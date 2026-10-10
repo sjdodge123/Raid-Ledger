@@ -293,3 +293,41 @@ describe('GuildMemberAddListener (ROK-1260)', () => {
     });
   });
 });
+
+describe('GuildMemberAddListener — Discord sign-in stamp (ROK-1759)', () => {
+  function build(isGuildMember: jest.Mock) {
+    const db = createDrizzleMock();
+    const listener = new GuildMemberAddListener(
+      db as never,
+      { getClient: jest.fn(), isGuildMember } as never,
+      makeMockUsersService() as never,
+      makeMockNotificationService() as never,
+    );
+    return { db, listener };
+  }
+
+  it('stamps guild_member_seen_at when the bot confirms membership', async () => {
+    const isMember = jest.fn().mockResolvedValue(true);
+    const { db, listener } = build(isMember);
+    await listener.handleDiscordLogin({ userId: 7, discordId: '123' });
+    expect(isMember).toHaveBeenCalledWith('123');
+    expect(db.set).toHaveBeenCalledWith({
+      guildMemberSeenAt: expect.any(Date),
+    });
+  });
+
+  it('leaves the row untouched when the user is not a guild member', async () => {
+    const { db, listener } = build(jest.fn().mockResolvedValue(false));
+    await listener.handleDiscordLogin({ userId: 7, discordId: '123' });
+    expect(db.update).not.toHaveBeenCalled();
+  });
+
+  it('never rejects (login must not fail) when the membership lookup throws', async () => {
+    const lookup = jest.fn().mockRejectedValue(new Error('bot offline'));
+    const { db, listener } = build(lookup);
+    await expect(
+      listener.handleDiscordLogin({ userId: 7, discordId: '123' }),
+    ).resolves.toBeUndefined();
+    expect(db.update).not.toHaveBeenCalled();
+  });
+});

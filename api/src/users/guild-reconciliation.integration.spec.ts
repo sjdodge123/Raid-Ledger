@@ -26,6 +26,9 @@ import {
 import * as schema from '../drizzle/schema';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { DiscordNotificationService } from '../notifications/discord-notification.service';
+import { isGuildMemberSeen } from '../notifications/discord-notification-deactivate.helpers';
+import { UsersService } from './users.service';
 import { defined } from '../common/testing/narrow';
 
 let testApp: TestApp;
@@ -222,5 +225,82 @@ describe('GuildReconciliationService — seen-in-guild scoping (ROK-1749)', () =
 
     expect((await readUser(local.id)).deactivatedAt).toBeNull();
     expect((await readUser(unlinked.id)).deactivatedAt).toBeNull();
+  });
+
+  it('ROK-1759: does not deactivate a user the listener stamped after the member fetch started', async () => {
+    const joiner = await createUser('latejoiner', 'discord-late-1');
+    const leaver = await createUser('oldleaver', 'discord-left-1', {
+      seen: new Date('2025-01-01T00:00:00Z'),
+    });
+    listSpy = jest
+      .spyOn(botClient, 'listAllGuildMemberAvatars')
+      .mockImplementation(async () => {
+        // GuildMemberAdd fires mid-fetch: the listener stamps the joiner, who
+        // is absent from the snapshot this sweep is about to diff against.
+        await testApp.db
+          .update(schema.users)
+          .set({ guildMemberSeenAt: new Date() })
+          .where(eq(schema.users.id, joiner.id));
+        return new Map([['discord-someone-else', null]]);
+      });
+    await service.runReconciliation();
+    expect((await readUser(joiner.id)).deactivatedAt).toBeNull();
+    expect((await readUser(leaver.id)).deactivatedAt).not.toBeNull();
+  });
+});
+
+describe('guild_member_seen_at review fixes (ROK-1759)', () => {
+  const OLD_SEEN = new Date('2025-01-01T00:00:00Z');
+  let deactSpy: jest.SpyInstance | undefined;
+  afterEach(() => {
+    deactSpy?.mockRestore();
+    deactSpy = undefined;
+  });
+
+  it('linking a DIFFERENT Discord id clears the stamp, so the sweep and the 50278 classifier spare a non-member', async () => {
+    const user = await createUser('relinker', 'discord-old-x', {
+      seen: OLD_SEEN,
+    });
+    await testApp.app
+      .get(UsersService)
+      .linkDiscord(user.id, 'discord-new-y', 'relinker');
+    expect((await readUser(user.id)).guildMemberSeenAt).toBeNull();
+    expect(await isGuildMemberSeen(testApp.db, user.id)).toBe(false);
+    mockGuildMembers(['discord-someone-else']);
+    await service.runReconciliation();
+    expect((await readUser(user.id)).deactivatedAt).toBeNull();
+  });
+
+  it('re-linking the SAME Discord id keeps the stamp', async () => {
+    const user = await createUser('samelink', 'discord-same-z', {
+      seen: OLD_SEEN,
+    });
+    await testApp.app
+      .get(UsersService)
+      .linkDiscord(user.id, 'discord-same-z', 'samelink');
+    expect((await readUser(user.id)).guildMemberSeenAt).toEqual(OLD_SEEN);
+  });
+
+  it('spares a user whose stamp lands after the candidate load (the deactivation UPDATE is guarded)', async () => {
+    const racer = await createUser('racer', 'discord-race-1', {
+      seen: OLD_SEEN,
+    });
+    mockGuildMembers(['discord-someone-else']);
+    const notif = testApp.app.get(DiscordNotificationService);
+    const original = notif.deactivateUser.bind(notif);
+    deactSpy = jest
+      .spyOn(notif, 'deactivateUser')
+      .mockImplementation(async (...args) => {
+        // GuildMemberAdd / login stamps the user AFTER the sweep decided they
+        // were a gap but BEFORE the deactivation UPDATE runs.
+        await testApp.db
+          .update(schema.users)
+          .set({ guildMemberSeenAt: new Date() })
+          .where(eq(schema.users.id, racer.id));
+        return original(...args);
+      });
+    await service.runReconciliation();
+    expect(deactSpy).toHaveBeenCalledTimes(1);
+    expect((await readUser(racer.id)).deactivatedAt).toBeNull();
   });
 });
