@@ -59,6 +59,8 @@ export function toLoadedCharacter(
       class: c.class,
       level: c.level,
       addonGuid: c.addonGuid,
+      race: c.race,
+      gender: c.gender,
     },
   };
 }

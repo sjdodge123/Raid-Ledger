@@ -13,6 +13,7 @@ import {
   sameName,
   titleCaseClass,
 } from './addon-import.binding-name';
+import { raceDisplayName } from './addon-import.race';
 
 /**
  * ROK-1724 §4.3 Binding — pure: decides whether a decoded export may land on
@@ -30,6 +31,9 @@ export interface AddonBindingCharacter {
   class: string | null;
   level: number | null;
   addonGuid: string | null;
+  /** ROK-1742 — optional so a caller that never reads them stays valid. */
+  race?: string | null;
+  gender?: string | null;
 }
 
 /** Only the envelope fields every section shares. */
@@ -53,6 +57,9 @@ export interface AddonBindingResult {
   pinGuid: string | null;
   /** Ruleset to write on apply; undefined = unchanged. */
   setRuleset?: WowForeverRuleset;
+  /** ROK-1742 R9: `who.race` / `who.gender` to write; undefined = unchanged. */
+  setRace?: string;
+  setGender?: 'male' | 'female';
 }
 
 /** Game → region → name. Returns the first reject, or null. */
@@ -135,6 +142,23 @@ function rulesetOutcome(
   if (opts.confirm?.updateRuleset) result.setRuleset = who.ruleset;
 }
 
+/**
+ * ROK-1742 R9 — race/gender follow the export: written when present and
+ * different, the addon token mapped to the Armory display name (Night Elf,
+ * Undead) first. An absent `who.gender` (UnitSex unknown) never clears a stored one.
+ */
+function raceGenderOutcome(
+  who: AddonWho,
+  character: AddonBindingCharacter,
+  result: AddonBindingResult,
+): void {
+  const race = who.race ? raceDisplayName(who.race) : null;
+  if (race && race !== character.race) result.setRace = race;
+  if (who.gender && who.gender !== character.gender) {
+    result.setGender = who.gender;
+  }
+}
+
 export function bindToCharacter(
   payload: AddonBindingPayload,
   character: AddonBindingCharacter,
@@ -153,6 +177,7 @@ export function bindToCharacter(
   }
   rulesetOutcome(payload.who, character, opts, result);
   guidOutcome(payload.who, character, opts, result);
+  raceGenderOutcome(payload.who, character, result);
   result.diff = classLevelDiff(payload.who, character);
   if (result.diff.class || result.diff.level) {
     result.warnings.push({ code: 'CLASS_LEVEL_UPDATED' });
