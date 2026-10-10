@@ -7,7 +7,11 @@ import type { CharacterCompletedQuest, CharacterQuestInstanceGroup } from '@raid
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 import { getWowheadQuestUrl } from '../lib/wowhead-urls';
 
-/** Chain line: each step success (done) or warning (still needed). */
+/**
+ * Chain line: each step success (done) or warning (still needed), plus sr-only
+ * state text. The token colour sits on an inner span because the unlayered
+ * `.quest-prereq__step` rule in quest-prep-panel.css beats Tailwind utilities.
+ */
 function QuestChain({ chain }: { chain: CharacterCompletedQuest['chain'] }) {
     if (chain.length <= 1) return null;
     return (
@@ -15,7 +19,10 @@ function QuestChain({ chain }: { chain: CharacterCompletedQuest['chain'] }) {
             {chain.map((step, i) => (
                 <Fragment key={step.questId}>
                     {i > 0 && <span className="quest-prereq__arrow" aria-hidden="true">→</span>}
-                    <span className={`quest-prereq__step ${step.done ? 'text-success' : 'text-warning'}`}>{step.name}</span>
+                    <span className="quest-prereq__step">
+                        <span className={step.done ? 'text-success' : 'text-warning'}>{step.name}</span>
+                        <span className="sr-only">{step.done ? 'done' : 'not done'}</span>
+                    </span>
                 </Fragment>
             ))}
         </div>

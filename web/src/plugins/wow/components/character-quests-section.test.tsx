@@ -19,14 +19,15 @@ function makeQuests(overrides: Partial<CharacterQuestsDto> = {}): CharacterQuest
         syncedAt: '2026-10-01T12:00:00.000Z',
         inProgress: [
             {
-                questId: 100, title: 'The Defias Brotherhood', dungeonInstanceId: 63,
+                // Instance 129 has no completed group: the tag must come from the entry itself.
+                questId: 100, title: 'The Defias Brotherhood', dungeonInstanceId: 129, instanceName: 'Razorfen Downs',
                 objectives: [
                     { text: 'Edwin VanCleef slain', done: true, have: 1, need: 1 },
                     { text: 'Red Silk Bandana', done: false, have: 3, need: 8 },
                     { text: 'Speak to Gryan', done: false, have: null, need: null },
                 ],
             },
-            { questId: 92472, title: 'Untracked Errand', dungeonInstanceId: null, objectives: [] },
+            { questId: 92472, title: 'Untracked Errand', dungeonInstanceId: null, instanceName: null, objectives: [] },
         ],
         completedKnown: [
             {
@@ -106,7 +107,8 @@ describe('CharacterQuestsSection — summary + quest log', () => {
         expect(screen.getByRole('heading', { name: 'In progress (2)' })).toBeInTheDocument();
         const link = screen.getByRole('link', { name: 'The Defias Brotherhood on Wowhead' });
         expect(link.getAttribute('href')).toContain('/forever/quest=100');
-        expect(screen.getAllByText('The Deadmines').length).toBeGreaterThan(0);
+        const row = screen.getByText('The Defias Brotherhood').closest('[data-quest-row]')!;
+        expect(within(row as HTMLElement).getByText('Razorfen Downs')).toHaveClass('text-muted');
         expect(screen.getByText('Untracked Errand')).toBeInTheDocument();
     });
 
@@ -147,8 +149,16 @@ describe('CharacterQuestsSection — completed dungeon quests', () => {
     it('shows the chain with done/needed step classes only when it has >1 step', async () => {
         await renderLoaded();
         const bfd = screen.getByText('Blackfathom Deeps · 1/8').closest('details')!;
-        expect(within(bfd).getByText('Step A')).toHaveClass('quest-prereq__step', 'text-success');
-        expect(within(bfd).getByText('Step C')).toHaveClass('quest-prereq__step', 'text-warning');
+        // Token colour on an inner span: the unlayered .quest-prereq__step rule would override it.
+        const stepA = within(bfd).getByText('Step A');
+        expect(stepA).toHaveClass('text-success');
+        expect(stepA).not.toHaveClass('quest-prereq__step');
+        expect(stepA.parentElement).toHaveClass('quest-prereq__step');
+        expect(within(stepA.parentElement!).getByText('done')).toHaveClass('sr-only');
+        const stepC = within(bfd).getByText('Step C');
+        expect(stepC).toHaveClass('text-warning');
+        expect(stepC).not.toHaveClass('quest-prereq__step');
+        expect(within(stepC.parentElement!).getByText('not done')).toHaveClass('sr-only');
         const deadmines = screen.getByText('The Deadmines · 1/6').closest('details')!;
         expect(deadmines.querySelector('.quest-prereq')).toBeNull();
     });
