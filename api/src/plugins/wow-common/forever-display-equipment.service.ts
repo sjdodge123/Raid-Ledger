@@ -5,7 +5,8 @@
  *
  * Read-only on `characters`: never writes `equipment` or `last_synced_at`.
  * Unknown/due item ids are enqueued fire-and-forget (D6 — the only path that
- * resolves snapshots imported before the resolver shipped).
+ * resolves snapshots imported before the resolver shipped). ROK-1760: an
+ * `error` row is due again on view after a short floor (`isMetaDue`).
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -15,6 +16,7 @@ import * as schema from '../../drizzle/schema';
 import type { DisplayEquipmentRow } from '../plugin-host/extension-points';
 import { addonSnapshotToEquipment } from './addon-equipment.adapter';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
+import { isMetaDue } from './wowhead-item/wow-item-meta.due';
 import {
   loadForeverCharSnapshot,
   type ForeverCharSnapshot,
@@ -63,9 +65,8 @@ export class ForeverDisplayEquipmentService {
     }
     const ids = snapshotItemIds(snapshot);
     const meta = await this.itemMeta.getMeta(ids);
-    this.enqueueInBackground(
-      ids.filter((id) => !meta.has(id) || isDue(meta.get(id))),
-    );
+    const now = Date.now();
+    this.enqueueInBackground(ids.filter((id) => isMetaDue(meta.get(id), now)));
     return addonSnapshotToEquipment(snapshot, meta);
   }
 
@@ -77,8 +78,4 @@ export class ForeverDisplayEquipmentService {
       this.logger.warn(`Wowhead enqueue failed: ${String(err)}`);
     });
   }
-}
-
-function isDue(row: { nextRetryAt: Date | null } | undefined): boolean {
-  return !!row?.nextRetryAt && row.nextRetryAt.getTime() <= Date.now();
 }

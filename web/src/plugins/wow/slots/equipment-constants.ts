@@ -4,9 +4,13 @@
  */
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 
-/** Quality color mapping for WoW item quality */
+/**
+ * Quality color mapping for WoW item quality. COMMON (white in game) is the
+ * `text-secondary` token — near-white on dark, slate on light; raw gray-300
+ * has no light-scheme repaint and was illegible there (ROK-1760 verify).
+ */
 export const QUALITY_COLORS: Record<string, string> = {
-    POOR: 'text-gray-500', COMMON: 'text-gray-300', UNCOMMON: 'text-green-400',
+    POOR: 'text-gray-500', COMMON: 'text-secondary', UNCOMMON: 'text-green-400',
     RARE: 'text-blue-400', EPIC: 'text-purple-400', LEGENDARY: 'text-orange-400',
 };
 
