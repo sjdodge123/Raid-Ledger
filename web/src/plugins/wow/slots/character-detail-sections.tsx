@@ -15,6 +15,7 @@ import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
+import { CharacterQuestsSection } from '../components/character-quests-section';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
@@ -95,6 +96,7 @@ export function CharacterDetailSections({
             )}
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={variant} />
+            <CharacterQuestsSection characterId={characterId} variant={variant} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>
