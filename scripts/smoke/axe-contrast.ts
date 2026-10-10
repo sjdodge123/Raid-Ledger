@@ -34,13 +34,14 @@ import { expect } from './base';
 /** localStorage keys mirrored from web/src/stores/theme-helpers.ts. */
 export const THEME_MODE_KEY = 'raid_ledger_theme_mode';
 export const LIGHT_THEME_KEY = 'raid_ledger_light_theme';
+export const DARK_THEME_KEY = 'raid_ledger_dark_theme';
 
 type AxeResults = Awaited<ReturnType<AxeBuilder['analyze']>>;
 type Violation = AxeResults['violations'][number];
 type ViolationNode = Violation['nodes'][number];
 
 /** The `data` axe attaches to a failed color-contrast check. */
-interface ContrastData {
+export interface ContrastData {
     fgColor?: string;
     bgColor?: string;
     contrastRatio?: number;
@@ -136,6 +137,31 @@ export async function useLightScheme(
     );
 }
 
+/** Override only the theme fields of a `{ data: prefs }` preferences body to a dark theme (ROK-1203). */
+export function pinDarkPreferences(body: unknown, darkThemeId: string): unknown {
+    if (typeof body !== 'object' || body === null) return body;
+    const data = (body as { data?: unknown }).data;
+    if (typeof data !== 'object' || data === null) return body;
+    return { ...body, data: { ...data, themeMode: 'dark', darkTheme: darkThemeId } };
+}
+
+/** `useLightScheme`'s dark twin: boot every later navigation in `darkThemeId` (renders `data-scheme="dark"` for default-dark). */
+export async function useDarkScheme(page: Page, darkThemeId = 'default-dark'): Promise<void> {
+    await page.route(PREFERENCES_ROUTE, async (route) => {
+        if (route.request().method() !== 'GET') return route.fallback();
+        const response = await route.fetch();
+        const json = pinDarkPreferences(await response.json(), darkThemeId);
+        await route.fulfill({ response, json });
+    });
+    await page.addInitScript(
+        ([modeKey, themeKey, themeId]) => {
+            localStorage.setItem(modeKey, 'dark');
+            localStorage.setItem(themeKey, themeId);
+        },
+        [THEME_MODE_KEY, DARK_THEME_KEY, darkThemeId] as const,
+    );
+}
+
 /**
  * Assert the page actually rendered in the light scheme. `default-light` (and
  * quest-log) render as `data-scheme="light"`; a tinted light theme renders as
@@ -156,7 +182,8 @@ export async function waitForFiniteAnimations(page: Page): Promise<void> {
     );
 }
 
-function contrastData(node: ViolationNode): ContrastData {
+/** The color-contrast check data axe attached to `node` (empty when it attached none). */
+export function contrastData(node: ViolationNode): ContrastData {
     const check = [...node.any, ...node.all, ...node.none].find(
         (c) => c.id === 'color-contrast',
     );
