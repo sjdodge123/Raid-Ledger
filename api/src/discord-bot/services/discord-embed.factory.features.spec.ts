@@ -50,7 +50,7 @@ function createFeaturesFactory() {
 }
 
 function makeMmoMentionEvent(
-  mentions: EmbedEventData['signupMentions'],
+  mentions: Exclude<EmbedEventData['signupMentions'], undefined>,
   roleCounts: Record<string, number>,
 ): EmbedEventData {
   return {

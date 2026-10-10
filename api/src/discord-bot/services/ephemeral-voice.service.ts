@@ -102,7 +102,7 @@ export class EphemeralVoiceService {
       const channelId = await createVoiceChannel(guild, {
         name,
         parentId: categoryId,
-        permissionOverwrites,
+        ...(permissionOverwrites !== undefined ? { permissionOverwrites } : {}),
       });
       // Atomically claim the slot (set id only if still null). If an overlapping
       // scan already created a channel, delete the one we just made so we don't

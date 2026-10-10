@@ -173,8 +173,10 @@ export class ScheduledEventService {
         eventId,
         eventData,
         {
-          gameId,
-          voiceChannelOverride,
+          ...(gameId !== undefined ? { gameId } : {}),
+          ...(voiceChannelOverride !== undefined
+            ? { voiceChannelOverride }
+            : {}),
           channelResolver: this.channelResolver,
           describe: (id, data) => desc(this.settingsService, id, data),
         },

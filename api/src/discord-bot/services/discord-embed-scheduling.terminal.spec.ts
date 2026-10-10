@@ -138,7 +138,10 @@ describe('cancelled card — reason (S1-AC3)', () => {
   it.each([null, undefined, '', '   '])(
     'omits the reason line when the reason is %p',
     (reason) => {
-      const desc = description({ status: 'cancelled', cancelReason: reason });
+      const desc = description({
+        status: 'cancelled',
+        ...(reason !== undefined ? { cancelReason: reason } : {}),
+      });
       expect(desc).not.toContain('Reason');
       expect(desc).not.toContain('null');
     },

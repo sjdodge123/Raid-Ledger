@@ -35,7 +35,9 @@ describe('buildScheduledEventName (ROK-1350)', () => {
   });
 
   it('returns the bare title when game is undefined', () => {
-    const name = buildScheduledEventName(makeEventData({ game: undefined }));
+    const data = makeEventData();
+    delete data.game;
+    const name = buildScheduledEventName(data);
     expect(name).toBe('Gamernight');
   });
 
