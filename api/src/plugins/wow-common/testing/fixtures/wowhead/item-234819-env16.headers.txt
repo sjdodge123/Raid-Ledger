@@ -1,0 +1,15 @@
+HTTP/2 200 
+content-type: application/json; charset=utf-8
+date: Fri, 09 Oct 2026 19:04:57 GMT
+access-control-allow-origin: *
+etag: W/"75d1791545977:2d1791545977:17d1791545969:70291"
+server: nginx
+x-origin-timestamp: 2026-10-09T14:04:57-05:00
+expires: Tue, 23 Nov 2004 03:00:00 GMT
+cache-control: max-age=0, s-maxage=43200
+vary: Accept-Encoding
+x-cache: Miss from cloudfront
+via: 1.1 4ed8ea60292c29670cf21e13b99f55a4.cloudfront.net (CloudFront)
+x-amz-cf-pop: ATL58-P13
+x-amz-cf-id: aDfVUMPDBuEwUuPaTmG8xSI31aA6fZHu9CBEcb9bmvbqTUpmlyze3Q==
+

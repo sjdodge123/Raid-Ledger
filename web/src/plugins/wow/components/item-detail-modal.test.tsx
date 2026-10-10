@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import type { EquipmentItemDto } from '@raid-ledger/contract';
 import { ItemDetailModal } from './item-detail-modal';
+import { CLASSIC_FALLBACK_HINT } from '../lib/item-wowhead-variant';
 
 const ITEM: EquipmentItemDto = {
     slot: 'HEAD',
@@ -33,5 +34,26 @@ describe('ItemDetailModal — View on Wowhead link', () => {
         [null, 'https://www.wowhead.com/item=19019'],
     ])('%j → %s', (variant, href) => {
         expect(renderModal(variant)).toBe(href);
+    });
+});
+
+/** ROK-1727: per-item Wowhead env (addon gear) + the Classic hint, modal only. */
+describe('ItemDetailModal — addon item Wowhead env (ROK-1727)', () => {
+    function renderItem(item: EquipmentItemDto) {
+        render(<ItemDetailModal isOpen onClose={vi.fn()} items={[item]} currentIndex={0} onNavigate={vi.fn()} gameVariant="wow_forever" />);
+        return screen.getByRole('link', { name: /view on wowhead/i }).getAttribute('href');
+    }
+
+    it('env 4 links to Wowhead Classic and shows the Classic hint', () => {
+        expect(renderItem({ ...ITEM, wowheadEnv: 4 })).toBe('https://www.wowhead.com/classic/item=19019');
+        expect(screen.getByText(CLASSIC_FALLBACK_HINT)).toHaveClass('text-xs', 'text-muted');
+    });
+
+    it.each<[string, EquipmentItemDto]>([
+        ['env 16', { ...ITEM, wowheadEnv: 16 }],
+        ['env absent', ITEM],
+    ])('%s links to Wowhead Forever with no Classic hint', (_label, item) => {
+        expect(renderItem(item)).toBe('https://www.wowhead.com/forever/item=19019');
+        expect(screen.queryByText(CLASSIC_FALLBACK_HINT)).toBeNull();
     });
 });

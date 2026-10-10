@@ -49,6 +49,7 @@ describe('ForeverConfigService reads (ROK-1717)', () => {
       namespacePrefix: 'classicforever',
       namespacePrefixIsDefault: true,
       armoryImportEnabled: false,
+      wowheadResolverEnabled: true,
     });
     await expect(service.getCapabilities()).resolves.toEqual({
       armoryImport: { wow_forever: false },
@@ -71,6 +72,7 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
       namespacePrefix: 'foo',
       namespacePrefixIsDefault: false,
       armoryImportEnabled: true,
+      wowheadResolverEnabled: true,
     });
     expect(events.emit).toHaveBeenCalledWith(WOW_FOREVER_CONFIG_UPDATED, {
       namespacePrefix: 'foo',
@@ -97,6 +99,28 @@ describe('ForeverConfigService writes (ROK-1717)', () => {
     await expect(service.getCapabilities()).resolves.toEqual({
       armoryImport: { wow_forever: false },
     });
+  });
+
+  it('Wowhead resolver switch: off stores "false", on deletes it, omitted leaves it (ROK-1727 D2)', async () => {
+    const { service, store } = setup();
+    const base = {
+      namespacePrefix: 'classicforever',
+      armoryImportEnabled: false,
+    };
+    const off = await service.updateConfig({
+      ...base,
+      wowheadResolverEnabled: false,
+    });
+    expect(off.wowheadResolverEnabled).toBe(false);
+    expect(store.get('wowhead_resolver_enabled')).toBe('false');
+    await service.updateConfig(base);
+    expect(store.get('wowhead_resolver_enabled')).toBe('false');
+    const on = await service.updateConfig({
+      ...base,
+      wowheadResolverEnabled: true,
+    });
+    expect(on.wowheadResolverEnabled).toBe(true);
+    expect(store.has('wowhead_resolver_enabled')).toBe(false);
   });
 
   it('rejects an invalid prefix with 400 and writes nothing', async () => {

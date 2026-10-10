@@ -11,6 +11,7 @@ import type { AddonWho } from '@raid-ledger/contract';
 import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
 import { RULESET_IDENTITY_INDEX } from '../../../characters/characters-unique-keys.helpers';
+import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import type { AddonImportAuditService } from './addon-import.audit';
 import { HARDCORE_CREATE_MESSAGE } from './addon-import-create.helpers';
 import { NIL_CHARACTER_ID } from './addon-import-create.apply';
@@ -103,12 +104,14 @@ function setup(w: AddonWho, target: unknown = { action: 'create' }) {
     recordAttempt: jest.fn().mockResolvedValue(undefined),
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
+  const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
   const service = new AddonImportCreateService(
     db as unknown as PostgresJsDatabase<typeof schema>,
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
+    itemMeta as unknown as WowItemMetaService,
   );
-  return { service, tx, characters, audit };
+  return { service, tx, characters, audit, itemMeta };
 }
 
 const body = (dryRun: boolean, extra: object = {}) => ({
@@ -361,5 +364,35 @@ describe('AddonImportCreateService — A1, claims, D4', () => {
       await codeOf(s.service.importNew(1, { importString: '' })),
     ).toMatchObject({ code: 'RATE_LIMITED' });
     expect(decodeImportPaste).not.toHaveBeenCalled();
+  });
+});
+
+describe('Wowhead gear enqueue on the create route (ROK-1727)', () => {
+  const gear = [
+    { slot: 1, itemId: 16921, bonusIds: [] },
+    { slot: 4, bonusIds: [] },
+    { slot: 16, itemId: 19019, bonusIds: [] },
+  ];
+  const withGear = () => {
+    const p = paste(who());
+    const payload = { ...p.sections.char.payload, data: { gear } };
+    return { ...p, sections: { char: { ...p.sections.char, payload } } };
+  };
+
+  it('enqueues the gear item ids after the apply transaction', async () => {
+    const { service, itemMeta } = setup(who());
+    (decodeImportPaste as jest.Mock).mockReturnValue(withGear());
+    await service.importNew(1, body(false, { ruleset: 'pvp' }));
+    expect(itemMeta.enqueue).toHaveBeenCalledWith([16921, 19019]);
+    const ran = (runForCharacter as jest.Mock).mock.invocationCallOrder[0];
+    const enqueued = itemMeta.enqueue.mock.invocationCallOrder[0];
+    expect(enqueued).toBeGreaterThan(ran ?? Infinity);
+  });
+
+  it('never enqueues for a dry run', async () => {
+    const { service, itemMeta } = setup(who());
+    (decodeImportPaste as jest.Mock).mockReturnValue(withGear());
+    await service.importNew(1, body(true, { ruleset: 'pvp' }));
+    expect(itemMeta.enqueue).not.toHaveBeenCalled();
   });
 });

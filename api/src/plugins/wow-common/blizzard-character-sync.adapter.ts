@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { BlizzardService } from './blizzard.service';
-import type { CharacterSyncAdapter } from '../plugin-host/extension-points';
+import type {
+  CharacterSyncAdapter,
+  DisplayEquipmentRow,
+} from '../plugin-host/extension-points';
+import type { CharacterEquipmentDto } from '@raid-ledger/contract';
+import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import type {
   ExternalCharacterProfile,
   ExternalInferredSpecialization,
@@ -18,7 +23,17 @@ import { ALL_WOW_GAME_SLUGS } from './manifest';
 export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
   readonly gameSlugs = ALL_WOW_GAME_SLUGS;
 
-  constructor(private readonly blizzardService: BlizzardService) {}
+  constructor(
+    private readonly blizzardService: BlizzardService,
+    private readonly foreverEquipment: ForeverDisplayEquipmentService,
+  ) {}
+
+  /** ROK-1727: Forever characters display their addon snapshot gear. */
+  resolveDisplayEquipment(
+    row: DisplayEquipmentRow,
+  ): Promise<CharacterEquipmentDto | undefined> {
+    return this.foreverEquipment.resolve(row);
+  }
 
   /** @deprecated Game ID is now the lookup key; kept for interface compat. */
   resolveGameSlugs(gameVariant?: string): string[] {
