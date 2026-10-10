@@ -11,6 +11,7 @@ import type {
   CharacterEquipmentDto,
   EquipmentItemDto,
 } from '@raid-ledger/contract';
+import { ERROR_VIEW_FLOOR_MAX_ATTEMPTS } from './wowhead-item/wow-item-meta.due';
 
 /**
  * The `wow_item_meta` columns this adapter reads. Structurally a subset of
@@ -22,6 +23,8 @@ export interface AddonItemMeta {
   name: string | null;
   quality: number | null;
   icon: string | null;
+  /** Consecutive failed runs (`error` rows); 0 otherwise. */
+  attempts: number;
 }
 
 export interface AddonGearSnapshot {
@@ -92,14 +95,28 @@ function toWowheadEnv(env: number | null): 16 | 4 {
 }
 
 /**
+ * ROK-1760: a miss that will not change within the client's poll window — a
+ * `not_found` row (daily re-probe) or an `error` row parked on its hour-scale
+ * backoff after {@link ERROR_VIEW_FLOOR_MAX_ATTEMPTS} failed runs. Its
+ * fallback is final, so it reports `resolved: true` and the page stops polling.
+ */
+function isTerminalMiss(meta: AddonItemMeta | undefined): boolean {
+  if (!meta) return false;
+  if (meta.status === 'not_found') return true;
+  return (
+    meta.status === 'error' && meta.attempts >= ERROR_VIEW_FLOOR_MAX_ATTEMPTS
+  );
+}
+
+/**
  * ROK-1760: until Wowhead resolves the item, show the name/quality parsed
  * from the addon's raw item link, else an `Item #<id>` placeholder.
  */
-function fallbackFields(gear: EquippedGear): ResolvedFields {
+function fallbackFields(gear: EquippedGear, final: boolean): ResolvedFields {
   return {
     name: gear.name ?? `Item #${gear.itemId}`,
     quality: QUALITY_NAMES[gear.quality ?? 1] ?? 'COMMON',
-    resolved: false,
+    resolved: final,
   };
 }
 
@@ -108,7 +125,7 @@ function metaFields(
   gear: EquippedGear,
   meta: AddonItemMeta | undefined,
 ): ResolvedFields {
-  if (!isResolved(meta)) return fallbackFields(gear);
+  if (!isResolved(meta)) return fallbackFields(gear, isTerminalMiss(meta));
   return {
     name: meta.name,
     quality: QUALITY_NAMES[meta.quality ?? 1] ?? 'COMMON',

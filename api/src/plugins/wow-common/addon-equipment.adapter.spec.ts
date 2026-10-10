@@ -32,6 +32,7 @@ function meta(overrides: Partial<AddonItemMeta> = {}): AddonItemMeta {
     name: 'Thunderfury',
     quality: 5,
     icon: 'inv_sword_39',
+    attempts: 0,
     ...overrides,
   };
 }
@@ -117,23 +118,18 @@ describe('addonSnapshotToEquipment — unresolved items', () => {
   it.each([
     ['no meta row', undefined],
     [
-      'not_found row',
-      meta({
-        status: 'not_found',
-        env: null,
-        name: null,
-        quality: null,
-        icon: null,
-      }),
+      'error row (first failed run)',
+      meta({ status: 'error', env: null, name: null, quality: null, icon: null }),
     ],
     [
-      'error row',
+      'error row (2 failed runs, still on the view floor)',
       meta({
         status: 'error',
         env: null,
         name: null,
         quality: null,
         icon: null,
+        attempts: 2,
       }),
     ],
   ])('renders an Item #<id> placeholder for %s', (_label, row) => {
@@ -225,7 +221,6 @@ describe('addonSnapshotToEquipment — raw-link fallback (ROK-1760)', () => {
 
   it.each([
     ['no meta row', undefined],
-    ['not_found row', meta({ status: 'not_found', name: null, quality: null })],
     ['error row', meta({ status: 'error', name: null, quality: null })],
   ])('shows the link name and quality for %s, still unresolved', (_l, row) => {
     const metaMap = new Map<number, AddonItemMeta>(row ? [[6120, row]] : []);
@@ -247,6 +242,68 @@ describe('addonSnapshotToEquipment — raw-link fallback (ROK-1760)', () => {
     expect(item).toMatchObject({
       name: 'Thunderfury',
       quality: 'LEGENDARY',
+      resolved: true,
+    });
+  });
+});
+
+/**
+ * Verify-lane finding (step 3): a not_found item, or an error row parked
+ * after ERROR_VIEW_FLOOR_MAX_ATTEMPTS failed runs, will not change within the
+ * client's poll window. Its fallback is final, so it reports resolved:true —
+ * otherwise one never-resolvable item keeps the page polling to the cap.
+ */
+describe('addonSnapshotToEquipment — terminal misses are final (ROK-1760)', () => {
+  const linked: AddonSnapshotGearItem = {
+    slot: 13,
+    itemId: 999999,
+    ilvl: 60,
+    bonusIds: [],
+    name: 'Ledger Trinket',
+    quality: 3,
+  };
+  const notFound = meta({
+    status: 'not_found',
+    env: null,
+    name: null,
+    quality: null,
+    icon: null,
+  });
+  const parked = meta({
+    status: 'error',
+    env: null,
+    name: null,
+    quality: null,
+    icon: null,
+    attempts: 3,
+  });
+
+  it.each([
+    ['not_found row', notFound],
+    ['error row parked after 3 failed runs', parked],
+  ])('keeps the link name for a %s and reports resolved:true', (_l, row) => {
+    const metaMap = new Map<number, AddonItemMeta>([[999999, row]]);
+    const [item] = addonSnapshotToEquipment(snapshot([linked]), metaMap).items;
+    expect(item).toEqual({
+      slot: 'TRINKET_1',
+      itemId: 999999,
+      itemLevel: 60,
+      itemSubclass: null,
+      name: 'Ledger Trinket',
+      quality: 'RARE',
+      resolved: true,
+    });
+  });
+
+  it('a not_found item with no link name keeps Item #<id>, resolved:true', () => {
+    const metaMap = new Map<number, AddonItemMeta>([[16921, notFound]]);
+    const result = addonSnapshotToEquipment(
+      snapshot([gearItem(1, 16921, 66)]),
+      metaMap,
+    );
+    expect(result.items[0]).toMatchObject({
+      name: 'Item #16921',
+      quality: 'COMMON',
       resolved: true,
     });
   });
