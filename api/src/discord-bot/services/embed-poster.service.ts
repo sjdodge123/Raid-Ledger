@@ -27,11 +27,11 @@ import {
 } from './embed-poster.helpers';
 
 interface ChannelOpts {
-  gameId?: number | null;
-  recurrenceGroupId?: string | null;
-  notificationChannelOverride?: string | null;
+  gameId?: number | null | undefined;
+  recurrenceGroupId?: string | null | undefined;
+  notificationChannelOverride?: string | null | undefined;
   /** ROK-1352 Tier 0: a live ephemeral channel wins over static bindings. */
-  ephemeralVoiceChannelId?: string | null;
+  ephemeralVoiceChannelId?: string | null | undefined;
 }
 
 /**
@@ -103,7 +103,7 @@ export class EmbedPosterService {
     const signupRows = await querySignupRows(this.db, eventId);
     const activeSignups = filterActiveSignups(signupRows);
     const roleCounts = await queryRoleCounts(this.db, eventId);
-    const signupMentions = buildSignupMentions(activeSignups);
+    const signupMentions = buildSignupMentions(activeSignups) ?? [];
     return {
       ...event,
       signupCount: activeSignups.length,
