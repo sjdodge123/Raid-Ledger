@@ -7,7 +7,7 @@
  *     unlink frees it so the rightful owner can import; non-admins get 403.
  */
 import * as bcrypt from 'bcrypt';
-import { and, count, eq } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 import type { AddonWho } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { truncateAllTables } from '../../../common/testing/integration-helpers';
@@ -204,11 +204,9 @@ describe('admin unlink — option B (ROK-1756 finding 2)', () => {
     const admin = await user('boss', 'admin');
     const res = await unlink(admin.token, squatId);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      characterId: squatId,
-      userId: squatter.userId,
-      guid: FIXTURE_GUID,
-    });
+    expect(res.body).toEqual({ characterId: squatId, userId: squatter.userId });
+    // Never-leak: the GUID stays server-side (audit row only), even for admins.
+    expect(JSON.stringify(res.body)).not.toContain(FIXTURE_GUID);
     const [unlinked] = await guidAudit('addon_guid_admin_unlinked');
     expect(unlinked).toMatchObject({
       actorId: admin.userId,
@@ -232,5 +230,79 @@ describe('admin unlink — option B (ROK-1756 finding 2)', () => {
     expect((await unlink(holder.token, id)).status).toBe(403);
     const [n] = await testApp.db.select({ n: count() }).from(schema.characters);
     expect(Number(n?.n)).toBe(1);
+  });
+
+  it('an unknown character id → 404, nothing deleted or audited', async () => {
+    const holder = await user('holder404');
+    await applyNew(holder.token, charString());
+    const admin = await user('boss404', 'admin');
+    const res = await unlink(admin.token, '00000000-0000-4000-8000-000000000000');
+    expect(res.status).toBe(404);
+    expect(await characters()).toHaveLength(1);
+    expect(await guidAudit('addon_guid_admin_unlinked')).toHaveLength(0);
+  });
+
+  it('a character with no GUID → 409, it stays and nothing is audited', async () => {
+    const holder = await user('plain');
+    const res = await applyNew(holder.token, charString());
+    const id = res.body.target.characterId as string;
+    await testApp.db
+      .update(schema.characters)
+      .set({ addonGuid: null })
+      .where(eq(schema.characters.id, id));
+    const admin = await user('boss409', 'admin');
+    const out = await unlink(admin.token, id);
+    expect(out.status).toBe(409);
+    expect(out.body.message).toBe(
+      'That character is not linked to an in-game character.',
+    );
+    expect(await characters()).toHaveLength(1);
+    expect(await guidAudit('addon_guid_admin_unlinked')).toHaveLength(0);
+  });
+
+  it('dependent rows: snapshots cascade away, a signup keeps its row with character_id NULL', async () => {
+    const squatter = await user('squatdeps');
+    const squat = await applyNew(squatter.token, charString());
+    const squatId = squat.body.target.characterId as string;
+    const snapshots = () =>
+      testApp.db
+        .select()
+        .from(schema.characterAddonSnapshots)
+        .where(eq(schema.characterAddonSnapshots.characterId, squatId));
+    expect((await snapshots()).length).toBeGreaterThan(0);
+    const start = new Date(Date.now() + 24 * HOUR_S * 1000);
+    const [event] = nonEmpty(
+      await testApp.db
+        .insert(schema.events)
+        .values({
+          title: 'Raid night',
+          gameId: testApp.seed.game.id,
+          duration: [start, new Date(start.getTime() + 2 * HOUR_S * 1000)],
+          maxAttendees: 10,
+          creatorId: testApp.seed.adminUser.id,
+        })
+        .returning(),
+      'event',
+    );
+    const [signup] = nonEmpty(
+      await testApp.db
+        .insert(schema.eventSignups)
+        .values({ eventId: event.id, userId: squatter.userId, characterId: squatId })
+        .returning(),
+      'signup',
+    );
+    const admin = await user('bossdeps', 'admin');
+    expect((await unlink(admin.token, squatId)).status).toBe(200);
+    expect(await snapshots()).toHaveLength(0);
+    const kept = await testApp.db
+      .select()
+      .from(schema.eventSignups)
+      .where(
+        and(
+          eq(schema.eventSignups.id, signup.id),
+          isNull(schema.eventSignups.characterId),
+        ),
+      );
+    expect(kept).toHaveLength(1);
   });
 });

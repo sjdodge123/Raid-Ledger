@@ -21,8 +21,8 @@ interface CharacterDetailAdminActionsProps {
 function UnlinkFooter({ onCancel, onConfirm, isPending }: { onCancel: () => void; onConfirm: () => void; isPending: boolean }) {
     return (
         <>
-            <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-            <Button variant="destructive" onClick={onConfirm} loading={isPending} loadingLabel="Unlinking...">
+            <Button variant="secondary" onClick={onCancel} disabled={isPending}>Cancel</Button>
+            <Button variant="destructive" onClick={onConfirm} loading={isPending} loadingLabel="Deleting...">
                 Delete character
             </Button>
         </>

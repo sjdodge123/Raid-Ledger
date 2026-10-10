@@ -44,7 +44,8 @@ async function unlinkWithin(
   tx: AddonImportTx,
   adminId: number,
   characterId: string,
-): Promise<CharacterRow & { addonGuid: string }> {
+  logger: Logger,
+): Promise<CharacterRow> {
   const [row] = await characterById(tx, characterId);
   if (!row) throw new NotFoundException('Character not found');
   const guid = row.addonGuid;
@@ -54,6 +55,11 @@ async function unlinkWithin(
     );
   }
   await lockGuid(tx, row, guid);
+  // A concurrent apply may have changed the row between the read and the lock.
+  const [locked] = await characterById(tx, row.id);
+  if (locked?.addonGuid !== guid) {
+    throw new ConflictException('That character changed; reload and retry.');
+  }
   await tx.delete(schema.characters).where(eq(schema.characters.id, row.id));
   await logGuidAudit(tx, {
     action: 'addon_guid_admin_unlinked',
@@ -65,7 +71,10 @@ async function unlinkWithin(
     gameId: row.gameId,
     region: row.region,
   });
-  return { ...row, addonGuid: guid };
+  // Same tx: it sees the delete uncommitted, and a failure rolls the delete
+  // back instead of leaving the user with no main behind a 500.
+  await autoPromoteAfterDelete(tx, row.userId, row.gameId, logger);
+  return row;
 }
 
 @Injectable()
@@ -82,12 +91,11 @@ export class AddonCharacterUnlinkService {
     characterId: string,
   ): Promise<AddonCharacterUnlinkResult> {
     const row = await this.db.transaction((tx) =>
-      unlinkWithin(tx, adminId, characterId),
+      unlinkWithin(tx, adminId, characterId, this.logger),
     );
-    await autoPromoteAfterDelete(this.db, row.userId, row.gameId, this.logger);
     this.logger.log(
       `Admin ${adminId} unlinked character ${row.id} (user ${row.userId})`,
     );
-    return { characterId: row.id, userId: row.userId, guid: row.addonGuid };
+    return { characterId: row.id, userId: row.userId };
   }
 }

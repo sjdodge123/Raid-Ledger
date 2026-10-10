@@ -74,7 +74,7 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
 
     it('asks for confirmation before calling the API, then deletes, toasts and navigates away', async () => {
         detail.role = 'admin'; setCharacter(true);
-        const calls = mockUnlink(200, { characterId: 'c1', userId: 5, guid: 'Player-1-0A' });
+        const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
         const user = userEvent.setup();
         renderPage();
         await user.click(screen.getByRole('button', BUTTON));
@@ -88,7 +88,7 @@ describe('CharacterDetailAdminActions (ROK-1756)', () => {
 
     it('Cancel closes the confirm without calling the API', async () => {
         detail.role = 'admin'; setCharacter(true);
-        const calls = mockUnlink(200, { characterId: 'c1', userId: 5, guid: 'g' });
+        const calls = mockUnlink(200, { characterId: 'c1', userId: 5 });
         const user = userEvent.setup();
         renderPage();
         await user.click(screen.getByRole('button', BUTTON));

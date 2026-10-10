@@ -7,11 +7,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '../../../lib/api-client';
 
-/** Response of the unlink endpoint (api `AddonCharacterUnlinkResult`). */
+/** Response of the unlink endpoint (api `AddonCharacterUnlinkResult`); never carries the GUID. */
 export interface AddonCharacterUnlinkResult {
     characterId: string;
     userId: number;
-    guid: string;
 }
 
 export function unlinkAddonCharacter(characterId: string): Promise<AddonCharacterUnlinkResult> {
