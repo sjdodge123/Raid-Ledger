@@ -1,7 +1,8 @@
 /**
  * Error code → dialog copy for the addon "Import string" flow (ROK-1724 §4.4).
  * Codes: `AddonImportErrorCodeSchema` (contract) and
- * `packages/contract/ledgerlink/v1/CONTRACT.md` §7. Copy never echoes the paste.
+ * `packages/contract/ledgerlink/v1/CONTRACT.md` §7. Copy never echoes the paste;
+ * INVALID_PAYLOAD shows the server's message, which the contract keeps paste-free.
  */
 import type { AddonImportAddCharacterPrefill, AddonImportErrorCode } from '@raid-ledger/contract';
 import { AddonImportRequestError } from './use-addon-import';
@@ -79,6 +80,12 @@ export function addonImportErrorCopy(error: unknown, gameId?: number): AddonImpo
     const copy = COPY[error.code];
     if (error.code === 'NAME_MISMATCH' && error.addCharacter && gameId !== undefined) {
         return { ...copy, action: nameMismatchAction(error.addCharacter, gameId) };
+    }
+    if (error.code === 'INVALID_PAYLOAD' && error.message.trim()) {
+        // The server's INVALID_PAYLOAD message is the specific, actionable part
+        // (a field path, the export-clock bound, a hardcore/name/GUID reject) and
+        // never echoes the paste (CONTRACT.md §7), so it replaces the generic body.
+        return { ...copy, body: error.message };
     }
     return copy;
 }
