@@ -84,16 +84,20 @@ describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
 
     it('a 409 refresh_raced is indeterminate and leaves auth storage alone', async () => {
         setLocks(createFakeLocks());
-        countRefreshes(() => HttpResponse.json({ code: 'refresh_raced' }, { status: 409 }));
+        const counter = countRefreshes(() =>
+            HttpResponse.json({ code: 'refresh_raced' }, { status: 409 }),
+        );
         const tab = await openTab();
 
         expect(await tab.refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
         expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('old-token');
+        // Exactly one retry after the race, never a loop.
+        expect(counter.calls()).toBe(2);
     });
 
     it('a 409 refresh_raced adopts a token another tab stored meanwhile', async () => {
         setLocks(createFakeLocks());
-        countRefreshes(() => {
+        const counter = countRefreshes(() => {
             // Another tab (old bundle, no lock) won the race and stored its token.
             localStorage.setItem(ACCESS_TOKEN_KEY, 'sibling-token');
             return HttpResponse.json({ code: 'refresh_raced' }, { status: 409 });
@@ -101,5 +105,6 @@ describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
         const tab = await openTab();
 
         expect(await tab.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'sibling-token' });
+        expect(counter.calls()).toBe(1);
     });
 });
