@@ -70,6 +70,12 @@ describe('lazyWithRetry', () => {
         expect(reload).not.toHaveBeenCalled();
     });
 
+    it('reloads once on Vite\'s CSS-preload failure for a route with split CSS', async () => {
+        renderFailingRoute(new Error('Unable to preload CSS for /assets/calendar-page-abc123.css'));
+        await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
+        expect(screen.queryByText(/caught:/)).not.toBeInTheDocument();
+    });
+
     it('rethrows a non-chunk error without reloading', async () => {
         renderFailingRoute(new Error('boom'));
         expect(await screen.findByText('caught: boom')).toBeInTheDocument();

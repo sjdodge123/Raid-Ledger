@@ -15,6 +15,8 @@ describe('isChunkLoadError', () => {
         ['Firefox', 'error loading dynamically imported module: https://x/assets/a.js'],
         ['CSS chunk', 'Loading CSS chunk 3 failed'],
         ['JS chunk', 'Loading chunk 12 failed.'],
+        ['Vite CSS preload', 'Unable to preload CSS for /assets/calendar-page-abc123.css'],
+        ['Vite CSS preload (any case)', 'UNABLE TO PRELOAD CSS FOR /assets/event-detail-page-x.css'],
     ])('matches the %s wording', (_engine, message) => {
         expect(isChunkLoadError(new TypeError(message))).toBe(true);
     });
