@@ -46,6 +46,9 @@ function useRedeemOnArrival(token: string, user: User | null) {
                 if (res.joined) toast.success("You've joined this poll.");
                 navigate(`/community-lineup/${res.lineupId}/schedule/${res.matchId}`, { replace: true });
             },
+            // A failed join (invalid link, deactivated) must not leave the
+            // token parked for a later onboarding/login hand-back.
+            onError: () => sessionStorage.removeItem(POLL_SHARE_TOKEN_KEY),
         });
     }, [user, token, navigate, join]);
     return join;

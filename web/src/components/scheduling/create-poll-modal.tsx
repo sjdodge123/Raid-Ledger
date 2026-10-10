@@ -8,8 +8,9 @@
  *
  * ROK-1750: "Who can see this poll?" (Community / Private — anyone with the
  * link). A private poll does not auto-navigate: the modal switches to a
- * success state with the share link + Open poll. The control is hidden for
- * reschedule polls (ruling R3, `hideVisibility`).
+ * success state with the share link + Open poll. Reschedule/LFG polls never
+ * open this modal and send no `visibility`, so ruling R3 (they can't be
+ * private) is enforced by the contract refine + the API, not a UI prop.
  */
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -31,8 +32,6 @@ import { CreatePollSuccess, CreatePollSuccessFooter } from './create-poll-succes
 interface CreatePollModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** ROK-1750 (R3): reschedule polls can't be private — hide the control. */
-  hideVisibility?: boolean;
 }
 
 /** A created private poll, shown in the success state. */
@@ -113,7 +112,7 @@ function useSubmitPoll(form: ReturnType<typeof useCreatePollForm>, close: () => 
  * Modal for creating a standalone scheduling poll.
  * Contains a game picker (search) and an optional member picker.
  */
-export function CreatePollModal({ isOpen, onClose, hideVisibility = false }: CreatePollModalProps) {
+export function CreatePollModal({ isOpen, onClose }: CreatePollModalProps) {
   const form = useCreatePollForm();
   const { reset } = form;
   const handleClose = useCallback(() => {
@@ -140,7 +139,7 @@ export function CreatePollModal({ isOpen, onClose, hideVisibility = false }: Cre
     >
       {created
         ? <CreatePollSuccess token={created.shareToken} />
-        : <CreatePollFormBody form={form} hideVisibility={hideVisibility} />}
+        : <CreatePollFormBody form={form} />}
     </Modal>
   );
 }
@@ -157,9 +156,8 @@ function useThresholdSliderMax(pickedCount: number): number {
 }
 
 /** Form body extracted to stay within function line limits. */
-function CreatePollFormBody({ form, hideVisibility }: {
+function CreatePollFormBody({ form }: {
   form: ReturnType<typeof useCreatePollForm>;
-  hideVisibility: boolean;
 }) {
   const sliderMax = useThresholdSliderMax(form.memberIds.length);
   return (
@@ -172,9 +170,7 @@ function CreatePollFormBody({ form, hideVisibility }: {
         selectedIds={form.memberIds}
         onChange={form.setMemberIds}
       />
-      {!hideVisibility && (
-        <CreatePollVisibility value={form.visibility} onChange={form.setVisibility} />
-      )}
+      <CreatePollVisibility value={form.visibility} onChange={form.setVisibility} />
       <DurationPicker
         value={form.durationHours}
         onChange={form.setDurationHours}

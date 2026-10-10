@@ -3,7 +3,6 @@
  *  - Private sends `visibility:'private'`, does NOT navigate, and switches to a
  *    success state with the share link (Copy → copyWithToast) + Open poll.
  *  - Community (default) sends no `visibility` key and auto-navigates as before.
- *  - `hideVisibility` (ruling R3, reschedule polls) hides the control.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
@@ -103,15 +102,5 @@ describe('CreatePollModal — private poll (ROK-1750)', () => {
         expect(mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('visibility');
         expect(navigate).toHaveBeenCalledWith('/community-lineup/2/schedule/1');
         expect(screen.queryByTestId('create-poll-success')).toBeNull();
-    });
-
-    it('hideVisibility (R3, reschedule) hides the control and sends no visibility', async () => {
-        mutateAsync.mockResolvedValue({ id: 1, lineupId: 2, visibility: 'public', shareToken: null });
-        const user = userEvent.setup();
-        renderWithProviders(<CreatePollModal isOpen={true} onClose={vi.fn()} hideVisibility />);
-        expect(screen.queryByRole('radiogroup', { name: 'Who can see this poll?' })).toBeNull();
-        await pickGame(user);
-        await user.click(screen.getByRole('button', { name: /create poll/i }));
-        expect(mutateAsync.mock.calls[0]?.[0]).not.toHaveProperty('visibility');
     });
 });
