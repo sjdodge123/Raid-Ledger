@@ -236,7 +236,10 @@ describe('admin unlink — option B (ROK-1756 finding 2)', () => {
     const holder = await user('holder404');
     await applyNew(holder.token, charString());
     const admin = await user('boss404', 'admin');
-    const res = await unlink(admin.token, '00000000-0000-4000-8000-000000000000');
+    const res = await unlink(
+      admin.token,
+      '00000000-0000-4000-8000-000000000000',
+    );
     expect(res.status).toBe(404);
     expect(await characters()).toHaveLength(1);
     expect(await guidAudit('addon_guid_admin_unlinked')).toHaveLength(0);
@@ -287,7 +290,11 @@ describe('admin unlink — option B (ROK-1756 finding 2)', () => {
     const [signup] = nonEmpty(
       await testApp.db
         .insert(schema.eventSignups)
-        .values({ eventId: event.id, userId: squatter.userId, characterId: squatId })
+        .values({
+          eventId: event.id,
+          userId: squatter.userId,
+          characterId: squatId,
+        })
         .returning(),
       'signup',
     );
