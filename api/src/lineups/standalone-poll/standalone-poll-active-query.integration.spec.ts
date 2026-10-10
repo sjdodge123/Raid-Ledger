@@ -150,9 +150,9 @@ function describeActiveStandalonePolls(): void {
   it('returns the unchanged DTO shape for a listed poll', async () => {
     const live = await seedPoll({ deadlineHours: 48, slotHours: [5, 9] });
 
-    const row = (await findActiveStandalonePolls(testApp.db, LIFECYCLE_CALLER)).find(
-      (r) => r.matchId === live,
-    );
+    const row = (
+      await findActiveStandalonePolls(testApp.db, LIFECYCLE_CALLER)
+    ).find((r) => r.matchId === live);
 
     expect(row).toMatchObject({
       matchId: live,
