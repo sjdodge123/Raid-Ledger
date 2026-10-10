@@ -5,12 +5,13 @@
  */
 import { useState, useMemo } from 'react';
 import { useAuth } from '../../../hooks/use-auth';
-import type { EnrichedDungeonQuestDto, EquipmentItemDto, QuestCoverageEntry } from '@raid-ledger/contract';
+import type { EnrichedDungeonQuestDto, EquipmentItemDto, QuestCoverageEntry, EventQuestPrereqsResponse } from '@raid-ledger/contract';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
-import { useEnrichedQuests, useQuestCoverage, useUpdateQuestProgress } from '../hooks/use-quest-prep';
+import { useEnrichedQuests, useQuestCoverage, useQuestPrereqs, useUpdateQuestProgress } from '../hooks/use-quest-prep';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { slugToContentVariant } from '../lib/wow-variant-config';
-import { QuestCard } from './quest-card';
+import { QuestCard, type QuestCardPrereqs } from './quest-card';
+import { QuestPrepNeededLine } from './quest-prep-needed-line';
 import { isQuestUsable, deduplicateByName } from '../utils/quest-dedup';
 import './quest-prep-panel.css';
 
@@ -67,6 +68,13 @@ function useCoverageMap(coverage: QuestCoverageEntry[] | undefined) {
     }, [coverage]);
 }
 
+/** ROK-1748: index the viewer's chain state by questId for the cards. */
+function usePrereqsByQuest(prereqs: EventQuestPrereqsResponse | undefined) {
+    return useMemo(() => new Map<number, QuestCardPrereqs>(
+        (prereqs?.quests ?? []).map((state) => [state.questId, { state, asOf: prereqs?.asOf ?? null }]),
+    ), [prereqs]);
+}
+
 function useQuestPrepState(eventId: number | undefined) {
     const [expandedQuests, setExpandedQuests] = useState<Set<number>>(new Set());
     const [pendingQuestId, setPendingQuestId] = useState<number | null>(null);
@@ -117,6 +125,7 @@ function useAllUsableQuests(questMap: Map<number, EnrichedDungeonQuestDto[]> | u
 interface BuildSharedPropsOptions {
     user: ReturnType<typeof useAuth>['user'];
     coverageMap: Map<number, QuestCoverageEntry>;
+    prereqsByQuest: Map<number, QuestCardPrereqs>;
     eventId: number | undefined;
     wowheadVariant: string;
     expandedQuests: Set<number>;
@@ -132,6 +141,7 @@ interface BuildSharedPropsOptions {
 function buildSharedProps(opts: BuildSharedPropsOptions): SharedQuestProps {
     return {
         coverageMap: opts.coverageMap,
+        prereqsByQuest: opts.prereqsByQuest,
         currentUserId: opts.user?.id,
         eventId: opts.eventId,
         wowheadVariant: opts.wowheadVariant,
@@ -153,6 +163,8 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     const instanceIds = useInstanceIds(parsedInstances);
     const { data: questMap, isLoading } = useEnrichedQuests(instanceIds, variant);
     const { data: coverage } = useQuestCoverage(eventId);
+    const { data: prereqs } = useQuestPrereqs(eventId, gameSlug);
+    const prereqsByQuest = usePrereqsByQuest(prereqs);
     const { data: character } = useCharacterDetail(characterId);
     const wowheadVariant = character?.gameVariant ?? variant;
     const equippedBySlot = useEquippedSlotMap(character);
@@ -167,18 +179,18 @@ export function QuestPrepPanel({ contentInstances, eventId, gameSlug, characterI
     if (!questMap || allFlat.length === 0) return null;
     if (allUsable.length === 0 && allFlat.length > 0) return <QuestPrepEmpty />;
 
-    const shared = buildSharedProps({ user, coverageMap, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp });
-    return <QuestPrepBody instances={parsedInstances} questMap={questMap} allUsable={allUsable} character={character} shared={shared} />;
+    const shared = buildSharedProps({ user, coverageMap, prereqsByQuest, eventId, wowheadVariant, expandedQuests, pendingQuestId, equippedBySlot, character, characterId, toggleExpanded, handleTogglePickedUp });
+    return <QuestPrepBody instances={parsedInstances} questMap={questMap} allUsable={allUsable} character={character} shared={shared} prereqs={prereqs} />;
 }
 
 /** Render the panel body — separated to keep main component under 30 lines */
-function QuestPrepBody({ instances, questMap, allUsable, character, shared }: {
-    instances: ParsedInstance[]; questMap: Map<number, EnrichedDungeonQuestDto[]>;
+function QuestPrepBody({ instances, questMap, allUsable, character, shared, prereqs }: {
+    instances: ParsedInstance[]; questMap: Map<number, EnrichedDungeonQuestDto[]>; prereqs: EventQuestPrereqsResponse | undefined;
     allUsable: EnrichedDungeonQuestDto[]; character: ReturnType<typeof useCharacterDetail>['data']; shared: SharedQuestProps;
 }) {
     return (
         <div className="quest-prep-panel">
-            <QuestPrepHeader count={allUsable.length} />
+            <QuestPrepHeader count={allUsable.length} prereqs={prereqs} />
             {instances.length > 1
                 ? instances.map((inst) => (
                     <InstanceQuestSection key={inst.id} instance={inst} quests={questMap.get(inst.id) ?? []} character={character} {...shared} />
@@ -189,8 +201,9 @@ function QuestPrepBody({ instances, questMap, allUsable, character, shared }: {
     );
 }
 
-function QuestPrepHeader({ count }: { count: number }) {
+function QuestPrepHeader({ count, prereqs }: { count: number; prereqs: EventQuestPrereqsResponse | undefined }) {
     return (
+        <>
         <div className="quest-prep-panel__header">
             <h2 className="quest-prep-panel__title">
                 <span className="quest-prep-panel__title-icon">📋</span>
@@ -198,6 +211,8 @@ function QuestPrepHeader({ count }: { count: number }) {
             </h2>
             <span className="text-xs text-muted">{count} quests</span>
         </div>
+        <QuestPrepNeededLine prereqs={prereqs} />
+        </>
     );
 }
 
@@ -221,6 +236,7 @@ function QuestPrepEmpty() {
 /** Shared props for quest rendering (passed through from panel) */
 interface SharedQuestProps {
     coverageMap: Map<number, QuestCoverageEntry>;
+    prereqsByQuest: Map<number, QuestCardPrereqs>;
     currentUserId: number | undefined;
     eventId: number | undefined;
     wowheadVariant: string;
@@ -306,8 +322,8 @@ function QuestSubGroup({ label, icon, quests, ...cardProps }: {
                     equippedBySlot={cardProps.equippedBySlot}
                     charClass={cardProps.charClass}
                     characterId={cardProps.characterId}
-                    onToggleExpanded={cardProps.onToggleExpanded}
-                    onTogglePickedUp={cardProps.onTogglePickedUp}
+                    onToggleExpanded={cardProps.onToggleExpanded} onTogglePickedUp={cardProps.onTogglePickedUp}
+                    prereqs={cardProps.prereqsByQuest.get(quest.questId)}
                 />
             ))}
         </div>

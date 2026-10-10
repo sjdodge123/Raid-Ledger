@@ -21,6 +21,7 @@ import { BossEncounterSeeder } from './boss-encounter-seeder';
 import { BossDataRefreshService } from './boss-data-refresh.service';
 import { QuestProgressController } from './quest-progress.controller';
 import { QuestProgressService } from './quest-progress.service';
+import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -65,6 +66,7 @@ import { CharacterQuestsService } from './character-quests.service';
     BossEncounterSeeder,
     BossDataRefreshService,
     QuestProgressService,
+    QuestProgressReadService,
     AddonImportService,
     AddonImportCreateService,
     AddonImportAuditService,
