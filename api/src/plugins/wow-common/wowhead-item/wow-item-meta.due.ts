@@ -17,7 +17,10 @@ export type DueCheckRow = Pick<
 >;
 
 /** No row, a due `next_retry_at`, or an `error` row past the floor. */
-export function isMetaDue(row: DueCheckRow | undefined, nowMs: number): boolean {
+export function isMetaDue(
+  row: DueCheckRow | undefined,
+  nowMs: number,
+): boolean {
   if (!row) return true;
   if (row.nextRetryAt !== null && row.nextRetryAt.getTime() <= nowMs) {
     return true;

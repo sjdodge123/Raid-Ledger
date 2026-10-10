@@ -212,3 +212,42 @@ describe('addonSnapshotToEquipment — item level, gaps and output shape', () =>
     expect(CharacterEquipmentSchema.parse(result)).toEqual(result);
   });
 });
+
+describe('addonSnapshotToEquipment — raw-link fallback (ROK-1760)', () => {
+  const linked: AddonSnapshotGearItem = {
+    slot: 4,
+    itemId: 6120,
+    ilvl: 1,
+    bonusIds: [],
+    name: "Recruit's Shirt",
+    quality: 4,
+  };
+
+  it.each([
+    ['no meta row', undefined],
+    ['not_found row', meta({ status: 'not_found', name: null, quality: null })],
+    ['error row', meta({ status: 'error', name: null, quality: null })],
+  ])('shows the link name and quality for %s, still unresolved', (_l, row) => {
+    const metaMap = new Map<number, AddonItemMeta>(row ? [[6120, row]] : []);
+    const [item] = addonSnapshotToEquipment(snapshot([linked]), metaMap).items;
+    expect(item).toEqual({
+      slot: 'SHIRT',
+      itemId: 6120,
+      itemLevel: 1,
+      itemSubclass: null,
+      name: "Recruit's Shirt",
+      quality: 'EPIC',
+      resolved: false,
+    });
+  });
+
+  it('a resolved Wowhead row always wins over the link name', () => {
+    const metaMap = new Map([[6120, meta()]]);
+    const [item] = addonSnapshotToEquipment(snapshot([linked]), metaMap).items;
+    expect(item).toMatchObject({
+      name: 'Thunderfury',
+      quality: 'LEGENDARY',
+      resolved: true,
+    });
+  });
+});
