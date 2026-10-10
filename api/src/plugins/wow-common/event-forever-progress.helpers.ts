@@ -47,14 +47,25 @@ export interface ForeverEventProgress {
 /** A manual row joined with its username (event-scoped). */
 export type ManualRowWithName = ManualProgressRow & { username: string };
 
-/** Instance ids from `events.content_instances` (`[{id}]`), aliases resolved. */
+/**
+ * One stored content-instance entry's numeric id. Mirrors the web parsers
+ * (`quest-prep-panel.tsx` / `boss-loot-panel.tsx`): a numeric `id`, a numeric
+ * string `id`, or the legacy `instanceId` key.
+ */
+function contentInstanceId(entry: unknown): number | undefined {
+  if (!entry || typeof entry !== 'object') return undefined;
+  const { id, instanceId } = entry as { id?: unknown; instanceId?: unknown };
+  const raw = id ?? instanceId;
+  const n = typeof raw === 'number' ? raw : Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+/** Instance ids from `events.content_instances`, aliases resolved. */
 export function contentInstanceIds(content: unknown): number[] {
   if (!Array.isArray(content)) return [];
   const ids = content
-    .map((c: unknown) =>
-      c && typeof c === 'object' ? (c as { id?: unknown }).id : undefined,
-    )
-    .filter((id): id is number => Number.isInteger(id));
+    .map(contentInstanceId)
+    .filter((id): id is number => id !== undefined);
   return [...new Set(ids.flatMap((id) => resolveQuestInstanceIds(id)))];
 }
 
