@@ -85,6 +85,51 @@ export const CharacterEquipmentSchema = z.object({
 export type CharacterEquipmentDto = z.infer<typeof CharacterEquipmentSchema>;
 
 // ==========================================
+// Forever Talents (ROK-1744) — addon-sourced talent display DTO.
+// Additive: CharacterSchema.talents stays z.unknown() (D2).
+// ==========================================
+
+/** One talent node from a LedgerLink snapshot, with its resolved grid slot. */
+export const ForeverTalentNodeSchema = z.object({
+    nodeId: z.number().int().positive(),
+    rank: z.number().int().min(0),
+    maxRanks: z.number().int().min(1).max(255).optional(),
+    name: z.string().max(64).optional(),
+    spellId: z.number().int().positive().optional(),
+    /** Resolved sub-tree (addon hint or server-derived). */
+    tree: z.number().int().min(0).max(2).optional(),
+    row: z.number().int().min(0).max(9).optional(),
+    col: z.number().int().min(0).max(3).optional(),
+});
+
+export type ForeverTalentNodeDto = z.infer<typeof ForeverTalentNodeSchema>;
+
+/** Forever talents as rendered on the character page (`format: 'forever'`). */
+export const ForeverTalentsSchema = z.object({
+    format: z.literal('forever'),
+    source: z.literal('addon'),
+    /** Snapshot capturedAt. */
+    syncedAt: z.string().datetime(),
+    configId: z.number().int().optional(),
+    /** Carried, not used (non-goal). */
+    importString: z.string().max(2048).optional(),
+    /** grid ⇔ every node has tree/row/col. */
+    layout: z.enum(['grid', 'list']),
+    /** [] when layout = 'list'. */
+    trees: z
+        .array(
+            z.object({
+                index: z.number().int().min(0).max(2),
+                spent: z.number().int().min(0),
+            }),
+        )
+        .max(3),
+    nodes: z.array(ForeverTalentNodeSchema).max(200),
+});
+
+export type ForeverTalentsDto = z.infer<typeof ForeverTalentsSchema>;
+
+// ==========================================
 // Profession Types (Character Detail Page)
 // ==========================================
 

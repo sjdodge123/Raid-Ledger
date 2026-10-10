@@ -1,24 +1,24 @@
 /**
- * Shared loader for a WoW: Forever character's LedgerLink `char` snapshot
- * (extracted from ROK-1727's ForeverDisplayEquipmentService; reused by
- * ROK-1744 and ROK-1745).
+ * Shared loader for a character's LedgerLink `char` snapshot (ROK-1727 query,
+ * extracted for ROK-1744 / ROK-1745). The games-slug join is the variant gate:
+ * only characters on the WoW: Forever game return a row.
  */
 import { and, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
 
-/** The `data` + `capturedAt` slice of a `char` snapshot row. */
-export type CharSnapshot = Pick<
+/** The snapshot columns the display resolvers read. */
+export type ForeverCharSnapshot = Pick<
   schema.CharacterAddonSnapshotSelect,
   'data' | 'capturedAt'
 >;
 
-/** The `char` snapshot of a character on the Forever game, if any. */
+/** The `char` snapshot of a character on the Forever game, or null. */
 export async function loadForeverCharSnapshot(
   db: PostgresJsDatabase<typeof schema>,
   characterId: string,
-): Promise<CharSnapshot | undefined> {
+): Promise<ForeverCharSnapshot | null> {
   const snap = schema.characterAddonSnapshots;
   const [found] = await db
     .select({ data: snap.data, capturedAt: snap.capturedAt })
@@ -33,5 +33,8 @@ export async function loadForeverCharSnapshot(
       ),
     )
     .limit(1);
-  return found;
+  return found ?? null;
 }
+
+/** Alias kept for ROK-1745 call sites that predate the rename. */
+export type CharSnapshot = ForeverCharSnapshot;

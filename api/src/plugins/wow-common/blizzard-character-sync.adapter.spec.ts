@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
 
 let adapter: BlizzardCharacterSyncAdapter;
+let talentsResolve: jest.Mock;
 let mockBlizzardService: {
   fetchCharacterProfile: jest.Mock;
   fetchCharacterSpecializations: jest.Mock;
@@ -19,6 +21,7 @@ async function setupEach() {
     fetchCharacterEquipment: jest.fn(),
     fetchCharacterProfessions: jest.fn(),
   };
+  talentsResolve = jest.fn();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       BlizzardCharacterSyncAdapter,
@@ -26,6 +29,10 @@ async function setupEach() {
       {
         provide: ForeverDisplayEquipmentService,
         useValue: { resolve: jest.fn() },
+      },
+      {
+        provide: ForeverDisplayTalentsService,
+        useValue: { resolve: talentsResolve },
       },
     ],
   }).compile();
@@ -223,5 +230,22 @@ describe('BlizzardCharacterSyncAdapter — fetchProfessions', () => {
       'classic1x',
     );
     expect(result).toBeNull();
+  });
+});
+
+describe('BlizzardCharacterSyncAdapter — resolveDisplayTalents (ROK-1744)', () => {
+  beforeEach(() => setupEach());
+
+  it('delegates to ForeverDisplayTalentsService', async () => {
+    const dto = { format: 'forever' };
+    talentsResolve.mockResolvedValue(dto);
+    const row = {
+      id: 'c1',
+      gameVariant: 'wow_forever',
+      talents: null,
+      lastSyncedAt: null,
+    };
+    await expect(adapter.resolveDisplayTalents(row)).resolves.toBe(dto);
+    expect(talentsResolve).toHaveBeenCalledWith(row);
   });
 });

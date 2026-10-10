@@ -17,10 +17,12 @@ import { addonSnapshotToEquipment } from './addon-equipment.adapter';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import {
   loadForeverCharSnapshot,
-  type CharSnapshot,
+  type ForeverCharSnapshot,
 } from './forever-char-snapshot.query';
 
 const FOREVER_VARIANT = 'wow_forever';
+
+type CharSnapshot = ForeverCharSnapshot;
 
 /** Gear item ids in a snapshot (entries without an itemId are skipped). */
 export function snapshotItemIds(snapshot: CharSnapshot): number[] {
