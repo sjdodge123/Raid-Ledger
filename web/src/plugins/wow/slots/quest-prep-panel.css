@@ -162,6 +162,12 @@
     color: var(--color-indigo-400);
 }
 
+/* Inset the focus ring: the right-hand 8px overhang sits in the card's
+   padding, and `.quest-card { overflow: hidden }` would clip an outset ring. */
+.quest-card__wowhead-icon:focus-visible {
+    outline-offset: -2px;
+}
+
 .quest-card__chevron {
     flex-shrink: 0;
     font-size: 1rem;
