@@ -31,7 +31,7 @@ function ForeverTalentList({ talents, points }: { talents: ForeverTalentsDto; po
     const unnamed = ranked.length - named.length;
     return (
         <div className="space-y-2">
-            <TalentPillSection label="Talents" talents={pills} pillClass={PILL_CLASS} />
+            <TalentPillSection label="Learned talents" talents={pills} pillClass={PILL_CLASS} />
             {unnamed > 0 && <p className="text-xs text-muted">+{unnamed} unnamed talents</p>}
         </div>
     );
