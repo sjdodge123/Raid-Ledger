@@ -58,10 +58,10 @@ export function mapConflicts(
 export function buildUpdateData(
   existing: AvailabilityDto,
   dto: {
-    startTime?: string;
-    endTime?: string;
-    status?: string;
-    gameId?: number | null;
+    startTime?: string | undefined;
+    endTime?: string | undefined;
+    status?: string | undefined;
+    gameId?: number | null | undefined;
   },
 ): {
   updateData: Record<string, unknown>;

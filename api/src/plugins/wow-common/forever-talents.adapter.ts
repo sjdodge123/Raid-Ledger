@@ -25,15 +25,15 @@ const MAX_ROW = 6;
 export interface ForeverTalentNodeInput {
   nodeId: number;
   rank: number;
-  maxRanks?: number;
-  name?: string;
-  spellId?: number;
-  posX?: number;
-  posY?: number;
-  tree?: number;
-  row?: number;
-  col?: number;
-  entryId?: number;
+  maxRanks?: number | undefined;
+  name?: string | undefined;
+  spellId?: number | undefined;
+  posX?: number | undefined;
+  posY?: number | undefined;
+  tree?: number | undefined;
+  row?: number | undefined;
+  col?: number | undefined;
+  entryId?: number | undefined;
 }
 
 /** Talent snapshot input (capturedAt becomes the DTO's syncedAt). */

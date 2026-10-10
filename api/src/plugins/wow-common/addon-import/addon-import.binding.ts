@@ -45,7 +45,9 @@ export interface AddonBindingPayload {
 export interface AddonBindingOptions {
   /** Preview (`true`) never raises `GUID_CONFIRM_REQUIRED`. */
   dryRun: boolean;
-  confirm?: { updateRuleset?: boolean; repinGuid?: boolean };
+  confirm?:
+    | { updateRuleset?: boolean | undefined; repinGuid?: boolean | undefined }
+    | undefined;
 }
 
 export interface AddonBindingResult {
