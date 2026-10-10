@@ -3,7 +3,7 @@
  * without a JWT (public like the character page, D3). The LedgerLink `char`
  * snapshot's `quests` slice is intersected with the known dungeon quests; the
  * raw completed-id list never reaches the response. Hidden cases return 200
- * with an empty body (Nest serialises `null` as no content).
+ * with `{ quests: null }`.
  */
 import { eq } from 'drizzle-orm';
 import { CharacterQuestsResponseSchema } from '@raid-ledger/contract';
@@ -141,7 +141,8 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
     await seedSnapshot(id, 2, { ...BASE_DATA, quests: QUESTS });
     const res = await get(id);
     expect(res.status).toBe(200);
-    const body = CharacterQuestsResponseSchema.parse(res.body);
+    const body = CharacterQuestsResponseSchema.parse(res.body).quests;
+    expect(body).not.toBeNull();
     expect(body?.syncedAt).toBe(CAPTURED_AT.toISOString());
     expect(body?.counts).toEqual({
       completedKnown: 2,
@@ -169,27 +170,27 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
     expect(res.text).not.toContain(JSON.stringify(COMPLETED));
   });
 
-  it('returns 200 with no body for a schema-1 snapshot without quests', async () => {
+  it('returns 200 with quests: null for a schema-1 snapshot without quests', async () => {
     const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
     await seedSnapshot(id, 1, BASE_DATA);
     const res = await get(id);
     expect(res.status).toBe(200);
-    expect(res.text).toBe('');
+    expect(res.body).toEqual({ quests: null });
   });
 
-  it('returns 200 with no body when the Forever character has no snapshot', async () => {
+  it('returns 200 with quests: null when the Forever character has no snapshot', async () => {
     const id = await seedCharacter(WOW_FOREVER_GAME_SLUG);
     const res = await get(id);
     expect(res.status).toBe(200);
-    expect(res.text).toBe('');
+    expect(res.body).toEqual({ quests: null });
   });
 
-  it('returns 200 with no body for a non-Forever character', async () => {
+  it('returns 200 with quests: null for a non-Forever character', async () => {
     const id = await seedCharacter('world-of-warcraft-classic');
     await seedSnapshot(id, 2, { ...BASE_DATA, quests: QUESTS });
     const res = await get(id);
     expect(res.status).toBe(200);
-    expect(res.text).toBe('');
+    expect(res.body).toEqual({ quests: null });
   });
 
   it('returns 404 for an unknown character id', async () => {

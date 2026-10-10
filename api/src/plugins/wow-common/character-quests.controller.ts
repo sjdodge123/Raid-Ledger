@@ -5,7 +5,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
-import type { CharacterQuestsDto } from '@raid-ledger/contract';
+import type { CharacterQuestsResponse } from '@raid-ledger/contract';
 import {
   PluginActiveGuard,
   RequirePlugin,
@@ -23,11 +23,11 @@ import { CharacterQuestsService } from './character-quests.service';
 export class CharacterQuestsController {
   constructor(private readonly quests: CharacterQuestsService) {}
 
-  /** GET /plugins/wow/characters/:id/quests → DTO, or null when hidden (D2). */
+  /** GET /plugins/wow/characters/:id/quests → `{ quests }`, null when hidden (D2). */
   @Get(':id/quests')
-  getQuests(
+  async getQuests(
     @Param('id', ParseUUIDPipe) id: string,
-  ): Promise<CharacterQuestsDto | null> {
-    return this.quests.getForCharacter(id);
+  ): Promise<CharacterQuestsResponse> {
+    return { quests: await this.quests.getForCharacter(id) };
   }
 }

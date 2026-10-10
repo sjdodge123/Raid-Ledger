@@ -65,6 +65,11 @@ export const CharacterQuestsDtoSchema = z.object({
 });
 export type CharacterQuestsDto = z.infer<typeof CharacterQuestsDtoSchema>;
 
-/** `null` = section hidden (non-Forever, no snapshot, no quest data). */
-export const CharacterQuestsResponseSchema = CharacterQuestsDtoSchema.nullable();
+/**
+ * Envelope so the wire never relies on an empty body.
+ * `quests: null` = section hidden (non-Forever, no snapshot, no quest data).
+ */
+export const CharacterQuestsResponseSchema = z.object({
+    quests: CharacterQuestsDtoSchema.nullable(),
+});
 export type CharacterQuestsResponse = z.infer<typeof CharacterQuestsResponseSchema>;
