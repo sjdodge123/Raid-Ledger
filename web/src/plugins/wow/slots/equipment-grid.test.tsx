@@ -376,6 +376,15 @@ describe('EquipmentSlot — addon items (ROK-1727)', () => {
         expect(screen.queryByText('Item #2312')).toBeNull();
     });
 
+    it.each(['COMMON', 'HEIRLOOM'])('ROK-1760: a %s item name uses the text-secondary token so it reads on light schemes', (quality) => {
+        mockMatchMedia(false);
+        const item = createItem({ name: "Recruit's Shirt", itemId: 6120, quality, itemLevel: 1 });
+        render(<EquipmentSlot item={item} slotName="SHIRT" gameVariant="wow_forever" />);
+        const name = screen.getByText("Recruit's Shirt");
+        expect(name.className).toContain('text-secondary');
+        expect(name.className).not.toContain('text-gray-300');
+    });
+
     it.each<[EquipmentItemDto['wowheadEnv'], string, string]>([
         [16, 'https://www.wowhead.com/forever/item=19019', 'item=19019&domain=forever'],
         [4, 'https://www.wowhead.com/classic/item=19019', 'item=19019&domain=classic&dataEnv=1'],
