@@ -27,7 +27,7 @@
     "section": "char",
     "data": {
       "gear": [
-        {"slot":16,"itemId":19019,"ilvl":80,"bonusIds":[6646,7890]},
+        {"slot":16,"itemId":19019,"ilvl":80,"bonusIds":[6646,7890],"name":"Thunderfury"},
         {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
       ],
       "talents": {

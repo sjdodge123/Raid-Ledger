@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
 
 export const DEPARTURE_GRACE_QUEUE = 'departure-grace';
 
@@ -44,6 +45,8 @@ export class DepartureGraceQueueService {
           await existingJob.remove();
         }
       }
+      // ROK-1762: a retained completed/failed job would block the add.
+      await clearFinishedJob(this.queue, jobId);
 
       await this.queue.add('departure-expire', data, {
         jobId,
