@@ -2,7 +2,8 @@
  * Private standalone polls shared by link — integration (ROK-1750 spec §9).
  *
  * Real DB, real HTTP. Covers:
- *   1. private poll page hidden from anon + non-invitees; vote → 403
+ *   1. private poll page (+ availability, other-polls) hidden from anon +
+ *      non-invitees; vote → 403
  *   2. preview: minimal fields only; unknown / malformed / reset → one 404
  *   3. join: invitee + member rows, then view + vote; second join idempotent
  *   4. deactivated join → 403; creator join → joined:false, no rows
@@ -215,6 +216,23 @@ describe('ROK-1750 private poll — outsiders', () => {
     expect((await vote(poll, outsider.token, slotId)).status).toBe(403);
     // The creator still sees their own poll.
     expect((await getPage(poll, creator.token)).status).toBe(200);
+  });
+
+  // Review m3: the page's side reads apply the same 404 to an outsider.
+  it('404s availability + other-polls for a non-invitee, like the page', async () => {
+    const creator = await loginAsMember('creator');
+    const outsider = await loginAsMember('outsider');
+    const poll = await createPoll(creator.token);
+    const side = (path: string, token: string) =>
+      testApp.request
+        .get(`/lineups/${poll.lineupId}/schedule/${poll.matchId}/${path}`)
+        .set(...auth(token));
+
+    expect((await side('availability', outsider.token)).status).toBe(404);
+    expect((await side('other-polls', outsider.token)).status).toBe(404);
+    expect((await side('availability', creator.token)).status).toBe(200);
+    expect((await side('other-polls', creator.token)).status).toBe(200);
+    expect((await side('availability', adminToken)).status).toBe(200);
   });
 });
 

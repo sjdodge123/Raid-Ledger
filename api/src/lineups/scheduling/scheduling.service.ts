@@ -28,7 +28,6 @@ import {
   insertScheduleSlot,
   insertScheduleVote,
   deleteAllUserVotesForMatch,
-  findUserSchedulingMatches,
   ensureMatchMember,
 } from './scheduling-query.helpers';
 import {
@@ -39,11 +38,12 @@ import {
   assertMayLockInSlot,
   assertSlotStillVotable,
 } from './scheduling-lock-in.helpers';
-import { buildSchedulingAvailability } from './scheduling-availability.helpers';
 import {
-  findMatchById,
-  findMatchMembers,
-} from '../lineups-match-query.helpers';
+  loadMatchAvailability,
+  loadOtherPolls,
+  type SideReadViewer,
+} from './scheduling-side-reads.helpers';
+import { findMatchById } from '../lineups-match-query.helpers';
 import { buildBannerForUser } from './scheduling-banner.helpers';
 import { LineupNotificationService } from '../lineup-notification.service';
 import { SchedulingPollEmbedService } from './scheduling-poll-embed.service';
@@ -331,30 +331,14 @@ export class SchedulingService {
     };
   }
 
-  /**
-   * Get heatmap availability data (fresh/stale/unknown) for a match's members.
-   *
-   * @param matchId - The scheduling match the heatmap belongs to.
-   * @param viewerUserId - Viewer, for the freshness banner. Optional.
-   * @param weekStart - Sunday 00:00 UTC of the week to paint (ROK-1570). The
-   *   members' dated signups and absences in that week are subtracted from
-   *   their templates. `undefined` = the current week.
-   */
-  async getMatchAvailability(
+  /** Heatmap availability for a match's members (private-poll guarded). */
+  getMatchAvailability(
     matchId: number,
-    viewerUserId?: number,
+    viewer: SideReadViewer,
     weekStart?: Date,
     tzOffset = 0,
   ): Promise<AggregateGameTimeResponse> {
-    const members = await findMatchMembers(this.db, [matchId]);
-    return buildSchedulingAvailability(
-      this.db,
-      members.map((m) => m.userId),
-      matchId,
-      viewerUserId,
-      weekStart,
-      tzOffset,
-    );
+    return loadMatchAvailability(this.db, matchId, viewer, weekStart, tzOffset);
   }
 
   /** Get the scheduling banner for the events page. */
@@ -364,22 +348,13 @@ export class SchedulingService {
     return buildBannerForUser(this.db, userId);
   }
 
-  /** Get other scheduling polls the user is a member of. */
-  async getOtherPolls(
+  /** Other scheduling polls the viewer is a member of (guarded). */
+  getOtherPolls(
     lineupId: number,
     excludeMatchId: number,
-    userId: number,
+    viewer: SideReadViewer,
   ): Promise<OtherPollsResponseDto> {
-    const matches = await findUserSchedulingMatches(this.db, lineupId, userId);
-    const polls = matches
-      .filter((m) => m.matchId !== excludeMatchId)
-      .map((m) => ({
-        matchId: m.matchId,
-        gameName: m.gameName,
-        gameCoverUrl: m.gameCoverUrl,
-        memberCount: m.memberCount,
-      }));
-    return { polls };
+    return loadOtherPolls(this.db, lineupId, excludeMatchId, viewer);
   }
 
   /**

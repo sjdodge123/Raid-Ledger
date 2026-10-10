@@ -145,7 +145,15 @@ export async function insertInvitees(
   return inserted.length;
 }
 
-/** Add one match member (idempotent on `uq_match_member_user`). */
+/**
+ * Add one match member (idempotent on `uq_match_member_user`).
+ *
+ * `source: 'voted'` on purpose (review m2): a link joiner becomes an INVITEE,
+ * the same standing as a member picked at creation, and the standalone
+ * `insertMatchMembers` rows those as 'voted'. 'added' marks a creator's
+ * post-creation manage action. The only readers (the reminder's
+ * `<> 'bandwagon'` filter, the match-member response) treat both alike.
+ */
 export async function insertMatchMember(
   db: DbOrTx,
   matchId: number,
