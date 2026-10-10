@@ -57,7 +57,7 @@ export async function runRefreshSnapshot(
 ): Promise<RefreshSnapshotResult> {
   const log: SectionLog = {
     logger: deps.logger ?? new Logger('runRefreshSnapshot'),
-    jobId: deps.jobId,
+    ...(deps.jobId !== undefined ? { jobId: deps.jobId } : {}),
   };
   const cfg = await loadConfig(deps.settings);
   const snapshotDate = todayUtcIso();
