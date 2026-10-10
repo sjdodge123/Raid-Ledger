@@ -62,7 +62,7 @@ describe('ForeverTalentDisplay — header + calc link', () => {
 describe('ForeverTalentGrid', () => {
     it('renders the three class sub-tree headings in tab order with spent points', () => {
         renderForever(talents('grid', GRID_NODES));
-        const headings = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+        const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
         expect(headings).toEqual(['Arms', 'Fury', 'Protection']);
         expect(screen.getByTestId('forever-tree-spent-0')).toHaveTextContent('3');
     });
@@ -92,7 +92,7 @@ describe('ForeverTalentGrid', () => {
 
     it('falls back to "Tree 1/2/3" headings for an unknown class', () => {
         renderForever(talents('grid', GRID_NODES), 'Monk');
-        const headings = screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent);
+        const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
         expect(headings).toEqual(['Tree 1', 'Tree 2', 'Tree 3']);
     });
 });

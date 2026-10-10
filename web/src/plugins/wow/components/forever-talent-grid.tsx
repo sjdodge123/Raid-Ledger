@@ -34,7 +34,7 @@ function SubTree({ name, index, spent, nodes }: { name: string; index: number; s
     return (
         <div className="space-y-2 min-w-0">
             <div className="flex items-center justify-between text-sm">
-                <h4 className="text-foreground font-medium">{name}</h4>
+                <h3 className="text-foreground font-medium">{name}</h3>
                 <span data-testid={`forever-tree-spent-${index}`} className="text-muted font-mono">{spent}</span>
             </div>
             <div className="grid grid-cols-4 gap-1" style={{ gridTemplateRows: `repeat(${rows}, minmax(0, auto))` }}>
