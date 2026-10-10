@@ -25,6 +25,11 @@ function scrubStringValues(record: unknown): void {
     }
 }
 
+/** ROK-1750 R6: HttpContext copies document.referrer into request.headers.Referer. */
+function scrubRequestHeaders(request: unknown): void {
+    if (isRecord(request)) scrubStringValues(request.headers);
+}
+
 interface ScrubbableTransaction {
     request?: unknown;
     spans?: unknown[];
@@ -35,6 +40,7 @@ interface ScrubbableTransaction {
 export function scrubTransactionEvent<T extends ScrubbableTransaction>(event: T): T {
     scrubStringValues(event);
     scrubStringValues(event.request);
+    scrubRequestHeaders(event.request);
     scrubStringValues(event.contexts?.trace?.data);
     for (const span of event.spans ?? []) {
         scrubStringValues(span);
@@ -57,6 +63,7 @@ interface ScrubbableError {
 export function scrubErrorEvent<T extends ScrubbableError>(event: T): T {
     if (event.transaction) event.transaction = scrubTokenFromUrl(event.transaction);
     if (event.request?.url) event.request.url = scrubTokenFromUrl(event.request.url);
+    scrubRequestHeaders(event.request);
     scrubStringValues(event.contexts?.trace?.data);
     return event;
 }
