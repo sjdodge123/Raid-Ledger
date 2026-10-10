@@ -9,7 +9,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 
 import { QuestProgressReadService } from './quest-progress-read.service';
 import type { QuestProgressDto } from './quest-progress-read.service';
-import { loadForeverEventProgress } from './event-forever-progress.query';
+import { loadForeverMemberProgress } from './event-forever-progress.query';
 import { addonRowsFor } from './event-forever-progress.helpers';
 import {
   fillFromAddon,
@@ -138,7 +138,7 @@ export class QuestProgressService {
     userId: number,
     questId: number,
   ): Promise<AddonProgressRow | undefined> {
-    const forever = await loadForeverEventProgress(this.db, eventId);
+    const forever = await loadForeverMemberProgress(this.db, eventId, userId);
     if (!forever) return undefined;
     return addonRowsFor(forever, userId).find((r) => r.questId === questId);
   }

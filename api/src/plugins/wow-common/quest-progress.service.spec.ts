@@ -1,11 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
-import { loadForeverEventProgress } from './event-forever-progress.query';
+import { loadForeverMemberProgress } from './event-forever-progress.query';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
 
 jest.mock('./event-forever-progress.query');
-const mockLoad = jest.mocked(loadForeverEventProgress);
+const mockLoad = jest.mocked(loadForeverMemberProgress);
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -118,6 +118,7 @@ describe('QuestProgressService — write', () => {
       expect(mockDb.values).toHaveBeenCalledWith(
         expect.objectContaining({ pickedUp: true, completed: true }),
       );
+      expect(mockLoad).toHaveBeenCalledWith(mockDb, 10, 1);
       expect(mockReads.invalidateCoverage).toHaveBeenCalledWith(10);
     });
 

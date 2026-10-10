@@ -14,6 +14,7 @@ import * as schema from '../../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import { defined } from '../../common/testing/narrow';
 import { QuestProgressReadService } from './quest-progress-read.service';
+import { clearKnownQuestMemo } from './event-forever-progress.query';
 
 /** Create a test event owned by the admin user. */
 async function createTestEvent(
@@ -380,6 +381,7 @@ describe('Quest Progress — Forever addon rows (ROK-1748, integration)', () => 
 
   /** Admin: 100+400 done, 200 in log. Other: 300 in log. Declined: 200. */
   beforeEach(async () => {
+    clearKnownQuestMemo();
     await seedForeverQuests();
     adminId = testApp.seed.adminUser.id;
     foreverEvent = await createGameEvent(FOREVER_SLUG);
@@ -492,6 +494,27 @@ describe('Quest Progress — Forever addon rows (ROK-1748, integration)', () => 
     ]);
   });
 
+  it('a departed signup feeds no progress or coverage rows (D8)', async () => {
+    const goneId = await seedUser('qp-departed');
+    const goneChar = await seedChar(goneId, 'Gona', {
+      completed: [100],
+      inProgress: [{ questId: 200 }, { questId: 300 }],
+    });
+    await signUp(foreverEvent, goneId, goneChar, 'departed');
+    const progress = await get(foreverEvent, 'quest-progress');
+    const rows = progress.body as Array<{ userId: number }>;
+    expect(rows.filter((r: { userId: number }) => r.userId === goneId)).toEqual(
+      [],
+    );
+    const coverage = await get(foreverEvent, 'quest-coverage');
+    const carriers = (
+      coverage.body as Array<{ coveredBy: Array<{ userId: number }> }>
+    ).flatMap((e: { coveredBy: Array<{ userId: number }> }) => e.coveredBy);
+    expect(carriers.map((c: { userId: number }) => c.userId)).not.toContain(
+      goneId,
+    );
+  });
+
   it('quest-prereqs/me returns chain states and neededTotal; a manual untick counts as needed', async () => {
     const res = await get(foreverEvent, 'quest-prereqs/me');
     expect(res.status).toBe(200);
@@ -524,6 +547,27 @@ describe('Quest Progress — Forever addon rows (ROK-1748, integration)', () => 
     await signUp(classic, adminId, adminChar);
     expect((await get(classic, 'quest-progress')).body).toEqual([]);
     expect((await get(classic, 'quest-coverage')).body).toEqual([]);
+    expect((await put(classic, { questId: 200, pickedUp: true })).status).toBe(
+      200,
+    );
+    const legacy = await get(classic, 'quest-progress');
+    expect(legacy.body).toEqual([
+      {
+        id: expect.any(Number),
+        eventId: classic,
+        userId: adminId,
+        username: expect.any(String),
+        questId: 200,
+        pickedUp: true,
+        completed: false,
+      },
+    ]);
+    expect((await get(classic, 'quest-coverage')).body).toEqual([
+      {
+        questId: 200,
+        coveredBy: [{ userId: adminId, username: expect.any(String) }],
+      },
+    ]);
     const prereqs = await get(classic, 'quest-prereqs/me');
     expect(prereqs.status).toBe(200);
     expect(prereqs.text).toBe('null');
