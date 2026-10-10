@@ -28,7 +28,7 @@ import * as crudH from './characters-crud.helpers';
 import * as createH from './characters-create.helpers';
 import * as identityH from './characters-identity.helpers';
 import { defined } from '../common/defined.helpers';
-import { withDisplayEquipment } from './characters-display-equipment.helpers';
+import { withDisplayOverrides } from './characters-display-equipment.helpers';
 
 /**
  * Service for managing player characters (ROK-130).
@@ -285,7 +285,7 @@ export class CharactersService {
       .limit(1);
     if (!character)
       throw new NotFoundException(`Character ${characterId} not found`);
-    const dto = await withDisplayEquipment(
+    const dto = await withDisplayOverrides(
       mapCharacterToDto(character),
       this.findCharacterSyncAdapter(character.gameVariant ?? undefined),
       this.logger,
