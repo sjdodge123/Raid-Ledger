@@ -31,7 +31,7 @@ interface DungeonQuestEntry {
   rewardType: string | null;
 }
 
-/** ROK-1748: Forever rows (`expansion: 'forever'`); ships `[]` pre-launch. */
+/** ROK-1748: Forever rows (`expansion: 'forever'`), imported offline from Wowhead Forever. */
 const FOREVER_QUEST_FILE = 'forever-dungeon-quest-data.json';
 
 async function readQuestFile(file: string): Promise<DungeonQuestEntry[]> {

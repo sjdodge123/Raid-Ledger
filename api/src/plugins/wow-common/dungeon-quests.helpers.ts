@@ -27,7 +27,7 @@ export const VARIANT_EXPANSIONS: Record<string, string[]> = {
   classic_anniversary: ['classic', 'tbc'],
   classic: ['classic', 'tbc', 'wotlk', 'cata'],
   retail: ['classic', 'tbc', 'wotlk', 'cata'],
-  // ROK-1719: vanilla content plus Forever's own (no 'forever' rows seeded yet).
+  // ROK-1719/1748: vanilla content plus Forever's own seeded 'forever' rows.
   wow_forever: ['classic', 'forever'],
 };
 
