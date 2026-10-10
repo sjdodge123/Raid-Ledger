@@ -4,9 +4,19 @@
  * A parent rotated within `RACE_GRACE_MS` may mint ONE sibling (multi-tab
  * session restore racing on one cookie). The "once" is an atomic Redis
  * `SET NX PX` keyed on the parent row, so a captured token replayed inside
- * the window can no longer fork unlimited live chains: the second replay is
- * reuse → family revoke + blocklist. Was 60 s and uncapped (ROK-1353).
+ * the window can no longer fork unlimited live chains: every later in-window
+ * replay is `raced` → 409 `refresh_raced`, NO token and NO revoke (3+ tabs
+ * sharing one cookie jar must not revoke their own family and blocklist the
+ * user). Only a replay older than the window is reuse → family revoke +
+ * blocklist. Was 60 s and uncapped (ROK-1353).
  */
+import {
+  ConflictException,
+  HttpStatus,
+  ServiceUnavailableException,
+  type HttpException,
+} from '@nestjs/common';
+
 /** Grace window for a race-loser sibling (AC: ≤ 10 s). */
 export const RACE_GRACE_MS = 10_000;
 
@@ -16,7 +26,10 @@ const GRACE_KEY_PREFIX = 'refresh_grace:';
 export type GraceClaim = 'claimed' | 'used' | 'error';
 
 /** What to do with a replay of an already-rotated (not revoked) token. */
-export type ReplayVerdict = 'sibling' | 'reuse' | 'reject';
+export type ReplayVerdict = 'sibling' | 'reuse' | 'raced' | 'unavailable';
+
+/** Machine-readable code on the 409 an in-window race loser gets. */
+export const REFRESH_RACED_CODE = 'refresh_raced';
 
 /** The one ioredis call the claim needs (ioredis `Redis` satisfies it). */
 export interface GraceRedis {
@@ -49,9 +62,10 @@ export async function claimGraceOnce(
 }
 
 /**
- * Inside the window: first claim → sibling, later claims → reuse. A Redis
- * failure → plain 401 (no revoke: an outage must not log out every
- * multi-tab user). Outside the window → reuse, as before.
+ * Inside the window: first claim → sibling, later claims → raced (409, no
+ * revoke). A Redis failure → unavailable (503, no revoke: an outage must not
+ * log out every multi-tab user, and a 401 would make the web clear the shared
+ * access token). Outside the window → reuse, as before.
  */
 export function replayVerdict(
   rotatedAgoMs: number,
@@ -60,6 +74,31 @@ export function replayVerdict(
   if (rotatedAgoMs > RACE_GRACE_MS) return Promise.resolve('reuse');
   return claim().then((result) => {
     if (result === 'claimed') return 'sibling';
-    return result === 'used' ? 'reuse' : 'reject';
+    return result === 'used' ? 'raced' : 'unavailable';
   });
+}
+
+/**
+ * The non-revoking error for a verdict that proves nothing about the session
+ * (the web treats 409/503 as indeterminate: no logout, no storage wipe), or
+ * null for `sibling` / `reuse`.
+ */
+export function indeterminateReplayError(
+  verdict: ReplayVerdict,
+): HttpException | null {
+  if (verdict === 'raced') {
+    return new ConflictException({
+      statusCode: HttpStatus.CONFLICT,
+      code: REFRESH_RACED_CODE,
+      message: 'Refresh token was just rotated by a concurrent request',
+    });
+  }
+  if (verdict === 'unavailable') {
+    return new ServiceUnavailableException({
+      statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+      code: 'refresh_unavailable',
+      message: 'Refresh temporarily unavailable; retry',
+    });
+  }
+  return null;
 }

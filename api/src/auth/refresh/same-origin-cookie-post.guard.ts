@@ -14,6 +14,14 @@
  *
  * Reads the raw `Host` header only — never `req.hostname` / X-Forwarded-Host,
  * which `trust proxy` makes client-controlled (same rule as ROK-1732).
+ *
+ * `Sec-Fetch-Site: cross-site` is rejected even when the Origin is on the
+ * explicit `CORS_ORIGIN` list — fine, because prod `rl_rt` is SameSite=Strict
+ * (`refresh-cookie.helpers.ts`), so a cross-site split deploy never sent it.
+ *
+ * Escape hatch: `AUTH_ORIGIN_GUARD=report` logs each would-reject line and
+ * allows (for a self-host behind a proxy that rewrites `Host`). Unset/blank/
+ * anything else → enforce. Read per request, like `CORS_ORIGIN`.
  */
 import {
   ForbiddenException,
@@ -29,6 +37,13 @@ import {
 } from '../../cors/cors-auto-decision';
 
 export const CROSS_SITE_REJECTED_MESSAGE = 'Cross-site request rejected';
+
+export type OriginGuardMode = 'enforce' | 'report';
+
+/** Only an explicit `report` relaxes the guard; everything else enforces. */
+export function parseOriginGuardMode(raw: string | undefined): OriginGuardMode {
+  return raw?.trim().toLowerCase() === 'report' ? 'report' : 'enforce';
+}
 
 export type CookiePostReason =
   | 'cross-site'
@@ -100,6 +115,12 @@ export class SameOriginCookiePostGuard implements CanActivate {
       isProduction: process.env.NODE_ENV === 'production',
     });
     if (decision.allow) return true;
+    if (parseOriginGuardMode(process.env.AUTH_ORIGIN_GUARD) === 'report') {
+      this.logger.warn(
+        `ROK-1755: would-reject ${req.method} ${req.path} (${decision.reason}) — AUTH_ORIGIN_GUARD=report, allowing`,
+      );
+      return true;
+    }
     this.logger.warn(
       `ROK-1755: rejected ${req.method} ${req.path} (${decision.reason})`,
     );
