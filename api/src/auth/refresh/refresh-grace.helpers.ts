@@ -7,8 +7,6 @@
  * the window can no longer fork unlimited live chains: the second replay is
  * reuse → family revoke + blocklist. Was 60 s and uncapped (ROK-1353).
  */
-import type Redis from 'ioredis';
-
 /** Grace window for a race-loser sibling (AC: ≤ 10 s). */
 export const RACE_GRACE_MS = 10_000;
 
@@ -20,9 +18,20 @@ export type GraceClaim = 'claimed' | 'used' | 'error';
 /** What to do with a replay of an already-rotated (not revoked) token. */
 export type ReplayVerdict = 'sibling' | 'reuse' | 'reject';
 
+/** The one ioredis call the claim needs (ioredis `Redis` satisfies it). */
+export interface GraceRedis {
+  set(
+    key: string,
+    value: string,
+    px: 'PX',
+    ms: number,
+    nx: 'NX',
+  ): Promise<string | null>;
+}
+
 /** Atomically take the parent's single grace sibling. */
 export async function claimGraceOnce(
-  redis: Pick<Redis, 'set'>,
+  redis: GraceRedis,
   parentId: string,
 ): Promise<GraceClaim> {
   try {
