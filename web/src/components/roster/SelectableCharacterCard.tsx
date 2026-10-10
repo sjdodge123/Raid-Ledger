@@ -1,6 +1,7 @@
 import type { CharacterDto } from '@raid-ledger/contract';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
+import { ForeverPortraitFallback } from '../../plugins/wow/components/forever-portrait';
 
 /**
  * ROK-461: Selectable character card for admin assignment flow.
@@ -21,7 +22,7 @@ export function SelectableCharacterCard({
                 : 'border-edge bg-panel/50 hover:border-edge-strong hover:bg-panel'
                 }`}
         >
-            <CharacterAvatar name={character.name} avatarUrl={character.avatarUrl} />
+            <ForeverPortraitFallback character={character} size="md"><CharacterAvatar name={character.name} avatarUrl={character.avatarUrl} /></ForeverPortraitFallback>
             <CharacterInfo character={character} isMain={isMain} />
             {isSelected && <SelectedCheckmark />}
         </button>

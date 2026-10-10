@@ -1,5 +1,6 @@
 import type { CharacterDto, CharacterRole } from '@raid-ledger/contract';
 import { RoleIcon } from '../shared/RoleIcon';
+import { ForeverPortraitFallback } from '../../plugins/wow/components/forever-portrait';
 
 const ROLE_COLORS: Record<CharacterRole, string> = {
     tank: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -71,7 +72,7 @@ export function SignupCharacterCard({ character, isSelected, onSelect, isMain }:
         <button onClick={onSelect}
             className={`w-full flex items-center gap-3 p-3 rounded-lg border-2 transition-all text-left ${isSelected
                 ? 'border-indigo-500 bg-indigo-500/10' : 'border-edge bg-panel/50 hover:border-edge-strong hover:bg-panel'}`}>
-            <CharacterAvatar character={character} />
+            <ForeverPortraitFallback character={character} size="md"><CharacterAvatar character={character} /></ForeverPortraitFallback>
             <CharacterDetails character={character} isMain={isMain} />
             {role && (
                 <span className={`shrink-0 px-2 py-1 text-xs font-medium rounded border whitespace-nowrap ${ROLE_COLORS[role]}`}>
