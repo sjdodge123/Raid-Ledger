@@ -22,6 +22,7 @@ import {
   GAME_TASTE_RECOMPUTE_QUEUE,
   type GameTasteRecomputeJobData,
 } from './game-taste.constants';
+import { clearFinishedJob } from '../queue/clear-finished-job.helpers';
 
 /**
  * Service layer for ROK-1082 game taste vectors.
@@ -68,11 +69,19 @@ export class GameTasteService {
     return getVectorWithDerivation(this.db, gameId);
   }
 
+  /**
+   * ROK-1762: the fixed jobId used to be added with NO retention opts, so the
+   * first finished recompute was kept forever and every later same-game add
+   * was a silent no-op. Clear a finished job first (a pending one still
+   * dedups) and bound retention like the other fixed-id queues.
+   */
   async enqueueRecompute(gameId: number): Promise<void> {
+    const jobId = `game-taste-recompute-${gameId}`;
+    await clearFinishedJob(this.queue, jobId);
     await this.queue.add(
       'recompute',
       { gameId },
-      { jobId: `game-taste-recompute-${gameId}` },
+      { jobId, removeOnComplete: 100, removeOnFail: 50 },
     );
   }
 }

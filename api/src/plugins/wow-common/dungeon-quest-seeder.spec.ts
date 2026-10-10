@@ -3,6 +3,9 @@ import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { PgDialect } from 'drizzle-orm/pg-core';
+import type { SQL } from 'drizzle-orm';
+import { wowClassicDungeonQuests } from '../../drizzle/schema';
 
 const readData = (file: string): Array<Record<string, unknown>> =>
   JSON.parse(readFileSync(join(__dirname, 'data', file), 'utf-8')) as Array<
@@ -10,6 +13,15 @@ const readData = (file: string): Array<Record<string, unknown>> =>
   >;
 const classicData = readData('dungeon-quest-data.json');
 const foreverData = readData('forever-dungeon-quest-data.json');
+
+describe('bundled dungeon-quest datasets (ROK-1758)', () => {
+  it('questIds are unique across the Classic and Forever files', () => {
+    // DO UPDATE fails on a repeat inside a batch and is last-file-wins across files.
+    const ids = [...classicData, ...foreverData].map((q) => q['questId']);
+    const dups = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(dups).toEqual([]);
+  });
+});
 
 jest.mock('fs/promises', () => {
   const actual =
@@ -21,6 +33,8 @@ const fsPromises = require('fs/promises') as { readFile: jest.Mock };
 
 let seeder: DungeonQuestSeeder;
 let mockValues: jest.Mock;
+let mockOnConflictDoNothing: jest.Mock;
+let mockOnConflictDoUpdate: jest.Mock;
 let mockDb: {
   insert: jest.Mock;
   delete: jest.Mock;
@@ -28,12 +42,16 @@ let mockDb: {
 
 async function setupEach() {
   const mockReturning = jest.fn().mockResolvedValue([{ id: 1 }]);
-  const mockOnConflictDoNothing = jest
+  mockOnConflictDoNothing = jest
     .fn()
     .mockReturnValue({ returning: mockReturning });
-  mockValues = jest
+  mockOnConflictDoUpdate = jest
     .fn()
-    .mockReturnValue({ onConflictDoNothing: mockOnConflictDoNothing });
+    .mockReturnValue({ returning: mockReturning });
+  mockValues = jest.fn().mockReturnValue({
+    onConflictDoNothing: mockOnConflictDoNothing,
+    onConflictDoUpdate: mockOnConflictDoUpdate,
+  });
 
   mockDb = {
     insert: jest.fn().mockReturnValue({ values: mockValues }),
@@ -111,5 +129,39 @@ describe('DungeonQuestSeeder', () => {
 
       expect(mockDb.delete).toHaveBeenCalled();
     });
+  });
+});
+
+describe('DungeonQuestSeeder.seed() — reconciles corrected rows (ROK-1758)', () => {
+  beforeEach(() => setupEach());
+
+  const upsertArg = (): { target: unknown; set: Record<string, SQL> } =>
+    mockOnConflictDoUpdate.mock.calls[0]?.[0] as {
+      target: unknown;
+      set: Record<string, SQL>;
+    };
+
+  it('upserts on questId instead of skipping existing rows', async () => {
+    await seeder.seed();
+    expect(mockOnConflictDoNothing).not.toHaveBeenCalled();
+    expect(mockOnConflictDoUpdate).toHaveBeenCalled();
+    expect(upsertArg().target).toBe(wowClassicDungeonQuests.questId);
+  });
+
+  it('refreshes every non-key dataset field from the excluded row', async () => {
+    await seeder.seed();
+    expect(mockOnConflictDoUpdate).toHaveBeenCalled();
+    const datasetKeys = Object.keys(foreverData[0] ?? {})
+      .filter((k) => k !== 'questId')
+      .sort();
+    const set = upsertArg().set;
+    expect(Object.keys(set).sort()).toEqual(datasetKeys);
+    const dialect = new PgDialect();
+    expect(dialect.sqlToQuery(set['prevQuestId']!).sql).toBe(
+      'excluded."prev_quest_id"',
+    );
+    expect(dialect.sqlToQuery(set['dungeonInstanceId']!).sql).toBe(
+      'excluded."dungeon_instance_id"',
+    );
   });
 });

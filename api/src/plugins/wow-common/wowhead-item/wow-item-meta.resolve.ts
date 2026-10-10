@@ -4,6 +4,7 @@
  * (429 / 5xx / network) is retried in-run up to WOWHEAD_MAX_TRIES_PER_RUN
  * times, then stored as `error` with a backoff `next_retry_at`.
  */
+import { notFoundRetryOffsetMs } from './wow-item-meta.backoff';
 import * as wowheadFetch from './wowhead-item.fetch';
 import {
   createWowheadLimiter,
@@ -24,7 +25,7 @@ import {
 const DAY_MS = 86_400_000;
 /** `resolved` rows: long cache. */
 export const RESOLVED_TTL_MS = 30 * DAY_MS;
-/** `classic_fallback` / `not_found` rows: daily re-probe (AC). */
+/** `classic_fallback` rows (and `not_found` before the miss cap): daily re-probe (AC). */
 export const RECHECK_TTL_MS = DAY_MS;
 
 /** Injectable I/O for the resolver (tests replace any of it). */
@@ -127,12 +128,14 @@ function rowFor(
 
 /**
  * Probe env 16 then env 4. `prevAttempts` is the row's consecutive error
- * count (0 for a new item); any non-error outcome resets it.
+ * count (0 for a new item); any non-error outcome resets it. `prevMisses` is
+ * the row's consecutive `not_found` count (ROK-1756 re-probe cap).
  */
 export async function resolveItem(
   itemId: number,
   prevAttempts: number,
   deps: WowheadResolverDeps,
+  prevMisses = 0,
 ): Promise<WowItemMetaInsert> {
   for (const env of [WOWHEAD_ENV_FOREVER, WOWHEAD_ENV_CLASSIC]) {
     const res = await fetchWithRetry(itemId, env, deps);
@@ -140,13 +143,16 @@ export async function resolveItem(
     if (row) return row;
   }
   const fetchedAt = deps.now();
-  const nextRetryAt = new Date(fetchedAt.getTime() + RECHECK_TTL_MS);
+  const misses = prevMisses + 1;
+  const nextRetryAt = new Date(
+    fetchedAt.getTime() + notFoundRetryOffsetMs(misses),
+  );
   return {
     itemId,
     status: 'not_found',
     ...EMPTY,
     fetchedAt,
     nextRetryAt,
-    attempts: 0,
+    attempts: misses,
   };
 }
