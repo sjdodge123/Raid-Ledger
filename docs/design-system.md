@@ -479,6 +479,22 @@ button" and tests query that name. It is neither the toggle chip above (it has n
 `components/ui/` instead of copying the class string. Rendered: `/dev/design-system` → *Primitives* →
 "Removable chip".
 
+**DO — read-only status pill (ROK-1748).** A non-interactive label that states a per-viewer fact on a
+card header (the quest card's "Done", `web/src/plugins/wow/slots/quest-card.tsx::DonePill`) is a `<span>`:
+`inline-flex shrink-0 items-center rounded-full border border-success/30 bg-success/10 px-1.5 text-[0.625rem]
+font-semibold text-success` — the size of the neighbouring "Chain" badge, the colours of the removable chip.
+It is not a 44px chip: it has no control, so it never takes the chip geometry. Render it only when the fact
+is known (no viewer state → no pill, never a "Not done" pill).
+
+**DO — per-step status marks on a chain (ROK-1748).** A sequence of steps where each is done or still needed
+(`web/src/plugins/wow/slots/quest-prereq-chain.tsx`) prefixes each step with a glyph on an INNER span:
+done → `text-success` ✓ + `sr-only` "done", needed → `text-warning` ○ + `sr-only` "needed". The token class
+goes on the inner span because the unlayered `.quest-prereq__step` colour rule beats a Tailwind utility on the
+same element. The chain row stays `flex-wrap` (no horizontal scroll at 375px). A summary line pairs with it
+(`quest-prep-needed-line.tsx`: `text-sm text-warning` "You need N more pre-reqs" / `text-success` "All pre-reqs
+done"); an addon-sourced state adds the shared `formatAddonSourceLine` (`plugins/wow/lib/addon-source-line.ts`)
+as `text-xs text-muted` under the chain. Without a state the chain renders exactly as before.
+
 **Light / Dark** — OFF flips cleanly; of ON's three amber classes only the fill (`:737`) and border
 (`:781`) are remapped, so **the ON label is ≈1.4:1 — unreadable in all six light themes** (§6.9). Use
 `text-amber-400` on a new ON label until that is fixed. The removable chip is tokens only, so it flips with `success` (`#10b981` →
