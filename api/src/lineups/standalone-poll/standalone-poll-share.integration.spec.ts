@@ -416,16 +416,18 @@ describe('ROK-1750 poll page visibility + shareToken', () => {
     expect(res.body.shareToken).toBe(poll.shareToken);
   });
 
-  it('nulls the token for a deactivated invitee viewing the page', async () => {
+  it('hides a private poll page (and its token) from a deactivated invitee', async () => {
     const creator = await loginAsMember('creator');
     const visitor = await loginAsMember('visitor');
     const poll = await createPoll(creator.token);
     await join(poll.shareToken, visitor.token);
     await deactivate(visitor.userId);
 
+    // ROK-1629: a deactivated viewer is not a member viewer, so a private
+    // poll is as hidden from them as from an anonymous visitor.
     const res = await getPage(poll, visitor.token);
-    if (res.status === 200) expect(res.body.shareToken).toBeNull();
-    else expect(res.status).toBe(404);
+    expect(res.status).toBe(404);
+    expect(JSON.stringify(res.body)).not.toContain(poll.shareToken);
   });
 
   it('reports a public poll as public with a null token, anonymously', async () => {
