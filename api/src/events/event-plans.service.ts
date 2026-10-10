@@ -47,6 +47,7 @@ import {
   buildOpsDeps,
 } from './event-plans-service.helpers';
 import { defined } from '../common/defined.helpers';
+import { clearFinishedJob } from '../queue/clear-finished-job.helpers';
 
 export const EVENT_PLANS_QUEUE = 'event-plans';
 export interface PollClosedJobData {
@@ -272,6 +273,10 @@ export class EventPlansService {
     planId: string,
     delayMs: number,
   ): Promise<void> {
+    // ROK-1762: a poll-close that used up its retries is retained
+    // (removeOnFail: 50) and would silently swallow this add on a restart or
+    // new round, leaving the plan stuck in `polling`. Finished jobs only.
+    await clearFinishedJob(this.queue, `plan-poll-close-${planId}`);
     await this.queue.add(
       'poll-closed',
       { planId } satisfies PollClosedJobData,
