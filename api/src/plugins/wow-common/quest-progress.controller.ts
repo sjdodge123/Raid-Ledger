@@ -7,10 +7,13 @@ import {
   ParseIntPipe,
   UseGuards,
   Req,
+  Res,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import { QuestProgressService } from './quest-progress.service';
+import { QuestProgressReadService } from './quest-progress-read.service';
 import {
   PluginActiveGuard,
   RequirePlugin,
@@ -28,7 +31,10 @@ import { UpdateQuestProgressBodySchema } from '@raid-ledger/contract';
 @UseGuards(PluginActiveGuard)
 @RequirePlugin(WOW_COMMON_MANIFEST.id)
 export class QuestProgressController {
-  constructor(private readonly questProgressService: QuestProgressService) {}
+  constructor(
+    private readonly questProgressService: QuestProgressService,
+    private readonly reads: QuestProgressReadService,
+  ) {}
 
   /**
    * GET /plugins/wow-classic/events/:eventId/quest-progress
@@ -38,7 +44,7 @@ export class QuestProgressController {
   @Get('events/:eventId/quest-progress')
   @UseGuards(AuthGuard('jwt'))
   async getProgressForEvent(@Param('eventId', ParseIntPipe) eventId: number) {
-    return this.questProgressService.getProgressForEvent(eventId);
+    return this.reads.getProgressForEvent(eventId);
   }
 
   /**
@@ -49,7 +55,24 @@ export class QuestProgressController {
   @Get('events/:eventId/quest-coverage')
   @UseGuards(AuthGuard('jwt'))
   async getCoverageForEvent(@Param('eventId', ParseIntPipe) eventId: number) {
-    return this.questProgressService.getCoverageForEvent(eventId);
+    return this.reads.getCoverageForEvent(eventId);
+  }
+
+  /**
+   * GET /plugins/wow-classic/events/:eventId/quest-prereqs/me (ROK-1748 D11)
+   *
+   * The viewer's pre-req chain state, or a JSON `null` body when the event is
+   * not Forever or the viewer has no Forever character with a quests snapshot
+   * (Nest sends an EMPTY body for a returned null, which clients cannot parse).
+   */
+  @Get('events/:eventId/quest-prereqs/me')
+  @UseGuards(AuthGuard('jwt'))
+  async getMyPrereqs(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Req() req: { user: { id: number } },
+    @Res() res: Response,
+  ): Promise<void> {
+    res.json(await this.reads.getPrereqsForViewer(eventId, req.user.id));
   }
 
   /**

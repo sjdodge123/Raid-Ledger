@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { QuestProgressController } from './quest-progress.controller';
 import { QuestProgressService } from './quest-progress.service';
+import { QuestProgressReadService } from './quest-progress-read.service';
 import { Reflector } from '@nestjs/core';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 
@@ -9,6 +10,7 @@ let mockService: {
   getProgressForEvent: jest.Mock;
   getCoverageForEvent: jest.Mock;
   updateProgress: jest.Mock;
+  getPrereqsForViewer: jest.Mock;
 };
 
 const mockProgress = [
@@ -35,12 +37,14 @@ async function setupEach() {
     getProgressForEvent: jest.fn().mockResolvedValue(mockProgress),
     getCoverageForEvent: jest.fn().mockResolvedValue(mockCoverage),
     updateProgress: jest.fn().mockResolvedValue(mockProgress[0]),
+    getPrereqsForViewer: jest.fn().mockResolvedValue(null),
   };
 
   const module: TestingModule = await Test.createTestingModule({
     controllers: [QuestProgressController],
     providers: [
       { provide: QuestProgressService, useValue: mockService },
+      { provide: QuestProgressReadService, useValue: mockService },
       { provide: Reflector, useValue: new Reflector() },
       {
         provide: PluginRegistryService,
@@ -92,5 +96,24 @@ describe('QuestProgressController — updateProgress', () => {
       pickedUp: undefined,
       completed: true,
     });
+  });
+});
+
+describe('QuestProgressController — quest-prereqs/me (ROK-1748)', () => {
+  beforeEach(() => setupEach());
+
+  it('writes a JSON null body when the service returns null', async () => {
+    const res = { json: jest.fn() };
+    await controller.getMyPrereqs(10, { user: { id: 3 } }, res as never);
+    expect(mockService.getPrereqsForViewer).toHaveBeenCalledWith(10, 3);
+    expect(res.json).toHaveBeenCalledWith(null);
+  });
+
+  it('writes the viewer state when present', async () => {
+    const state = { characterId: 'c', asOf: null, quests: [], neededTotal: 0 };
+    mockService.getPrereqsForViewer.mockResolvedValueOnce(state);
+    const res = { json: jest.fn() };
+    await controller.getMyPrereqs(10, { user: { id: 3 } }, res as never);
+    expect(res.json).toHaveBeenCalledWith(state);
   });
 });
