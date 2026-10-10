@@ -11,6 +11,7 @@ import {
   type AddonGuildExport,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
+import { assertPlausibleExportTimes } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
 import { mergeGuildPages, type AddonPageHeader } from './addon-import.pages';
@@ -171,6 +172,7 @@ function decodeGroup(
   const sha256 = normalisedHash(group.headers);
   try {
     const payload = finalize(group.headers.map(decodePage));
+    assertPlausibleExportTimes(payload);
     return { payload, pages: group.headers.length, sha256, inputBytes };
   } catch (err) {
     if (!mixed || !(err instanceof AddonImportError)) throw err;

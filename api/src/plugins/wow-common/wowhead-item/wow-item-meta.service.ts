@@ -12,6 +12,7 @@ import {
   WowheadResolverDisabledError,
   type WowheadResolverDeps,
 } from './wow-item-meta.resolve';
+import { priorErrors, priorMisses } from './wow-item-meta.backoff';
 import { conflictSet } from './wow-item-meta.upsert';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 import { isWowheadResolverEnabled } from './wowhead-resolver.settings';
@@ -104,7 +105,7 @@ export class WowItemMetaService {
     const fresh = ids.filter((id) => !this.inFlight.has(id));
     fresh.forEach((id) => this.inFlight.add(id));
     const results = await Promise.all(
-      fresh.map((id) => this.resolveOne(id, meta.get(id)?.attempts ?? 0)),
+      fresh.map((id) => this.resolveOne(id, meta.get(id))),
     );
     const stopped = results.filter((r) => r === 'disabled').length;
     if (stopped > 0) {
@@ -118,10 +119,12 @@ export class WowItemMetaService {
   /** `disabled` = the kill switch flipped off before this item's fetch. */
   private async resolveOne(
     id: number,
-    attempts: number,
+    prev: WowItemMetaRow | undefined,
   ): Promise<'written' | 'failed' | 'disabled'> {
     try {
-      await this.upsert(await resolveItem(id, attempts, this.deps));
+      const errors = priorErrors(prev);
+      const misses = priorMisses(prev);
+      await this.upsert(await resolveItem(id, errors, this.deps, misses));
       return 'written';
     } catch (err: unknown) {
       if (err instanceof WowheadResolverDisabledError) return 'disabled';
