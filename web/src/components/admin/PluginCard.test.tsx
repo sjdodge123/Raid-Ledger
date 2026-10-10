@@ -63,7 +63,7 @@ describe('PluginCard — part 1', () => {
         (url) => {
             render(<PluginCard plugin={{ ...basePlugin, author: { name: 'Author', url } }} {...handlers} isPending={false} />);
             expect(screen.queryByRole('link', { name: 'Author' })).toBeNull();
-            expect(screen.getByText('Author')).toBeInTheDocument();
+            expect(screen.getByText('by Author')).toBeInTheDocument();
         },
     );
 
