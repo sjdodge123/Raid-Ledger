@@ -68,7 +68,9 @@ function collectSourceFiles(dir: string): string[] {
 
 /** Strip block + line comments so a comment mentioning the guard can't satisfy the scan. */
 function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1');
 }
 
 describe('every /admin/test controller carries DemoModeGuard', () => {
