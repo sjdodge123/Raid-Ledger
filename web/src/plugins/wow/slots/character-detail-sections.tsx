@@ -15,6 +15,8 @@ import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
+import { CharacterQuestsSection } from '../components/character-quests-section';
+import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
 import type {
@@ -68,13 +70,6 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
     );
 }
 
-/** "via addon · 1 Oct 2026" — the addon snapshot date (ROK-1727 Q4: source + date always shown). */
-function formatAddonSourceLine(syncedAt: string): string {
-    const date = new Date(syncedAt);
-    if (Number.isNaN(date.getTime())) return 'via addon';
-    return `via addon · ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
-}
-
 /** Source line under the Equipment heading; Armory equipment (or absent source) shows nothing new. */
 function EquipmentSourceLine({ equipment }: { equipment: CharacterEquipmentDto }) {
     if (equipment.source !== 'addon') return null;
@@ -101,6 +96,7 @@ export function CharacterDetailSections({
             )}
             <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={variant} />
+            <CharacterQuestsSection characterId={characterId} variant={variant} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>

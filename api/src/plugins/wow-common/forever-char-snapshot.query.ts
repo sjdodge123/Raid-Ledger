@@ -35,3 +35,6 @@ export async function loadForeverCharSnapshot(
     .limit(1);
   return found ?? null;
 }
+
+/** Alias kept for ROK-1745 call sites that predate the rename. */
+export type CharSnapshot = ForeverCharSnapshot;

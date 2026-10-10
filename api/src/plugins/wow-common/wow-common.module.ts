@@ -35,6 +35,8 @@ import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
+import { CharacterQuestsController } from './character-quests.controller';
+import { CharacterQuestsService } from './character-quests.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule],
@@ -46,6 +48,7 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
     BossEncountersController,
     QuestProgressController,
     AddonImportController,
+    CharacterQuestsController,
   ],
   providers: [
     BlizzardService,
@@ -70,6 +73,7 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
     ForeverDisplayEquipmentService,
     ForeverDisplayTalentsService,
+    CharacterQuestsService,
   ],
   exports: [
     BlizzardService,
