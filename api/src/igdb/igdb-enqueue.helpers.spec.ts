@@ -5,7 +5,8 @@
  * silently wedged every later 6-hourly sync. A retained job must be cleared
  * first; an `active` one must not be doubled.
  */
-import { enqueueSyncJob } from './igdb-enqueue.helpers';
+import { enqueueReenrichJob, enqueueSyncJob } from './igdb-enqueue.helpers';
+import { REENRICH_DELAY_MS } from './igdb-sync.constants';
 
 function makeQueue(existingState: string | null) {
   const existing =
@@ -61,5 +62,66 @@ describe('enqueueSyncJob (ROK-1741 retained-jobId wedge)', () => {
     expect(existing?.remove).not.toHaveBeenCalled();
     expect(queue.add).not.toHaveBeenCalled();
     expect(result).toEqual({ jobId: 'igdb-scheduled-sync' });
+  });
+});
+
+/** ROK-1762: a mocked queue whose `reenrich-42` slot holds a job in `state`. */
+function makeReenrichQueue(state: string | null) {
+  const job =
+    state === null
+      ? undefined
+      : { getState: jest.fn().mockResolvedValue(state) };
+  return {
+    getJob: jest.fn().mockResolvedValue(job),
+    remove: jest.fn().mockResolvedValue(1),
+    add: jest.fn().mockResolvedValue({ id: 'job' }),
+  };
+}
+
+describe('enqueueReenrichJob (ROK-1762 retained finished job)', () => {
+  it.each(['failed', 'completed'])(
+    'removes a retained %s reenrich-42 job before adding',
+    async (state) => {
+      const queue = makeReenrichQueue(state);
+
+      await enqueueReenrichJob(queue, 42);
+
+      expect(queue.getJob).toHaveBeenCalledWith('reenrich-42');
+      expect(queue.remove).toHaveBeenCalledWith('reenrich-42');
+      expect(queue.add).toHaveBeenCalledWith(
+        'sync',
+        { trigger: 'reenrich-game', gameId: 42 },
+        expect.objectContaining({
+          jobId: 'reenrich-42',
+          delay: REENRICH_DELAY_MS,
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        }),
+      );
+      expect(queue.remove.mock.invocationCallOrder[0]).toBeLessThan(
+        queue.add.mock.invocationCallOrder[0] ?? 0,
+      );
+    },
+  );
+
+  it.each(['waiting', 'delayed', 'active'])(
+    'leaves a %s reenrich-42 job alone (same-id add still dedups)',
+    async (state) => {
+      const queue = makeReenrichQueue(state);
+
+      await enqueueReenrichJob(queue, 42);
+
+      expect(queue.remove).not.toHaveBeenCalled();
+      expect(queue.add).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('adds directly when no job holds the id', async () => {
+    const queue = makeReenrichQueue(null);
+
+    await enqueueReenrichJob(queue, 42);
+
+    expect(queue.remove).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledTimes(1);
   });
 });
