@@ -3,7 +3,8 @@
  * 403 and touch nothing, in BOTH `CORS_AUTO_MODE`s (report lets every Origin
  * through the CORS gate, so this guard is the only layer there). Same-origin
  * and header-less requests are unchanged. Also: the 10 s race grace mints ONE
- * sibling per parent; the next replay is reuse → family revoked.
+ * sibling per parent; later in-window replays are 409 `refresh_raced` (no
+ * revoke, no blocklist); only a replay older than the window is reuse.
  */
 import * as crypto from 'crypto';
 import { eq } from 'drizzle-orm';
@@ -13,6 +14,8 @@ import { defined } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
 import { CROSS_SITE_REJECTED_MESSAGE } from './same-origin-cookie-post.guard';
+import { RACE_GRACE_MS } from './refresh-grace.helpers';
+import { TokenBlocklistService } from '../token-blocklist.service';
 
 const APP_HOST = 'raid.gamernight.net';
 const SAME_ORIGIN = `https://${APP_HOST}`;
@@ -174,25 +177,73 @@ describe.each(['report', 'enforce'] as const)(
   },
 );
 
+async function familyRevocations(familyId: string) {
+  return testApp.db
+    .select({ revokedAt: schema.refreshTokens.revokedAt })
+    .from(schema.refreshTokens)
+    .where(eq(schema.refreshTokens.familyId, familyId));
+}
+
+function isUserBlocked(): Promise<boolean> {
+  const nowSec = Math.floor(Date.now() / 1000);
+  return testApp.app
+    .get(TokenBlocklistService)
+    .isBlocked(testApp.seed.adminUser.id, nowSec);
+}
+
 describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
-  it('second in-window replay of a rotated token revokes the family', async () => {
+  it('3 concurrent refreshes on one cookie → rotation + one sibling + 409, family live, user not blocked', async () => {
     const token = await login();
     const familyId = (await rowFor(token)).familyId;
 
-    const winner = await post('/auth/refresh', token);
-    expect(winner.status).toBe(200);
-    const sibling = await post('/auth/refresh', token);
-    expect(sibling.status).toBe(200);
+    const results = await Promise.all(
+      [0, 1, 2].map(() => post('/auth/refresh', token)),
+    );
+    const statuses = results.map((r) => r.status).sort();
+    expect(statuses).toEqual([200, 200, 409]);
+    const raced = results.filter((r) => r.status === 409);
+    for (const res of raced) {
+      expect(res.body).toMatchObject({ statusCode: 409, code: 'refresh_raced' });
+      expect(res.body).not.toHaveProperty('access_token');
+      expect(extractRefreshCookie(res)).toBeNull();
+    }
+
+    const family = await familyRevocations(familyId);
+    expect(family.length).toBe(3); // parent + winner child + one sibling
+    expect(family.filter((r) => r.revokedAt !== null)).toEqual([]);
+    expect(await isUserBlocked()).toBe(false);
+  });
+
+  it('a sequential third in-window replay is raced (409), not reuse', async () => {
+    const token = await login();
+    const familyId = (await rowFor(token)).familyId;
+    expect((await post('/auth/refresh', token)).status).toBe(200);
+    expect((await post('/auth/refresh', token)).status).toBe(200);
+
+    const replay = await post('/auth/refresh', token);
+    expect(replay.status).toBe(409);
+    expect(replay.body).toMatchObject({ code: 'refresh_raced' });
+    expect(replay.body).not.toHaveProperty('access_token');
+    const family = await familyRevocations(familyId);
+    expect(family.filter((r) => r.revokedAt !== null)).toEqual([]);
+    expect(await isUserBlocked()).toBe(false);
+  });
+
+  it('a replay older than the window is reuse → family revoked + user blocked', async () => {
+    const token = await login();
+    const familyId = (await rowFor(token)).familyId;
+    expect((await post('/auth/refresh', token)).status).toBe(200);
+    await testApp.db
+      .update(schema.refreshTokens)
+      .set({ rotatedAt: new Date(Date.now() - RACE_GRACE_MS - 5_000) })
+      .where(eq(schema.refreshTokens.familyId, familyId));
 
     const replay = await post('/auth/refresh', token);
     expect(replay.status).toBe(401);
     expect(replay.body).not.toHaveProperty('access_token');
-
-    const family = await testApp.db
-      .select({ revokedAt: schema.refreshTokens.revokedAt })
-      .from(schema.refreshTokens)
-      .where(eq(schema.refreshTokens.familyId, familyId));
-    expect(family.length).toBe(3);
+    const family = await familyRevocations(familyId);
+    expect(family.length).toBe(2);
     expect(family.filter((r) => r.revokedAt === null)).toEqual([]);
+    expect(await isUserBlocked()).toBe(true);
   });
 });

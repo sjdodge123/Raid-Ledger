@@ -1,12 +1,17 @@
 /**
  * ROK-1755 — decision table for the refresh/logout origin guard.
  */
-import { ForbiddenException, type ExecutionContext } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Logger,
+  type ExecutionContext,
+} from '@nestjs/common';
 import { ExecutionContextHost } from '@nestjs/core/helpers/execution-context-host';
 import {
   CROSS_SITE_REJECTED_MESSAGE,
   SameOriginCookiePostGuard,
   decideCookiePostOrigin,
+  parseOriginGuardMode,
   type CookiePostInput,
 } from './same-origin-cookie-post.guard';
 
@@ -159,5 +164,47 @@ describe('SameOriginCookiePostGuard', () => {
       );
     expect(act).toThrow(ForbiddenException);
     expect(act).toThrow(CROSS_SITE_REJECTED_MESSAGE);
+  });
+
+  describe('AUTH_ORIGIN_GUARD escape hatch', () => {
+    const saved = process.env.AUTH_ORIGIN_GUARD;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.AUTH_ORIGIN_GUARD;
+      else process.env.AUTH_ORIGIN_GUARD = saved;
+    });
+    const crossSite = () =>
+      contextFor({ host: HOST, 'sec-fetch-site': 'cross-site' });
+
+    it('report → logs the would-reject line and allows', () => {
+      process.env.AUTH_ORIGIN_GUARD = 'report';
+      const guard = new SameOriginCookiePostGuard();
+      const warn = jest
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => undefined);
+      expect(guard.canActivate(crossSite())).toBe(true);
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining('would-reject POST /auth/refresh (cross-site)'),
+      );
+      warn.mockRestore();
+    });
+
+    it('enforce (explicit) still throws 403', () => {
+      process.env.AUTH_ORIGIN_GUARD = 'enforce';
+      const guard = new SameOriginCookiePostGuard();
+      expect(() => guard.canActivate(crossSite())).toThrow(ForbiddenException);
+    });
+  });
+});
+
+describe('parseOriginGuardMode', () => {
+  it.each([
+    [undefined, 'enforce'],
+    ['', 'enforce'],
+    ['enforce', 'enforce'],
+    ['report', 'report'],
+    [' REPORT ', 'report'],
+    ['off', 'enforce'],
+  ])('%p → %s', (raw, mode) => {
+    expect(parseOriginGuardMode(raw)).toBe(mode);
   });
 });
