@@ -152,16 +152,17 @@
     flex-shrink: 0;
 }
 
-/* 44px hit area around the 12px glyph (design-system tap targets, ROK-1758) — a
-   transparent ::before like Switch's, so the row's layout doesn't change. */
+/* Wider hit area for the 12px glyph (design-system tap targets, ROK-1758) — a
+   transparent ::before like Switch's, so the row's layout doesn't change. It
+   reaches 8px left/up/down (the 0.5rem gaps: never over the card's expand
+   header or a neighbouring row) and 24px right, so it is 44px wide. */
 .quest-card__wowhead-icon::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 44px;
-    height: 44px;
-    transform: translate(-50%, -50%);
+    top: -8px;
+    bottom: -8px;
+    left: -8px;
+    right: -24px;
 }
 
 .quest-card__wowhead-icon:hover {

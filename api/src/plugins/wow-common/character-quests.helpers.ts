@@ -121,11 +121,22 @@ function minLevel(group: CharacterQuestInstanceGroup): number | null {
   return levels.length ? Math.min(...levels) : null;
 }
 
-/** Build one instance group, or `null` when none of its quests is completed. */
+/** What a group builder reads: chain lookup, completed ids, truncation test. */
+interface GroupCtx {
+  lookup: Map<number, DungeonQuestDto>;
+  completed: Set<number>;
+  /** True for a quest a truncated snapshot cannot speak to (ROK-1758). */
+  unknown: (id: number) => boolean;
+}
+
+/**
+ * Build one instance group, or `null` when none of its quests is completed.
+ * `knownCount` leaves out truncation-unknown quests, like `knownTotal`.
+ */
 function buildGroup(
   id: number,
   rows: DungeonQuestDto[],
-  ctx: { lookup: Map<number, DungeonQuestDto>; completed: Set<number> },
+  ctx: GroupCtx,
   names: (id: number) => string,
 ): CharacterQuestInstanceGroup | null {
   const done = rows
@@ -142,17 +153,17 @@ function buildGroup(
     dungeonInstanceId: id,
     instanceName: names(id),
     completed: done,
-    knownCount: rows.length,
+    knownCount: rows.filter((q) => !ctx.unknown(q.questId)).length,
   };
 }
 
 /** Build instance groups holding ≥1 completed quest (R-4), sorted per D8. */
 function buildGroups(
   known: DungeonQuestDto[],
-  completed: Set<number>,
+  base: Omit<GroupCtx, 'lookup'>,
   names: (id: number) => string,
 ): CharacterQuestInstanceGroup[] {
-  const ctx = { lookup: new Map(known.map((q) => [q.questId, q])), completed };
+  const ctx = { ...base, lookup: new Map(known.map((q) => [q.questId, q])) };
   const groups: CharacterQuestInstanceGroup[] = [];
   for (const [id, rows] of groupByInstance(known)) {
     const group = buildGroup(id, rows, ctx, names);
@@ -176,19 +187,29 @@ function hasQuestData(
 }
 
 /**
- * Known in-instance quests the snapshot can speak to. When the completed list
- * is truncated (the addon keeps the lowest ids), a quest above the highest
- * sent id that is not in the log is unknown, so it is left out of the total
- * rather than counted as not completed (ROK-1758).
+ * Quests the snapshot cannot speak to. When the completed list is truncated
+ * (the addon keeps the lowest ids), a quest above the highest sent id that is
+ * not in the log is unknown, so it is left out of the known counts rather
+ * than counted as not completed (ROK-1758).
  */
-function countAssessable(
-  knownQuests: DungeonQuestDto[],
+function unknownTest(
   quests: NonNullable<ForeverQuestSnapshotInput['quests']>,
-): number {
+): (id: number) => boolean {
   const cutoff = truncationCutoff(quests);
   const inLog = new Set(quests.inProgress.map((q) => q.questId));
-  const unknown = (id: number): boolean =>
-    cutoff !== undefined && id > cutoff && !inLog.has(id);
+  return (id) => cutoff !== undefined && id > cutoff && !inLog.has(id);
+}
+
+/** Completed known quests across all instance groups. */
+function countCompleted(groups: CharacterQuestInstanceGroup[]): number {
+  return groups.reduce((n, g) => n + g.completed.length, 0);
+}
+
+/** Known in-instance quests, less the ones the snapshot cannot speak to. */
+function countKnown(
+  knownQuests: DungeonQuestDto[],
+  unknown: (id: number) => boolean,
+): number {
   return knownQuests.filter(
     (q) => q.dungeonInstanceId !== null && !unknown(q.questId),
   ).length;
@@ -206,7 +227,12 @@ export function buildCharacterQuests(
   const quests = snapshot.quests;
   if (!hasQuestData(quests)) return null;
   const completed = new Set(quests.completed);
-  const completedKnown = buildGroups(knownQuests, completed, names);
+  const unknown = unknownTest(quests);
+  const completedKnown = buildGroups(
+    knownQuests,
+    { completed, unknown },
+    names,
+  );
   const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
   const inProgress = quests.inProgress.map((q) => toLogEntry(q, lookup, names));
   return CharacterQuestsDtoSchema.parse({
@@ -215,11 +241,8 @@ export function buildCharacterQuests(
     inProgress,
     completedKnown,
     counts: {
-      completedKnown: completedKnown.reduce(
-        (n, g) => n + g.completed.length,
-        0,
-      ),
-      knownTotal: countAssessable(knownQuests, quests),
+      completedKnown: countCompleted(completedKnown),
+      knownTotal: countKnown(knownQuests, unknown),
       completedTotal: quests.completed.length,
       inProgress: inProgress.length,
     },

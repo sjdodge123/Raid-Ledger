@@ -215,9 +215,11 @@ function prereqStateFor(
   const chain = walkChainInMemory(quest, lookup);
   const idx = chain.findIndex((q) => q.questId === quest.questId);
   const before = chain.slice(0, idx);
-  const steps: QuestPrereqStep[] = before.map((q) => {
-    const { done, source } = doneFn(q.questId);
-    return { questId: q.questId, name: q.name, done, source };
+  // An unknown step (truncated snapshot) gets no state, so the chain shows it
+  // unmarked instead of "needed" beside "All pre-reqs done" (ROK-1758).
+  const steps: QuestPrereqStep[] = before.flatMap((q) => {
+    const { done, source, unknown } = doneFn(q.questId);
+    return unknown ? [] : [{ questId: q.questId, name: q.name, done, source }];
   });
   const needed = before.filter((q) => isNeeded(doneFn(q.questId)));
   const self = doneFn(quest.questId);

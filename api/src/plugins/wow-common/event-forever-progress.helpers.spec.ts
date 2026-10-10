@@ -79,46 +79,46 @@ describe('buildMembers', () => {
   });
 });
 
-describe('buildViewerPrereqs (ROK-1758)', () => {
-  const ALLIANCE = ['Human', 'Dwarf', 'Night Elf', 'Gnome'];
-  const HORDE = ['Orc', 'Undead', 'Tauren', 'Troll'];
-  const raced = (q: DungeonQuestDto, races: string[]): DungeonQuestDto => ({
-    ...q,
-    raceRestriction: races,
-    classRestriction: null,
-  });
-  // Alliance chain 1 → 2 → 3 and Horde chain 11 → 12 → 13; 2/3/12/13 in-instance.
-  const known = [
-    raced(quest(1, null), ALLIANCE),
-    raced(quest(2, 90, 1), ALLIANCE),
-    raced(quest(3, 90, 2), ALLIANCE),
-    raced(quest(11, null), HORDE),
-    raced(quest(12, 90, 11), HORDE),
-    raced(quest(13, 90, 12), HORDE),
-  ];
-  const member = (
-    completed: number[],
-    completedTruncated?: boolean,
-  ): ForeverMember => ({
-    userId: 1,
-    username: 'u',
-    characterId: 'c1',
-    charClass: 'Mage',
-    charRace: 'Human',
-    snapshot: {
-      capturedAt: '2026-10-01T00:00:00.000Z',
-      quests: {
-        completed,
-        inProgress: [],
-        ...(completedTruncated !== undefined ? { completedTruncated } : {}),
-      },
+const ALLIANCE = ['Human', 'Dwarf', 'Night Elf', 'Gnome'];
+const HORDE = ['Orc', 'Undead', 'Tauren', 'Troll'];
+const raced = (q: DungeonQuestDto, races: string[]): DungeonQuestDto => ({
+  ...q,
+  raceRestriction: races,
+  classRestriction: null,
+});
+// Alliance chain 1 → 2 → 3 and Horde chain 11 → 12 → 13; 2/3/12/13 in-instance.
+const known = [
+  raced(quest(1, null), ALLIANCE),
+  raced(quest(2, 90, 1), ALLIANCE),
+  raced(quest(3, 90, 2), ALLIANCE),
+  raced(quest(11, null), HORDE),
+  raced(quest(12, 90, 11), HORDE),
+  raced(quest(13, 90, 12), HORDE),
+];
+const member = (
+  completed: number[],
+  completedTruncated?: boolean,
+): ForeverMember => ({
+  userId: 1,
+  username: 'u',
+  characterId: 'c1',
+  charClass: 'Mage',
+  charRace: 'Human',
+  snapshot: {
+    capturedAt: '2026-10-01T00:00:00.000Z',
+    quests: {
+      completed,
+      inProgress: [],
+      ...(completedTruncated !== undefined ? { completedTruncated } : {}),
     },
-  });
-  const progress = (m: ForeverMember) => ({
-    ...selectEventQuests(known, [90]),
-    members: [m],
-  });
+  },
+});
+const progress = (m: ForeverMember) => ({
+  ...selectEventQuests(known, [90]),
+  members: [m],
+});
 
+describe('buildViewerPrereqs (ROK-1758)', () => {
   it('keeps only quests the viewer can take and counts each step once', () => {
     const m = member([]);
     const out = buildViewerPrereqs(progress(m), m, []);
@@ -139,7 +139,9 @@ describe('buildViewerPrereqs (ROK-1758)', () => {
     const full = member([1]);
     expect(buildViewerPrereqs(progress(full), full, []).neededTotal).toBe(1);
   });
+});
 
+describe('buildViewerPrereqs — same-name variants (ROK-1758)', () => {
   it('no race: same-name faction variants collapse to the one the panel shows', () => {
     // Web deduplicateByName/pickBestVariant: no race → first variant (2).
     const shared = known.map((q) =>

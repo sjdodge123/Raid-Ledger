@@ -13,6 +13,7 @@ import { walkChainInMemory } from './dungeon-quests.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 import type { CharSnapshot } from './forever-char-snapshot.query';
 import { resolveQuestInstanceIds } from './forever-instance-aliases';
+import { dedupeVariantsByName } from './quest-variant-dedup.helpers';
 import {
   buildPrereqState,
   countNeeded,
@@ -162,7 +163,8 @@ export function groupCoverage(rows: CoverageRow[]): QuestCoverageEntry[] {
 
 /**
  * The viewer's chain state over the event's quests (D11/D12). Only quests the
- * viewer's class/race can take count, each pre-req step once, and steps a
+ * viewer's class/race can take count — one variant per name, as the panel
+ * shows — each pre-req step once, and steps a
  * truncated snapshot cannot speak to are not counted needed (ROK-1758).
  */
 export function buildViewerPrereqs(
@@ -178,8 +180,11 @@ export function buildViewerPrereqs(
     rows,
     truncationCutoff(member.snapshot.quests),
   );
-  const usable = progress.eventQuests.filter((q) =>
-    isQuestUsableBy(q, member.charClass, member.charRace),
+  const { charClass, charRace } = member;
+  const usable = dedupeVariantsByName(
+    progress.eventQuests.filter((q) => isQuestUsableBy(q, charClass, charRace)),
+    charClass,
+    charRace,
   );
   const quests = buildPrereqState(usable, progress.lookup, doneFn);
   return {
