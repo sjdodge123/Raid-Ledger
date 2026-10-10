@@ -1429,6 +1429,13 @@
       "when": 1791587337409,
       "tag": "0204_wow_item_meta",
       "breakpoints": true
+    },
+    {
+      "idx": 205,
+      "version": "7",
+      "when": 1791591224115,
+      "tag": "0205_characters_gender",
+      "breakpoints": true
     }
   ]
 }

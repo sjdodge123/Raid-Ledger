@@ -28,6 +28,8 @@ export function bindingUpdates(
   if (binding.setRuleset !== undefined) set.ruleset = binding.setRuleset;
   if (binding.diff.class) set.class = binding.diff.class.to;
   if (binding.diff.level) set.level = binding.diff.level.to;
+  if (binding.setRace !== undefined) set.race = binding.setRace;
+  if (binding.setGender !== undefined) set.gender = binding.setGender;
   return set;
 }
 

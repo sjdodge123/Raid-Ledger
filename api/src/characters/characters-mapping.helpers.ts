@@ -36,6 +36,7 @@ function mapExtendedFields(row: typeof schema.characters.$inferSelect) {
     renderUrl: row.renderUrl ?? null,
     level: row.level,
     race: row.race,
+    gender: (row.gender as CharacterDto['gender']) ?? null,
     faction: row.faction as CharacterDto['faction'],
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
     profileUrl: row.profileUrl,

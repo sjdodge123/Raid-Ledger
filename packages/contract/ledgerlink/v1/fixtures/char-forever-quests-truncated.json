@@ -1,0 +1,49 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": ["Ana Forever",null]
+      },
+      "ruleset": "normal",
+      "class": "WARRIOR",
+      "race": "NightElf",
+      "gender": "female",
+      "level": 8,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "char",
+    "data": {
+      "gear": [
+        {"slot":5,"itemId":6120,"ilvl":5,"bonusIds":[7890],"enchantId":1900,"gemIds":[2000]},
+        {"slot":4,"itemId":2105,"ilvl":4,"bonusIds":[],"gemIds":[3000,3001]},
+        {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
+      ],
+      "talents": {
+        "configId": 7,
+        "nodes": [{"nodeId":101,"rank":2}]
+      },
+      "lockouts": [
+        {"name":"Molten Core","instanceId":409,"difficultyId":9,"resetAt":1790500000,"killed":3,"total":10}
+      ],
+      "quests": {
+        "completed": [456,463,470],
+        "inProgress": [{"questId":2459,"title":"Ferocitas the Dream Eater","objectives":[{"text":"Ferocitas the Dream Eater slain: 0/1","done":false,"have":0,"need":1},{"text":"Gnarlpine Mystic slain: 7/7","done":true,"have":7,"need":7}]},{"questId":488,"title":"Zenn's Bidding","objectives":[{"text":"Nightsaber Fang: 2/3","done":false,"have":2,"need":3},{"text":"Strigid Owl Feather: 3/3","done":true,"have":3,"need":3},{"text":"Webwood Spider Silk: 1/3","done":false,"have":1,"need":3}]},{"questId":6344,"title":"Nessa Shadowsong"}],
+        "completedTruncated": true
+      }
+    }
+  }
+}
