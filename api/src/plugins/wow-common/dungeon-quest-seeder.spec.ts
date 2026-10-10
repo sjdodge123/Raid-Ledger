@@ -114,42 +114,45 @@ describe('DungeonQuestSeeder', () => {
     });
   });
 
-  describe('seed() — reconciles corrected rows (ROK-1758)', () => {
-    const upsertArg = (): { target: unknown; set: Record<string, SQL> } =>
-      mockOnConflictDoUpdate.mock.calls[0]?.[0] as {
-        target: unknown;
-        set: Record<string, SQL>;
-      };
-
-    it('upserts on questId instead of skipping existing rows', async () => {
-      await seeder.seed();
-      expect(mockOnConflictDoNothing).not.toHaveBeenCalled();
-      expect(mockOnConflictDoUpdate).toHaveBeenCalled();
-      expect(upsertArg().target).toBe(wowClassicDungeonQuests.questId);
-    });
-
-    it('refreshes every non-key dataset field from the excluded row', async () => {
-      await seeder.seed();
-      const datasetKeys = Object.keys(foreverData[0] ?? {})
-        .filter((k) => k !== 'questId')
-        .sort();
-      const set = upsertArg().set;
-      expect(Object.keys(set).sort()).toEqual(datasetKeys);
-      const dialect = new PgDialect();
-      expect(dialect.sqlToQuery(set['prevQuestId']!).sql).toBe(
-        'excluded."prev_quest_id"',
-      );
-      expect(dialect.sqlToQuery(set['dungeonInstanceId']!).sql).toBe(
-        'excluded."dungeon_instance_id"',
-      );
-    });
-  });
-
   describe('drop()', () => {
     it('should delete all dungeon quest data', async () => {
       await seeder.drop();
 
       expect(mockDb.delete).toHaveBeenCalled();
     });
+  });
+});
+
+describe('DungeonQuestSeeder.seed() — reconciles corrected rows (ROK-1758)', () => {
+  beforeEach(() => setupEach());
+
+  const upsertArg = (): { target: unknown; set: Record<string, SQL> } =>
+    mockOnConflictDoUpdate.mock.calls[0]?.[0] as {
+      target: unknown;
+      set: Record<string, SQL>;
+    };
+
+  it('upserts on questId instead of skipping existing rows', async () => {
+    await seeder.seed();
+    expect(mockOnConflictDoNothing).not.toHaveBeenCalled();
+    expect(mockOnConflictDoUpdate).toHaveBeenCalled();
+    expect(upsertArg().target).toBe(wowClassicDungeonQuests.questId);
+  });
+
+  it('refreshes every non-key dataset field from the excluded row', async () => {
+    await seeder.seed();
+    expect(mockOnConflictDoUpdate).toHaveBeenCalled();
+    const datasetKeys = Object.keys(foreverData[0] ?? {})
+      .filter((k) => k !== 'questId')
+      .sort();
+    const set = upsertArg().set;
+    expect(Object.keys(set).sort()).toEqual(datasetKeys);
+    const dialect = new PgDialect();
+    expect(dialect.sqlToQuery(set['prevQuestId']!).sql).toBe(
+      'excluded."prev_quest_id"',
+    );
+    expect(dialect.sqlToQuery(set['dungeonInstanceId']!).sql).toBe(
+      'excluded."dungeon_instance_id"',
+    );
   });
 });
