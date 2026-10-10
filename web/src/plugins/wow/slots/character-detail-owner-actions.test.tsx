@@ -18,6 +18,10 @@ const detail = vi.hoisted(() => ({ character: null as unknown, userId: 0 }));
 vi.mock('../../../hooks/use-character-detail', () => ({
     useCharacterDetail: () => ({ data: detail.character, isLoading: false, error: null }),
 }));
+const registry = vi.hoisted(() => ({ games: [] as { id: number; slug: string }[] }));
+vi.mock('../../../hooks/use-game-registry', () => ({
+    useGameRegistry: () => ({ games: registry.games, isLoading: false, error: null }),
+}));
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ user: { id: detail.userId }, isAuthenticated: true }),
 }));
@@ -29,7 +33,13 @@ function renderSlot(context: { ruleset: string | null; gameVariant: string | nul
 }
 
 describe('CharacterDetailOwnerActions via the character-detail:owner-actions slot', () => {
-    beforeEach(() => activateWowPlugin());
+    beforeEach(() => { activateWowPlugin(); registry.games = []; });
+
+    it('renders for a LedgerLink Forever character (null variant + null ruleset) on the Forever game (ROK-1751)', () => {
+        registry.games = [{ id: 7, slug: 'world-of-warcraft-forever' }];
+        renderSlot({ ruleset: null, gameVariant: null });
+        expect(screen.getByRole('button', BUTTON)).toBeInTheDocument();
+    });
 
     it.each([
         ['manual WoW: Forever (ruleset set)', { ruleset: 'normal', gameVariant: null }],

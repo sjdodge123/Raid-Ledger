@@ -48,7 +48,7 @@ interface ResolvedChar {
     charId: string; charName: string; avatarUrl?: string | null | undefined; faction?: string | null | undefined;
     level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
     spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
-    isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null;
+    isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null; gameId: number | null;
     professions?: CharacterProfessionsDto | null | undefined;
 }
 
@@ -61,7 +61,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         charClass: c?.class ?? props.className, spec: c?.spec ?? props.spec,
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
-        gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null,
+        gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null, gameId: c?.gameId ?? null,
         professions: c?.professions ?? props.professions ?? null,
     };
 }
@@ -73,16 +73,16 @@ function CharacterAvatar({ avatarUrl, charName, size }: { avatarUrl?: string | n
     return <div className={`${size} rounded-full bg-overlay flex items-center justify-center text-muted flex-shrink-0`}>👤</div>;
 }
 
-function NameRow({ charName, isMain, faction, gameVariant, ruleset, textSize }: {
+function NameRow({ charName, isMain, faction, gameVariant, ruleset, gameId, textSize }: {
     charName: string; isMain?: boolean | undefined; faction?: string | null | undefined;
-    gameVariant: string | null; ruleset: string | null; textSize: string;
+    gameVariant: string | null; ruleset: string | null; gameId: number | null; textSize: string;
 }) {
     return (
         <div className="flex items-center gap-2 flex-wrap">
             <span className={`font-medium text-foreground truncate max-w-[180px] sm:max-w-none ${textSize}`}>{charName}</span>
             {isMain && <span className="text-yellow-400 text-xs font-semibold inline-flex items-center gap-0.5 flex-shrink-0">⭐ Main</span>}
             {faction && <span className={`px-1.5 py-0.5 rounded text-xs font-medium border flex-shrink-0 ${FACTION_STYLES[faction] ?? 'bg-faint text-muted'}`}>{faction.charAt(0).toUpperCase() + faction.slice(1)}</span>}
-            <PluginSlot name="character-card:badges" context={{ gameVariant, ruleset }} />
+            <PluginSlot name="character-card:badges" context={{ gameVariant, ruleset, gameId }} />
         </div>
     );
 }
@@ -121,7 +121,7 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
             <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
             <div className="min-w-0 overflow-hidden">
-                <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} gameVariant={c.gameVariant} ruleset={c.ruleset} textSize={isSm ? 'text-sm' : ''} />
+                <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} gameVariant={c.gameVariant} ruleset={c.ruleset} gameId={c.gameId} textSize={isSm ? 'text-sm' : ''} />
                 <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} professions={c.professions} textSize={isSm ? 'text-xs' : 'text-sm'} />
             </div>
         </Link>

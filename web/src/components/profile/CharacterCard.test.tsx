@@ -6,9 +6,11 @@ import * as useCharacterMutationsHook from '../../hooks/use-character-mutations'
 import type { CharacterDto } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
 
-// Mock the plugins module so PluginSlot renders nothing
+// Mock the plugins module so PluginSlot renders nothing visible; the badge
+// slot exposes the gameId it received (ROK-1751) as a data attribute.
 vi.mock('../../plugins', () => ({
-    PluginSlot: () => null,
+    PluginSlot: ({ name, context }: { name: string; context?: { gameId?: number | null } }) =>
+        name === 'character-card:badges' ? <span data-testid="badge-slot" data-game-id={String(context?.gameId)} /> : null,
 }));
 
 const createMockCharacter = (overrides: Partial<CharacterDto> = {}): CharacterDto => ({
@@ -286,5 +288,13 @@ it('disables Delete button when deleteMutation is pending', () => {
     describe('Actions', () => {
         actionsGroup1();
         actionsGroup2();
+    });
+});
+
+describe('CharacterCard — ROK-1751 badge slot context', () => {
+    it('passes the character gameId to the character-card:badges slot', () => {
+        vi.spyOn(useCharacterMutationsHook, 'useDeleteCharacter').mockReturnValue({ mutate: vi.fn(), isPending: false } as unknown as ReturnType<typeof useCharacterMutationsHook.useDeleteCharacter>);
+        render(<BrowserRouter><CharacterCard character={createMockCharacter({ gameId: 7, gameVariant: null })} onEdit={vi.fn()} /></BrowserRouter>);
+        expect(screen.getByTestId('badge-slot').getAttribute('data-game-id')).toBe('7');
     });
 });
