@@ -58,6 +58,15 @@ describe('PluginCard — part 1', () => {
         expect(link).toHaveAttribute('href', 'https://example.com');
     });
 
+    it.each(['data:text/html,<script>alert(1)</script>', 'javascript:alert(1)', '/relative'])(
+        'renders the author as plain text when the URL is not http(s): %s (ROK-1757)',
+        (url) => {
+            render(<PluginCard plugin={{ ...basePlugin, author: { name: 'Author', url } }} {...handlers} isPending={false} />);
+            expect(screen.queryByRole('link', { name: 'Author' })).toBeNull();
+            expect(screen.getByText('Author')).toBeInTheDocument();
+        },
+    );
+
     it('shows Active badge for active status', () => {
         render(<PluginCard plugin={basePlugin} {...handlers} isPending={false} />);
         expect(screen.getByText('Active')).toBeInTheDocument();
