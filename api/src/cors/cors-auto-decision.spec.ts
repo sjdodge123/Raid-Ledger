@@ -3,7 +3,9 @@
  * explicit-origin allow list (AC4), and `CORS_AUTO_MODE` parsing (Q6).
  */
 import {
+  CSP_REPORT_PATH,
   DEFAULT_CORS_AUTO_MODE,
+  isCspReportRequest,
   decideAutoOrigin,
   decideExplicitOrigin,
   hostHeaderHostname,
@@ -166,10 +168,10 @@ describe('decideExplicitOrigin (unchanged allow list, AC4)', () => {
 });
 
 describe('parseCorsAutoMode', () => {
-  it('defaults to report this release (unset or blank)', () => {
-    expect(DEFAULT_CORS_AUTO_MODE).toBe('report');
-    expect(parseCorsAutoMode(undefined)).toBe('report');
-    expect(parseCorsAutoMode('   ')).toBe('report');
+  it('defaults to enforce (unset or blank) after AC0', () => {
+    expect(DEFAULT_CORS_AUTO_MODE).toBe('enforce');
+    expect(parseCorsAutoMode(undefined)).toBe('enforce');
+    expect(parseCorsAutoMode('   ')).toBe('enforce');
   });
 
   it('accepts report / enforce case-insensitively without warning', () => {
@@ -188,5 +190,17 @@ describe('parseCorsAutoMode', () => {
       'CORS_AUTO_MODE="enforced" is not valid',
     );
     expect(warn.mock.calls[0][0]).toContain('falling back to "report"');
+  });
+});
+
+describe('isCspReportRequest (ROK-1732 enforce: Origin: null exemption)', () => {
+  it('matches only POST to the exact CSP report path', () => {
+    expect(CSP_REPORT_PATH).toBe('/csp-report');
+    expect(isCspReportRequest('POST', '/csp-report')).toBe(true);
+    expect(isCspReportRequest('GET', '/csp-report')).toBe(false);
+    expect(isCspReportRequest('OPTIONS', '/csp-report')).toBe(false);
+    expect(isCspReportRequest('POST', '/csp-report/x')).toBe(false);
+    expect(isCspReportRequest('POST', '/api/csp-report')).toBe(false);
+    expect(isCspReportRequest('POST', '/auth/refresh')).toBe(false);
   });
 });
