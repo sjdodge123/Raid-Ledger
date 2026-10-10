@@ -77,7 +77,7 @@ describe('every /admin/test controller carries DemoModeGuard', () => {
   it('has DemoModeGuard in its class-level @UseGuards', () => {
     const controllerRe = /@Controller\(\s*['"`]admin\/test[^)]*\)/;
     const guardedRe =
-      /@Controller\(\s*['"`]admin\/test[^)]*\)\s*(?:@\w+\([^)]*\)\s*)*@UseGuards\([^)]*\bDemoModeGuard\b[^)]*\)/;
+      /@Controller\(\s*['"`]admin\/test[^)]*\)\s*(?:@\w+\((?:[^()]|\([^()]*\))*\)\s*)*@UseGuards\((?:[^()]|\([^()]*\))*\bDemoModeGuard\b/;
     const scanned: string[] = [];
     const missing: string[] = [];
     for (const file of collectSourceFiles(SRC_DIR)) {

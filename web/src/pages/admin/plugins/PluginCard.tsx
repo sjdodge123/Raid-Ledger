@@ -4,6 +4,7 @@ import { getPluginBadge } from '../../../plugins/plugin-registry';
 import { AdminPluginSection } from '../../../components/admin/AdminPluginSection';
 import { NewBadge } from '../../../components/ui/new-badge';
 import type { PluginInfoDto } from '@raid-ledger/contract';
+import { safeHttpUrl } from '../../../lib/safe-http-url';
 
 interface PluginCardProps {
     plugin: PluginInfoDto;
@@ -76,11 +77,12 @@ function PluginCardDetails({ plugin }: { plugin: PluginInfoDto }): JSX.Element {
 }
 
 function PluginAuthor({ author }: { author: { name: string; url?: string | null | undefined } }): JSX.Element {
+    const href = safeHttpUrl(author.url);
     return (
         <div className="flex items-center gap-2 text-sm">
             <span className="text-dim">Author:</span>
-            {author.url ? (
-                <a href={author.url} target="_blank" rel="noopener noreferrer"
+            {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer"
                     className="text-secondary hover:text-foreground underline underline-offset-2 transition-colors">{author.name}</a>
             ) : (
                 <span className="text-secondary">{author.name}</span>
