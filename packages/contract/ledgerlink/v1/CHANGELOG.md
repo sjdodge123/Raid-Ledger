@@ -14,6 +14,13 @@ Newest first. Every entry states **additive** or **breaking** (see
   fixture `.json` files were regenerated (`api/scripts/gen-ledgerlink-fixtures.ts`)
   to include the decoded `name`; the `.txt` pastes are unchanged.
 
+## v1 — 2026-10-10 — golden fixture correction — **no format change**
+
+- **Fixture only (stays v1).** `fixtures/char-forever-talents-named` (`.txt` +
+  `.json`) regenerated so every node's `tree`/`row`/`col` hint equals the
+  CONTRACT.md §3 rule applied to its own `posX`/`posY` (ROK-1758). No schema,
+  `schema.json` or Zod change; addon copies should re-sync the fixture pair.
+
 ## v1 — 2026-10-09 — Forever character fields — **additive**
 
 - **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):

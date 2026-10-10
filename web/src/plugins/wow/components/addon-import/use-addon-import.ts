@@ -110,14 +110,17 @@ export function useAddonImportPreview(characterId: string) {
     });
 }
 
-/** Apply (`dryRun: false`). Success invalidates the character's detail query. */
+/** Apply (`dryRun: false`). Success invalidates the character's detail query and its Quests snapshot (ROK-1758). */
 export function useAddonImportApply(characterId: string) {
     const queryClient = useQueryClient();
     return useMutation<AddonImportResultDto, AddonImportRequestError, AddonImportVariables>({
         mutationFn: (vars) => postAddonImport(characterId, requestBody(vars, false)),
         onSuccess: () => {
             resetUnresolvedEquipmentPoll(characterId);
-            return queryClient.invalidateQueries({ queryKey: ['characters', characterId] });
+            return Promise.all([
+                queryClient.invalidateQueries({ queryKey: ['characters', characterId] }),
+                queryClient.invalidateQueries({ queryKey: ['character-quests', characterId] }),
+            ]);
         },
     });
 }
@@ -150,5 +153,6 @@ function refreshAfterCreate(queryClient: QueryClient) {
         queryClient.invalidateQueries({ queryKey: ['me', 'characters'] }),
         queryClient.invalidateQueries({ queryKey: ['characters'] }),
         queryClient.invalidateQueries({ queryKey: ['userProfile'] }),
+        queryClient.invalidateQueries({ queryKey: ['character-quests'] }),
     ]);
 }
