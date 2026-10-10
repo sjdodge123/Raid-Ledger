@@ -10,6 +10,7 @@ import * as schema from '../drizzle/schema';
 import { NotificationService } from '../notifications/notification.service';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot/discord-bot.constants';
+import { clearFinishedJob } from '../queue/clear-finished-job.helpers';
 
 export const BENCH_PROMOTION_QUEUE = 'bench-promotion';
 export const PROMOTION_DELAY_MS = 5 * 60 * 1000; // 5 minutes
@@ -72,6 +73,10 @@ export class BenchPromotionService {
     vacatedPosition: number,
   ): Promise<void> {
     const jobId = `promote-${eventId}-${vacatedRole}-${vacatedPosition}`;
+    // ROK-1762: a retained failed promote job (removeOnFail: 50) holds this id
+    // and BullMQ would silently drop the add. Clear finished jobs only — a
+    // pending one keeps its delay timer (plain dedup, unchanged).
+    await clearFinishedJob(this.queue, jobId);
     await this.queue.add(
       'promote',
       {

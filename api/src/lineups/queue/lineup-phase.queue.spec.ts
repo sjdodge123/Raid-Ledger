@@ -206,3 +206,114 @@ describe('LineupPhaseQueueService.scheduleTransition failure contract (ROK-1512)
     );
   });
 });
+
+/**
+ * ROK-1762: queue that also supports `queue.remove(id)`, which drops the id
+ * from `jobs` the way BullMQ does, so later probes see it gone.
+ */
+function buildRetainingService(jobs: Record<string, FakeJob>) {
+  const add = jest.fn().mockResolvedValue(undefined);
+  const remove = jest.fn((id: string) => {
+    delete jobs[id];
+    return Promise.resolve(1);
+  });
+  const queue = {
+    add,
+    remove,
+    getJob: jest.fn((id: string) => Promise.resolve(jobs[id])),
+  } as unknown as Queue;
+  const service = new LineupPhaseQueueService(queue, {} as never);
+  return { service, add, remove };
+}
+
+/** The jobId the single `add` call landed under. */
+function addedJobId(add: jest.Mock): string {
+  expect(add).toHaveBeenCalledTimes(1);
+  return (add.mock.calls[0][2] as { jobId: string }).jobId;
+}
+
+describe('LineupPhaseQueueService retained finished jobs (ROK-1762)', () => {
+  it.each(['completed', 'failed'])(
+    'scheduleTransition clears a retained %s base job and lands under the base id',
+    async (state) => {
+      const { service, add, remove } = buildRetainingService({
+        [BASE_ID]: fakeJob(BASE_ID, state),
+      });
+
+      await service.scheduleTransition(7, 'voting', 60_000);
+
+      expect(remove).toHaveBeenCalledWith(BASE_ID);
+      expect(addedJobId(add)).toBe(BASE_ID);
+    },
+  );
+
+  it.each([
+    ['failed', 'failed'],
+    ['completed', 'failed'],
+    ['failed', 'completed'],
+  ])(
+    'scheduleTransition still lands when base is %s AND its -r twin is %s (was silently dropped)',
+    async (baseState, altState) => {
+      const { service, add, remove } = buildRetainingService({
+        [BASE_ID]: fakeJob(BASE_ID, baseState),
+        [ALT_ID]: fakeJob(ALT_ID, altState),
+      });
+
+      await service.scheduleTransition(7, 'voting', 60_000);
+
+      expect(remove).toHaveBeenCalledWith(BASE_ID);
+      expect(remove).toHaveBeenCalledWith(ALT_ID);
+      expect(addedJobId(add)).toBe(BASE_ID);
+    },
+  );
+
+  it.each(['completed', 'failed'])(
+    'scheduleTransition clears a retained %s -r twin when the base is active, then lands under -r',
+    async (altState) => {
+      const active = fakeJob(BASE_ID, 'active');
+      const { service, add, remove } = buildRetainingService({
+        [BASE_ID]: active,
+        [ALT_ID]: fakeJob(ALT_ID, altState),
+      });
+
+      await service.scheduleTransition(7, 'voting', 60_000);
+
+      expect(active.remove).not.toHaveBeenCalled();
+      expect(remove).toHaveBeenCalledWith(ALT_ID);
+      expect(remove).not.toHaveBeenCalledWith(BASE_ID);
+      expect(addedJobId(add)).toBe(ALT_ID);
+    },
+  );
+
+  it.each(['completed', 'failed'])(
+    'scheduleGraceAdvance clears a retained %s grace job before adding',
+    async (state) => {
+      const graceId = 'lineup-grace-7';
+      const { service, add, remove } = buildRetainingService({
+        [graceId]: fakeJob(graceId, state),
+      });
+
+      await service.scheduleGraceAdvance(7, 30_000);
+
+      expect(remove).toHaveBeenCalledWith(graceId);
+      expect(remove.mock.invocationCallOrder[0]).toBeLessThan(
+        add.mock.invocationCallOrder[0] ?? -Infinity,
+      );
+      expect(addedJobId(add)).toBe(graceId);
+    },
+  );
+
+  it('scheduleGraceAdvance still replaces a pending grace job (unchanged)', async () => {
+    const graceId = 'lineup-grace-7';
+    const pending = fakeJob(graceId, 'delayed');
+    const { service, add, remove } = buildRetainingService({
+      [graceId]: pending,
+    });
+
+    await service.scheduleGraceAdvance(7, 30_000);
+
+    expect(remove).not.toHaveBeenCalled();
+    expect(pending.remove).toHaveBeenCalledTimes(1);
+    expect(addedJobId(add)).toBe(graceId);
+  });
+});

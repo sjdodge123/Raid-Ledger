@@ -10,6 +10,7 @@ import { games } from '../drizzle/schema';
 import type { IgdbApiGame } from './igdb.constants';
 import { REENRICH_DELAY_MS, type IgdbSyncJobData } from './igdb-sync.constants';
 import { reEnrichGamesWithIgdb } from './igdb-reenrichment.helpers';
+import { clearFinishedJob } from '../queue/clear-finished-job.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -51,16 +52,22 @@ export async function enqueueSyncJob(
   return { jobId };
 }
 
-/** Enqueue a delayed re-enrichment job for a single game. */
+/**
+ * Enqueue a delayed re-enrichment job for a single game. ROK-1762: a retained
+ * finished `reenrich-<id>` job (100 completed / 50 failed kept on the shared
+ * IGDB queue) would silently swallow the add; a pending one still dedups.
+ */
 export async function enqueueReenrichJob(
-  queue: Queue,
+  queue: Pick<Queue, 'add' | 'getJob' | 'remove'>,
   gameId: number,
 ): Promise<void> {
+  const jobId = `reenrich-${gameId}`;
+  await clearFinishedJob(queue, jobId);
   await queue.add(
     'sync',
     { trigger: 'reenrich-game', gameId },
     {
-      jobId: `reenrich-${gameId}`,
+      jobId,
       delay: REENRICH_DELAY_MS,
       removeOnComplete: 100,
       removeOnFail: 50,
