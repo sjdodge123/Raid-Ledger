@@ -138,6 +138,15 @@ describe('PollSharePage — signed in (ROK-1750)', () => {
         expect(screen.getByTestId('location')).toHaveTextContent('/p/poll/tok_abc');
     });
 
+    it('a failed join clears the parked token so a later sign-in cannot replay it', async () => {
+        server.use(pollShareJoinHandler({ status: 404, message: 'This link is no longer valid' }, joinCalls));
+        auth.user = makeUser(true);
+        sessionStorage.setItem('poll_share_token', 'tok_abc');
+        renderPage();
+        expect(await screen.findByRole('alert')).toHaveTextContent(INVALID_LINK_COPY);
+        expect(sessionStorage.getItem('poll_share_token'), 'a failed join must clear the parked token').toBeNull();
+    });
+
     it('a join refused for this account (403) shows the can\'t-join card', async () => {
         server.use(pollShareJoinHandler({ status: 403, message: 'Account is deactivated' }, joinCalls));
         auth.user = makeUser(true);
