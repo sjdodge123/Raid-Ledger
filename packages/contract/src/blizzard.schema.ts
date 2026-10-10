@@ -88,6 +88,8 @@ export const WowForeverNamespacePrefixSchema = z.string().trim().regex(/^[a-z0-9
 export const WowForeverConfigSchema = z.object({
     namespacePrefix: WowForeverNamespacePrefixSchema,
     armoryImportEnabled: z.boolean(),
+    /** ROK-1727: Wowhead item resolver kill switch. Omitted on PUT = unchanged; GET always sends it (unset ⇒ true). */
+    wowheadResolverEnabled: z.boolean().optional(),
 });
 export type WowForeverConfigDto = z.infer<typeof WowForeverConfigSchema>;
 

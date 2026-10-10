@@ -8,6 +8,7 @@ import { useMediaQuery } from '../../../hooks/use-media-query';
 import { isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
 import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
 import { getWowheadItemUrl, getWowheadItemData } from '../lib/wowhead-urls';
+import { itemWowheadVariant } from '../lib/item-wowhead-variant';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 import {
     QUALITY_COLORS, QUALITY_BORDERS, SLOT_LABELS,
@@ -82,8 +83,8 @@ function SlotItemDetails({ item, qualityClass, gameVariant, isMobile }: {
     const firstEnchant = item.enchantments?.[0];
     return (
         <div className="min-w-0 flex-1">
-            <a href={getWowheadItemUrl(item.itemId, gameVariant)}
-                data-wowhead={isMobile ? undefined : getWowheadItemData(item.itemId, gameVariant)}
+            <a href={getWowheadItemUrl(item.itemId, itemWowheadVariant(item, gameVariant))}
+                data-wowhead={isMobile ? undefined : getWowheadItemData(item.itemId, itemWowheadVariant(item, gameVariant))}
                 target="_blank" rel="noopener noreferrer" className={`text-sm font-medium truncate block ${qualityClass} hover:underline`}
                 onClick={(e) => e.preventDefault()}>{item.name}</a>
             <div className="flex items-center gap-2 text-xs text-muted">

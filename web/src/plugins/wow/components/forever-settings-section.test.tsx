@@ -73,3 +73,24 @@ describe('ForeverSettingsSection probe panel (ROK-1716)', () => {
         expect(await screen.findByRole('heading', { name: /namespace probe/i })).toBeInTheDocument();
     });
 });
+
+/** ROK-1727: the Wowhead item resolver kill switch (unset ⇒ ON, D2). */
+describe('ForeverSettingsSection — Wowhead item lookup switch (ROK-1727)', () => {
+    it('reads unset as ON and turning it off PUTs wowheadResolverEnabled false with the other settings', async () => {
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverSettingsSection />);
+        const toggle = await screen.findByRole('switch', { name: /wowhead item lookup/i });
+        expect(toggle).toHaveAttribute('aria-checked', 'true');
+        await user.click(toggle);
+        await waitFor(() => expect(puts).toEqual([{ namespacePrefix: 'classicforever', armoryImportEnabled: false, wowheadResolverEnabled: false }]));
+    });
+
+    it('reads a saved false and keeps it when the Armory switch is flipped', async () => {
+        server.use(http.get(URL, () => HttpResponse.json({ ...DEFAULT_CONFIG, wowheadResolverEnabled: false })));
+        const user = userEvent.setup();
+        renderWithProviders(<ForeverSettingsSection />);
+        expect(await screen.findByRole('switch', { name: /wowhead item lookup/i })).toHaveAttribute('aria-checked', 'false');
+        await user.click(screen.getByRole('switch', { name: /armory import for wow forever/i }));
+        await waitFor(() => expect(puts).toEqual([{ namespacePrefix: 'classicforever', armoryImportEnabled: true, wowheadResolverEnabled: false }]));
+    });
+});

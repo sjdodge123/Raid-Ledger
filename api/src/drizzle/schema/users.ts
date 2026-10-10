@@ -27,6 +27,16 @@ export const users = pgTable(
     gameTimeConfirmedAt: timestamp('game_time_confirmed_at'),
     /** Timestamp when the user left the Discord guild and was auto-deactivated (ROK-1260). Null = active. */
     deactivatedAt: timestamp('deactivated_at'),
+    /**
+     * ROK-1749: last time the user was seen in the Discord guild roster — set by
+     * the GuildMemberAdd listener (join/rejoin) and by the daily reconciliation
+     * sweep for every DB user found in the fetched member list. NULL = never
+     * seen in the guild (e.g. a poll-link / PUG-invite guest who signed in via
+     * Discord OAuth) → NOT a reconciliation or 50278-deactivation candidate.
+     */
+    guildMemberSeenAt: timestamp('guild_member_seen_at', {
+      withTimezone: true,
+    }),
     /** ROK-313: soft-removal (kick) state. Null = not kicked. Cooldown enforced at auth time. */
     kickedAt: timestamp('kicked_at'),
     kickReason: text('kick_reason'),

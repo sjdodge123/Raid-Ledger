@@ -132,10 +132,7 @@ export class DiscordNotificationProcessor
     } catch (error) {
       const kind = classifyDiscordError(error);
       if (kind === 'permanent-deactivate') {
-        this.logger.warn(
-          `ROK-1260/ROK-1354: 50278/10013 for user ${userId} — deactivating, swallowing error`,
-        );
-        await this.discordNotificationService.deactivateUser(userId);
+        await this.handlePermanentDeactivate(userId, error);
         return;
       }
       if (kind === 'permanent-prefs-only') {
@@ -150,6 +147,37 @@ export class DiscordNotificationProcessor
       this.handleProcessError(job, userId, error);
       throw error;
     }
+  }
+
+  /**
+   * 50278 / 10013 (ROK-1260, ROK-1354). ROK-1749: a 50278 ("no mutual guilds")
+   * for a user never seen in the guild roster is expected — they are an OAuth
+   * guest, not a leaver — so record the DM failure and do NOT deactivate.
+   */
+  private async handlePermanentDeactivate(
+    userId: number,
+    error: unknown,
+  ): Promise<void> {
+    const code = (error as { code?: unknown }).code;
+    if (
+      code === 50278 &&
+      !(await this.discordNotificationService.isGuildMemberSeen(userId))
+    ) {
+      this.logger.warn(
+        `ROK-1749: 50278 for user ${userId} never seen in the guild — recording failure, NOT deactivating`,
+      );
+      await this.discordNotificationService
+        .recordFailure(userId)
+        .catch(() => {});
+      return;
+    }
+    this.logger.warn(
+      `ROK-1260/ROK-1354: ${String(code)} for user ${userId} — deactivating, swallowing error`,
+    );
+    await this.discordNotificationService.deactivateUser(
+      userId,
+      code === 10013 ? 'dm-failure-10013' : 'dm-failure-50278',
+    );
   }
 
   /** Build the embed and send the DM. */

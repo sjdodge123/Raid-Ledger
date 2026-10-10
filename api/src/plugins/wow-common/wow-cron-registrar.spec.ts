@@ -3,12 +3,14 @@ import { WowCronRegistrar } from './wow-cron-registrar';
 import { CharactersService } from '../../characters/characters.service';
 import { BossDataRefreshService } from './boss-data-refresh.service';
 import { ForeverNamespaceProbeService } from './forever-namespace-probe.service';
+import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { at } from '../../common/testing/narrow';
 
 let registrar: WowCronRegistrar;
 let mockCharactersService: { syncAllCharacters: jest.Mock };
 let mockBossDataRefresh: { refresh: jest.Mock };
 let mockProbe: { run: jest.Mock; runIfInLaunchWindow: jest.Mock };
+let mockItemMeta: { retryDue: jest.Mock };
 
 async function setupEach() {
   mockCharactersService = {
@@ -18,6 +20,7 @@ async function setupEach() {
     refresh: jest.fn(),
   };
   mockProbe = { run: jest.fn(), runIfInLaunchWindow: jest.fn() };
+  mockItemMeta = { retryDue: jest.fn().mockResolvedValue(0) };
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -25,6 +28,7 @@ async function setupEach() {
       { provide: CharactersService, useValue: mockCharactersService },
       { provide: BossDataRefreshService, useValue: mockBossDataRefresh },
       { provide: ForeverNamespaceProbeService, useValue: mockProbe },
+      { provide: WowItemMetaService, useValue: mockItemMeta },
     ],
   }).compile();
 
@@ -57,7 +61,7 @@ describe('WowCronRegistrar — getCronJobs', () => {
 
   it('should return cron jobs for character sync and boss data refresh', () => {
     const jobs = registrar.getCronJobs();
-    expect(jobs).toHaveLength(4);
+    expect(jobs).toHaveLength(5);
     expect(jobs[0]?.name).toBe('character-auto-sync');
     expect(jobs[0]?.cronExpression).toBe('0 0 3,15 * * *');
     expect(typeof at(jobs, 0).handler).toBe('function');
@@ -72,6 +76,14 @@ describe('WowCronRegistrar — getCronJobs', () => {
     expect(jobs[2]?.cronExpression).toBe('0 0 5 * * *');
     expect(jobs[3]?.name).toBe('forever-namespace-probe-launch');
     expect(jobs[3]?.cronExpression).toBe('0 30 * * * *');
+  });
+
+  it('registers the daily Wowhead item retry job (ROK-1727)', async () => {
+    const job = registrar.getCronJobs()[4];
+    expect(job?.name).toBe('wowhead-item-retry');
+    expect(job?.cronExpression).toBe('0 15 5 * * *');
+    await job?.handler();
+    expect(mockItemMeta.retryDue).toHaveBeenCalledTimes(1);
   });
 });
 

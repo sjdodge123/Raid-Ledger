@@ -16,10 +16,19 @@ import type {
 } from './extension-types';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
+  CharacterEquipmentDto,
   CreateCharacterDto,
   UpdateCharacterDto,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
+
+/** The character fields a display-equipment resolver may read (ROK-1727). */
+export interface DisplayEquipmentRow {
+  id: string;
+  gameVariant: string | null;
+  /** The stored (Armory) equipment, as mapped onto the DTO. */
+  equipment: CharacterEquipmentDto | null;
+}
 
 /** Provides character data fetch + sync capabilities for a game */
 export interface CharacterSyncAdapter {
@@ -50,6 +59,14 @@ export interface CharacterSyncAdapter {
     region: string,
     gameVariant?: string | null,
   ): Promise<ExternalCharacterProfessions | null>;
+  /**
+   * Equipment to DISPLAY on the public character detail (ROK-1727, D1):
+   * lets a plugin substitute data from a table it owns. `undefined` = no
+   * opinion (keep the stored equipment). Read-only; never persisted.
+   */
+  resolveDisplayEquipment?(
+    row: DisplayEquipmentRow,
+  ): Promise<CharacterEquipmentDto | null | undefined>;
 }
 
 /** Provides game content data (realms, instances) */

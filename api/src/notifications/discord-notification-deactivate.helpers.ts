@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { ModuleRef } from '@nestjs/core';
-import { eq, and, isNull, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { UsersService } from '../users/users.service';
@@ -9,6 +9,35 @@ import { SignupsRosterService } from '../events/signups-roster.service';
 import { cancelAllUpcomingSignupsForUser } from '../events/signup-cancel-batch.helpers';
 import { invalidateAuthUser } from '../auth/auth-user-cache';
 import { RefreshTokenService } from '../auth/refresh/refresh-token.service';
+
+/**
+ * ROK-1749: why a user was deactivated — rendered into the admin notification
+ * so a deactivation can be attributed to the layer that fired it.
+ */
+export type DeactivationReason =
+  | 'reconciliation-sweep'
+  | 'dm-failure-50278'
+  | 'dm-failure-10013'
+  | 'manual'
+  | 'unknown';
+
+const REASON_SUFFIX: Record<DeactivationReason, string> = {
+  'reconciliation-sweep':
+    'was deactivated by the daily guild sweep (not in the member list).',
+  'dm-failure-50278': 'was deactivated because a DM was refused (50278).',
+  'dm-failure-10013':
+    'was deactivated because their Discord account no longer exists (10013).',
+  manual: 'was deactivated manually.',
+  unknown: 'left the Discord guild and was deactivated.',
+};
+
+/** Admin-notification body for a deactivation (ROK-1749). */
+export function deactivationMessage(
+  username: string,
+  reason: DeactivationReason,
+): string {
+  return `${username} ${REASON_SUFFIX[reason] ?? REASON_SUFFIX.unknown}`;
+}
 
 /**
  * ModuleRef-aware entry point — resolves cross-module deps lazily to
@@ -22,6 +51,7 @@ export async function deactivateUserViaModuleRef(
   logger: Logger,
   moduleRef: ModuleRef | undefined,
   userId: number,
+  reason: DeactivationReason = 'unknown',
 ): Promise<void> {
   if (!moduleRef) {
     logger.warn(`ROK-1260: deactivateUser(${userId}) — no moduleRef, skipping`);
@@ -45,6 +75,7 @@ export async function deactivateUserViaModuleRef(
       refreshTokenService: deps.refreshTokenService,
     },
     userId,
+    reason,
   );
 }
 
@@ -107,6 +138,7 @@ export async function deactivateUserOrchestrated(
     logger: Logger;
   },
   userId: number,
+  reason: DeactivationReason = 'unknown',
 ): Promise<void> {
   const [row] = await deps.db
     .update(schema.users)
@@ -126,10 +158,10 @@ export async function deactivateUserOrchestrated(
   // re-mint a session — this is the primary deactivation path (guild leave).
   await revokeRefreshTokens(deps, row.id);
   deps.logger.log(
-    `ROK-1260: deactivated user ${row.id} (${row.username}) — running cancel cascade`,
+    `ROK-1260: deactivated user ${row.id} (${row.username}) [${reason}] — running cancel cascade`,
   );
   await runCascade(deps, row.id);
-  await writeAdminNotification(deps, row);
+  await writeAdminNotification(deps, row, reason);
 }
 
 /** ROK-1353: best-effort revoke of all refresh tokens for a deactivated user. */
@@ -181,6 +213,7 @@ async function writeAdminNotification(
     logger: Logger;
   },
   user: { id: number; username: string },
+  reason: DeactivationReason,
 ): Promise<void> {
   try {
     const admin = await deps.usersService.findAdmin();
@@ -194,8 +227,8 @@ async function writeAdminNotification(
       userId: admin.id,
       type: 'user_deactivated_discord',
       title: 'User deactivated',
-      message: `${user.username} left the Discord guild and was deactivated.`,
-      payload: { deactivatedUserId: user.id, username: user.username },
+      message: deactivationMessage(user.username, reason),
+      payload: { deactivatedUserId: user.id, username: user.username, reason },
       skipDiscord: true,
     });
   } catch (err: unknown) {
@@ -203,4 +236,26 @@ async function writeAdminNotification(
       `ROK-1260: admin deactivation notification failed for user ${user.id}: ${err instanceof Error ? err.message : 'Unknown error'}`,
     );
   }
+}
+
+/**
+ * ROK-1749: true when the user has ever been seen in the guild roster
+ * (`guild_member_seen_at IS NOT NULL`). Only such users may be deactivated by
+ * the 50278 classifier — a never-seen OAuth guest has no mutual guild by design.
+ */
+export async function isGuildMemberSeen(
+  db: PostgresJsDatabase<typeof schema>,
+  userId: number,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(
+      and(
+        eq(schema.users.id, userId),
+        isNotNull(schema.users.guildMemberSeenAt),
+      ),
+    )
+    .limit(1);
+  return !!row;
 }
