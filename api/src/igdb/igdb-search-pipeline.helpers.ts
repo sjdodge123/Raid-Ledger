@@ -149,7 +149,9 @@ function buildSnapshotItadDeps(
     db: params.db,
     queryIgdb: params.queryIgdb,
     getAdultFilter: () => Promise.resolve(adultFilter),
-    onGameUpserted: params.onGameUpserted,
+    ...(params.onGameUpserted !== undefined
+      ? { onGameUpserted: params.onGameUpserted }
+      : {}),
   });
 }
 

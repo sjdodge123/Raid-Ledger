@@ -53,8 +53,12 @@ export function buildItadSearchDeps(
     findBannedOrHiddenSlugs: (slugs) =>
       findBannedOrHiddenSlugs(params.db, slugs),
     upsertGame: (game) => upsertItadGame(params.db, game),
-    onUnenriched: params.onUnenriched,
-    onGameUpserted: params.onGameUpserted,
+    ...(params.onUnenriched !== undefined
+      ? { onUnenriched: params.onUnenriched }
+      : {}),
+    ...(params.onGameUpserted !== undefined
+      ? { onGameUpserted: params.onGameUpserted }
+      : {}),
   };
 }
 
@@ -91,9 +95,11 @@ function mapToSearchGame(
     title: game.title,
     type: game.type,
     mature: game.mature,
-    assets: game.assets,
-    tags: info?.tags,
-    releaseDate: info?.releaseDate,
+    ...(game.assets !== undefined ? { assets: game.assets } : {}),
+    ...(info?.tags !== undefined ? { tags: info.tags } : {}),
+    ...(info?.releaseDate !== undefined
+      ? { releaseDate: info.releaseDate }
+      : {}),
   };
 }
 

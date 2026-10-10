@@ -327,7 +327,6 @@ describe('discoverGameViaItad', () => {
       const deps = buildDeps({
         db: mockDb.asDeps,
         lookupBySteamAppId: jest.fn().mockResolvedValue(FAKE_ITAD_GAME),
-        queryIgdb: undefined,
       });
 
       const result = await discoverGameViaItad(STEAM_APP_ID, deps, 'steam');
