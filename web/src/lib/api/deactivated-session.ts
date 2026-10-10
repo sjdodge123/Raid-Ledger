@@ -43,7 +43,9 @@ export async function isDeactivatedResponse(res: Response): Promise<boolean> {
 }
 
 function goTo(path: string): void {
-  window.location.assign(path);
+  // replace, not assign: Back must not restore the dead page with its
+  // requests left pending forever (fetchWithAuth never settles on this path).
+  window.location.replace(path);
 }
 
 /**
