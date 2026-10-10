@@ -16,6 +16,9 @@ import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { WOW_FOREVER_GAME_SLUG } from './wow-forever-identity.helpers';
+import { pinExportClock } from './addon-import/testing/pin-export-clock';
+
+pinExportClock();
 
 const FIXTURE = join(
   __dirname,

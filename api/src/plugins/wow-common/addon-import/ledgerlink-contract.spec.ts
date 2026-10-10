@@ -17,6 +17,9 @@ import {
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const V1 = join(
   __dirname,

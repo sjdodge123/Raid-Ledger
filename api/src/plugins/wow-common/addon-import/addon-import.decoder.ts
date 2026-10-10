@@ -11,7 +11,7 @@ import {
   type AddonGuildExport,
   type AddonRaidExport,
 } from '@raid-ledger/contract';
-import { assertPlausibleExportTimes } from './addon-import.clock';
+import { assertPlausibleExportTimes, exportClock } from './addon-import.clock';
 import { AddonImportError } from './addon-import.errors';
 import { assertStructuralLimits } from './addon-import.limits';
 import { mergeGuildPages, type AddonPageHeader } from './addon-import.pages';
@@ -168,11 +168,12 @@ function decodeGroup(
   group: AddonSectionGroup,
   inputBytes: number,
   mixed: boolean,
+  nowMs: number,
 ): DecodedAddonSection {
   const sha256 = normalisedHash(group.headers);
   try {
     const payload = finalize(group.headers.map(decodePage));
-    assertPlausibleExportTimes(payload);
+    assertPlausibleExportTimes(payload, nowMs);
     return { payload, pages: group.headers.length, sha256, inputBytes };
   } catch (err) {
     if (!mixed || !(err instanceof AddonImportError)) throw err;
@@ -195,9 +196,13 @@ function toSections(decoded: DecodedAddonSection[]): DecodedAddonSections {
  * page set → per section, per page: base64 length → bounded inflate → JSON
  * → structural limits → strict schema → same exporter across sections.
  * All-or-nothing: any failure rejects the whole paste. Throws
- * `AddonImportError`; never echoes input.
+ * `AddonImportError`; never echoes input. `nowMs` is the server clock the
+ * export timestamps are bounded by (defaults to `exportClock`).
  */
-export function decodeImportPaste(raw: string): DecodedAddonPaste {
+export function decodeImportPaste(
+  raw: string,
+  nowMs: number = exportClock.nowMs(),
+): DecodedAddonPaste {
   const input = raw.trim();
   const inputBytes = Buffer.byteLength(input, 'utf8');
   if (inputBytes > ADDON_IMPORT_MAX_BYTES)
@@ -206,7 +211,7 @@ export function decodeImportPaste(raw: string): DecodedAddonPaste {
   const groups = parsePaste(input);
   const mixed = groups.length > 1;
   const decoded = groups.map((g) =>
-    decodeGroup(g, mixed ? g.bytes : inputBytes, mixed),
+    decodeGroup(g, mixed ? g.bytes : inputBytes, mixed, nowMs),
   );
   assertSameExporter(decoded.map((d) => d.payload));
   return {
@@ -222,8 +227,11 @@ export function decodeImportPaste(raw: string): DecodedAddonPaste {
  * the paste, then require exactly one section. A mixed paste is rejected
  * with `PAGES_INCOMPLETE` until the service handles several sections.
  */
-export function decodeImportString(raw: string): DecodedAddonImport {
-  const { sections, order } = decodeImportPaste(raw);
+export function decodeImportString(
+  raw: string,
+  nowMs: number = exportClock.nowMs(),
+): DecodedAddonImport {
+  const { sections, order } = decodeImportPaste(raw, nowMs);
   const [only] = order;
   const section = only && order.length === 1 ? sections[only] : undefined;
   if (!section) {

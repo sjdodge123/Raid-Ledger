@@ -14,6 +14,14 @@ const DAY_S = 86_400;
 export const EXPORT_MAX_FUTURE_S = DAY_S;
 export const EXPORT_MAX_AGE_S = 365 * DAY_S;
 
+/**
+ * The server clock the bound reads. A live-bound object (not a bare
+ * `Date.now` reference) so a spec can pin it with `jest.spyOn` and the
+ * golden fixtures — dated 2026-09-21 — never age out of the 1-year window.
+ * See `testing/pin-export-clock.ts`.
+ */
+export const exportClock = { nowMs: (): number => Date.now() };
+
 export const EXPORT_TIME_MESSAGE =
   "The import string's date doesn't match the server clock — check your computer's date and export again.";
 
@@ -35,7 +43,7 @@ function exportStamps(p: DecodedAddonExport): {
 /** Throws 422 `INVALID_PAYLOAD` when any stamp is outside the window. */
 export function assertPlausibleExportTimes(
   payload: DecodedAddonExport,
-  nowMs: number = Date.now(),
+  nowMs: number = exportClock.nowMs(),
 ): void {
   const now = Math.floor(nowMs / 1000);
   const { recent, past } = exportStamps(payload);

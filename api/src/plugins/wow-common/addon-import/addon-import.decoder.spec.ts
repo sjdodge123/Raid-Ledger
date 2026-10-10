@@ -25,6 +25,9 @@ import {
   FIXTURE_ITEM_LINK,
   wrapImportBytes,
 } from './testing/addon-fixture.builder';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 /** Decode `input`, assert it fails with `code`, a contract-valid body and no echo. */
 function expectReject(
