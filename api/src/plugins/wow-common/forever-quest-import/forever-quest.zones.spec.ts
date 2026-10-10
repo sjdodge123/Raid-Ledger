@@ -8,7 +8,7 @@ describe('FOREVER_WOWHEAD_ZONES', () => {
     );
   });
 
-  it('reports every seed n as unmapped while all zones are null', () => {
-    expect(unmappedZones()).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+  it('reports only the seed ns still without a Wowhead zone id', () => {
+    expect(unmappedZones()).toEqual([5, 6, 7, 8, 9, 10, 11]);
   });
 });
