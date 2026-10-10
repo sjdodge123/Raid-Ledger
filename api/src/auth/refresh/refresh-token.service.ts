@@ -7,6 +7,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { getSessionLengthDays } from '../../settings/settings-session.helpers';
 import { TokenBlocklistService } from '../token-blocklist.service';
+import { deactivatedException } from '../auth-status.helpers';
 import {
   type AuthMethod,
   generateRawToken,
@@ -75,9 +76,14 @@ export class RefreshTokenService {
    * vs unknown/expired (401 — caller throws). Returns the new token on
    * success, or null when the caller should reject with 401. Throws 409/503
    * (no revoke) for an in-window race beyond the one sibling / a Redis error.
+   * ROK-1753: a deactivated holder gets a 401 `USER_DEACTIVATED` BEFORE the
+   * consume, so nothing rotates or revokes and reactivation resumes the token.
    */
   async rotate(rawToken: string): Promise<IssuedRefreshToken | null> {
     const presentedHash = hashToken(rawToken);
+    if (await this.holderIsDeactivated(presentedHash)) {
+      throw deactivatedException();
+    }
     const consumed = await this.consumeRow(presentedHash);
     if (consumed) return this.mintChild(consumed);
     return this.handleNoConsume(presentedHash);
@@ -120,6 +126,17 @@ export class RefreshTokenService {
   }
 
   // ── internals ──────────────────────────────────────────────────────────
+
+  /** ROK-1753: does the presented token belong to a deactivated user? */
+  private async holderIsDeactivated(tokenHash: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ deactivatedAt: schema.users.deactivatedAt })
+      .from(schema.refreshTokens)
+      .innerJoin(schema.users, eq(schema.users.id, schema.refreshTokens.userId))
+      .where(eq(schema.refreshTokens.tokenHash, tokenHash))
+      .limit(1);
+    return row?.deactivatedAt != null;
+  }
 
   /** Atomically consume the row if it is live; returns it or undefined. */
   private async consumeRow(tokenHash: string) {
