@@ -59,6 +59,20 @@ describe('refresh race grace (ROK-1755)', () => {
     expect(await replayVerdict(100, claim)).toBe('unavailable');
   });
 
+  it('claims with SET NX and a TTL equal to the window', async () => {
+    const set = jest.fn().mockResolvedValue('OK');
+    await claimGraceOnce({ set }, 'parent-4');
+    expect(set).toHaveBeenCalledWith(
+      'refresh_grace:parent-4',
+      '1',
+      'PX',
+      RACE_GRACE_MS,
+      'NX',
+    );
+  });
+});
+
+describe('indeterminateReplayError (ROK-1755 review B1/M1)', () => {
   it('raced → 409 with code refresh_raced and no token', () => {
     const err = indeterminateReplayError('raced');
     expect(err).toBeInstanceOf(ConflictException);
@@ -79,17 +93,5 @@ describe('refresh race grace (ROK-1755)', () => {
   it('sibling and reuse are not indeterminate', () => {
     expect(indeterminateReplayError('sibling')).toBeNull();
     expect(indeterminateReplayError('reuse')).toBeNull();
-  });
-
-  it('claims with SET NX and a TTL equal to the window', async () => {
-    const set = jest.fn().mockResolvedValue('OK');
-    await claimGraceOnce({ set }, 'parent-4');
-    expect(set).toHaveBeenCalledWith(
-      'refresh_grace:parent-4',
-      '1',
-      'PX',
-      RACE_GRACE_MS,
-      'NX',
-    );
   });
 });

@@ -203,7 +203,10 @@ describe('refresh race grace — one sibling per parent (ROK-1755)', () => {
     expect(statuses).toEqual([200, 200, 409]);
     const raced = results.filter((r) => r.status === 409);
     for (const res of raced) {
-      expect(res.body).toMatchObject({ statusCode: 409, code: 'refresh_raced' });
+      expect(res.body).toMatchObject({
+        statusCode: 409,
+        code: 'refresh_raced',
+      });
       expect(res.body).not.toHaveProperty('access_token');
       expect(extractRefreshCookie(res)).toBeNull();
     }
