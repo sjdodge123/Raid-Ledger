@@ -2,7 +2,8 @@ import { randomInt } from 'node:crypto';
 import { generateInviteCode } from './pugs.helpers';
 
 jest.mock('node:crypto', () => {
-  const actual = jest.requireActual<typeof import('node:crypto')>('node:crypto');
+  const actual =
+    jest.requireActual<typeof import('node:crypto')>('node:crypto');
   return { ...actual, randomInt: jest.fn(actual.randomInt) };
 });
 const mockRandomInt = jest.mocked(randomInt);
