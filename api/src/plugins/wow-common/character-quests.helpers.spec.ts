@@ -43,7 +43,11 @@ function snap(
 ): ForeverQuestSnapshotInput {
   return {
     capturedAt: CAPTURED_AT,
-    quests: { completed, inProgress, completedTruncated },
+    quests: {
+      completed,
+      inProgress,
+      ...(completedTruncated !== undefined ? { completedTruncated } : {}),
+    },
   };
 }
 

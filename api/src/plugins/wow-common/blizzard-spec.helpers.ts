@@ -60,8 +60,9 @@ export function extractClassTalents(
       const spell = t.spell_tooltip as
         { spell?: { name?: string; id?: number } } | undefined;
       const tName = talent?.name ?? spell?.spell?.name;
+      const id = talent?.id ?? spell?.spell?.id;
       if (tName)
-        result.push({ name: tName, id: talent?.id ?? spell?.spell?.id });
+        result.push({ name: tName, ...(id !== undefined ? { id } : {}) });
     }
   }
   return result;
@@ -83,7 +84,10 @@ export function extractHeroTalents(data: Record<string, unknown>): {
     treeName: heroTree.hero_talent_tree?.name ?? null,
     talents: (heroTree.talents ?? [])
       .filter((t) => t.talent?.name)
-      .map((t) => ({ name: t.talent!.name!, id: t.talent?.id })),
+      .map((t) => {
+        const id = t.talent?.id;
+        return { name: t.talent!.name!, ...(id !== undefined ? { id } : {}) };
+      }),
   };
 }
 

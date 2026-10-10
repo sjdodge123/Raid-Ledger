@@ -112,23 +112,33 @@ function mapWeapon(w: WeaponData | undefined) {
     : undefined;
 }
 
+/** Optional fields with their `undefined` holes dropped (exactOptionalPropertyTypes). */
+type Compact<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
+
+/** Drops `undefined`-valued keys so an optional field stays absent, not `undefined`. */
+function compact<T extends object>(fields: T): Compact<T> {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined),
+  ) as Compact<T>;
+}
+
 /** Map enchantments, sockets, and stats from extracted fields. */
 function mapItemArrayFields(f: ReturnType<typeof extractItemFields>) {
-  return {
+  return compact({
     enchantments: f.enchantments?.map((e) => ({
       displayString: e.display_string,
-      enchantmentId: e.enchantment_id,
+      ...compact({ enchantmentId: e.enchantment_id }),
     })),
     sockets: f.sockets?.map((s) => ({
       socketType: s.socket_type?.type ?? 'UNKNOWN',
-      itemId: s.item?.id,
+      ...compact({ itemId: s.item?.id }),
     })),
     stats: f.stats?.map((s) => ({
       type: s.type.type,
       name: s.type.name,
       value: s.value,
     })),
-  };
+  });
 }
 
 /** Map a single raw equipment item to a BlizzardEquipmentItem. */
@@ -146,13 +156,15 @@ function mapSingleItem(
     itemLevel: f.level?.value ?? 0,
     itemSubclass: f.itemSubclass?.name ?? null,
     ...arrays,
-    armor: f.armor?.value,
-    binding: f.binding?.type,
-    requiredLevel: f.requirements?.level?.value,
-    weapon: mapWeapon(f.weapon),
-    description: item.description as string | undefined,
-    setName: f.setObj?.item_set?.name,
-    iconUrl: iconUrls.get(f.itemObj.id),
+    ...compact({
+      armor: f.armor?.value,
+      binding: f.binding?.type,
+      requiredLevel: f.requirements?.level?.value,
+      weapon: mapWeapon(f.weapon),
+      description: item.description as string | undefined,
+      setName: f.setObj?.item_set?.name,
+      iconUrl: iconUrls.get(f.itemObj.id),
+    }),
   };
 }
 

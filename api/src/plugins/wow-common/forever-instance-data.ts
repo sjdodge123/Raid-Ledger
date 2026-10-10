@@ -30,6 +30,8 @@ export const FOREVER_EXPANSION = 'Forever';
 
 interface ForeverSeedInstance extends WowInstanceDetail {
   expansion: typeof FOREVER_EXPANSION;
+  /** Every seed row carries a short name (see `seed`). */
+  shortName: string;
   minimumLevel: number;
   maximumLevel: number;
   maxPlayers: number;

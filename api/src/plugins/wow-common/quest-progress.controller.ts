@@ -94,11 +94,15 @@ export class QuestProgressController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
+    const { questId, pickedUp, completed } = parsed.data;
     return this.questProgressService.updateProgress(
       eventId,
       req.user.id,
-      parsed.data.questId,
-      { pickedUp: parsed.data.pickedUp, completed: parsed.data.completed },
+      questId,
+      {
+        ...(pickedUp !== undefined ? { pickedUp } : {}),
+        ...(completed !== undefined ? { completed } : {}),
+      },
     );
   }
 }
