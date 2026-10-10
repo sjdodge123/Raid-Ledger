@@ -10,7 +10,12 @@
  *   3. A gameId that is not in the matchup → 400.
  *   4. Uninvited member on a PRIVATE lineup → 403 on bracket-vote.
  *   5. Uninvited member on a PRIVATE lineup → 403 on veto, slot not spent.
- *   6. Invited member on a PRIVATE lineup still votes and vetoes (regression).
+ *   (4 and 5 also prove an invited member still votes / vetoes.)
+ *   6. Admin bypass on a PRIVATE lineup they did not create still votes.
+ *   7. A bye matchup → 400; a missing lineup → 404.
+ *   8. A veto against a BRACKET-mode tiebreaker → 400, no veto row.
+ *   9. The conditional insert writes nothing once the matchup is resolved
+ *      (late-vote race: the round advanced after the pre-check).
  */
 import { and, eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -22,9 +27,10 @@ import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { TiebreakerService } from './tiebreaker.service';
 import { advanceBracket } from './tiebreaker-bracket.helpers';
+import { insertBracketVoteIfOpen } from './tiebreaker-authz.helpers';
 import { findMatchups } from './tiebreaker-query.helpers';
 import { DiscordBotClientService } from '../../discord-bot/discord-bot-client.service';
-import { at, nonEmpty } from '../../common/testing/narrow';
+import { at, defined, nonEmpty } from '../../common/testing/narrow';
 
 interface TiedSetup {
   lineupId: number;
@@ -37,6 +43,7 @@ interface SetupOpts {
   mode: 'bracket' | 'veto';
   games: number;
   inviteeIds?: number[];
+  createdBy?: number;
 }
 
 const BV = schema.communityLineupTiebreakerBracketVotes;
@@ -117,7 +124,7 @@ function describeTiebreakerAuthz() {
           title: 'ROK-1752 tiebreaker authz',
           status: 'voting',
           visibility: opts.visibility,
-          createdBy: testApp.seed.adminUser.id,
+          createdBy: opts.createdBy ?? testApp.seed.adminUser.id,
           publicSlug: generatePublicSlug(),
         })
         .returning(),
@@ -230,15 +237,17 @@ function describeTiebreakerAuthz() {
       games: 4,
     });
     const matchup = await firstOpenMatchup(tb.tiebreakerId);
-    const outsider = tb.gameIds.find(
-      (g) => g !== matchup.gameAId && g !== matchup.gameBId,
+    const outsider = defined(
+      tb.gameIds.find((g) => g !== matchup.gameAId && g !== matchup.gameBId),
+      'a game outside the first matchup',
     );
     const res = await postBracketVote(tb.lineupId, adminToken, {
       matchupId: matchup.id,
-      gameId: outsider ?? -1,
+      gameId: outsider,
     });
     expect(res.status).toBe(400);
     expect(res.body.message).toBe('Game is not in this matchup');
+    expect(await bracketVotesFor(matchup.id)).toEqual([]);
   });
 
   it('403s an uninvited member on a private lineup bracket-vote', async () => {
@@ -292,6 +301,86 @@ function describeTiebreakerAuthz() {
         ),
       );
     expect(row?.gameId).toBe(at(tb.gameIds, 0));
+  });
+
+  it('lets an admin vote on a private lineup they were not invited to', async () => {
+    const creator = await createMember();
+    const tb = await setupTiedLineup({
+      visibility: 'private',
+      mode: 'bracket',
+      games: 2,
+      createdBy: creator.id,
+    });
+    const matchup = await firstOpenMatchup(tb.tiebreakerId);
+    const res = await postBracketVote(tb.lineupId, adminToken, {
+      matchupId: matchup.id,
+      gameId: matchup.gameAId,
+    });
+    expect(res.status).toBe(200);
+    const rows = await bracketVotesFor(matchup.id);
+    expect(rows.map((r) => r.userId)).toEqual([testApp.seed.adminUser.id]);
+  });
+
+  it('rejects a vote on a bye matchup', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 3,
+    });
+    const all = await findMatchups(testApp.db, tb.tiebreakerId);
+    const bye = defined(
+      all.find((m) => m.isBye),
+      'a bye matchup in a 3-game bracket',
+    );
+    const res = await postBracketVote(tb.lineupId, adminToken, {
+      matchupId: bye.id,
+      gameId: bye.gameAId,
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Matchup is not open in the current round');
+    expect(await bracketVotesFor(bye.id)).toEqual([]);
+  });
+
+  it('404s a bracket-vote and a veto on a missing lineup', async () => {
+    const vote = await postBracketVote(999999, adminToken, {
+      matchupId: 1,
+      gameId: 1,
+    });
+    expect(vote.status).toBe(404);
+    expect(vote.body.message).toBe('Lineup not found');
+    const veto = await postVeto(999999, adminToken, 1);
+    expect(veto.status).toBe(404);
+    expect(veto.body.message).toBe('Lineup not found');
+  });
+
+  it('rejects a veto against a bracket-mode tiebreaker', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 2,
+    });
+    const res = await postVeto(tb.lineupId, adminToken, at(tb.gameIds, 0));
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe('Not a veto tiebreaker');
+    expect(await vetoesFor(tb.tiebreakerId)).toEqual([]);
+  });
+
+  it('writes no vote once the matchup was resolved after the pre-check', async () => {
+    const tb = await setupTiedLineup({
+      visibility: 'public',
+      mode: 'bracket',
+      games: 4,
+    });
+    const roundOne = await firstOpenMatchup(tb.tiebreakerId);
+    await advanceBracket(testApp.db, tb.tiebreakerId);
+    const inserted = await insertBracketVoteIfOpen(testApp.db, {
+      tiebreakerId: tb.tiebreakerId,
+      matchupId: roundOne.id,
+      userId: testApp.seed.adminUser.id,
+      gameId: roundOne.gameAId,
+    });
+    expect(inserted).toBe(false);
+    expect(await bracketVotesFor(roundOne.id)).toEqual([]);
   });
 }
 
