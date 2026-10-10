@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   UnauthorizedException,
+  UseGuards,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
@@ -22,10 +23,13 @@ import {
   clearRefreshCookie,
 } from './refresh-cookie.helpers';
 import { hashToken } from './refresh-token.helpers';
+import { SameOriginCookiePostGuard } from './same-origin-cookie-post.guard';
 
 /**
  * ROK-1353: POST /auth/refresh (rotate) + POST /auth/logout (revoke).
  * Neither route is JWT-guarded — they operate on the httpOnly `rl_rt` cookie.
+ * ROK-1755: both reject cross-site callers (Sec-Fetch-Site / Origin) with 403
+ * before touching the cookie, whatever the CORS mode.
  */
 @Controller('auth')
 export class RefreshTokenController {
@@ -39,6 +43,7 @@ export class RefreshTokenController {
   /** Rotate the refresh cookie → fresh 1h access JWT + new cookie. */
   @RateLimit('refresh')
   @Post('refresh')
+  @UseGuards(SameOriginCookiePostGuard)
   @HttpCode(HttpStatus.OK)
   async refresh(
     @Req() req: Request,
@@ -55,6 +60,7 @@ export class RefreshTokenController {
 
   /** Revoke the presented family + clear cookie (this device only). */
   @Post('logout')
+  @UseGuards(SameOriginCookiePostGuard)
   @HttpCode(HttpStatus.OK)
   async logout(
     @Req() req: Request,
