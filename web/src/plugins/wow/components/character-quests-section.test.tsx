@@ -97,6 +97,12 @@ describe('CharacterQuestsSection — hidden states', () => {
 });
 
 describe('CharacterQuestsSection — summary + quest log', () => {
+    it('says "1 quest total" for a single completed quest (ROK-1758)', async () => {
+        body = { quests: makeQuests({ counts: { completedKnown: 1, knownTotal: 377, completedTotal: 1, inProgress: 2 } }) };
+        await renderLoaded();
+        expect(screen.getByText('1 completed · 377 known · via addon · 1 Oct 2026 · 1 quest total')).toBeInTheDocument();
+    });
+
     it('shows counts, source, date and the total completed', async () => {
         await renderLoaded();
         expect(screen.getByText('2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total')).toBeInTheDocument();
