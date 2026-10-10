@@ -242,7 +242,9 @@ export async function completeStandalonePoll(
   });
   return {
     ok: true,
-    linkedEventId: match.linkedEventId ?? undefined,
+    ...(match.linkedEventId != null
+      ? { linkedEventId: match.linkedEventId }
+      : {}),
     linkedEventCancelled: match.linkedEventCancelled,
   };
 }

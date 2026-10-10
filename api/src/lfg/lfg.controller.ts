@@ -76,7 +76,12 @@ export class LfgController {
     const result = await this.service.createIntent(
       req.user.id,
       parsed.data.gameId,
-      { urgency: parsed.data.urgency, ttlMinutes: parsed.data.ttlMinutes },
+      {
+        urgency: parsed.data.urgency,
+        ...(parsed.data.ttlMinutes !== undefined
+          ? { ttlMinutes: parsed.data.ttlMinutes }
+          : {}),
+      },
     );
     res.status(result.created ? HttpStatus.CREATED : HttpStatus.OK);
     return result.body;

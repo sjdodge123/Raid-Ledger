@@ -104,7 +104,7 @@ export class LineupStarService {
     assertVoteOpen(lineup);
     await assertUserCanParticipate(this.db, lineup, {
       id: userId,
-      role: callerRole,
+      ...(callerRole !== undefined ? { role: callerRole } : {}),
     });
     if (
       gameId !== null &&

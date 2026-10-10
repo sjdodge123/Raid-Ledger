@@ -52,7 +52,7 @@ export async function loadLineupMeta(
     .where(eq(schema.communityLineups.id, lineupId))
     .limit(1);
   return {
-    title: row?.title,
+    ...(row?.title !== undefined ? { title: row.title } : {}),
     description: row?.description ?? null,
     phaseDeadline: row?.phaseDeadline ?? null,
   };

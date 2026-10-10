@@ -170,7 +170,7 @@ export class SignupsAllocationService {
       chainMoves: chainMoves.map(
         (m) => `${m.username}: ${m.fromRole} → ${m.toRole}`,
       ),
-      warning: warnings.length > 0 ? warnings.join('\n') : undefined,
+      ...(warnings.length > 0 ? { warning: warnings.join('\n') } : {}),
     };
   }
 

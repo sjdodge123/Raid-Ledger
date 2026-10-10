@@ -77,7 +77,7 @@ export async function notifyLineupAborted(
     return;
   const phase = resolvePhase(lineup.preAbortStatus);
   const ctx = await resolveEmbedCtx(deps, lineup.id, phase, {
-    title: lineup.title,
+    ...(lineup.title !== undefined ? { title: lineup.title } : {}),
     description: lineup.description ?? null,
   });
   await postChannelEmbed(

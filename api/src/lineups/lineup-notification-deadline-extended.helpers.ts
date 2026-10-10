@@ -79,8 +79,8 @@ export async function notifyDeadlineExtended(
   nominationCount: number,
 ): Promise<void> {
   const ctx = await resolveEmbedCtx(deps, lineup.id, 'nominations', {
-    title: lineup.title,
-    description: lineup.description ?? undefined,
+    ...(lineup.title !== undefined ? { title: lineup.title } : {}),
+    ...(lineup.description != null ? { description: lineup.description } : {}),
     phaseDeadline: newDeadline,
   });
   await postChannelEmbed(

@@ -81,7 +81,7 @@ export class LineupSubmitService {
     }
     await assertUserCanParticipate(this.db, lineup, {
       id: userId,
-      role: callerRole,
+      ...(callerRole !== undefined ? { role: callerRole } : {}),
     });
     return lineup;
   }
