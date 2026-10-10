@@ -88,7 +88,7 @@ function getDiscordNotificationService(): DiscordNotificationService {
 
 /** Count un-revoked refresh-token rows for a user. */
 /**
- * Age every consumed rotation for the user past the 60s race grace so a
+ * Age every consumed rotation for the user past the 10 s race grace so a
  * replay reads as theft, not as a concurrent-tab race loser (ROK-1353).
  */
 async function backdateRotations(userId: number): Promise<void> {
@@ -186,7 +186,7 @@ describe('POST /auth/refresh rotation (AC2)', () => {
       .set('Cookie', cookieHeader(oldCookie));
     expect(first.status).toBe(200);
 
-    // Outside the 60s concurrent-tab grace, replaying the consumed OLD
+    // Outside the 10 s concurrent-tab grace, replaying the consumed OLD
     // token must NOT mint a new access token.
     await backdateRotations(adminId);
     const replay = await testApp.request

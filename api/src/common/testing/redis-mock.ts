@@ -5,7 +5,7 @@
  * 300-line ESLint cap and so a future redis-mock unit test can target this
  * module directly. The mock implements only the subset of ioredis methods
  * the codebase touches (set with NX, setex, del, incr, expire, ttl, exists,
- * keys with `*` glob, ping, quit, disconnect, duplicate). The `store` Map
+ * keys with `*` glob, getdel, ping, quit, disconnect, duplicate). The `store` Map
  * is exposed via the returned handle so `truncateAllTables` can purge
  * cross-suite keys (e.g. `jwt_block:*`) without round-tripping the client.
  *
@@ -78,6 +78,19 @@ function mockRedisKeys(store: Map<string, string>) {
   };
 }
 
+/** Redis mock GETDEL: read and remove in one step (atomic, like Redis). */
+function mockRedisGetdel(
+  store: Map<string, string>,
+  expiries: Map<string, number>,
+) {
+  return (key: string) => {
+    const value = store.get(key) ?? null;
+    store.delete(key);
+    expiries.delete(key);
+    return Promise.resolve(value);
+  };
+}
+
 /** Redis mock del helper. */
 function mockRedisDel(
   store: Map<string, string>,
@@ -125,6 +138,7 @@ function buildRedisMockClient(
 ) {
   return {
     get: (key: string) => Promise.resolve(store.get(key) ?? null),
+    getdel: mockRedisGetdel(store, expiries),
     lpush: (key: string, ...values: string[]) => {
       const list = readList(store, key);
       list.unshift(...values.reverse());
