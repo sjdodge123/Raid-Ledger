@@ -5,9 +5,11 @@
  */
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { eq, inArray } from 'drizzle-orm';
-import { z } from 'zod';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { CharacterQuestsDto } from '@raid-ledger/contract';
+import {
+  AddonQuestsSchema,
+  type CharacterQuestsDto,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import {
@@ -21,42 +23,18 @@ import { loadForeverCharSnapshot } from './forever-char-snapshot.query';
 
 type QuestsSlice = NonNullable<ForeverQuestSnapshotInput['quests']>;
 
-const int = z.number().int();
-
-/** Shape the builder needs; anything else hides the section instead of a 500. */
-const QuestsSliceSchema: z.ZodType<QuestsSlice> = z.object({
-  completed: z.array(int),
-  completedTruncated: z.boolean().optional(),
-  inProgress: z.array(
-    z.object({
-      questId: int,
-      title: z.string().optional(),
-      objectives: z
-        .array(
-          z.object({
-            text: z.string(),
-            done: z.boolean(),
-            have: int.optional(),
-            need: int.optional(),
-          }),
-        )
-        .optional(),
-      dungeonInstanceId: int.optional(),
-    }),
-  ),
-});
-
 /**
- * Validate `data.quests` (schema 2) without depending on the snapshot type,
- * which may predate the ROK-1742 `quests` field. Absent or malformed slices
- * return `undefined` (section hidden).
+ * Read `data.quests` (snapshot schema 2) through the ROK-1742 wire schema
+ * (`AddonQuestsSchema`) the import path already validated it with. Schema-1
+ * rows (no `quests`) and malformed slices return `undefined` (section hidden)
+ * instead of a 500.
  */
 export function readQuestsSlice(data: unknown): QuestsSlice | undefined {
   if (!data || typeof data !== 'object') return undefined;
-  const parsed = QuestsSliceSchema.safeParse(
+  const parsed = AddonQuestsSchema.safeParse(
     (data as { quests?: unknown }).quests,
   );
-  return parsed.success ? parsed.data : undefined;
+  return parsed.success ? (parsed.data satisfies QuestsSlice) : undefined;
 }
 
 @Injectable()
