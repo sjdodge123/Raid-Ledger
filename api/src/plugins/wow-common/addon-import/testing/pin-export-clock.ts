@@ -1,3 +1,5 @@
+// nest build runs TS 6 (types default []) and compiles this helper: load jest globals explicitly.
+/// <reference types="jest" />
 import { exportClock } from '../addon-import.clock';
 import { FIXTURE_EXPORTED_AT } from './addon-fixture.builder';
 
