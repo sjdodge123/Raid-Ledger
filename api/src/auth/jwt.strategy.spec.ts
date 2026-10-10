@@ -197,6 +197,7 @@ describe('JwtStrategy — non-integer sub is a 401 before any lookup (ROK-1764)'
     ['zero', 0],
     ['negative', -3],
     ['a float', 1.5],
+    ['above the int4 users.id range', 2_147_483_648],
   ])('rejects a sub that is %s', async (_label, sub) => {
     await expect(strategy.validate(buildPayload({ sub }))).rejects.toThrow(
       new UnauthorizedException('Invalid session token'),

@@ -75,12 +75,20 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
  * JWT_SECRET (e.g. the deferred-signup intent token, which has no `sub`), so
  * a `sub` that is not a positive integer is a 401 — never a users query.
  */
+/** `users.id` is a serial (int4); a larger sub would 500 the lookup. */
+const INT4_MAX = 2_147_483_647;
+
 function assertSessionPayload(payload: JwtPayload): void {
   if (payload.magicLink) {
     throw new UnauthorizedException('Magic-link tokens are not session tokens');
   }
   const sub: unknown = payload.sub;
-  if (typeof sub !== 'number' || !Number.isSafeInteger(sub) || sub <= 0) {
+  const isUserId =
+    typeof sub === 'number' &&
+    Number.isInteger(sub) &&
+    sub > 0 &&
+    sub <= INT4_MAX;
+  if (!isUserId) {
     throw new UnauthorizedException('Invalid session token');
   }
 }
