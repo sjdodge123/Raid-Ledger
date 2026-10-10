@@ -291,7 +291,7 @@ async function testRosterAvailabilityAnonymous401() {
   expect(res.body.users).toBeUndefined();
 }
 
-async function testRosterAvailabilityDeactivated403() {
+async function testRosterAvailabilityDeactivated401() {
   const eventId = await createFutureEvent(testApp, adminToken);
   const { userId, token } = await createMemberAndLogin(
     testApp,
@@ -308,7 +308,8 @@ async function testRosterAvailabilityDeactivated403() {
     .get(`/events/${eventId}/roster/availability`)
     .set('Authorization', `Bearer ${token}`);
 
-  expect(res.status).toBe(403);
+  // ROK-1753: rejected at JwtStrategy (401) before the route guard runs.
+  expect(res.status).toBe(401);
   expect(res.body.code).toBe('USER_DEACTIVATED');
   expect(res.body.users).toBeUndefined();
 }
@@ -343,8 +344,8 @@ describe('getRosterAvailability (integration)', () => {
     testRosterAvailability404());
   it('rejects an anonymous caller with 401 (R8, ROK-1629)', () =>
     testRosterAvailabilityAnonymous401());
-  it('rejects a deactivated member with 403 (R9, ROK-1629)', () =>
-    testRosterAvailabilityDeactivated403());
+  it('rejects a deactivated member with 401 (R9, ROK-1629, ROK-1753)', () =>
+    testRosterAvailabilityDeactivated401());
 });
 
 describe('getAggregateGameTime (integration)', () => {
