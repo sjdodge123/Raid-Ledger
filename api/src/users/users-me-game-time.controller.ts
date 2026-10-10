@@ -102,8 +102,14 @@ export class UsersMeGameTimeController {
     @Request() req: AuthenticatedRequest,
     @Body() body: unknown,
   ) {
-    const dto = parseOrBadRequest(GameTimeAbsenceInputSchema, body);
-    const result = await this.gameTimeService.createAbsence(req.user.id, dto);
+    const { reason, ...range } = parseOrBadRequest(
+      GameTimeAbsenceInputSchema,
+      body,
+    );
+    const result = await this.gameTimeService.createAbsence(req.user.id, {
+      ...range,
+      ...(reason !== undefined ? { reason } : {}),
+    });
     return { data: result };
   }
 

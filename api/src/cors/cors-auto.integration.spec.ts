@@ -27,7 +27,7 @@ const SAME_ORIGIN = `https://${APP_HOST}`;
 const SIBLING_ORIGIN = 'https://slot-1.gamernight.net';
 
 let testApp: TestApp;
-let savedEnv: { corsOrigin?: string; autoMode?: string };
+let savedEnv: { corsOrigin: string | undefined; autoMode: string | undefined };
 
 beforeAll(async () => {
   testApp = await getTestApp();

@@ -64,9 +64,9 @@ export class AdminGamesController {
     @Query('limit', new ParseIntPipe({ optional: true })) limit = 20,
   ): Promise<AdminGameListResponseDto> {
     return queryGameList(this.igdbService.database, {
-      search,
-      showHidden,
-      enrichmentStatus,
+      ...(search !== undefined ? { search } : {}),
+      ...(showHidden !== undefined ? { showHidden } : {}),
+      ...(enrichmentStatus !== undefined ? { enrichmentStatus } : {}),
       page,
       limit,
     });
@@ -137,7 +137,7 @@ export class AdminGamesController {
     );
     return {
       success: true,
-      hiddenCount: enabled ? hiddenCount : undefined,
+      ...(enabled ? { hiddenCount } : {}),
       message: enabled
         ? `Adult content filter enabled.${hiddenCount > 0 ? ` ${hiddenCount} games with adult themes were hidden.` : ''}`
         : 'Adult content filter disabled.',

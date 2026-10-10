@@ -30,16 +30,13 @@ export class DemoTestSignupsController {
   @Post('signup')
   @HttpCode(HttpStatus.OK)
   async createSignupForTest(@Body() body: unknown): Promise<unknown> {
-    const parsed = parseDemoBody(CreateTestSignupSchema, body);
-    return this.demoTestService.createSignupForTest(
-      parsed.eventId,
-      parsed.userId,
-      {
-        preferredRoles: parsed.preferredRoles,
-        characterId: parsed.characterId,
-        status: parsed.status,
-      },
-    );
+    const { eventId, userId, preferredRoles, characterId, status } =
+      parseDemoBody(CreateTestSignupSchema, body);
+    return this.demoTestService.createSignupForTest(eventId, userId, {
+      ...(preferredRoles !== undefined ? { preferredRoles } : {}),
+      ...(characterId !== undefined ? { characterId } : {}),
+      ...(status !== undefined ? { status } : {}),
+    });
   }
 
   /** Enqueue a departure grace job with 0 delay — DEMO_MODE only (smoke tests). */

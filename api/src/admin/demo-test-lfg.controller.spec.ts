@@ -34,7 +34,9 @@ const discordClient = { getGuild: jest.fn() };
 const ephemeralVoice = { destroyById: jest.fn() };
 
 function controller(
-  { voice }: { voice?: typeof ephemeralVoice } = { voice: ephemeralVoice },
+  { voice }: { voice?: typeof ephemeralVoice | undefined } = {
+    voice: ephemeralVoice,
+  },
 ): DemoTestLfgController {
   return new DemoTestLfgController(
     settings as unknown as SettingsService,

@@ -44,12 +44,15 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
     CronJobModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'),
-        // ROK-1353: access JWT shortened 24h → 1h; refresh-token rotation
-        // keeps sessions long-lived without a long-lived access token.
-        signOptions: { expiresIn: '1h' },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const secret = configService.get<string>('JWT_SECRET');
+        return {
+          ...(secret !== undefined ? { secret } : {}),
+          // ROK-1353: access JWT shortened 24h → 1h; refresh-token rotation
+          // keeps sessions long-lived without a long-lived access token.
+          signOptions: { expiresIn: '1h' },
+        };
+      },
       inject: [ConfigService],
     }),
   ],

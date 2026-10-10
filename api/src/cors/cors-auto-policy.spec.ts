@@ -69,7 +69,7 @@ function legacyOriginFn(
 type Wiring = 'legacy' | 'policy';
 interface Probe {
   method?: 'get' | 'post' | 'options';
-  origin?: string;
+  origin?: string | undefined;
   host?: string;
   xfh?: string;
   path?: string;

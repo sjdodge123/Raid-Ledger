@@ -10,7 +10,7 @@
  * with the same secrets the app uses (`process.env.JWT_SECRET` is set for
  * this file's realm by `getTestApp`).
  */
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -26,6 +26,12 @@ import { signPurposeJwt } from './purpose-jwt.helpers';
 import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
 import { hashToken } from './single-use-token.helpers';
 import { TokenBlocklistService } from './token-blocklist.service';
+
+/** 15-minute sign options under the legacy `JWT_SECRET` key. */
+function jwtSecretSignOptions(): JwtSignOptions {
+  const secret = process.env.JWT_SECRET;
+  return { ...(secret !== undefined ? { secret } : {}), expiresIn: '15m' };
+}
 
 const REDEEM = '/auth/redeem-magic-link';
 
@@ -210,7 +216,7 @@ const BAD_TOKENS: [string, TokenBuilder][] = [
       Promise.resolve(
         signer.sign(
           { sub, username: 'admin', role: 'admin', magicLink: true },
-          { secret: process.env.JWT_SECRET, expiresIn: '15m' },
+          jwtSecretSignOptions(),
         ),
       ),
   ],
@@ -350,7 +356,7 @@ describe('magic tokens as Authorization: Bearer (AC5)', () => {
   it('a JWT_SECRET-signed {magicLink:true} token is 401 through JwtStrategy', async () => {
     const sub = testApp.seed.adminUser.id;
     const payload = { sub, username: 'admin', role: 'admin' };
-    const opts = { secret: process.env.JWT_SECRET, expiresIn: '15m' as const };
+    const opts = jwtSecretSignOptions();
     const plain = signer.sign(payload, opts);
     const legacy = signer.sign({ ...payload, magicLink: true }, opts);
 
