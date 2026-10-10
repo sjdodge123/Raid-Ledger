@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { at } from '../../../test/defined';
 
 const CSS = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'quest-prep-panel.css'), 'utf8')
     .replace(/\/\*[\s\S]*?\*\//g, '');
@@ -16,7 +17,7 @@ const CSS = readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'quest
 function rule(selector: string): string {
     const match = new RegExp(`(?:^|\\n)${selector.replace(/[.]/g, '\\.')}\\s*\\{([^}]*)\\}`).exec(CSS);
     if (!match) throw new Error(`no rule for ${selector}`);
-    return match[1];
+    return at(match, 1);
 }
 
 describe('quest-prep-panel.css (ROK-1758)', () => {
