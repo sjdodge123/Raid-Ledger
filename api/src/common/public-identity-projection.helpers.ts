@@ -37,7 +37,10 @@ import type {
 } from '@raid-ledger/contract';
 import { discordAvatarUrl } from './discord-avatar-url.helpers';
 
-type IdentityRow = { discordId?: string | null; avatar: string | null };
+type IdentityRow = {
+  discordId?: string | null | undefined;
+  avatar: string | null;
+};
 
 /** Drop `discordId`; replace the raw avatar hash with a server-built absolute URL. */
 export function toPublicIdentity<T extends IdentityRow>(

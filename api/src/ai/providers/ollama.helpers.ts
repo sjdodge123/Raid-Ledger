@@ -60,7 +60,7 @@ export function mapOllamaModel(raw: OllamaRawModel): LlmModelInfo {
     id: raw.name,
     name: raw.name,
     provider: 'ollama',
-    capabilities: raw.details?.family ? [raw.details.family] : undefined,
+    ...(raw.details?.family ? { capabilities: [raw.details.family] } : {}),
   };
 }
 
@@ -71,13 +71,14 @@ export function mapOllamaChatResponse(
 ): LlmChatResponse {
   return {
     content: raw.message?.content ?? '',
-    usage:
-      raw.prompt_eval_count != null || raw.eval_count != null
-        ? {
+    ...(raw.prompt_eval_count != null || raw.eval_count != null
+      ? {
+          usage: {
             promptTokens: raw.prompt_eval_count ?? 0,
             completionTokens: raw.eval_count ?? 0,
-          }
-        : undefined,
+          },
+        }
+      : {}),
     latencyMs,
   };
 }
@@ -89,13 +90,14 @@ export function mapOllamaGenerateResponse(
 ): LlmGenerateResponse {
   return {
     content: raw.response ?? '',
-    usage:
-      raw.prompt_eval_count != null || raw.eval_count != null
-        ? {
+    ...(raw.prompt_eval_count != null || raw.eval_count != null
+      ? {
+          usage: {
             promptTokens: raw.prompt_eval_count ?? 0,
             completionTokens: raw.eval_count ?? 0,
-          }
-        : undefined,
+          },
+        }
+      : {}),
     latencyMs,
   };
 }

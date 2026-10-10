@@ -87,7 +87,7 @@ export class OllamaSetupService implements OnModuleInit {
     return {
       running,
       step: step ?? '',
-      error: error ?? undefined,
+      ...(error != null ? { error } : {}),
     };
   }
 
