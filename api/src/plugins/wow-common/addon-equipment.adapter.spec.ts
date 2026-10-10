@@ -119,7 +119,13 @@ describe('addonSnapshotToEquipment — unresolved items', () => {
     ['no meta row', undefined],
     [
       'error row (first failed run)',
-      meta({ status: 'error', env: null, name: null, quality: null, icon: null }),
+      meta({
+        status: 'error',
+        env: null,
+        name: null,
+        quality: null,
+        icon: null,
+      }),
     ],
     [
       'error row (2 failed runs, still on the view floor)',
