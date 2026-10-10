@@ -32,6 +32,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as Sentry from '@sentry/nestjs';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
 import { parseTimestampUtc } from '../../drizzle/timestamp-utils';
 import * as schema from '../../drizzle/schema';
 import {
@@ -155,6 +156,10 @@ export class LineupPhaseQueueService implements OnModuleInit {
   async scheduleGraceAdvance(lineupId: number, delayMs: number): Promise<void> {
     const jobId = `lineup-grace-${lineupId}`;
     try {
+      // ROK-1762: a retained failed grace job (removeOnFail: 50) would make
+      // every later quorum re-schedule a silent no-op (stuck
+      // `pending_advance_at`). Then replace a pending one, as before.
+      await clearFinishedJob(this.queue, jobId);
       await this.removeExisting(jobId);
       await this.enqueue(
         jobId,
@@ -223,9 +228,18 @@ export class LineupPhaseQueueService implements OnModuleInit {
    * from inside the very `voting` job it runs in; without this the extended
    * window never fired. Pending jobs under BOTH ids are cleared first, so
    * the pair never holds two runnable transitions for one target.
+   *
+   * ROK-1762: retained FINISHED jobs (completed, or failed under
+   * removeOnFail: 50) are cleared from both ids first. Before, a retained
+   * failed base pushed the job to the `-r` id, and a retained failed twin
+   * as well meant the add collapsed into it silently — a stuck lineup. The
+   * `-r` id stays, because an ACTIVE base cannot be removed; only that case
+   * needs it now.
    */
   private async freeTransitionJobId(baseId: string): Promise<string> {
     const altId = `${baseId}${LINEUP_PHASE_RESCHEDULED_SUFFIX}`;
+    await clearFinishedJob(this.queue, baseId);
+    await clearFinishedJob(this.queue, altId);
     const baseOccupied = await this.removeExisting(baseId);
     await this.removeExisting(altId);
     return baseOccupied ? altId : baseId;
@@ -233,8 +247,9 @@ export class LineupPhaseQueueService implements OnModuleInit {
 
   /**
    * Remove a delayed/waiting job by ID. Returns `true` when the id is still
-   * occupied afterwards — an active (locked) or retained failed job that a
-   * same-id `add` would silently collapse into.
+   * occupied afterwards — an active (locked) job, or a finished one not yet
+   * cleared by `clearFinishedJob`, that a same-id `add` would silently
+   * collapse into.
    */
   private async removeExisting(jobId: string): Promise<boolean> {
     const existing = await this.queue.getJob(jobId);

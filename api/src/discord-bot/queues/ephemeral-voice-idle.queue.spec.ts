@@ -6,12 +6,13 @@ import {
 } from './ephemeral-voice-idle.queue';
 
 let service: EphemeralVoiceIdleQueueService;
-let mockQueue: { add: jest.Mock; getJob: jest.Mock };
+let mockQueue: { add: jest.Mock; getJob: jest.Mock; remove: jest.Mock };
 
 beforeEach(async () => {
   mockQueue = {
     add: jest.fn().mockResolvedValue(undefined),
     getJob: jest.fn().mockResolvedValue(null),
+    remove: jest.fn().mockResolvedValue(1),
   };
   const module: TestingModule = await Test.createTestingModule({
     providers: [

@@ -54,15 +54,35 @@ function buildMockService(db: Record<string, jest.Mock>): Partial<IgdbService> {
   };
 }
 
-function buildMockQueue(): { add: jest.Mock } {
-  return { add: jest.fn().mockResolvedValue(undefined) };
+type MockQueue = { add: jest.Mock; getJob: jest.Mock; remove: jest.Mock };
+
+function buildMockQueue(): MockQueue {
+  return {
+    add: jest.fn().mockResolvedValue(undefined),
+    // ROK-1762: enqueuePriceSync clears a retained finished job first.
+    getJob: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn().mockResolvedValue(0),
+  };
+}
+
+/**
+ * Resolves once `queue.add` has run `count` times. The enqueue is
+ * fire-and-forget and awaits the retained-job probe before adding.
+ */
+function addsSettled(queue: MockQueue, count: number): Promise<void> {
+  return new Promise((resolve) => {
+    queue.add.mockImplementation(() => {
+      if (queue.add.mock.calls.length >= count) resolve();
+      return Promise.resolve(undefined);
+    });
+  });
 }
 
 async function createController(
   mockService: Partial<IgdbService>,
   mockItadService: Partial<ItadPriceService>,
-  mockQueue: { add: jest.Mock } = buildMockQueue(),
-): Promise<{ ctrl: IgdbController; queue: { add: jest.Mock } }> {
+  mockQueue: MockQueue = buildMockQueue(),
+): Promise<{ ctrl: IgdbController; queue: MockQueue }> {
   const module: TestingModule = await Test.createTestingModule({
     controllers: [IgdbController],
     providers: [
@@ -129,10 +149,15 @@ describe('IgdbController.batchPricing — ROK-1047 async fetch', () => {
       getOverviewBatch: jest.fn(),
     });
 
+    const added = addsSettled(queue, 2);
+
     const result = await ctrl.batchPricing('1,2');
+    await added;
 
     expect(result.data['1']).toBeNull();
     expect(result.data['2']).toBeNull();
+    expect(queue.getJob).toHaveBeenCalledWith('itad-price-1');
+    expect(queue.getJob).toHaveBeenCalledWith('itad-price-2');
     expect(queue.add).toHaveBeenCalledTimes(2);
     expect(queue.add).toHaveBeenCalledWith(
       'sync',
@@ -172,6 +197,7 @@ describe('IgdbController.batchPricing — ROK-1047 async fetch', () => {
 
     expect(result.data['7']).toBeNull();
     expect(queue.add).not.toHaveBeenCalled();
+    expect(queue.getJob).not.toHaveBeenCalled();
   });
 
   it('responds in <50ms even when ITAD service throws (no sync call)', async () => {
@@ -225,6 +251,7 @@ describe('IgdbController.batchPricing — ROK-1047 async fetch', () => {
       currentBest: expect.objectContaining({ shop: 'Steam', price: 9.99 }),
     });
     expect(queue.add).not.toHaveBeenCalled();
+    expect(queue.getJob).not.toHaveBeenCalled();
   });
 });
 

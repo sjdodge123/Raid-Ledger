@@ -46,7 +46,11 @@ describe('ItadPriceSyncProcessor.process', () => {
 describe('enqueuePriceSync', () => {
   it('uses jobId itad-price-<gameId> for per-game dedupe', async () => {
     const add = jest.fn().mockResolvedValue(undefined);
-    const queue = { add } as unknown as Queue;
+    const queue = {
+      add,
+      getJob: jest.fn().mockResolvedValue(undefined),
+      remove: jest.fn(),
+    } as unknown as Queue;
 
     await enqueuePriceSync(queue, 99);
 
