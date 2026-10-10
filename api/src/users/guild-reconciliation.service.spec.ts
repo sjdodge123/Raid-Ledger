@@ -10,7 +10,14 @@ import type { SQL } from 'drizzle-orm';
 import { GuildReconciliationService } from './guild-reconciliation.service';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 
-type Row = { id: number; discordId: string; avatar: string | null };
+type Row = {
+  id: number;
+  discordId: string;
+  avatar: string | null;
+  guildMemberSeenAt: Date | null;
+};
+
+const OLD = new Date('2025-01-01T00:00:00Z');
 
 interface Harness {
   db: MockDb;
@@ -81,10 +88,15 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
   });
 
   it('deactivates a stamped user absent from the guild with the sweep reason', async () => {
-    const h = setup(['111'], [{ id: 5, discordId: '999', avatar: null }]);
+    const h = setup(
+      ['111'],
+      [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }],
+    );
     await h.run();
     expect(h.deactivateUser).toHaveBeenCalledTimes(1);
-    expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep');
+    expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep', {
+      seenBefore: expect.any(Date),
+    });
   });
 
   it('logs how many never-seen users were skipped', async () => {
@@ -103,8 +115,26 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
     expect(stamps[0]?.[0]).toEqual({ guildMemberSeenAt: expect.any(Date) });
   });
 
+  it('ROK-1759: skips a candidate the listener stamped after the member fetch started', async () => {
+    const lateJoin = new Date(Date.now() + 60_000);
+    const h = setup(
+      ['111'],
+      [
+        { id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD },
+        { id: 6, discordId: '888', avatar: null, guildMemberSeenAt: lateJoin },
+      ],
+    );
+    await h.run();
+    expect(h.deactivateUser.mock.calls).toEqual([
+      [5, 'reconciliation-sweep', { seenBefore: expect.any(Date) }],
+    ]);
+  });
+
   it('does not stamp or deactivate when the bot is disconnected', async () => {
-    const h = setup([], [{ id: 5, discordId: '999', avatar: null }]);
+    const h = setup(
+      [],
+      [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }],
+    );
     const svc = new GuildReconciliationService(
       h.db as never,
       {} as never,
