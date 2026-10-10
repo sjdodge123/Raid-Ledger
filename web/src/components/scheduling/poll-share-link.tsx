@@ -6,13 +6,7 @@
  */
 import type { JSX } from 'react';
 import { LinkIcon } from '@heroicons/react/24/outline';
-import { copyWithToast } from '../../lib/clipboard';
-import { pollShareUrl } from '../../lib/poll-share-redirect';
-
-/** Copy a private poll's share link with the standard toasts. */
-export function copyPollShareLink(token: string): void {
-    void copyWithToast(pollShareUrl(token), { success: 'Link copied', error: 'Failed to copy link' });
-}
+import { pollShareUrl, copyPollShareLink } from '../../lib/poll-share-redirect';
 
 export function PollShareLink({ token }: { token: string }): JSX.Element {
     const url = pollShareUrl(token);

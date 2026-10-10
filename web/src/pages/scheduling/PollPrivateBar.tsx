@@ -12,7 +12,7 @@ import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { useAuth, isOperatorOrAdmin } from '../../hooks/use-auth';
 import { useResetPollShareToken } from '../../hooks/use-poll-share';
 import { canBypassThreshold } from './threshold';
-import { copyPollShareLink } from '../../components/scheduling/poll-share-link';
+import { copyPollShareLink } from '../../lib/poll-share-redirect';
 import { Modal } from '../../components/ui/modal';
 import { Button } from '../../components/ui/button';
 
