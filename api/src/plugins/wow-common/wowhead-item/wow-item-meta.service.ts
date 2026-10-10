@@ -12,6 +12,11 @@ import {
   WowheadResolverDisabledError,
   type WowheadResolverDeps,
 } from './wow-item-meta.resolve';
+import {
+  keepMissCount,
+  priorErrors,
+  priorMisses,
+} from './wow-item-meta.backoff';
 import { conflictSet } from './wow-item-meta.upsert';
 import { isMetaDue } from './wow-item-meta.due';
 import { ResolverOutcomeLog } from './wow-item-meta.outcome-log';
@@ -104,7 +109,7 @@ export class WowItemMetaService {
     const fresh = ids.filter((id) => !this.inFlight.has(id));
     fresh.forEach((id) => this.inFlight.add(id));
     const results = await Promise.all(
-      fresh.map((id) => this.resolveOne(id, meta.get(id)?.attempts ?? 0)),
+      fresh.map((id) => this.resolveOne(id, meta.get(id))),
     );
     const stopped = results.filter((r) => r === 'disabled').length;
     if (stopped > 0) {
@@ -118,11 +123,14 @@ export class WowItemMetaService {
   /** `disabled` = the kill switch flipped off before this item's fetch. */
   private async resolveOne(
     id: number,
-    attempts: number,
+    prev: WowItemMetaRow | undefined,
   ): Promise<'written' | 'failed' | 'disabled'> {
     try {
-      const row = await resolveItem(id, attempts, this.deps);
-      await this.upsert(row);
+      const errors = priorErrors(prev);
+      const misses = priorMisses(prev);
+      const row = await resolveItem(id, errors, this.deps, misses);
+      await this.upsert(keepMissCount(row, prev));
+      // Log the probe's own outcome (ROK-1760), not the miss-count carry.
       const line = this.outcomes.record(row);
       if (line) this.logger.warn(line);
       return 'written';

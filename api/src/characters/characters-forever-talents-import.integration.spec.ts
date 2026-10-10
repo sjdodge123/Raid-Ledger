@@ -22,6 +22,9 @@ import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import { WowItemMetaService } from '../plugins/wow-common/wowhead-item/wow-item-meta.service';
 import { buildImportString } from '../plugins/wow-common/addon-import/testing/addon-fixture.builder';
+import { pinExportClock } from '../plugins/wow-common/addon-import/testing/pin-export-clock';
+
+pinExportClock();
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const FIXTURE = join(
