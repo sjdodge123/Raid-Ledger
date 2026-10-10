@@ -10,7 +10,8 @@ import type { EventQuestPrereqsResponse } from '@raid-ledger/contract';
 export function QuestPrepNeededLine({ prereqs }: { prereqs: EventQuestPrereqsResponse | undefined }) {
     if (!prereqs || prereqs.asOf === null) return null;
     if (prereqs.neededTotal > 0) {
-        return <p className="text-sm text-warning">You need {prereqs.neededTotal} more pre-reqs</p>;
+        const noun = prereqs.neededTotal === 1 ? 'pre-req' : 'pre-reqs';
+        return <p className="text-sm text-warning">You need {prereqs.neededTotal} more {noun}</p>;
     }
     return <p className="text-sm text-success">All pre-reqs done</p>;
 }

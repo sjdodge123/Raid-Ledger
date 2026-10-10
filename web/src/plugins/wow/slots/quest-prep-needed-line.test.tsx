@@ -22,6 +22,11 @@ describe('QuestPrepNeededLine', () => {
         expect(line).toHaveClass('text-sm', 'text-warning');
     });
 
+    it('uses the singular for exactly one needed pre-req', () => {
+        render(<QuestPrepNeededLine prereqs={makeResponse(1)} />);
+        expect(screen.getByText('You need 1 more pre-req')).toHaveClass('text-warning');
+    });
+
     it('says all pre-reqs are done in text-success when none are needed', () => {
         render(<QuestPrepNeededLine prereqs={makeResponse(0)} />);
         expect(screen.getByText('All pre-reqs done')).toHaveClass('text-success');
