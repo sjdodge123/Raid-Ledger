@@ -8,11 +8,12 @@
  * (a frozen copy of `buildCorsOriginFn`) and the new policy, and requires identical status,
  * body, `Access-Control-*` headers and handler execution.
  */
-import { Controller, Get, Post } from '@nestjs/common';
+import { Controller, Get, HttpCode, Post } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
 import { applyTrustProxy } from '../main.helpers';
+import { CSP_REPORT_ROUTE } from '../csp-report/csp-report.constants';
 import { applyCorsPolicy, type CorsEnv } from './cors-auto-policy';
 
 const PROD = 'raid.gamernight.net';
@@ -31,6 +32,16 @@ class ProbeController {
   post() {
     handlerRuns += 1;
     return { ok: true };
+  }
+}
+
+/** Stands in for the real CSP report controller (same shared route). */
+@Controller(CSP_REPORT_ROUTE)
+class CspReportProbeController {
+  @Post()
+  @HttpCode(204)
+  handle() {
+    handlerRuns += 1;
   }
 }
 
@@ -91,7 +102,7 @@ async function buildApp(
   logger = makeLogger(),
 ): Promise<NestExpressApplication> {
   const module = await Test.createTestingModule({
-    controllers: [ProbeController],
+    controllers: [ProbeController, CspReportProbeController],
   }).compile();
   const app = module.createNestApplication<NestExpressApplication>({
     logger: false,
@@ -155,9 +166,9 @@ const PROBES: Probe[] = [
   { method: 'options', origin: `https://${PROD}`, host: PROD },
 ];
 
-describe('report mode (default) changes nothing a client can observe', () => {
+describe('report mode changes nothing a client can observe', () => {
   for (const isProduction of [true, false]) {
-    for (const autoMode of [undefined, 'report', 'typo']) {
+    for (const autoMode of ['report', 'typo']) {
       it(`auto, prod=${isProduction}, CORS_AUTO_MODE=${autoMode}: identical to legacy`, async () => {
         const env = { corsOrigin: 'auto', autoMode };
         const legacy = await buildApp('legacy', env, isProduction);
@@ -289,7 +300,11 @@ describe('enforce mode', () => {
 });
 
 describe('report-mode evidence logging', () => {
-  const env = { corsOrigin: 'auto', clientUrl: `https://${PROD}` };
+  const env = {
+    corsOrigin: 'auto',
+    autoMode: 'report',
+    clientUrl: `https://${PROD}`,
+  };
 
   it('logs a would-reject line without the query string', async () => {
     const logger = makeLogger();
@@ -345,7 +360,7 @@ describe('configuration', () => {
       logger,
     );
     expect(logger.log).toHaveBeenCalledWith(
-      '[cors-auto] mode=enforce (CORS_ORIGIN=auto; same-origin check; mismatched origins get 403)',
+      '[cors-auto] mode=enforce (set CORS_AUTO_MODE=report to log-only; CORS_ORIGIN=auto same-origin check, mismatched origins get 403)',
     );
   });
 
@@ -391,5 +406,68 @@ describe('configuration', () => {
       host: 'attacker.example',
     });
     expect(JSON.stringify(process.env)).toBe(before);
+  });
+});
+
+describe('CSP report endpoint is exempt (Origin: null per the Reporting API)', () => {
+  const cspProbe = { origin: 'null', host: PROD, path: `/${CSP_REPORT_ROUTE}` };
+
+  for (const autoMode of ['report', 'enforce', undefined]) {
+    it(`auto, CORS_AUTO_MODE=${autoMode}: POST is allowed, not logged, not CORS-granted`, async () => {
+      const logger = makeLogger();
+      const env = { corsOrigin: 'auto', autoMode };
+      const app = await buildApp('policy', env, true, logger);
+      const { res, ran } = await send(app, cspProbe);
+      expect({ status: res.status, ran }).toEqual({ status: 204, ran: true });
+      expect(res.headers['access-control-allow-origin']).toBeUndefined();
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+  }
+
+  it('enforce: Origin null to any other path is still rejected', async () => {
+    const env = { corsOrigin: 'auto', autoMode: 'enforce' };
+    const app = await buildApp('policy', env, true);
+    const { res, ran } = await send(app, { origin: 'null', host: PROD });
+    expect({ status: res.status, ran }).toEqual({ status: 403, ran: false });
+    const sibling = await send(app, { origin: SIBLING, host: PROD });
+    expect(sibling.res.status).toBe(403);
+  });
+
+  it('enforce: only POST is exempt — a null-origin preflight is still 403', async () => {
+    const env = { corsOrigin: 'auto', autoMode: 'enforce' };
+    const app = await buildApp('policy', env, true);
+    const { res } = await send(app, { ...cspProbe, method: 'options' });
+    expect(res.status).toBe(403);
+  });
+
+  it('report: a sibling POST to another path is still logged', async () => {
+    const logger = makeLogger();
+    const env = { corsOrigin: 'auto', autoMode: 'report' };
+    const app = await buildApp('policy', env, true, logger);
+    await send(app, cspProbe);
+    await send(app, { origin: SIBLING, host: PROD });
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn.mock.calls[0][0]).toContain('path=/probe');
+  });
+
+  it('explicit CORS_ORIGIN: the CSP report POST is allowed too', async () => {
+    const env = { corsOrigin: 'https://app.example.com' };
+    const app = await buildApp('policy', env, true);
+    const { res, ran } = await send(app, cspProbe);
+    expect({ status: res.status, ran }).toEqual({ status: 204, ran: true });
+  });
+});
+
+describe('default mode (CORS_AUTO_MODE unset)', () => {
+  it('defaults to enforce when CORS_AUTO_MODE is unset (post-AC0 flip)', async () => {
+    const logger = makeLogger();
+    const app = await buildApp('policy', { corsOrigin: 'auto' }, true, logger);
+    const { res, ran } = await send(app, { origin: SIBLING, host: PROD });
+    expect({ status: res.status, ran }).toEqual({ status: 403, ran: false });
+    expect(logger.log).toHaveBeenCalledWith(
+      expect.stringContaining(
+        '[cors-auto] mode=enforce (set CORS_AUTO_MODE=report to log-only;',
+      ),
+    );
   });
 });

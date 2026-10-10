@@ -5,10 +5,12 @@
  * no `Origin`, or when the Origin's hostname equals the request's own `Host`
  * hostname (ports are not compared — nginx strips them). `CORS_AUTO_MODE`
  * picks what happens to a mismatch:
- * - `report` (default this release): nothing is rejected — CORS headers are
+ * - `enforce` (default when unset, since the AC0 evidence): 403
+ *   `Origin not allowed`; the route handler never runs.
+ * - `report` (rollback): nothing is rejected — CORS headers are
  *   exactly what `auto` produced before (Origin reflected) — and the would-be
  *   rejection is logged as `[cors-auto] would-reject` evidence (AC0).
- * - `enforce`: 403 `Origin not allowed`; the route handler never runs.
+ * `POST /csp-report` is exempt in every mode (see `isCspReportRequest`).
  * An explicit `CORS_ORIGIN` keeps its allow list (dev adds localhost) and a
  * mismatch is a 403 instead of the old thrown Error → 500 (operator Q4).
  *
@@ -27,6 +29,7 @@ import {
 import {
   decideAutoOrigin,
   decideExplicitOrigin,
+  isCspReportRequest,
   parseCorsAutoMode,
   type CorsAutoMode,
   type CorsDecision,
@@ -130,6 +133,8 @@ function decideRequest(req: Request, env: CorsEnv, isProduction: boolean) {
 /** Decide → (auto) log → 403, or mark the request as passed and continue. */
 function buildGate(ctx: GateContext) {
   return (req: Request, res: Response, next: NextFunction): void => {
+    // Exempt, unlogged, and NOT added to `passed`: no ACAO for `Origin: null`.
+    if (isCspReportRequest(req.method, req.path)) return next();
     const env = ctx.getEnv();
     const auto = env.corsOrigin === 'auto';
     const decision = decideRequest(req, env, ctx.isProduction);
@@ -194,11 +199,9 @@ function logBootLine(
 ): void {
   if (env.corsOrigin !== 'auto') return;
   const mode = resolveMode(env.autoMode);
-  const effect =
-    mode === 'report'
-      ? 'set CORS_AUTO_MODE=enforce to reject'
-      : 'mismatched origins get 403';
   logger.log(
-    `[cors-auto] mode=${mode} (CORS_ORIGIN=auto; same-origin check; ${effect})`,
+    mode === 'report'
+      ? '[cors-auto] mode=report (CORS_ORIGIN=auto; same-origin check; set CORS_AUTO_MODE=enforce to reject)'
+      : '[cors-auto] mode=enforce (set CORS_AUTO_MODE=report to log-only; CORS_ORIGIN=auto same-origin check, mismatched origins get 403)',
   );
 }
