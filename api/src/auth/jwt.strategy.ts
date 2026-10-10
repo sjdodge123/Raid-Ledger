@@ -77,9 +77,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
  */
 function assertSessionPayload(payload: JwtPayload): void {
   if (payload.magicLink) {
-    throw new UnauthorizedException(
-      'Magic-link tokens are not session tokens',
-    );
+    throw new UnauthorizedException('Magic-link tokens are not session tokens');
   }
   const sub: unknown = payload.sub;
   if (typeof sub !== 'number' || !Number.isSafeInteger(sub) || sub <= 0) {

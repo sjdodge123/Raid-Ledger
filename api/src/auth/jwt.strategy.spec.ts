@@ -228,7 +228,11 @@ describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
   });
 
   it('rejects a deactivated user served from the auth cache', async () => {
-    setCachedAuthUser(1, { ...mockUser, role: 'member', deactivatedAt: new Date() });
+    setCachedAuthUser(1, {
+      ...mockUser,
+      role: 'member',
+      deactivatedAt: new Date(),
+    });
     await expect(strategy.validate(buildPayload())).rejects.toThrow(
       'Account deactivated',
     );
@@ -242,7 +246,11 @@ describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
   });
 
   it('still prefers the ban message for a banned + deactivated user', async () => {
-    mockDbReturns({ ...mockUser, deactivatedAt: new Date(), bannedAt: new Date() });
+    mockDbReturns({
+      ...mockUser,
+      deactivatedAt: new Date(),
+      bannedAt: new Date(),
+    });
     await expect(strategy.validate(buildPayload())).rejects.toThrow(
       'Your account has been suspended',
     );

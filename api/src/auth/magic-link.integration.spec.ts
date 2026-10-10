@@ -303,7 +303,8 @@ describe('POST /auth/redeem-magic-link — user-state gates (AC6)', () => {
    * AC6: a deactivated user is treated exactly like Discord login — the
    * link signs them in, and NotDeactivatedGuard 403s them per gated route.
    */
-  it('a deactivated user → signs in (token consumed), then a gated route 403s USER_DEACTIVATED', async () => {
+  // ROK-1753: the session is now rejected at JwtStrategy (401, same code).
+  it('a deactivated user → signs in (token consumed), then a gated route 401s USER_DEACTIVATED', async () => {
     const user = await createMember('deactivated-user', {
       deactivatedAt: new Date(),
     });
@@ -323,7 +324,7 @@ describe('POST /auth/redeem-magic-link — user-state gates (AC6)', () => {
         `Bearer ${(res.body as { access_token: string }).access_token}`,
       )
       .send({});
-    expect(gated.status).toBe(403);
+    expect(gated.status).toBe(401);
     expect(gated.body).toMatchObject({
       code: 'USER_DEACTIVATED',
       message: 'Account deactivated',

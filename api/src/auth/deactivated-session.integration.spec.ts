@@ -144,9 +144,7 @@ describe('ROK-1753 — POST /auth/refresh for a deactivated user', () => {
     });
     expect(res.body).not.toHaveProperty('access_token');
     const rows = await refreshRows(user.id);
-    expect(rows.map((r) => [r.rotatedAt, r.revokedAt])).toEqual([
-      [null, null],
-    ]);
+    expect(rows.map((r) => [r.rotatedAt, r.revokedAt])).toEqual([[null, null]]);
   });
 
   it('reactivation resumes the SAME refresh token', async () => {
@@ -174,16 +172,18 @@ describe('ROK-1764 — a bearer JWT without a numeric sub is a 401', () => {
     expect(res.status).toBe(401);
   });
 
-  it.each([['"42"', '42'], ['a word', 'abc'], ['zero', 0], ['a float', 1.5]])(
-    'rejects a sub that is %s',
-    async (_label, sub) => {
-      const token = testApp.app.get(JwtService).sign({ sub, username: 'x' });
+  it.each([
+    ['"42"', '42'],
+    ['a word', 'abc'],
+    ['zero', 0],
+    ['a float', 1.5],
+  ])('rejects a sub that is %s', async (_label, sub) => {
+    const token = testApp.app.get(JwtService).sign({ sub, username: 'x' });
 
-      const res = await testApp.request
-        .get('/auth/me')
-        .set('Authorization', `Bearer ${token}`);
+    const res = await testApp.request
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${token}`);
 
-      expect(res.status).toBe(401);
-    },
-  );
+    expect(res.status).toBe(401);
+  });
 });
