@@ -181,7 +181,9 @@ test.describe('Private poll share link (ROK-1750)', () => {
             await expect(dialog).toBeHidden({ timeout: 10_000 });
 
             await anon.page.goto(`/p/poll/${poll.shareToken}`);
-            await expect(anon.page.getByRole('alert'), 'the old link shows the invalid state')
+            // Scoped to the card's <p role=alert>: the app shell's sr-only
+            // #aria-live-assertive region is also role=alert (strict-mode clash).
+            await expect(anon.page.locator('p[role="alert"]'), 'the old link shows the invalid state')
                 .toHaveText(INVALID_LINK, { timeout: 15_000 });
             await expect(anon.page.getByRole('button', { name: 'Sign in with Discord' })).toHaveCount(0);
 
