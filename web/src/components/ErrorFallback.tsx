@@ -1,4 +1,3 @@
-import { CHUNK_RELOAD_KEY } from '../lazy-routes';
 import { isChunkLoadError } from '../lib/chunk-error';
 
 const reloadBtnStyle = {
@@ -22,10 +21,9 @@ export function ErrorFallback({ error }: { error: unknown }) {
       <h1>{isChunk ? 'New Version Available' : 'Something went wrong'}</h1>
       <p style={{ color: '#888', marginTop: '0.5rem' }}>{message}</p>
       <button
-        onClick={() => {
-          sessionStorage.removeItem(CHUNK_RELOAD_KEY);
-          window.location.reload();
-        }}
+        // Leaves the auto-reload stamp alone: if the chunk still fails after
+        // this reload, the page shows this screen again instead of looping.
+        onClick={() => window.location.reload()}
         style={reloadBtnStyle}
       >
         Reload Page

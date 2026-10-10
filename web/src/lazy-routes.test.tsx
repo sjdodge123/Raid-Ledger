@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { CHUNK_RELOAD_KEY, lazyWithRetry } from './lazy-routes';
+import { CHUNK_RELOAD_WINDOW_MS } from './lib/chunk-error';
 
 const WEBKIT_ERROR = 'Importing a module script failed.';
 
@@ -59,12 +60,13 @@ describe('lazyWithRetry', () => {
     it('reloads once and sets the flag on the WebKit stale-chunk error', async () => {
         renderFailingRoute(new TypeError(WEBKIT_ERROR));
         await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
-        expect(sessionStorage.getItem(CHUNK_RELOAD_KEY)).toBe('1');
+        const stamp = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
+        expect(Date.now() - stamp).toBeLessThan(CHUNK_RELOAD_WINDOW_MS);
         expect(screen.queryByText(/caught:/)).not.toBeInTheDocument();
     });
 
-    it('rethrows to the boundary when a reload was already attempted', async () => {
-        sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+    it('rethrows to the boundary when a reload was attempted within the window', async () => {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now()));
         renderFailingRoute(new TypeError(WEBKIT_ERROR));
         expect(await screen.findByText(`caught: ${WEBKIT_ERROR}`)).toBeInTheDocument();
         expect(reload).not.toHaveBeenCalled();
@@ -74,6 +76,12 @@ describe('lazyWithRetry', () => {
         renderFailingRoute(new Error('Unable to preload CSS for /assets/calendar-page-abc123.css'));
         await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
         expect(screen.queryByText(/caught:/)).not.toBeInTheDocument();
+    });
+
+    it('reloads again once the previous auto-reload has aged out of the window', async () => {
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now() - CHUNK_RELOAD_WINDOW_MS - 1));
+        renderFailingRoute(new TypeError(WEBKIT_ERROR));
+        await vi.waitFor(() => expect(reload).toHaveBeenCalledTimes(1));
     });
 
     it('rethrows a non-chunk error without reloading', async () => {
