@@ -31,9 +31,11 @@ export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
 /**
  * A stale-chunk failure within this long of the last auto-reload is treated as
  * persistent (cached index.html, content blocker, CSP, broken deploy): it
- * surfaces to the error boundary instead of reloading again.
+ * surfaces to the error boundary instead of reloading again. Generous on
+ * purpose — one reload cycle includes StartupGate's API wait, which can take
+ * well over 10s on a slow device; too long costs one click, too short loops.
  */
-export const CHUNK_RELOAD_WINDOW_MS = 10_000;
+export const CHUNK_RELOAD_WINDOW_MS = 2 * 60_000;
 
 /**
  * Reload-once guard. Returns true — and stamps the attempt — only when no
@@ -41,8 +43,13 @@ export const CHUNK_RELOAD_WINDOW_MS = 10_000;
  * reload cannot loop. Nothing clears the stamp; it simply ages out.
  */
 export function claimChunkReload(now: number = Date.now()): boolean {
-    const age = now - Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
-    if (age >= 0 && age < CHUNK_RELOAD_WINDOW_MS) return false;
-    sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
-    return true;
+    try {
+        const age = now - Number(sessionStorage.getItem(CHUNK_RELOAD_KEY));
+        if (age >= 0 && age < CHUNK_RELOAD_WINDOW_MS) return false;
+        sessionStorage.setItem(CHUNK_RELOAD_KEY, String(now));
+        return true;
+    } catch {
+        // Storage unavailable: no guard is possible, so never auto-reload.
+        return false;
+    }
 }
