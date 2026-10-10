@@ -8,6 +8,7 @@ import { ItemComparison } from '../components/item-comparison';
 import { WowItemCard } from '../components/wow-item-card';
 import { REWARD_TO_EQUIP_SLOT, formatGold } from './quest-card-constants';
 import { QuestPrereqChain } from './quest-prereq-chain';
+import { formatAddonSourceLine } from '../lib/addon-source-line';
 
 /** The viewer's chain state for this quest + the addon snapshot date (ROK-1748). */
 export interface QuestCardPrereqs { state: QuestPrereqState; asOf: string | null }
@@ -180,6 +181,27 @@ function QuestCoverageStatus({ coveredByMe, coveredByOthers, isCovered, questCov
     return <span className="quest-coverage__status quest-coverage__status--needed">No one has this yet</span>;
 }
 
+/**
+ * Latest addon snapshot date among addon-sourced coverage entries, or null
+ * when no entry came from the addon (manual / Classic coverage).
+ */
+function latestAddonAsOf(questCoverage: QuestCoverageEntry | undefined): string | null {
+    const addon = questCoverage?.coveredBy.filter((c) => c.source === 'addon') ?? [];
+    if (addon.length === 0) return null;
+    return addon.reduce<string>((max, c) => (c.asOf && c.asOf > max ? c.asOf : max), '');
+}
+
+/** "via addon · <date>" under the coverage status when coverage came from the addon (ROK-1748 §5). */
+function CoverageSourceLine({ questCoverage }: { questCoverage: QuestCoverageEntry | undefined }) {
+    const asOf = latestAddonAsOf(questCoverage);
+    if (asOf === null) return null;
+    return (
+        <span className="text-xs text-muted" data-testid="quest-coverage-source">
+            {formatAddonSourceLine(asOf)}
+        </span>
+    );
+}
+
 function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, isCovered, questCoverage }: {
     quest: EnrichedDungeonQuestDto; hasPrereqs: boolean; coveredByMe: boolean;
     coveredByOthers: { userId: number; username: string }[];
@@ -198,6 +220,7 @@ function QuestRestrictions({ quest, hasPrereqs, coveredByMe, coveredByOthers, is
             {quest.sharable && !hasPrereqs && (
                 <div className={`quest-card__details-right ${isCovered ? 'quest-coverage--covered' : 'quest-coverage--uncovered'}`}>
                     <QuestCoverageStatus coveredByMe={coveredByMe} coveredByOthers={coveredByOthers} isCovered={isCovered} questCoverage={questCoverage} />
+                    <CoverageSourceLine questCoverage={questCoverage} />
                 </div>
             )}
         </div>
