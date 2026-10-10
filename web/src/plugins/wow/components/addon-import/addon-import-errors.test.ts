@@ -30,7 +30,7 @@ describe('addonImportErrorCopy', () => {
     it('shows the server message for INVALID_PAYLOAD (e.g. the export-clock bound, ROK-1756)', () => {
         const clock = "The import string's date doesn't match the server clock — check your computer's date and export again.";
         const copy = addonImportErrorCopy(new AddonImportRequestError(422, 'INVALID_PAYLOAD', clock));
-        expect(copy.title).toBe('Unreadable export');
+        expect(copy.title).toBe("Can't import this string");
         expect(copy.body).toBe(clock);
     });
 
