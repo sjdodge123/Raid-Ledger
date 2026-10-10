@@ -42,11 +42,11 @@ export { queryCommonGroundByGameIds } from './common-ground-select.helpers';
 /** Filters applied to the common ground query. */
 export interface CommonGroundFilters {
   minOwners: number;
-  maxPlayers?: number;
+  maxPlayers?: number | undefined;
   /** ROK-1400: minimum supported online co-op group size (see SQL below). */
-  minOnlineCoop?: number;
-  genre?: string;
-  search?: string;
+  minOnlineCoop?: number | undefined;
+  genre?: string | undefined;
+  search?: string | undefined;
   limit: number;
 }
 

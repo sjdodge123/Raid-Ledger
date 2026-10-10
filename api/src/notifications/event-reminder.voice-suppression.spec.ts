@@ -119,9 +119,9 @@ async function buildModule(opts: {
   // When null, VoiceAttendanceService is NOT provided — @Optional() resolves to null.
 
   const module: TestingModule = await Test.createTestingModule({
-    providers: providers as Parameters<
-      typeof Test.createTestingModule
-    >[0]['providers'],
+    providers: providers as NonNullable<
+      Parameters<typeof Test.createTestingModule>[0]['providers']
+    >,
   }).compile();
 
   return module.get<EventReminderService>(EventReminderService);

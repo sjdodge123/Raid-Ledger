@@ -115,8 +115,8 @@ export class AdminSettingsController {
   @Get('igdb')
   async getIgdbStatus(): Promise<IgdbStatusResponse> {
     const configured = await this.settingsService.isIgdbConfigured();
-    const health = configured ? this.igdbService.getHealthStatus() : undefined;
-    return { configured, health };
+    if (!configured) return { configured };
+    return { configured, health: this.igdbService.getHealthStatus() };
   }
 
   @Put('igdb')

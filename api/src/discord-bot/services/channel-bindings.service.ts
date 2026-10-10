@@ -94,8 +94,8 @@ export class ChannelBindingsService {
       channelType,
       bindingPurpose,
       gameId,
-      config,
-      recurrenceGroupId,
+      ...(config !== undefined ? { config } : {}),
+      ...(recurrenceGroupId !== undefined ? { recurrenceGroupId } : {}),
     });
     this.logger.log(
       `Bound channel ${channelId} in guild ${guildId} as ${bindingPurpose}` +

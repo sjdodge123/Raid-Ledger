@@ -44,7 +44,7 @@ describe('FOREVER_INSTANCES seed (ROK-1719)', () => {
 
   it('uses short names that collide with no existing instance short name', () => {
     const taken = new Set(Object.values(INSTANCE_SHORT_NAMES));
-    const clashes = FOREVER_INSTANCES.filter((i) => taken.has(i.shortName!));
+    const clashes = FOREVER_INSTANCES.filter((i) => taken.has(i.shortName));
     expect(clashes.map((i) => `${i.name} -> ${i.shortName}`)).toEqual([]);
     const own = FOREVER_INSTANCES.map((i) => i.shortName);
     expect(new Set(own).size).toBe(own.length);

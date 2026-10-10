@@ -227,7 +227,7 @@ async function insertAllProposals(
         ? []
         : await resolveCandidates(db, blended, {
             limit: candidateCount,
-            tags,
+            ...(tags !== undefined ? { tags } : {}),
           });
     try {
       await insertProposal(db, proposal, blended, candidates);

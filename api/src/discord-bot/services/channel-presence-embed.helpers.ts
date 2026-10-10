@@ -157,7 +157,7 @@ export function buildShortGroupEmbed(
   const chatting = isJustChatting(group);
   const embed = createChannelEmbed({
     state: 'needs_you',
-    communityName: context.communityName,
+    communityName: context.communityName ?? null,
     authorLine: shortAuthorLine(group, room),
     timestamp: false,
   });

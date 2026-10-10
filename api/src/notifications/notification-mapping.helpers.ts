@@ -25,10 +25,12 @@ export function mapNotificationToDto(
     type: row.type,
     title: row.title,
     message: row.message,
-    payload: row.payload as Record<string, any> | undefined,
-    readAt: row.readAt?.toISOString(),
+    ...(row.payload !== undefined
+      ? { payload: row.payload as Record<string, any> }
+      : {}),
+    ...(row.readAt ? { readAt: row.readAt.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
-    expiresAt: row.expiresAt?.toISOString(),
+    ...(row.expiresAt ? { expiresAt: row.expiresAt.toISOString() } : {}),
   };
 }
 

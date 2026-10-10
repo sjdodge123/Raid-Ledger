@@ -167,7 +167,7 @@ function registerNewEvent(
   deps.activeEvents.set(eventKey, {
     eventId,
     memberSet: new Set([member.discordUserId]),
-    gameId: effectiveGameId,
+    ...(effectiveGameId !== undefined ? { gameId: effectiveGameId } : {}),
   });
   deps.voiceAttendanceService.handleJoin(
     eventId,
@@ -176,6 +176,11 @@ function registerNewEvent(
     null,
     member.discordAvatarHash,
   );
+}
+
+/** `gameName` only when resolved — the notify payloads type it as optional. */
+function gameNameField(gameName: string | undefined): { gameName?: string } {
+  return gameName !== undefined ? { gameName } : {};
 }
 
 /** Send completed notification. */
@@ -199,7 +204,7 @@ export async function notifyCompleted(
     {
       id: eventId,
       title: event.title,
-      gameName,
+      ...gameNameField(gameName),
       startTime: event.duration[0].toISOString(),
       endTime: now.toISOString(),
     },
@@ -273,7 +278,7 @@ async function notifySpawn(
   await deps.notificationService.notifySpawn(
     eventId,
     bindingId,
-    { id: eventId, title: event.title, gameName },
+    { id: eventId, title: event.title, ...gameNameField(gameName) },
     [
       {
         discordUserId: member.discordUserId,

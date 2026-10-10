@@ -283,7 +283,9 @@ export function buildSchedulingPollEmbedBody(
 ): ChannelEmbed {
   const embed = createChannelEmbed({
     state: CHROME_STATES[data.status ?? 'open'],
-    communityName: context.communityName,
+    ...(context.communityName !== undefined
+      ? { communityName: context.communityName }
+      : {}),
     authorLine: schedulingPollAuthorLine(data, context.timezone),
     footerLabel: 'Scheduling Poll',
   });

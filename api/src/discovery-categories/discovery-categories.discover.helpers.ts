@@ -100,9 +100,9 @@ async function resolveRowGames(
   const tags = extractStringArray(row.filterCriteria, 'genre_tags');
   const ids = await resolveCandidates(db, row.themeVector, {
     limit: DYNAMIC_ROW_LIMIT,
-    genreIds,
-    themeIds,
-    tags,
+    ...(genreIds !== undefined ? { genreIds } : {}),
+    ...(themeIds !== undefined ? { themeIds } : {}),
+    ...(tags !== undefined ? { tags } : {}),
   });
   return hydrateGameIds(db, ids);
 }

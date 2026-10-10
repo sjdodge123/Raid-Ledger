@@ -140,8 +140,8 @@ interface CoverageRow {
   userId: number;
   username: string;
   pickedUp: boolean;
-  source?: QuestProgressSource;
-  asOf?: string;
+  source?: QuestProgressSource | undefined;
+  asOf?: string | undefined;
 }
 
 /** Group picked-up rows by quest; `source`/`asOf` carried when present. */

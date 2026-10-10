@@ -165,7 +165,11 @@ async function send(
   timeoutMs?: number,
 ): Promise<GoogleHttpResponse> {
   try {
-    return await googleHttp.googleFormPost(url, form, { timeoutMs });
+    return await googleHttp.googleFormPost(
+      url,
+      form,
+      timeoutMs === undefined ? {} : { timeoutMs },
+    );
   } catch (err) {
     const timedOut = err instanceof Error && err.name === 'TimeoutError';
     throw new TransientError(timedOut ? 'timeout' : 'network');

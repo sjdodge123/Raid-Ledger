@@ -7,11 +7,13 @@
  * path end to end: a sibling-subdomain page (`slot-1.gamernight.net`) POSTs
  * `/auth/refresh` to `raid.gamernight.net` with the victim's `rl_rt` cookie.
  *
- * - `report` (this release's default): allowed exactly as before (Origin
- *   reflected) AND one `[cors-auto] would-reject` line is logged.
- * - `enforce`: 403, no `Access-Control-Allow-Origin`, and the refresh token
+ * - `report` (rollback): allowed exactly as before (Origin reflected) AND
+ *   one `[cors-auto] would-reject` line is logged.
+ * - `enforce` (the default when CORS_AUTO_MODE is unset): 403, no `Access-Control-Allow-Origin`, and the refresh token
  *   is NOT rotated — the handler never ran (a simple cross-origin POST needs
  *   no preflight, so withholding ACAO alone would not stop the rotation).
+ * - `POST /csp-report` with `Origin: null` (how browsers send CSP reports) is
+ *   accepted in every mode and never logged as a would-reject.
  */
 import * as crypto from 'crypto';
 import { eq } from 'drizzle-orm';
@@ -21,13 +23,14 @@ import { truncateAllTables } from '../common/testing/integration-helpers';
 import { defined } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { REFRESH_COOKIE_NAME } from '../auth/refresh/refresh-cookie.helpers';
+import { CSP_REPORT_ROUTE } from '../csp-report/csp-report.constants';
 
 const APP_HOST = 'raid.gamernight.net';
 const SAME_ORIGIN = `https://${APP_HOST}`;
 const SIBLING_ORIGIN = 'https://slot-1.gamernight.net';
 
 let testApp: TestApp;
-let savedEnv: { corsOrigin?: string; autoMode?: string };
+let savedEnv: { corsOrigin: string | undefined; autoMode: string | undefined };
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -132,7 +135,7 @@ async function expectRejectedWithoutRotation(
   expect(row.revokedAt).toBeNull();
 }
 
-// ── report mode (this release's default) ─────────────────────────────────────
+// ── report mode (rollback) ─────────────────────────────────────
 
 describe('CORS_ORIGIN=auto, CORS_AUTO_MODE=report (ROK-1732 AC2)', () => {
   it('allows a sibling-origin refresh as before and logs one would-reject line', async () => {
@@ -219,6 +222,58 @@ describe('CORS_ORIGIN=auto, CORS_AUTO_MODE=enforce — allowed (ROK-1732 AC2)', 
     expect(res.status).toBe(200);
     expect(res.headers['access-control-allow-origin']).toBeUndefined();
     expect((await refreshRow(rawToken)).rotatedAt).not.toBeNull();
+  });
+});
+
+// ── default mode (CORS_AUTO_MODE unset) ──────────────────────────────────────
+
+describe('CORS_ORIGIN=auto, CORS_AUTO_MODE unset — defaults to enforce (ROK-1732)', () => {
+  it('rejects a sibling-origin refresh with 403 and never rotates the token', async () => {
+    process.env.CORS_ORIGIN = 'auto';
+    delete process.env.CORS_AUTO_MODE;
+    const rawToken = await loginAndGetRefreshCookie();
+
+    const res = await refresh(rawToken, { origin: SIBLING_ORIGIN });
+
+    await expectRejectedWithoutRotation(res, rawToken);
+  });
+});
+
+// ── CSP report exemption (Origin: null per the Reporting API) ───────────────
+
+describe('POST /csp-report with Origin: null is exempt (ROK-1732 AC0)', () => {
+  const sampleReport = {
+    'csp-report': {
+      'blocked-uri': 'inline',
+      'violated-directive': 'script-src',
+    },
+  };
+
+  for (const mode of ['enforce', 'report'] as const) {
+    it(`accepts it in ${mode} mode without a would-reject line`, async () => {
+      setAutoMode(mode);
+      const warn = jest.spyOn(Logger.prototype, 'warn');
+
+      const res = await testApp.request
+        .post(`/${CSP_REPORT_ROUTE}`)
+        .set('Host', APP_HOST)
+        .set('Origin', 'null')
+        .set('Sec-Fetch-Site', 'same-origin')
+        .send(sampleReport);
+
+      expect(res.status).toBe(204);
+      expect(res.headers['access-control-allow-origin']).toBeUndefined();
+      expect(corsAutoWarnings(warn)).toEqual([]);
+    });
+  }
+
+  it('still rejects Origin: null on another path in enforce mode', async () => {
+    setAutoMode('enforce');
+    const rawToken = await loginAndGetRefreshCookie();
+
+    const res = await refresh(rawToken, { origin: 'null' });
+
+    await expectRejectedWithoutRotation(res, rawToken);
   });
 });
 

@@ -38,20 +38,20 @@ const HANDLER_MAP: Record<string, HandlerClass> = {
 
 export interface ExecuteCommandDto {
   commandName: string;
-  subcommand?: string;
-  options?: Record<string, unknown>;
-  discordUserId?: string;
-  guildId?: string;
-  channelId?: string;
+  subcommand?: string | undefined;
+  options?: Record<string, unknown> | undefined;
+  discordUserId?: string | undefined;
+  guildId?: string | undefined;
+  channelId?: string | undefined;
 }
 
 export interface ExecuteAutocompleteDto {
   commandName: string;
   focusedOption: string;
   value: string;
-  subcommand?: string;
-  discordUserId?: string;
-  guildId?: string;
+  subcommand?: string | undefined;
+  discordUserId?: string | undefined;
+  guildId?: string | undefined;
 }
 
 /**

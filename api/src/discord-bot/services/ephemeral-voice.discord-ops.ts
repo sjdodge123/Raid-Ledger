@@ -32,8 +32,10 @@ export async function createVoiceChannel(
     guild.channels.create({
       name: opts.name,
       type: ChannelType.GuildVoice,
-      parent: opts.parentId ?? undefined,
-      permissionOverwrites: opts.permissionOverwrites,
+      ...(opts.parentId !== null ? { parent: opts.parentId } : {}),
+      ...(opts.permissionOverwrites !== undefined
+        ? { permissionOverwrites: opts.permissionOverwrites }
+        : {}),
     }),
   );
   return channel.id;

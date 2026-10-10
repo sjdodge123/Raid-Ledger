@@ -177,7 +177,9 @@ function buildDeferredEventData(
     endTime: event.duration[1].toISOString(),
     signupCount: 0,
     maxAttendees: event.maxAttendees,
-    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+    slotConfig: event.slotConfig as NonNullable<
+      EmbedEventData['slotConfig']
+    > | null,
     game: gameData,
   };
 }

@@ -132,13 +132,16 @@ export class DemoTestQuickPlayVoiceController {
         `Binding ${id} monitors channel ${row.channelId}, not ${channelId}`,
       );
     }
+    // jsonb never holds `undefined`; `mapToResolvedBinding` takes the column
+    // as `unknown` and casts it the same way.
+    const config: unknown = row.config;
     return {
       bindingId: row.id,
       gameId: row.gameId,
       gameName: null,
       bindingPurpose: row.bindingPurpose,
       recurrenceGroupId: row.recurrenceGroupId ?? null,
-      config: row.config,
+      config: config as ResolvedBinding['config'],
     };
   }
 

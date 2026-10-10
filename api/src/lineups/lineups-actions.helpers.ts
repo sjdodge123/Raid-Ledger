@@ -112,7 +112,7 @@ export async function runCreateLineup(
     id: row.id,
     title: row.title,
     description: row.description ?? null,
-    targetDate: dto.targetDate ? new Date(dto.targetDate) : undefined,
+    ...(dto.targetDate ? { targetDate: new Date(dto.targetDate) } : {}),
     // ROK-1461: the created embed's author line closes on this deadline.
     phaseDeadline,
     channelOverrideId: row.channelOverrideId ?? null,
@@ -168,7 +168,7 @@ export async function runToggleVote(
   assertVoteOpen(lineup);
   await assertUserCanParticipate(deps.db, lineup, {
     id: userId,
-    role: callerRole,
+    ...(callerRole !== undefined ? { role: callerRole } : {}),
   });
   const action = await toggleVoteHelper(
     deps.db,
@@ -270,7 +270,7 @@ export async function runNominate(
     throw new BadRequestException('Lineup is not in building status');
   await assertUserCanParticipate(deps.db, lineup, {
     id: userId,
-    role: callerRole,
+    ...(callerRole !== undefined ? { role: callerRole } : {}),
   });
 
   await validateNominationCap(deps.db, lineup);

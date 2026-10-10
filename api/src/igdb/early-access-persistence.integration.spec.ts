@@ -273,7 +273,7 @@ describe('earlyAccess persistence (integration)', () => {
       title: 'Enriched Game',
       type: 'game',
       mature: false,
-      assets: { boxart: undefined },
+      assets: {},
     };
 
     await enrichSyncedGamesWithItad(
@@ -307,7 +307,7 @@ describe('earlyAccess persistence (integration)', () => {
       title: 'Enriched Game 2',
       type: 'game',
       mature: false,
-      assets: { boxart: undefined },
+      assets: {},
     };
 
     await enrichSyncedGamesWithItad(

@@ -331,7 +331,7 @@ export class NotificationService {
         type: input.type,
         title: input.title,
         message: input.message,
-        payload: input.payload,
+        ...(input.payload !== undefined ? { payload: input.payload } : {}),
       })
       .catch((err: unknown) => {
         this.logger.warn(

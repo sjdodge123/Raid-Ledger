@@ -47,7 +47,8 @@ function makeDeps(
 
 describe('handleNominateButtonClick — auto-nominate guard order (ROK-1092)', () => {
   it('does not persist the preference when LineupsService is unavailable', async () => {
-    const deps = makeDeps({ lineupsService: undefined });
+    // makeDeps() omits lineupsService — LineupsService unavailable.
+    const deps = makeDeps();
     const interaction = makeInteraction();
 
     await handleNominateButtonClick(
@@ -61,7 +62,8 @@ describe('handleNominateButtonClick — auto-nominate guard order (ROK-1092)', (
   });
 
   it('tells the user nominations are unavailable rather than failing silently', async () => {
-    const deps = makeDeps({ lineupsService: undefined });
+    // makeDeps() omits lineupsService — LineupsService unavailable.
+    const deps = makeDeps();
     const interaction = makeInteraction();
 
     await handleNominateButtonClick(

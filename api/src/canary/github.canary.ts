@@ -21,13 +21,11 @@ registerCanary({
       if (response.status === 404) {
         return { status: 'PASS' };
       }
+      const rateLimited = response.status === 403 || response.status === 429;
       return {
         status: 'FAIL',
         reason: `GitHub API returned HTTP ${response.status}`,
-        details:
-          response.status === 403 || response.status === 429
-            ? 'Rate limited — may be transient'
-            : undefined,
+        ...(rateLimited ? { details: 'Rate limited — may be transient' } : {}),
       };
     }
 

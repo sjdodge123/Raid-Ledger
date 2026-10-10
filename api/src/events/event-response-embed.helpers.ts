@@ -83,7 +83,7 @@ async function querySignupRows(
 /** Filters and maps signup rows to mention entries for embeds. */
 function buildSignupMentions(
   signupRows: Awaited<ReturnType<typeof querySignupRows>>,
-): EmbedEventData['signupMentions'] {
+): NonNullable<EmbedEventData['signupMentions']> {
   return signupRows
     .filter((r) => !INACTIVE_STATUSES.includes(r.status ?? ''))
     .filter((r) => r.discordId || r.username)
@@ -120,8 +120,16 @@ export async function buildEmbedEventData(
     startTime: event.startTime,
     endTime: event.endTime,
     signupCount: activeRows.length,
-    maxAttendees: event.maxAttendees,
-    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+    ...(event.maxAttendees !== undefined
+      ? { maxAttendees: event.maxAttendees }
+      : {}),
+    ...(event.slotConfig !== undefined
+      ? {
+          slotConfig: event.slotConfig as NonNullable<
+            EmbedEventData['slotConfig']
+          > | null,
+        }
+      : {}),
     roleCounts,
     signupMentions: buildSignupMentions(signupRows),
     // ROK-1460: the shared seam keeps `id` on the projection, so the six

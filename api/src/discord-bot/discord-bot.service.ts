@@ -208,7 +208,7 @@ export class DiscordBotService
 
       return {
         success: true,
-        guildName: guildInfo?.name,
+        ...(guildInfo ? { guildName: guildInfo.name } : {}),
         message: guildInfo
           ? `Connected to ${guildInfo.name} (${guildInfo.memberCount} members)`
           : 'Bot token is valid! Almost done — save the token, enable the bot, then use the Invite URL under "Invite Bot to Your Server" above to add it to your Discord server.',

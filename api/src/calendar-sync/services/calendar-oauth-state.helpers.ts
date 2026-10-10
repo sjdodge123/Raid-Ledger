@@ -81,7 +81,7 @@ export function mintCalendarOAuthState(
   const state = signState(
     { uid: input.uid, provider: input.provider, n, r },
     'calendar-oauth',
-    { nowMs: input.nowMs },
+    input.nowMs === undefined ? {} : { nowMs: input.nowMs },
   );
   return { state, codeChallenge: codeChallengeFor(deriveCodeVerifier(n)) };
 }
@@ -106,7 +106,11 @@ export async function verifyCalendarOAuthState(
   token: string,
   input: VerifyCalendarOAuthStateInput,
 ): Promise<VerifiedCalendarOAuthState | null> {
-  const claims = verifyState(token, 'calendar-oauth', { nowMs: input.nowMs });
+  const claims = verifyState(
+    token,
+    'calendar-oauth',
+    input.nowMs === undefined ? {} : { nowMs: input.nowMs },
+  );
   if (!claims || claims.provider !== input.provider) return null;
   const { n } = claims;
   if (typeof n !== 'string' || n.length === 0) return null;

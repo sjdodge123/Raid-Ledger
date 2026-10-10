@@ -34,7 +34,7 @@ export function createInviteEmbed(
 
   const embed = createDmEmbed({
     state: 'needs_you',
-    communityName: context.communityName,
+    communityName: context.communityName ?? null,
     authorLine: `${ENVELOPE} INVITED BY ${inviterUsername}`,
   });
   embed

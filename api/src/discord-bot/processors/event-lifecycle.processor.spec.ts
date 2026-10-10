@@ -249,7 +249,8 @@ describe('EventLifecycleProcessor — skip conditions', () => {
   });
 
   it('skips game affinity when creatorId is missing', async () => {
-    const payload = makePayload({ creatorId: undefined });
+    const payload = makePayload();
+    delete payload.creatorId;
     await processor.process(makeJob(payload));
 
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();
@@ -257,7 +258,7 @@ describe('EventLifecycleProcessor — skip conditions', () => {
 
   it('skips game affinity when game name is missing', async () => {
     const payload = makePayload();
-    payload.event.game = undefined;
+    delete payload.event.game;
     await processor.process(makeJob(payload));
 
     expect(gameAffinityService.notifyGameAffinity).not.toHaveBeenCalled();

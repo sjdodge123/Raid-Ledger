@@ -16,6 +16,7 @@ import { SettingsService } from '../settings/settings.service';
 import {
   SetEphemeralVoiceConfigSchema,
   type EphemeralVoiceConfig,
+  type SetEphemeralVoiceConfigDto,
   type DiscordCategorySummaryDto,
 } from '@raid-ledger/contract';
 import { handleValidationError } from './validation.util';
@@ -71,7 +72,7 @@ export class EphemeralVoiceSettingsController {
   }
 
   /** Apply only the fields present in a partial update. */
-  private async persist(cfg: Partial<EphemeralVoiceConfig>): Promise<void> {
+  private async persist(cfg: SetEphemeralVoiceConfigDto): Promise<void> {
     if (cfg.enabled !== undefined)
       await this.settingsService.setEphemeralVoiceEnabled(cfg.enabled);
     if (cfg.forced !== undefined)

@@ -127,8 +127,11 @@ function assembleEmbedData(
     // ROK-1243: ROSTER header reflects cumulative participation, not currently-active.
     signupCount: participants.length,
     maxAttendees: event.maxAttendees,
-    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
-    game: game ?? undefined,
+    slotConfig: event.slotConfig as Exclude<
+      EmbedEventData['slotConfig'],
+      undefined
+    >,
+    ...(game ? { game } : {}),
     // Quick-play rosters render the stored username as plain text rather than a
     // <@id> mention: ad-hoc participants are voice-presence based and frequently
     // include users Discord can't resolve in the embed (left the guild / not

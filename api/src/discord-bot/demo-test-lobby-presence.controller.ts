@@ -33,11 +33,25 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { parseDemoBody } from '../admin/demo-test.utils';
 import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
-import type { RoomSnapshot } from './services/channel-presence-room.helpers';
+import type {
+  RoomMemberSnapshot,
+  RoomSnapshot,
+} from './services/channel-presence-room.helpers';
 import {
   SetLobbyPresenceSchema,
   type LobbyPresenceResponse,
+  type SetLobbyPresenceBody,
 } from './demo-test-lobby-presence.schemas';
+
+type LobbyPresenceMember = NonNullable<SetLobbyPresenceBody['members']>[number];
+
+/** Drop an absent `eventId` key so the parsed member is exactly a snapshot member. */
+function toSnapshotMember({
+  eventId,
+  ...member
+}: LobbyPresenceMember): RoomMemberSnapshot {
+  return eventId === undefined ? member : { ...member, eventId };
+}
 
 @Controller('admin/test')
 @SkipThrottle()
@@ -70,7 +84,8 @@ export class DemoTestLobbyPresenceController {
     );
     // The annotation is the compile-time proof that the body mirrors the
     // override input type — if `RoomMemberSnapshot` gains a field, this breaks.
-    const snapshot: RoomSnapshot | null = members === null ? null : { members };
+    const snapshot: RoomSnapshot | null =
+      members === null ? null : { members: members.map(toSnapshotMember) };
 
     await this.presence.setRoomOverride(voiceChannelId, snapshot);
     await this.presence.flushNow();

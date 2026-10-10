@@ -528,8 +528,8 @@ describe('buildEventEmbed — timezone threading (ROK-918)', () => {
       timezone: null,
     }).content;
     const withUndefined = factory.buildEventEmbed(baseEvent, {
-      communityName: baseContext.communityName,
-      clientUrl: baseContext.clientUrl,
+      communityName: baseContext.communityName ?? null,
+      clientUrl: baseContext.clientUrl ?? null,
     }).content;
     expect(withNull).toBe(withUndefined);
   });

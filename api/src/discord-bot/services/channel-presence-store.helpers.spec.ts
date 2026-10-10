@@ -44,7 +44,7 @@ interface Op {
   values?: unknown;
   set?: unknown;
   where?: SQL;
-  conflict?: { target?: unknown; where?: SQL };
+  conflict?: { target?: unknown; where?: SQL } | undefined;
   limit?: number;
   orderBy?: unknown[];
 }

@@ -104,7 +104,7 @@ type TentativeCharArgs = {
   event: typeof schema.events.$inferSelect;
   ctx: TentativeCtx;
   deps: SignupInteractionDeps;
-  embed?: EmbedBuilder;
+  embed?: EmbedBuilder | undefined;
 };
 
 /** Handle character-based tentative branch. Returns null if not applicable. */

@@ -121,10 +121,12 @@ export async function tryDeleteEvent(
   } catch (error) {
     // 10070 = the SE is already gone in Discord — treat as a successful free.
     if (isUnknownEventError(error)) return { deleted: true };
+    const code = discordErrorCode(error);
+    const retryAfter = discordRetryAfter(error);
     return {
       deleted: false,
-      code: discordErrorCode(error),
-      retryAfter: discordRetryAfter(error),
+      ...(code !== undefined ? { code } : {}),
+      ...(retryAfter !== undefined ? { retryAfter } : {}),
     };
   }
 }

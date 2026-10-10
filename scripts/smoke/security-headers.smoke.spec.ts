@@ -34,6 +34,8 @@ const CSP_REQUIRED_SUBSTRINGS = [
     // browser blocks the locate fetch and every measurement fails.
     'https://locate.measurementlab.net',
     'wss://*.measurement-lab.org',
+    // Wowhead hover tooltips fetch tooltip data from nether.wowhead.com.
+    'https://nether.wowhead.com',
 ];
 
 async function assertSecurityHeaders(headers: Record<string, string>) {

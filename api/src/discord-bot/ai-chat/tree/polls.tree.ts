@@ -83,5 +83,11 @@ function leaf(
         },
       ]
     : [];
-  return { data, emptyMessage, buttons, isLeaf: true, systemHint };
+  return {
+    data,
+    emptyMessage,
+    buttons,
+    isLeaf: true,
+    ...(systemHint !== undefined ? { systemHint } : {}),
+  };
 }

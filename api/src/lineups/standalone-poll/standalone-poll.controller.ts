@@ -20,11 +20,36 @@ import { AuthGuard } from '@nestjs/passport';
 import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import {
   CreateSchedulingPollSchema,
+  type CreateSchedulingPollDto,
   type SchedulingPollResponseDto,
 } from '@raid-ledger/contract';
-import { StandalonePollService } from './standalone-poll.service';
+import {
+  StandalonePollService,
+  type CreatePollInput,
+} from './standalone-poll.service';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { isOperatorOrAdmin } from '../../events/controller.helpers';
+
+/**
+ * Omit the schema's absent optional fields so the parsed body satisfies
+ * `CreatePollInput` under `exactOptionalPropertyTypes` (ROK-1161).
+ */
+function toCreatePollInput(data: CreateSchedulingPollDto): CreatePollInput {
+  const {
+    linkedEventId,
+    durationHours,
+    memberUserIds,
+    minVoteThreshold,
+    ...rest
+  } = data;
+  return {
+    ...rest,
+    ...(linkedEventId !== undefined ? { linkedEventId } : {}),
+    ...(durationHours !== undefined ? { durationHours } : {}),
+    ...(memberUserIds !== undefined ? { memberUserIds } : {}),
+    ...(minVoteThreshold !== undefined ? { minVoteThreshold } : {}),
+  };
+}
 
 @Controller('scheduling-polls')
 @UseGuards(AuthGuard('jwt'))
@@ -74,7 +99,7 @@ export class StandalonePollController {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
     return this.service.create(
-      parsed.data,
+      toCreatePollInput(parsed.data),
       req.user.id,
       isOperatorOrAdmin(req.user.role),
     );

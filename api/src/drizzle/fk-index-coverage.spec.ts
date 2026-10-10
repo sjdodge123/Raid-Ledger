@@ -206,7 +206,10 @@ function childTable(where?: string): Snapshot {
       parent_id: { name: 'parent_id' },
     },
     indexes: {
-      idx_child_parent_id: { columns: [{ expression: 'parent_id' }], where },
+      idx_child_parent_id: {
+        columns: [{ expression: 'parent_id' }],
+        ...(where !== undefined ? { where } : {}),
+      },
     },
     foreignKeys: { child_parent_id_fk: { columnsFrom: ['parent_id'] } },
   };

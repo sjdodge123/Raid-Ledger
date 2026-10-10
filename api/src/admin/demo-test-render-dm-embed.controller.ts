@@ -66,11 +66,15 @@ export class DemoTestRenderDmEmbedController {
   @HttpCode(HttpStatus.OK)
   async renderDmEmbed(@Body() body: unknown): Promise<RenderedDmEmbed> {
     await this.assertDemoMode();
-    const input = parseDemoBody(RenderDmEmbedSchema, body);
+    const { payload, ...input } = parseDemoBody(RenderDmEmbedSchema, body);
     const branding = await this.settingsService.getBranding();
     const communityName = branding.communityName ?? DEFAULT_COMMUNITY_NAME;
     const { embed, row, rows } = await this.embedService.buildNotificationEmbed(
-      { notificationId: RENDER_NOTIFICATION_ID, ...input },
+      {
+        notificationId: RENDER_NOTIFICATION_ID,
+        ...input,
+        ...(payload !== undefined ? { payload } : {}),
+      },
       communityName,
     );
     // Row order mirrors `DiscordBotClientService.sendEmbedDM`: the

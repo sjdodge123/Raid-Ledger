@@ -88,5 +88,5 @@ export function mapClaudeChatResponse(
         completionTokens: raw.usage.output_tokens ?? 0,
       }
     : undefined;
-  return { content, usage, latencyMs };
+  return { content, ...(usage ? { usage } : {}), latencyMs };
 }

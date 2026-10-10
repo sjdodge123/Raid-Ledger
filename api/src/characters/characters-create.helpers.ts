@@ -60,7 +60,7 @@ export async function insertCharacterTx(
   identity?: CharacterIdentityProvider,
 ): Promise<CharacterDto> {
   await checkDuplicateClaim(tx, dto.gameId, userId, dto.name, dto.realm, {
-    region: dto.region,
+    ...(dto.region !== undefined ? { region: dto.region } : {}),
     identity,
   });
   const { shouldBeMain, charCount } = await resolveMainStatus(

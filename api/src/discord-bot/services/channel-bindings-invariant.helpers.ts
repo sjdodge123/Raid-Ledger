@@ -71,7 +71,8 @@ export function assertUpsertTriple(opts: {
 
 /** ROK-1416 updateConfig patch — a purpose flip and/or a game reassign/clear. */
 export interface BindingUpdatePatch {
-  bindingPurpose?: BindingPurpose;
+  /** Omitted or undefined = keep the existing purpose. */
+  bindingPurpose?: BindingPurpose | undefined;
   /** True when the PATCH body carried a `gameId` (including explicit null). */
   gameIdProvided?: boolean;
   /** The provided game; null clears it. Ignored unless `gameIdProvided`. */

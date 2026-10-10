@@ -64,8 +64,9 @@ export const QUICK_PLAY_GAME_COLUMNS = {
   ...EMBED_GAME_BADGE_COLUMNS,
 } as const;
 
-/** One games row as the Quick Play projection selects it. */
-export type QuickPlayGameRow = GameRow & GameBadgeInputs;
+/** One games row as the Quick Play projection selects it — every badge
+ *  column present, nulls and all. */
+export type QuickPlayGameRow = GameRow & Required<GameBadgeInputs>;
 
 /** Copy the badge columns off the row, nulls and all. */
 function toBadgeInputs(row: QuickPlayGameRow): GameBadgeInputs {

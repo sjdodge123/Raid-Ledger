@@ -41,7 +41,12 @@ export class AvailabilityService {
   /** Get all availability windows for a user with optional filters. */
   async findAllForUser(
     userId: number,
-    options?: { from?: string; to?: string; gameId?: number; status?: string },
+    options?: {
+      from?: string | undefined;
+      to?: string | undefined;
+      gameId?: number | undefined;
+      status?: string | undefined;
+    },
   ): Promise<AvailabilityListResponseDto> {
     const conditions = [eq(schema.availability.userId, userId)];
     if (options?.from && options?.to) {

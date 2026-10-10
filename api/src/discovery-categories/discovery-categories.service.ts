@@ -53,7 +53,9 @@ export class DiscoveryCategoriesService {
       llmService: this.llmService,
       settingsService: this.settingsService,
       logger: this.logger,
-      bypassQuota: opts?.bypassQuota,
+      ...(opts?.bypassQuota !== undefined
+        ? { bypassQuota: opts.bypassQuota }
+        : {}),
     });
     const expired = await runExpireSuggestions(this.db);
     this.logger.log(

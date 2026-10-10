@@ -51,7 +51,7 @@ type CharSignupArgs = {
   event: typeof schema.events.$inferSelect;
   ctx: NewSignupCtx;
   deps: SignupInteractionDeps;
-  embed?: EmbedBuilder;
+  embed?: EmbedBuilder | undefined;
 };
 
 /** Handle character-based signup branch (multi-char select or single char). */

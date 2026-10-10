@@ -271,7 +271,9 @@ function describe(...parts: Array<string | null>): string {
 function replyEmbed(ctx: LfgReplyContext, authorLine: string): ChannelEmbed {
   return createChannelEmbed({
     state: 'done',
-    communityName: ctx.communityName,
+    ...(ctx.communityName !== undefined
+      ? { communityName: ctx.communityName }
+      : {}),
     authorLine,
   });
 }

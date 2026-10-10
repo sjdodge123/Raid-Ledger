@@ -85,7 +85,7 @@ export function mapGeminiMessages(
     systemMsgs.length > 0
       ? { parts: [{ text: systemMsgs.map((m) => m.content).join('\n') }] }
       : undefined;
-  return { contents, systemInstruction };
+  return { contents, ...(systemInstruction ? { systemInstruction } : {}) };
 }
 
 /** Map a raw Gemini model to the provider-agnostic LlmModelInfo. */
@@ -109,5 +109,5 @@ export function mapGeminiChatResponse(
         completionTokens: raw.usageMetadata.candidatesTokenCount ?? 0,
       }
     : undefined;
-  return { content, usage, latencyMs };
+  return { content, ...(usage ? { usage } : {}), latencyMs };
 }

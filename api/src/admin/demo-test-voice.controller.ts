@@ -38,8 +38,15 @@ export class DemoTestVoiceController {
   async injectVoiceSessionForTest(
     @Body() body: unknown,
   ): Promise<{ success: boolean }> {
-    const parsed = parseDemoBody(InjectVoiceSessionSchema, body);
-    await this.demoTestService.injectVoiceSessionForTest(parsed);
+    const { firstJoinAt, lastLeaveAt, ...session } = parseDemoBody(
+      InjectVoiceSessionSchema,
+      body,
+    );
+    await this.demoTestService.injectVoiceSessionForTest({
+      ...session,
+      ...(firstJoinAt !== undefined ? { firstJoinAt } : {}),
+      ...(lastLeaveAt !== undefined ? { lastLeaveAt } : {}),
+    });
     return { success: true };
   }
 

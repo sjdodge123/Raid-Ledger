@@ -164,8 +164,9 @@ async function resolveGameBindingSpawn(
     channelId,
     binding,
   );
+  const members = deps.channelMembers.get(channelId)?.size;
   const ctx = gateCtx(binding, channelId, {
-    members: deps.channelMembers.get(channelId)?.size,
+    ...(members !== undefined ? { members } : {}),
     minPlayers,
     counted,
     confirmed: confirmedCount,
