@@ -15,6 +15,7 @@ import {
     isPreferencesRead,
     knownMatcherFrom,
     matchKnownSelectors,
+    pinDarkPreferences,
     pinLightPreferences,
     releaseLightScheme,
     reportedTargets,
@@ -169,5 +170,19 @@ describe('gotoWithPinnedPreferences', () => {
         await expect(gotoWithPinnedPreferences(page, '/players', 'sky')).rejects.toThrow('ERR_CONNECTION_REFUSED');
         expect(observe, 'nothing handles the pinned wait once goto throws, so its later rejection goes unhandled')
             .toHaveBeenCalled();
+    });
+});
+
+describe('pinDarkPreferences', () => {
+    it('forces the theme fields to dark and keeps every other preference', () => {
+        const body = { data: { themeMode: 'light', darkTheme: 'ember', timezone: 'UTC' } };
+        expect(pinDarkPreferences(body, 'default-dark')).toEqual({
+            data: { themeMode: 'dark', darkTheme: 'default-dark', timezone: 'UTC' },
+        });
+    });
+
+    it('passes a body without a data object through unchanged', () => {
+        expect(pinDarkPreferences({ error: 'nope' }, 'default-dark')).toEqual({ error: 'nope' });
+        expect(pinDarkPreferences(null, 'default-dark')).toBeNull();
     });
 });
