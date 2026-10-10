@@ -71,6 +71,12 @@ const SITES: Record<string, Site> = {
   },
 };
 
+function siteFor(name: string): Site {
+  const site = SITES[name];
+  if (!site) throw new Error(`unknown site ${name}`);
+  return site;
+}
+
 const FINISHED_CASES = Object.keys(SITES).flatMap((site) =>
   (['completed', 'failed'] as const).map((state) => [site, state] as const),
 );
@@ -79,7 +85,7 @@ describe('discord-bot fixed-jobId producers (ROK-1762 retained finished job)', (
   it.each(FINISHED_CASES)(
     '%s enqueues a new job when a %s job with the same id is retained',
     async (site, state) => {
-      const { jobId, enqueue } = SITES[site];
+      const { jobId, enqueue } = siteFor(site);
       const { queue, accepted } = makeFakeQueue(jobId, state);
 
       await enqueue(queue as unknown as Queue);
@@ -91,7 +97,7 @@ describe('discord-bot fixed-jobId producers (ROK-1762 retained finished job)', (
   it.each(Object.keys(SITES))(
     '%s never removes an active job with the same id',
     async (site) => {
-      const { jobId, enqueue } = SITES[site];
+      const { jobId, enqueue } = siteFor(site);
       const { queue, store } = makeFakeQueue(jobId, 'active');
 
       await enqueue(queue as unknown as Queue);
@@ -102,7 +108,7 @@ describe('discord-bot fixed-jobId producers (ROK-1762 retained finished job)', (
   );
 
   it('embed-sync still coalesces into a pending delayed job (debounce kept)', async () => {
-    const { jobId, enqueue } = SITES['embed-sync'];
+    const { jobId, enqueue } = siteFor('embed-sync');
     const { queue, accepted, store, changeDelay } = makeFakeQueue(
       jobId,
       'delayed',
@@ -118,7 +124,7 @@ describe('discord-bot fixed-jobId producers (ROK-1762 retained finished job)', (
   });
 
   it('embed-sync leaves a waiting job alone and adds nothing', async () => {
-    const { jobId, enqueue } = SITES['embed-sync'];
+    const { jobId, enqueue } = siteFor('embed-sync');
     const { queue, store } = makeFakeQueue(jobId, 'waiting');
 
     await enqueue(queue as unknown as Queue);
