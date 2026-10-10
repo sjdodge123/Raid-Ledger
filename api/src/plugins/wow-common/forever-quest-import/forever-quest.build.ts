@@ -89,21 +89,22 @@ async function importZone(
   state.summary.rowsPerInstance[instanceName] = count;
 }
 
+function emptyState(): BuildState {
+  const summary: BuildSummary = {
+    rowsPerInstance: {},
+    skipped: [],
+    notShown: [],
+    zoneReports: [],
+    nullInstancePrereqs: 0,
+  };
+  return { rows: new Map(), prereqs: new Map(), summary };
+}
+
 /** Build every row (zone quests, then out-of-zone pre-reqs), sorted by questId. */
 export async function buildForeverQuestDataset(
   source: QuestPageSource,
 ): Promise<{ rows: DungeonQuestRow[]; summary: BuildSummary }> {
-  const state: BuildState = {
-    rows: new Map(),
-    prereqs: new Map(),
-    summary: {
-      rowsPerInstance: {},
-      skipped: [],
-      notShown: [],
-      zoneReports: [],
-      nullInstancePrereqs: 0,
-    },
-  };
+  const state = emptyState();
   for (const instance of FOREVER_INSTANCES) {
     await importZone(
       source,

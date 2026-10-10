@@ -63,13 +63,13 @@ describe('parseZoneQuestList', () => {
     );
     expect(list.rows.map((r) => r.id)).toEqual([5]);
     expect(list.skipped).toHaveLength(1);
-    expect(list.skipped[0].reason).toMatch(/zone row/);
+    expect(list.skipped[0]?.reason).toMatch(/zone row/);
   });
 
   it('reports a page without a quest Listview', () => {
     const list = parseZoneQuestList('<html></html>');
     expect(list.rows).toEqual([]);
-    expect(list.skipped[0].reason).toMatch(/Listview not found/);
+    expect(list.skipped[0]?.reason).toMatch(/Listview not found/);
   });
 });
 
@@ -110,21 +110,19 @@ describe('parseQuestPage', () => {
   });
 });
 
-describe('toDungeonQuestRow', () => {
-  const zoneRow = (): ZoneQuestRow =>
-    parseZoneQuestList(fixture('zone-1584-forever.html')).rows.find(
-      (r) => r.id === 4136,
-    ) as ZoneQuestRow;
-  const parsed = (): ParsedQuest =>
-    parseQuestPage(fixture('quest-4136-forever.html'), {
-      env: 'forever',
-    }) as ParsedQuest;
+const zoneRow = (): ZoneQuestRow =>
+  parseZoneQuestList(fixture('zone-1584-forever.html')).rows.find(
+    (r) => r.id === 4136,
+  ) as ZoneQuestRow;
+const parsed = (): ParsedQuest =>
+  parseQuestPage(fixture('quest-4136-forever.html'), {
+    env: 'forever',
+  }) as ParsedQuest;
 
+describe('toDungeonQuestRow', () => {
   it('builds a forever row keyed on the seed instance id', () => {
     const result = toDungeonQuestRow(zoneRow(), parsed(), 7);
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.row).toMatchObject({
+    expect(result.ok && result.row).toMatchObject({
       questId: 4136,
       name: 'Ribbly Screwspigot',
       expansion: 'forever',

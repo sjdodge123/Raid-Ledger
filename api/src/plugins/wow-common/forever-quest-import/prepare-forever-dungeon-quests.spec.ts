@@ -56,8 +56,8 @@ describe('prepare-forever-dungeon-quests (fixtures mode)', () => {
       dungeonInstanceId: number | null;
     }>;
     expect(rows.map((r) => r.questId)).toEqual([4136, 4324]);
-    expect(rows[0].dungeonInstanceId).toBe(FOREVER_SEED_ID_BASE + 7);
-    expect(rows[1].dungeonInstanceId).toBeNull();
+    expect(rows[0]?.dungeonInstanceId).toBe(FOREVER_SEED_ID_BASE + 7);
+    expect(rows[1]?.dungeonInstanceId).toBeNull();
     const summary = lines.join('\n');
     expect(summary).toMatch(/Alcaz Prison: 1/);
     expect(summary).toMatch(/null-instance pre-reqs: 1/);

@@ -141,10 +141,10 @@ const SERIES_LINK_RE =
 
 function parseSeries(html: string): SeriesStep[] {
   const table = SERIES_RE.exec(html)?.[1] ?? '';
-  return [...table.matchAll(SERIES_ROW_RE)].map(([, cell]) => {
+  return [...table.matchAll(SERIES_ROW_RE)].map(([, cell = '']) => {
     const link = SERIES_LINK_RE.exec(cell);
     if (link)
-      return { questId: Number(link[1]), name: link[2], current: false };
+      return { questId: Number(link[1]), name: link[2] ?? '', current: false };
     const bold = /<b>([^<]+)<\/b>/.exec(cell)?.[1] ?? '';
     return { questId: null, name: bold, current: true };
   });
@@ -169,7 +169,7 @@ export function parseQuestPage(
     questLevel: intMatch(/\[li\]Level: (\d+)\[\/li\]/, info),
     requiredLevel: intMatch(/\[li\]Requires level (\d+)\[\/li\]/, info),
     startNpcId: start ? Number(start[1]) : null,
-    startNpcName: start ? start[2] : null,
+    startNpcName: start?.[2] ?? null,
     side: (side?.[1] as ParsedQuest['side']) ?? null,
     sharable: /\[li\]Sharable\[\/li\]/.test(info),
     series,
