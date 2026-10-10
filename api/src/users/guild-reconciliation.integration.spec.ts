@@ -223,4 +223,25 @@ describe('GuildReconciliationService — seen-in-guild scoping (ROK-1749)', () =
     expect((await readUser(local.id)).deactivatedAt).toBeNull();
     expect((await readUser(unlinked.id)).deactivatedAt).toBeNull();
   });
+
+  it('ROK-1759: does not deactivate a user the listener stamped after the member fetch started', async () => {
+    const joiner = await createUser('latejoiner', 'discord-late-1');
+    const leaver = await createUser('oldleaver', 'discord-left-1', {
+      seen: new Date('2025-01-01T00:00:00Z'),
+    });
+    listSpy = jest
+      .spyOn(botClient, 'listAllGuildMemberAvatars')
+      .mockImplementation(async () => {
+        // GuildMemberAdd fires mid-fetch: the listener stamps the joiner, who
+        // is absent from the snapshot this sweep is about to diff against.
+        await testApp.db
+          .update(schema.users)
+          .set({ guildMemberSeenAt: new Date() })
+          .where(eq(schema.users.id, joiner.id));
+        return new Map([['discord-someone-else', null]]);
+      });
+    await service.runReconciliation();
+    expect((await readUser(joiner.id)).deactivatedAt).toBeNull();
+    expect((await readUser(leaver.id)).deactivatedAt).not.toBeNull();
+  });
 });
