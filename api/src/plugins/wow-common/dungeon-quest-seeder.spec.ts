@@ -76,7 +76,7 @@ describe('DungeonQuestSeeder', () => {
       jest.requireActual<typeof import('fs/promises')>('fs/promises');
     afterEach(() => fsPromises.readFile.mockImplementation(actual.readFile));
 
-    it('reads both bundled files; the shipped [] forever file is a no-op', async () => {
+    it('reads both bundled files; the shipped forever rows ride the same upsert', async () => {
       const result = await seeder.seed();
       const paths = fsPromises.readFile.mock.calls.map((c) => String(c[0]));
       expect(paths.some((p) => p.endsWith('dungeon-quest-data.json'))).toBe(
@@ -85,8 +85,9 @@ describe('DungeonQuestSeeder', () => {
       expect(
         paths.some((p) => p.endsWith('forever-dungeon-quest-data.json')),
       ).toBe(true);
-      expect(foreverData).toEqual([]);
-      expect(result.total).toBe(classicData.length);
+      expect(foreverData.length).toBeGreaterThan(0);
+      expect(foreverData.every((r) => r.expansion === 'forever')).toBe(true);
+      expect(result.total).toBe(classicData.length + foreverData.length);
     });
 
     it('appends forever rows to the same upsert', async () => {
