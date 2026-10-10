@@ -25,6 +25,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
@@ -38,7 +39,7 @@ import { muteDiscordDms, parseQuietDms } from './demo-test-quiet-dms.helpers';
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestDeactivationController {
   constructor(
     @Inject(DrizzleAsyncProvider)

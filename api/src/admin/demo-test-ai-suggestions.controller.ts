@@ -32,6 +32,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
@@ -49,7 +50,7 @@ const FIXTURE_MODEL = 'rok-1110-fixture';
 
 @Controller('admin/test/ai-suggestions')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestAiSuggestionsController {
   constructor(
     @Inject(DrizzleAsyncProvider)

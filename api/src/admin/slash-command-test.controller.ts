@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SlashCommandTestService } from './slash-command-test.service';
 import type { CapturedResponse } from './fake-interaction';
 
@@ -39,7 +40,7 @@ const AutocompleteSchema = z.object({
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class SlashCommandTestController {
   constructor(private readonly service: SlashCommandTestService) {}
 

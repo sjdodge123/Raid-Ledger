@@ -27,6 +27,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { LineupsService } from '../lineups/lineups.service';
 import { LineupSubmitService } from '../lineups/submit/lineup-submit.service';
@@ -55,7 +56,7 @@ const KNOWN_KEYS = new Set<string>(Object.values(SETTING_KEYS));
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestGraceController {
   constructor(
     private readonly settings: SettingsService,

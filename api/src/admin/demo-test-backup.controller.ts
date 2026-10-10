@@ -11,6 +11,7 @@ import { ConfigService } from '@nestjs/config';
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { BackupService } from '../backup/backup.service';
 import { SimulateBackupCorruptionSchema } from './demo-test.schemas';
 import { parseDemoBody } from './demo-test.utils';
@@ -26,7 +27,7 @@ import { resolveDailyDir, writeCorruptDump } from './demo-test-backup.helpers';
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestBackupController {
   constructor(
     private readonly configService: ConfigService,

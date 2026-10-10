@@ -33,6 +33,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { UsersService } from '../users/users.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
@@ -61,7 +62,7 @@ export interface QuickPlayVoiceResult {
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestQuickPlayVoiceController {
   constructor(
     private readonly settingsService: SettingsService,

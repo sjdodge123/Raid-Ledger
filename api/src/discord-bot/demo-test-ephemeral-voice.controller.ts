@@ -9,6 +9,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from '../admin/demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { EphemeralVoiceScheduler } from './services/ephemeral-voice.scheduler';
 import { EphemeralVoiceReaper } from './services/ephemeral-voice.reaper';
@@ -19,7 +20,7 @@ import { EphemeralVoiceReaper } from './services/ephemeral-voice.reaper';
  */
 @Controller('admin/test/ephemeral-voice')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestEphemeralVoiceController {
   constructor(
     private readonly settingsService: SettingsService,
