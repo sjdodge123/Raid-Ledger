@@ -304,3 +304,17 @@ describe('LoginPage — first-run hint tokens (ROK-1648 ruling 9)', () => {
             .not.toMatch(/(blue|indigo|purple|violet)-\d/);
     });
 });
+
+describe('LoginPage — deactivated session notice (ROK-1753)', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('toasts the deactivated copy and clears the error param', async () => {
+        renderSuspended('?error=deactivated');
+
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.'));
+        await waitFor(() => expect(screen.getByTestId('search')).toHaveTextContent(''));
+    });
+});
+

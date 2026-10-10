@@ -10,6 +10,7 @@ import { UsersService } from '../../users/users.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
+import { invalidateAuthUser } from '../../auth/auth-user-cache';
 
 /**
  * Re-activate users when they rejoin the Discord guild (ROK-1260).
@@ -99,6 +100,8 @@ export class GuildMemberAddListener {
       )
       .returning({ id: schema.users.id, username: schema.users.username });
     if (!row) return;
+    // ROK-1753: JwtStrategy 401s deactivated users off a 30s cache — drop it.
+    invalidateAuthUser(row.id);
     this.logger.log(
       `ROK-1260: reactivated user ${row.id} (${row.username}) on guild rejoin`,
     );

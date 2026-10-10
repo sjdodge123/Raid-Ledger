@@ -291,3 +291,43 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
         expect(refreshCalls).toBe(0);
     });
 });
+
+describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        authState.token = null;
+    });
+
+    it('a 401 USER_DEACTIVATED does NOT refresh or retry, and ends the shared session', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        localStorage.setItem(ACCESS_TOKEN_KEY, FRESH_TOKEN);
+        authState.token = FRESH_TOKEN;
+        let dataCalls = 0;
+        let refreshCalls = 0;
+        server.use(
+            http.post(`${API_BASE}/auth/refresh`, () => {
+                refreshCalls += 1;
+                return HttpResponse.json({ access_token: 'should-not-mint' });
+            }),
+            http.get(`${API_BASE}/thing`, () => {
+                dataCalls += 1;
+                return HttpResponse.json({ code: 'USER_DEACTIVATED', message: 'Account deactivated' }, { status: 401 });
+            }),
+        );
+
+        const settled = vi.fn();
+        fetchApi('/thing').then(settled, settled);
+
+        await vi.waitFor(() => expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull());
+        // Give a would-be rejection every chance to land (body parse + throw).
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(refreshCalls).toBe(0);
+        expect(dataCalls).toBe(1);
+        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        // Never settles while the /login redirect lands, so no caller onError
+        // toast flashes over the deactivated notice.
+        expect(settled).not.toHaveBeenCalled();
+    });
+});
+
