@@ -83,21 +83,22 @@ describe('endDeactivatedSession', () => {
         beforeEach(() => vi.mocked(toast.error).mockClear());
         afterEach(() => window.history.replaceState({}, '', '/'));
 
-        it('toasts the deactivated notice in place and does NOT redirect', () => {
+        it('toasts the deactivated notice in place and does NOT redirect', async () => {
             window.history.replaceState({}, '', '/login');
             const redirect = vi.fn();
 
             const redirecting = endDeactivatedSession(redirect);
 
             expect({ redirecting, redirects: redirect.mock.calls }).toEqual({ redirecting: false, redirects: [] });
-            expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.');
+            await vi.waitFor(() => expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.'));
             expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
         });
 
-        it('leaves the toast to the login page when ?error=deactivated is already showing it', () => {
+        it('leaves the toast to the login page when ?error=deactivated is already showing it', async () => {
             window.history.replaceState({}, '', '/login?error=deactivated');
 
             endDeactivatedSession(vi.fn());
+            await import('../toast'); // let any (wrongly) scheduled lazy toast settle first
 
             expect(toast.error).not.toHaveBeenCalled();
         });

@@ -4,7 +4,6 @@ import {
   ORIGINAL_TOKEN_KEY,
   USER_CACHE_KEY,
 } from './auth-storage-keys';
-import { toast } from '../toast';
 
 /**
  * ROK-1753: a deactivated user's session is terminal. The API answers every
@@ -60,6 +59,10 @@ export function endDeactivatedSession(redirect: (path: string) => void = goTo): 
     return true;
   }
   // The login page's ?error=deactivated handler already toasts that case.
-  if (!window.location.search.includes('error=deactivated')) toast.error(DEACTIVATED_MESSAGE);
+  // Loaded lazily: a static import pulls `sonner` into the use-auth chunk
+  // (+9 KB gz, over its bundle budget) for a path almost nobody hits.
+  if (!window.location.search.includes('error=deactivated')) {
+    void import('../toast').then(({ toast }) => toast.error(DEACTIVATED_MESSAGE));
+  }
   return false;
 }
