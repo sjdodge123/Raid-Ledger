@@ -330,7 +330,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | Component | Path | Use when |
 |---|---|---|
 | `game-card-parts.tsx` (`CoverImage`, `CoverPlaceholder`, `RatingBadge`, `GradientOverlay`, `CardTitle`, `GenreBadge`, `HeartButton`) | `components/games/` | Building ANY game tile. Do not hand-roll a cover + title + badge stack. |
-| `game-badges.tsx` / `game-badges.helpers.ts` | `components/games/` | Badge row on a game card (sale %, owners, players, early access) |
+| `game-badges.tsx` / `game-badges.helpers.ts` | `components/games/` | Badge row on a game card (sale %, owners, players, early access). `YouOwnBadge` takes an optional `playtimeMinutes` ("You own · 12h played", ROK-1375) — fed by `GameBadgeData.currentUserPlaytimeMinutes`, which only lineup nominations populate today |
 | `GameRef.tsx`, `GameResearchDrawer.tsx`, `DrawerCard.tsx` | `components/games/` | Inline game reference that opens the research drawer (Cycle 4 U2) |
 | `PriceBadge.tsx`, `GameCarousel.tsx`, `ScreenshotGallery.tsx` | `components/games/` | Price pill, tile rail, screenshot lightbox |
 | `CommonGroundThemedRow.tsx`, `CommonGroundHero.tsx` | `components/lineups/cycle-4/` | Themed (Owned/Taste/Trending) rows, nomination hero |
