@@ -22,7 +22,7 @@ export function CharacterDetailOwnerActions({ characterId, gameId, ruleset, game
     const [open, setOpen] = useState(false);
     // A new key per opening: every session starts on an empty paste step.
     const [session, setSession] = useState(0);
-    const variant = useCharacterWowVariant({ gameVariant, ruleset, gameId });
+    const { variant } = useCharacterWowVariant({ gameVariant, ruleset, gameId });
     if (variant !== 'wow_forever') return null;
     return (
         <>

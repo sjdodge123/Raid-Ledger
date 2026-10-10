@@ -5,7 +5,7 @@
  * empty states and Wowhead links from it.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -25,12 +25,16 @@ const EQUIPMENT: CharacterEquipmentDto = {
     items: [{ slot: 'HEAD', name: 'Test Helm', itemId: 19019, quality: 'EPIC', itemLevel: 60, itemSubclass: 'Plate' }],
 };
 
-interface Case { gameVariant: string | null; ruleset?: string | null; isArmoryImported?: boolean; equipment?: CharacterEquipmentDto | null; gameSlug?: string }
+interface Case {
+    gameVariant: string | null; ruleset?: string | null; isArmoryImported?: boolean;
+    equipment?: CharacterEquipmentDto | null; gameSlug?: string; registryPending?: boolean;
+}
 
-function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null, gameSlug }: Case) {
+/** Seeds the character + game registry caches; `registryPending` leaves the registry to load over the network. */
+function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null, gameSlug, registryPending }: Case) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
     client.setQueryData(['characters', 'char-1'], { id: 'char-1', gameId: 1, gameVariant, ruleset });
-    if (gameSlug) client.setQueryData(['game-registry'], { data: [{ id: 1, slug: gameSlug, name: 'WoW' }] });
+    if (!registryPending) client.setQueryData(['game-registry'], { data: gameSlug ? [{ id: 1, slug: gameSlug, name: 'WoW' }] : [] });
     const { container } = render(
         <QueryClientProvider client={client}>
             <CharacterDetailSections equipment={equipment} talents={null} professions={null} gameVariant={gameVariant}
@@ -116,5 +120,33 @@ describe('CharacterDetailSections — Forever resolved from the game slug', () =
         renderSections({ gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-classic' });
         expect(hintUnder('No equipment data')).toBe(ARMORY_EQUIPMENT);
         expect(screen.queryByRole('heading', { name: 'Quests' })).toBeNull();
+    });
+});
+
+/** ROK-1751 review MINOR 1: no Armory copy -> addon hint flip while the registry is still loading. */
+describe('CharacterDetailSections — game registry still loading', () => {
+    it('null variant + null ruleset while the registry is pending → neither the Armory copy nor the addon hint', async () => {
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        let questsRequested = false;
+        server.use(
+            http.get('http://localhost:3000/games/configured', async () => {
+                await gate;
+                return HttpResponse.json({ data: [{ id: 1, slug: 'world-of-warcraft-forever', name: 'WoW' }] });
+            }),
+            http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => {
+                questsRequested = true;
+                return HttpResponse.json({ quests: null });
+            }),
+        );
+        renderSections({ gameVariant: null, ruleset: null, registryPending: true });
+        expect(screen.queryByText(ARMORY_EQUIPMENT)).toBeNull();
+        expect(screen.queryByText(ARMORY_TALENTS)).toBeNull();
+        expect(screen.queryByText(FOREVER_ADDON_HINT_EQUIPMENT)).toBeNull();
+        expect(questsRequested).toBe(false);
+        release();
+        expect(await screen.findByText(FOREVER_ADDON_HINT_EQUIPMENT)).toBeInTheDocument();
+        expect(screen.queryByText(ARMORY_EQUIPMENT)).toBeNull();
+        await waitFor(() => expect(questsRequested).toBe(true));
     });
 });

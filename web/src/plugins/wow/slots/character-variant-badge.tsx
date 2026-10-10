@@ -33,7 +33,7 @@ function VariantLabel({ label }: { label: string | null }) {
 
 /** Resolves the variant via the game registry slug (needs a QueryClientProvider). */
 function RegistryVariantBadge({ gameVariant, ruleset, gameId }: CharacterVariantBadgeProps) {
-    return <VariantLabel label={getWowVariantLabel(useCharacterWowVariant({ gameVariant, ruleset, gameId }))} />;
+    return <VariantLabel label={getWowVariantLabel(useCharacterWowVariant({ gameVariant, ruleset, gameId }).variant)} />;
 }
 
 /** Card badge for a character's WoW variant; null for retail / non-WoW characters. */

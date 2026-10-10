@@ -8,7 +8,8 @@
  * read from the page's own character query (same cache key, no extra
  * request), so core's slot context needs no WoW field. ROK-1751: the game
  * slug (from the cached game registry) resolves LedgerLink Forever characters
- * whose ruleset is null.
+ * whose ruleset is null; while the registry is still loading, neutral
+ * panels render instead of variant-specific copy.
  */
 import { useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
@@ -87,21 +88,41 @@ export function CharacterDetailSections({
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
     const { data: character } = useCharacterDetail(characterId);
-    const variant = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
+    const { variant, isResolving } = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
 
     return (
         <>
-            {equipment ? (
+            {isResolving ? (
+                <VariantPendingSections />
+            ) : equipment ? (
                 <EquipmentWithItems equipment={equipment} gameVariant={variant}
                     renderUrl={renderUrl} isArmoryImported={isArmoryImported} />
             ) : (
                 <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />
             )}
-            <TalentSection talents={talents} isArmoryImported={isArmoryImported}
-                characterClass={characterClass} gameVariant={variant} />
+            {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
+                characterClass={characterClass} gameVariant={variant} />}
             <CharacterQuestsSection characterId={characterId} variant={variant} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
+        </>
+    );
+}
+
+/**
+ * Neutral Equipment + Talents panels while the game registry resolves the
+ * variant (ROK-1751): no Armory copy and no addon hint, so the page does not
+ * flip from one to the other once the registry answers.
+ */
+function VariantPendingSections() {
+    return (
+        <>
+            {['Equipment', 'Talents'].map((title) => (
+                <div key={title} className="bg-panel border border-edge rounded-lg p-6" aria-busy="true">
+                    <h2 className="text-lg font-semibold text-foreground mb-4">{title}</h2>
+                    <div className="h-16 rounded-md bg-overlay animate-pulse" />
+                </div>
+            ))}
         </>
     );
 }
