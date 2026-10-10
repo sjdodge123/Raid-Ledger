@@ -11,7 +11,7 @@ import type { CharacterDto, EquipmentItemDto } from '@raid-ledger/contract';
 import { server } from '../test/mocks/server';
 import { createTestQueryClient } from '../test/render-helpers';
 import { useCharacterDetail } from './use-character-detail';
-import { UNRESOLVED_POLL_MAX_TRIES, UNRESOLVED_POLL_MS, resetUnresolvedEquipmentPoll } from './unresolved-equipment-poll';
+import { UNRESOLVED_POLL_MAX_MS, UNRESOLVED_POLL_MAX_TRIES, UNRESOLVED_POLL_MS, resetUnresolvedEquipmentPoll } from './unresolved-equipment-poll';
 
 const CHARACTER_ID = '11111111-1111-4111-8111-111111111111';
 const URL = `http://localhost:3000/characters/${CHARACTER_ID}`;
@@ -72,19 +72,20 @@ describe('useCharacterDetail — unresolved equipment polling (ROK-1760)', () =>
         const calls = serve(UNRESOLVED);
         renderDetail();
         await waitFor(() => expect(calls.count).toBe(1));
-        for (let i = 0; i < UNRESOLVED_POLL_MAX_TRIES + 5; i++) await advance(UNRESOLVED_POLL_MS);
+        for (let i = 0; i < UNRESOLVED_POLL_MAX_TRIES + 5; i++) await advance(UNRESOLVED_POLL_MAX_MS);
         expect(calls.count).toBe(1 + UNRESOLVED_POLL_MAX_TRIES);
     });
 
     it('starts a fresh budget after a reset (an addon import)', async () => {
         const calls = serve(UNRESOLVED);
         const { queryClient } = renderDetail();
-        for (let i = 0; i < UNRESOLVED_POLL_MAX_TRIES + 2; i++) await advance(UNRESOLVED_POLL_MS);
+        for (let i = 0; i < UNRESOLVED_POLL_MAX_TRIES + 2; i++) await advance(UNRESOLVED_POLL_MAX_MS);
         const exhausted = calls.count;
         expect(exhausted).toBe(1 + UNRESOLVED_POLL_MAX_TRIES);
         resetUnresolvedEquipmentPoll(CHARACTER_ID);
         await act(() => queryClient.invalidateQueries({ queryKey: ['characters', CHARACTER_ID] }));
-        await advance(UNRESOLVED_POLL_MS * 2);
+        // The invalidate fetch opens the episode; polls follow at +3 s and +9 s (widening).
+        await advance(UNRESOLVED_POLL_MAX_MS);
         expect(calls.count).toBe(exhausted + 3);
     });
 
