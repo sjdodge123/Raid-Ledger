@@ -24,6 +24,7 @@ interface ForeverQuestLogInput {
     have?: number;
     need?: number;
   }>;
+  /** Not sent by LedgerLink today; only a fallback when the known table has no id. */
   dungeonInstanceId?: number;
 }
 
@@ -37,8 +38,17 @@ export interface ForeverQuestSnapshotInput {
   };
 }
 
-/** Map one addon quest-log entry onto the DTO shape with null/[] defaults. */
-function toLogEntry(q: ForeverQuestLogInput): CharacterQuestLogEntry {
+/**
+ * Map one addon quest-log entry onto the DTO shape with null/[] defaults. The
+ * instance tag comes from the known-quest table (the addon log carries none).
+ */
+function toLogEntry(
+  q: ForeverQuestLogInput,
+  lookup: Map<number, DungeonQuestDto>,
+  names: (id: number) => string,
+): CharacterQuestLogEntry {
+  const instanceId =
+    lookup.get(q.questId)?.dungeonInstanceId ?? q.dungeonInstanceId ?? null;
   return {
     questId: q.questId,
     title: q.title ?? null,
@@ -48,7 +58,8 @@ function toLogEntry(q: ForeverQuestLogInput): CharacterQuestLogEntry {
       have: o.have ?? null,
       need: o.need ?? null,
     })),
-    dungeonInstanceId: q.dungeonInstanceId ?? null,
+    dungeonInstanceId: instanceId,
+    instanceName: instanceId === null ? null : names(instanceId),
   };
 }
 
@@ -174,7 +185,10 @@ export function buildCharacterQuests(
   if (!hasQuestData(quests)) return null;
   const completed = new Set(quests.completed);
   const completedKnown = buildGroups(knownQuests, completed, names);
-  const inProgress = quests.inProgress.map(toLogEntry);
+  const lookup = new Map(knownQuests.map((q) => [q.questId, q]));
+  const inProgress = quests.inProgress.map((q) =>
+    toLogEntry(q, lookup, names),
+  );
   return CharacterQuestsDtoSchema.parse({
     source: 'addon',
     syncedAt: snapshot.capturedAt,

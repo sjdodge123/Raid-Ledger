@@ -72,7 +72,6 @@ describe('buildCharacterQuests — quest log mapping', () => {
           {
             questId: 5,
             title: 'Known',
-            dungeonInstanceId: 230,
             objectives: [
               { text: 'Kill 8', done: false, have: 3, need: 8 },
               { text: 'Talk', done: true },
@@ -80,16 +79,18 @@ describe('buildCharacterQuests — quest log mapping', () => {
           },
         ],
       ),
-      [],
+      [quest({ questId: 5, dungeonInstanceId: 230 })],
       names,
     );
+    const none = { title: null, objectives: [], dungeonInstanceId: null };
     expect(dto?.inProgress).toEqual([
-      { questId: 92472, title: null, objectives: [], dungeonInstanceId: null },
-      { questId: 96638, title: null, objectives: [], dungeonInstanceId: null },
+      { questId: 92472, ...none, instanceName: null },
+      { questId: 96638, ...none, instanceName: null },
       {
         questId: 5,
         title: 'Known',
         dungeonInstanceId: 230,
+        instanceName: 'Name 230',
         objectives: [
           { text: 'Kill 8', done: false, have: 3, need: 8 },
           { text: 'Talk', done: true, have: null, need: null },
@@ -97,6 +98,18 @@ describe('buildCharacterQuests — quest log mapping', () => {
       },
     ]);
     expect(dto?.counts.inProgress).toBe(3);
+  });
+
+  it('falls back to the input instance id when the known table has none', () => {
+    const dto = buildCharacterQuests(
+      snap([], [{ questId: 8, dungeonInstanceId: 48 }]),
+      [quest({ questId: 8, dungeonInstanceId: null })],
+      names,
+    );
+    expect(dto?.inProgress[0]).toMatchObject({
+      dungeonInstanceId: 48,
+      instanceName: 'Name 48',
+    });
   });
 });
 

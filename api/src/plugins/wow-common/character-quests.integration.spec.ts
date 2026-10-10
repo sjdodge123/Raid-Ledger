@@ -25,6 +25,8 @@ const QUESTS = {
       title: 'Into the Depths',
       objectives: [{ text: 'Slay oozes', done: false, have: 3, need: 8 }],
     },
+    // Real LedgerLink log entries carry no instance id; the API resolves it.
+    { questId: 5002, title: 'VC Quest' },
   ],
 };
 const BASE_DATA = { gear: [], talents: { nodes: [] }, lockouts: [] };
@@ -148,7 +150,7 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
       completedKnown: 2,
       knownTotal: 2,
       completedTotal: 4,
-      inProgress: 1,
+      inProgress: 2,
     });
     expect(body?.completedKnown.map((g) => g.instanceName).sort()).toEqual([
       'Deadmines',
@@ -157,6 +159,10 @@ describe('GET /plugins/wow/characters/:id/quests (integration)', () => {
     expect(body?.inProgress[0]?.objectives[0]).toMatchObject({
       have: 3,
       need: 8,
+    });
+    expect(body?.inProgress[1]).toMatchObject({
+      dungeonInstanceId: 63,
+      instanceName: 'Deadmines',
     });
   });
 

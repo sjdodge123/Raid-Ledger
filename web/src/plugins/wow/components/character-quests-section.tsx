@@ -16,11 +16,6 @@ function questsSummaryLine(quests: CharacterQuestsDto): string {
     return `${completedKnown} completed · ${knownTotal} known · ${formatAddonSourceLine(quests.syncedAt)} · ${completedTotal} quests total`;
 }
 
-/** Instance names known from the completed groups, used to tag log quests. */
-function instanceNameMap(quests: CharacterQuestsDto): Map<number, string> {
-    return new Map(quests.completedKnown.map((g) => [g.dungeonInstanceId, g.instanceName]));
-}
-
 /** The Quests card; chrome matches the Talents section. */
 export function CharacterQuestsSection({ characterId, variant }: { characterId: string; variant: string | null }) {
     const { quests, isError } = useCharacterQuests(characterId, variant);
@@ -30,7 +25,7 @@ export function CharacterQuestsSection({ characterId, variant }: { characterId: 
             <h2 className="text-lg font-semibold text-foreground mb-4">Quests</h2>
             <p className="-mt-3 mb-4 text-xs text-muted">{questsSummaryLine(quests)}</p>
             <div className="space-y-6">
-                <CharacterQuestLog quests={quests.inProgress} instanceNames={instanceNameMap(quests)} />
+                <CharacterQuestLog quests={quests.inProgress} />
                 <CharacterCompletedQuests groups={quests.completedKnown} knownTotal={quests.counts.knownTotal} />
             </div>
         </div>

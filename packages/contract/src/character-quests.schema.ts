@@ -21,6 +21,8 @@ export const CharacterQuestLogEntrySchema = z.object({
     title: z.string().nullable(),
     objectives: z.array(CharacterQuestObjectiveSchema),
     dungeonInstanceId: z.number().int().nullable(),
+    /** Display name of `dungeonInstanceId` (null when untagged). */
+    instanceName: z.string().nullable(),
 });
 export type CharacterQuestLogEntry = z.infer<typeof CharacterQuestLogEntrySchema>;
 
