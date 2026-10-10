@@ -82,5 +82,5 @@ export function mapOpenAiChatResponse(
         completionTokens: raw.usage.completion_tokens ?? 0,
       }
     : undefined;
-  return { content, usage, latencyMs };
+  return { content, ...(usage ? { usage } : {}), latencyMs };
 }

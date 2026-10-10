@@ -151,7 +151,7 @@ export class EventLifecycleProcessor
         endTime: payload.event.endTime,
         creatorId: payload.creatorId!,
         clientUrl,
-        gameCoverUrl: payload.event.game!.coverUrl,
+        gameCoverUrl: payload.event.game!.coverUrl ?? null,
         discordMessage,
         followupForEventId: payload.followupForEventId ?? null,
       });

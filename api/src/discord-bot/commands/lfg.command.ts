@@ -212,7 +212,10 @@ export class LfgCommand
     // ROK-1656 — no `urgency:` joins an open group on its horizon (as the
     // board `+1` does) and otherwise raises a tonight hand.
     const opts = await resolveLfgCommandUrgency(this.db, gameId, urgency);
-    const request = { ...opts, timezone: ctx.timezone };
+    const request = {
+      ...opts,
+      ...(ctx.timezone !== undefined ? { timezone: ctx.timezone } : {}),
+    };
     const result = await this.lfgService.createIntent(userId, gameId, request);
     this.logger.debug(
       `Discord user ${interaction.user.id} raised a hand for game ${gameId}`,

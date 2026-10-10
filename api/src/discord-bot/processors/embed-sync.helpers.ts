@@ -225,9 +225,11 @@ function assembleEventData(
     endTime: event.duration[1].toISOString(),
     signupCount: signupMentions?.length ?? 0,
     maxAttendees: event.maxAttendees,
-    slotConfig: event.slotConfig as EmbedEventData['slotConfig'],
+    slotConfig: event.slotConfig as NonNullable<
+      EmbedEventData['slotConfig']
+    > | null,
     roleCounts,
-    signupMentions,
+    ...(signupMentions !== undefined ? { signupMentions } : {}),
   };
 }
 

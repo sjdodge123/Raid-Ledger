@@ -131,7 +131,11 @@ async function deleteOrRecord(
 ): Promise<boolean> {
   const outcome = await tryDeleteEvent(guild, eventId ?? 0, seId);
   if (outcome.deleted) return true;
-  failures.push({ eventId, seId, code: outcome.code });
+  failures.push({
+    eventId,
+    seId,
+    ...(outcome.code !== undefined ? { code: outcome.code } : {}),
+  });
   gcLogger.error(
     `GC failed to delete SE ${seId} (event ${eventId ?? 'unknown'}): code=${
       outcome.code ?? 'unknown'

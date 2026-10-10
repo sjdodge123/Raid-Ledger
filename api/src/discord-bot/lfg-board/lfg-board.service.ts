@@ -260,8 +260,10 @@ export class LfgBoardService {
     // appears and disappears with the hand count without a second refresh path.
     const spawnsNow = pressWouldSpawnNow({
       state: view.state,
-      nowCount: view.nowCount,
-      playingEventId: view.playingEventId,
+      ...(view.nowCount !== undefined ? { nowCount: view.nowCount } : {}),
+      ...(view.playingEventId !== undefined
+        ? { playingEventId: view.playingEventId }
+        : {}),
       // No `viewerHoldsNowHand`: a forum post is ONE shared message and its
       // component row cannot vary per viewer. AC2, resolved in favour of the
       // per-card reading and worded for it — see `lfg-now-indicator.helpers`.
@@ -271,10 +273,10 @@ export class LfgBoardService {
       gameSlug: view.gameSlug,
       // `EmbedContext.clientUrl` is nullable; the row builder drops the Link
       // button on a falsy value rather than sending Discord an empty URL.
-      clientUrl: context.clientUrl ?? undefined,
+      ...(context.clientUrl != null ? { clientUrl: context.clientUrl } : {}),
       state: view.state,
       spawnsNow,
-      spawnEmoji: spawnsNow ? spawnEmoji : undefined,
+      ...(spawnsNow ? { spawnEmoji } : {}),
     });
     return { embed, components };
   }
@@ -302,7 +304,10 @@ export class LfgBoardService {
       parent?.type === ChannelType.GuildForum
         ? this.channelService.tagIdFor(parent, lfmStateTag(view))
         : undefined;
-    return { name: threadNameFor(view), tagId };
+    return {
+      name: threadNameFor(view),
+      ...(tagId !== undefined ? { tagId } : {}),
+    };
   }
 
   /**

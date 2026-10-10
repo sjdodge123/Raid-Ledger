@@ -217,11 +217,15 @@ export class LlmService {
     await this.logService
       .log({
         feature: context.feature,
-        userId: context.userId,
+        ...(context.userId !== undefined ? { userId: context.userId } : {}),
         provider: providerKey,
         model,
-        promptTokens: response.usage?.promptTokens,
-        completionTokens: response.usage?.completionTokens,
+        ...(response.usage
+          ? {
+              promptTokens: response.usage.promptTokens,
+              completionTokens: response.usage.completionTokens,
+            }
+          : {}),
         latencyMs: response.latencyMs,
         success: true,
       })
@@ -240,7 +244,7 @@ export class LlmService {
     await this.logService
       .log({
         feature: context.feature,
-        userId: context.userId,
+        ...(context.userId !== undefined ? { userId: context.userId } : {}),
         provider: providerKey,
         model,
         latencyMs: 0,

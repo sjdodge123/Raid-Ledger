@@ -202,7 +202,7 @@ export class DiscordEmbedFactory {
   ): EmbedResult {
     return this.buildEventEmbed(event, context, {
       state: EMBED_STATES.RESCHEDULING,
-      pollUrl,
+      ...(pollUrl !== undefined ? { pollUrl } : {}),
     });
   }
 
@@ -228,15 +228,15 @@ export class DiscordEmbedFactory {
     const clientUrl = resolveClientUrl(context);
     const embed = createChannelEmbed({
       state: lifecycleToChromeState(state),
-      communityName: context.communityName,
+      communityName: context.communityName ?? null,
       authorLine: authorLineFor(state, event),
     });
     applyTitle(embed, event, state, clientUrl);
     const body = buildEventBody(event, {
       state,
-      clientUrl,
+      ...(clientUrl !== undefined ? { clientUrl } : {}),
       roster: buildRosterLine(event, this.emojiService),
-      pollUrl: options?.pollUrl,
+      ...(options?.pollUrl !== undefined ? { pollUrl: options.pollUrl } : {}),
       eventLink,
     });
     if (body) embed.setDescription(body);

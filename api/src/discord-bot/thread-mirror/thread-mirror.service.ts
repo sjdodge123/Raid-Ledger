@@ -284,7 +284,7 @@ export class ThreadMirrorService {
     }
 
     const rows = await listMirroredMessages(this.db, threadId, {
-      before: query.before,
+      ...(query.before !== undefined ? { before: query.before } : {}),
       limit: query.limit,
     });
     const hasMore = rows.length > query.limit;

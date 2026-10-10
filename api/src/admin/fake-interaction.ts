@@ -105,11 +105,11 @@ export class FakeInteraction {
 
   constructor(params: {
     commandName: string;
-    guildId?: string;
-    discordUserId?: string;
-    channelId?: string;
-    options?: Record<string, unknown>;
-    subcommand?: string;
+    guildId?: string | undefined;
+    discordUserId?: string | undefined;
+    channelId?: string | undefined;
+    options?: Record<string, unknown> | undefined;
+    subcommand?: string | undefined;
   }) {
     this.commandName = params.commandName;
     this.guildId = params.guildId ?? null;
@@ -167,9 +167,9 @@ export class FakeAutocompleteInteraction {
     commandName: string;
     focusedOption: string;
     value: string;
-    subcommand?: string;
-    discordUserId?: string;
-    guildId?: string;
+    subcommand?: string | undefined;
+    discordUserId?: string | undefined;
+    guildId?: string | undefined;
   }) {
     this.commandName = params.commandName;
     this.user = { id: params.discordUserId ?? '000000000000000000' };
@@ -195,10 +195,13 @@ export class FakeAutocompleteInteraction {
 function serializeReplyData(data: unknown): CapturedResponse {
   if (typeof data === 'string') return { content: data };
   const obj = data as Record<string, unknown>;
+  const content = obj.content as string | undefined;
+  const embeds = serializeEmbeds(obj.embeds);
+  const components = serializeComponents(obj.components);
   return {
-    content: obj.content as string | undefined,
-    embeds: serializeEmbeds(obj.embeds),
-    components: serializeComponents(obj.components),
+    ...(content !== undefined ? { content } : {}),
+    ...(embeds !== undefined ? { embeds } : {}),
+    ...(components !== undefined ? { components } : {}),
   };
 }
 

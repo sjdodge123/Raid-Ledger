@@ -205,7 +205,7 @@ async function finalizeSingleChar(
   const isTentative = mode === 'tentative';
   await reconfirmSignup(ctx.deps, ctx.interaction, ctx.event, userId, {
     characterId: char.id,
-    signupStatus: isTentative ? 'tentative' : undefined,
+    ...(isTentative ? { signupStatus: 'tentative' as const } : {}),
   });
   const label = isTentative ? 'marked as **tentative**' : 'confirmed';
   await ctx.interaction.editReply({

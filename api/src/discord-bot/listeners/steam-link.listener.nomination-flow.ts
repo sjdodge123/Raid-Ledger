@@ -118,7 +118,7 @@ export function translateNominateError(err: unknown, gameName: string): string {
 export interface LineupsNominator {
   nominate(
     lineupId: number,
-    dto: { gameId: number; note?: string | null },
+    dto: { gameId: number; note?: string },
     userId: number,
   ): Promise<unknown>;
 }

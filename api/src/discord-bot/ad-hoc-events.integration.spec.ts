@@ -632,11 +632,7 @@ describe('Ad-Hoc Events — COMPLETED embed historical record (ROK-1243)', () =>
           channelType: 'voice',
           bindingPurpose: 'game-voice-monitor',
           gameId: testApp.seed.game.id,
-          config: { notificationChannelId: 'text-1243' } as unknown as {
-            minPlayers?: number;
-            autoClose?: boolean;
-            gracePeriod?: number;
-          },
+          config: { notificationChannelId: 'text-1243' },
         })
         .returning(),
       'binding',

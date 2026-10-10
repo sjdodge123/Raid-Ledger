@@ -49,8 +49,10 @@ export class ForeverDisplayTalentsService {
     this.warnOnOriginDeviation(row.id, nodes);
     return snapshotToForeverTalents({
       capturedAt: capturedAt.toISOString(),
-      configId: talents.configId,
-      importString: talents.importString,
+      ...(talents.configId !== undefined ? { configId: talents.configId } : {}),
+      ...(talents.importString !== undefined
+        ? { importString: talents.importString }
+        : {}),
       nodes,
     });
   }

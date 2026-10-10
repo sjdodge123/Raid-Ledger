@@ -19,6 +19,7 @@ import {
   setCalendarProviderConfig,
   setCalendarSyncEnabled,
   type CalendarOAuthProvider,
+  type CalendarProviderConfigUpdate,
 } from '../../settings/settings-calendar-sync.helpers';
 import {
   CALENDAR_OAUTH_PROVIDERS,
@@ -59,6 +60,16 @@ export async function buildAdminCalendarSyncSettings(
   return { enabled, google, microsoft, redirectUris };
 }
 
+/** Drop absent keys: an omitted field leaves the stored value alone. */
+function toProviderConfigUpdate(
+  u: NonNullable<UpdateAdminCalendarSyncSettings[CalendarOAuthProvider]>,
+): CalendarProviderConfigUpdate {
+  return {
+    ...(u.clientId !== undefined ? { clientId: u.clientId } : {}),
+    ...(u.clientSecret !== undefined ? { clientSecret: u.clientSecret } : {}),
+  };
+}
+
 /**
  * Apply a validated PUT body. Omitted fields are left alone; an empty string
  * clears a client id or secret.
@@ -70,7 +81,11 @@ export async function applyAdminCalendarSyncUpdate(
   for (const provider of CALENDAR_OAUTH_PROVIDERS) {
     const providerUpdate = update[provider];
     if (providerUpdate) {
-      await setCalendarProviderConfig(svc, provider, providerUpdate);
+      await setCalendarProviderConfig(
+        svc,
+        provider,
+        toProviderConfigUpdate(providerUpdate),
+      );
     }
   }
   if (update.enabled !== undefined) {

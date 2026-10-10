@@ -245,7 +245,7 @@ export function buildRecapEmbeds(
   const sessions = chronological(input.events).slice(0, MAX_GROUP_EMBEDS);
   const lead = createChannelEmbed({
     state: 'done',
-    communityName: context.communityName,
+    communityName: context.communityName ?? null,
   });
   lead.setTimestamp(input.openedAt);
   lead.setTitle(recapTitle(input.channelName, input.room));

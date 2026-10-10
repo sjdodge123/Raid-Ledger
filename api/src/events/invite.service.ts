@@ -165,7 +165,7 @@ export class InviteService {
     return {
       type: user.discordId ? ('signup' as const) : ('claimed' as const),
       eventId: event.id,
-      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+      ...(discordServerInviteUrl != null ? { discordServerInviteUrl } : {}),
     };
   }
 
@@ -192,7 +192,7 @@ export class InviteService {
     return {
       type: 'signup' as const,
       eventId: slot.eventId,
-      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+      ...(discordServerInviteUrl != null ? { discordServerInviteUrl } : {}),
     };
   }
 
@@ -219,7 +219,7 @@ export class InviteService {
     return {
       type: 'claimed' as const,
       eventId: slot.eventId,
-      discordServerInviteUrl: discordServerInviteUrl ?? undefined,
+      ...(discordServerInviteUrl != null ? { discordServerInviteUrl } : {}),
     };
   }
 

@@ -17,15 +17,17 @@ import type { DungeonQuestDto } from './dungeon-quests.types';
 /** Quest log entry as the addon exports it (fields optional). */
 interface ForeverQuestLogInput {
   questId: number;
-  title?: string;
-  objectives?: Array<{
-    text: string;
-    done: boolean;
-    have?: number;
-    need?: number;
-  }>;
+  title?: string | undefined;
+  objectives?:
+    | Array<{
+        text: string;
+        done: boolean;
+        have?: number | undefined;
+        need?: number | undefined;
+      }>
+    | undefined;
   /** Not sent by LedgerLink today; only a fallback when the known table has no id. */
-  dungeonInstanceId?: number;
+  dungeonInstanceId?: number | undefined;
 }
 
 /** Snapshot slice this builder reads; the 1742 snapshot schema maps onto it. */
@@ -33,7 +35,7 @@ export interface ForeverQuestSnapshotInput {
   capturedAt: string;
   quests?: {
     completed: number[];
-    completedTruncated?: boolean;
+    completedTruncated?: boolean | undefined;
     inProgress: ForeverQuestLogInput[];
   };
 }

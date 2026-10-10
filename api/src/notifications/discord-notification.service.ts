@@ -231,7 +231,7 @@ export class DiscordNotificationService {
         type: input.type,
         title: input.title,
         message: input.message,
-        payload: input.payload,
+        ...(input.payload !== undefined ? { payload: input.payload } : {}),
       } satisfies DiscordNotificationJobData,
       {
         attempts: 3,

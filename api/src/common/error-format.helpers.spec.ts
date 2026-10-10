@@ -23,7 +23,7 @@ describe('errorStack', () => {
 
   it('falls back to the message when an Error has no stack', () => {
     const bare = new Error('no stack');
-    bare.stack = undefined;
+    Object.assign(bare, { stack: undefined });
     expect(errorStack(bare)).toBe('no stack');
   });
 

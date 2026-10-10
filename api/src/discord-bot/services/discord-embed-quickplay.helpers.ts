@@ -244,7 +244,7 @@ export function buildQuickPlayEmbed(
   const clientUrl = resolveClientUrl(context);
   const embed = createChannelEmbed({
     state: state === 'ended' ? 'done' : 'live',
-    communityName: context.communityName,
+    communityName: context.communityName ?? null,
     authorLine: authorLine(event, state, countNoun),
     footerLabel: footerLabel(event, state, context.timezone),
   });

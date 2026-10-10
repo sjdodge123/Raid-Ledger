@@ -87,13 +87,17 @@ export class OpenAiProvider implements LlmProvider {
   async generate(options: LlmGenerateOptions): Promise<LlmGenerateResponse> {
     const result = await this.chat({
       messages: [{ role: 'user', content: options.prompt }],
-      model: options.model,
-      maxTokens: options.maxTokens,
-      temperature: options.temperature,
+      ...(options.model !== undefined ? { model: options.model } : {}),
+      ...(options.maxTokens !== undefined
+        ? { maxTokens: options.maxTokens }
+        : {}),
+      ...(options.temperature !== undefined
+        ? { temperature: options.temperature }
+        : {}),
     });
     return {
       content: result.content,
-      usage: result.usage,
+      ...(result.usage ? { usage: result.usage } : {}),
       latencyMs: result.latencyMs,
     };
   }

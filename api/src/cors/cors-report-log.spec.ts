@@ -125,7 +125,9 @@ describe('would-reject rate limit', () => {
       ...SIBLING,
       origin: 'https://slot-2.gamernight.net',
     });
-    reporter.wouldReject({ ...SIBLING, reason: 'no-host', host: undefined });
+    const noHost: CorsReportInput = { ...SIBLING, reason: 'no-host' };
+    delete noHost.host;
+    reporter.wouldReject(noHost);
     expect(logger.warn).toHaveBeenCalledTimes(3);
   });
 

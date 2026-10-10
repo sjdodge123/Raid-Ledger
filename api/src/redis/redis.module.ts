@@ -12,17 +12,24 @@ export function retryStrategy(times: number): number {
   return Math.min(times * RETRY_BASE_MS, RETRY_CAP_MS);
 }
 
+/**
+ * ioredis's exported RedisOptions types `replyMapping` as `| undefined`, which
+ * its own constructor rejects under exactOptionalPropertyTypes. Nothing here
+ * sets it, so drop the key from the local options type.
+ */
+type ClientOptions = Omit<RedisOptions, 'replyMapping'>;
+
 /** Create a Redis client with error handling and reconnection. */
 export function createRedisClient(url: string): Redis {
   const logger = new Logger('RedisModule');
 
-  const base: RedisOptions = {
+  const base: ClientOptions = {
     retryStrategy,
     maxRetriesPerRequest: 3,
     lazyConnect: true,
   };
 
-  const opts: RedisOptions = url.startsWith('/')
+  const opts: ClientOptions = url.startsWith('/')
     ? { ...base, path: url }
     : { ...base };
 

@@ -23,9 +23,7 @@ describe('resolveDisplayName', () => {
   });
 
   it('falls back to username when displayName is undefined', () => {
-    expect(
-      resolveDisplayName({ displayName: undefined, username: 'alice123' }),
-    ).toBe('alice123');
+    expect(resolveDisplayName({ username: 'alice123' })).toBe('alice123');
   });
 
   it('falls back to username when displayName is empty string', () => {

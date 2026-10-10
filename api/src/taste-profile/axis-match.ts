@@ -75,8 +75,8 @@ interface LoweredRule {
   axis: TasteProfilePoolAxis;
   tag: string;
   weight: number;
-  excludes?: string[];
-  requires?: string[];
+  excludes?: string[] | undefined;
+  requires?: string[] | undefined;
 }
 
 const CO_OCCURRENCE_RULES_LOWER: LoweredRule[] = CO_OCCURRENCE_RULES.map(

@@ -188,8 +188,10 @@ async function deleteDuplicate(
   }
   result.failures.push({
     seId: dup.seId,
-    code: outcome.code,
-    retryAfter: outcome.retryAfter,
+    ...(outcome.code !== undefined ? { code: outcome.code } : {}),
+    ...(outcome.retryAfter !== undefined
+      ? { retryAfter: outcome.retryAfter }
+      : {}),
   });
   logger.warn(
     `Recovery delete SE ${dup.seId} (event ${dup.eventId}) failed: code=${

@@ -266,9 +266,7 @@ describe('EventsController', () => {
   });
 
   describe('findAll', () => {
-    const mockReq = { user: undefined } as {
-      user?: { id: number; role: UserRole };
-    };
+    const mockReq: { user?: { id: number; role: UserRole } } = {};
     const authedReq = { user: { id: 1, role: 'member' as UserRole } };
 
     it('should return paginated events', async () => {

@@ -181,7 +181,7 @@ export async function assignDirectSlot(
     eventId,
     signupId,
     slotRole,
-    explicitPosition: dto?.slotPosition,
+    ...(dto?.slotPosition != null && { explicitPosition: dto.slotPosition }),
     autoBench,
   });
   if (slotRole !== 'bench') {

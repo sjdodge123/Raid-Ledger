@@ -207,7 +207,7 @@ type CharOrRoleArgs = {
   ctx: GameContext;
   existingSignup: ExistingSignup;
   deps: SignupInteractionDeps;
-  embed?: EmbedBuilder;
+  embed?: EmbedBuilder | undefined;
 };
 
 async function offerCharacterOrRole(a: CharOrRoleArgs): Promise<boolean> {

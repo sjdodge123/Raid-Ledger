@@ -106,7 +106,7 @@ export class BossEncountersService {
   /** Resolve sub-instance ID to parent + wing boss filter. */
   private resolveSubInstance(instanceId: number): {
     queryId: number;
-    wingBossNames?: Set<string>;
+    wingBossNames?: Set<string> | undefined;
   } {
     if (instanceId <= 10000) return { queryId: instanceId };
     const parentId = Math.floor(instanceId / 100);

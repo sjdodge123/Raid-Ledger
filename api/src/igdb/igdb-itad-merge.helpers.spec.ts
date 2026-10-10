@@ -84,7 +84,8 @@ describe('buildItadOnlyDetail', () => {
   });
 
   it('handles missing assets gracefully', () => {
-    const noAssets = { ...SAMPLE_ITAD_GAME, assets: undefined };
+    const noAssets: ItadSearchGame = { ...SAMPLE_ITAD_GAME };
+    delete noAssets.assets;
     const result = buildItadOnlyDetail(noAssets);
 
     expect(result.coverUrl).toBeNull();
@@ -92,7 +93,8 @@ describe('buildItadOnlyDetail', () => {
   });
 
   it('handles missing tags gracefully', () => {
-    const noTags = { ...SAMPLE_ITAD_GAME, tags: undefined };
+    const noTags: ItadSearchGame = { ...SAMPLE_ITAD_GAME };
+    delete noTags.tags;
     const result = buildItadOnlyDetail(noTags);
 
     expect(result.itadTags).toEqual([]);

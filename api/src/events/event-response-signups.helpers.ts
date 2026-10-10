@@ -68,13 +68,14 @@ function groupSignupsByEvent(
     if (!result.has(signup.eventId)) result.set(signup.eventId, []);
     const list = result.get(signup.eventId)!;
     if (list.length < limit) {
+      const characters = charactersByUser.get(signup.userId);
       list.push({
         id: signup.userId,
         discordId: signup.discordId ?? '',
         username: signup.username,
         avatar: signup.avatar,
         customAvatarUrl: signup.customAvatarUrl,
-        characters: charactersByUser.get(signup.userId),
+        ...(characters !== undefined ? { characters } : {}),
       });
     }
   }

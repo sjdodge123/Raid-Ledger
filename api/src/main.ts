@@ -22,6 +22,7 @@ import {
   applyTrustProxy,
   enableGracefulShutdown,
 } from './main.helpers';
+import type { LogLevelEnv } from './main.helpers';
 
 function configureStaticAssets(
   app: NestExpressApplication,
@@ -44,13 +45,19 @@ function configureStaticAssets(
   });
 }
 
+/** Copies only the set log-level env vars, omitting unset keys. */
+function readLogLevelEnv(): LogLevelEnv {
+  const env: LogLevelEnv = {};
+  for (const key of ['DEBUG', 'LOG_LEVEL', 'NODE_ENV'] as const) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-    logger: getLogLevels({
-      DEBUG: process.env.DEBUG,
-      LOG_LEVEL: process.env.LOG_LEVEL,
-      NODE_ENV: process.env.NODE_ENV,
-    }),
+    logger: getLogLevels(readLogLevelEnv()),
     rawBody: false,
   });
   // Register the CSP-violation-report parser BEFORE Nest's default json parser

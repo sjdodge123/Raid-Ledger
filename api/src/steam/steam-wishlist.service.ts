@@ -195,9 +195,9 @@ export class SteamWishlistService {
       // item unmatched until the next cron sync.
       lookupBySteamAppId: (id) =>
         this.itadService!.lookupBySteamAppId(id, opts),
-      queryIgdb: this.igdbService
-        ? (body) => this.igdbService!.queryIgdb(body)
-        : undefined,
+      ...(this.igdbService
+        ? { queryIgdb: (body: string) => this.igdbService!.queryIgdb(body) }
+        : {}),
       adultFilterEnabled,
     };
   }

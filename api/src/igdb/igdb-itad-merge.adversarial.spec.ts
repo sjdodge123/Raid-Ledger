@@ -66,7 +66,7 @@ describe('mergeItadWithIgdb — cover fallback chain', () => {
   });
 
   it('returns null coverUrl when neither IGDB nor ITAD has a cover', () => {
-    const itad = makeItad({ assets: undefined });
+    const itad = makeItad();
     const igdb = makeIgdb({ coverUrl: null });
 
     const result = mergeItadWithIgdb(itad, igdb);
@@ -164,7 +164,7 @@ describe('buildItadOnlyDetail — edge cases', () => {
   });
 
   it('returns null coverUrl when no assets', () => {
-    const result = buildItadOnlyDetail(makeItad({ assets: undefined }));
+    const result = buildItadOnlyDetail(makeItad());
 
     expect(result.coverUrl).toBeNull();
   });
@@ -190,7 +190,7 @@ describe('release date parsing', () => {
   });
 
   it('returns null for undefined release date', () => {
-    const result = buildItadOnlyDetail(makeItad({ releaseDate: undefined }));
+    const result = buildItadOnlyDetail(makeItad());
 
     expect(result.firstReleaseDate).toBeNull();
   });

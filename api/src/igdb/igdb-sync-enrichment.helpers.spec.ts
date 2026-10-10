@@ -223,7 +223,8 @@ describe('edge cases', () => {
   it('handles a game with no boxart asset gracefully', async () => {
     const games = [{ id: 50, steamAppId: 456 }];
     const mockDb = createEnrichMockDb(games);
-    const itadGame = makeItadGame({ assets: undefined });
+    const itadGame = makeItadGame();
+    delete itadGame.assets;
     const mockLookup = jest.fn().mockResolvedValue(itadGame);
     const mockGetGameInfo = jest.fn().mockResolvedValue(null);
 

@@ -56,7 +56,10 @@ export async function runBandwagonJoin(
   const { db, lineupNotifications: notifications, logger, eventEmitter } = deps;
   const [lineup] = await findLineupById(db, lineupId);
   if (!lineup) throw new NotFoundException('Lineup not found');
-  await assertUserCanParticipate(db, lineup, { id: userId, role: callerRole });
+  await assertUserCanParticipate(db, lineup, {
+    id: userId,
+    ...(callerRole !== undefined ? { role: callerRole } : {}),
+  });
   const result = await executeBandwagonJoin(db, lineupId, matchId, userId);
   if (result.promoted) {
     fireSchedulingOpen(notifications, logger, db, matchId);

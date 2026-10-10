@@ -60,7 +60,7 @@ export class UsersModerationService {
     return runKick(this.deps(), {
       userId,
       actorId,
-      reason: dto.reason,
+      ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
       kickFromDiscord: dto.kickFromDiscord,
     });
   }
@@ -79,7 +79,7 @@ export class UsersModerationService {
     return runBan(this.deps(), {
       userId,
       actorId,
-      reason: dto.reason,
+      ...(dto.reason !== undefined ? { reason: dto.reason } : {}),
       wipeData: dto.wipeData,
       kickFromDiscord: dto.kickFromDiscord,
     });

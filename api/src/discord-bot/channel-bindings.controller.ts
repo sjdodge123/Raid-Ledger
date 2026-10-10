@@ -80,11 +80,12 @@ export class ChannelBindingsController {
         b.gameId,
       );
       if (!v) return [];
+      const channelName = channelMap.get(b.channelId);
       return [
         {
           id: b.id,
           channelId: b.channelId,
-          channelName: channelMap.get(b.channelId),
+          ...(channelName !== undefined ? { channelName } : {}),
           code: v.code,
           message: v.message,
         },
@@ -98,8 +99,12 @@ export class ChannelBindingsController {
       adHocEventsEnabled,
       logLevels: {
         effective: getLogLevels(process.env),
-        DEBUG: process.env.DEBUG,
-        LOG_LEVEL: process.env.LOG_LEVEL,
+        ...(process.env.DEBUG !== undefined
+          ? { DEBUG: process.env.DEBUG }
+          : {}),
+        ...(process.env.LOG_LEVEL !== undefined
+          ? { LOG_LEVEL: process.env.LOG_LEVEL }
+          : {}),
       },
     };
   }
@@ -199,7 +204,7 @@ export class ChannelBindingsController {
    * an explicit null rides through so the invariant guard can 400 a monitor.
    */
   private async resolveUpdateGameId(dto: {
-    gameId?: number | null;
+    gameId?: number | null | undefined;
   }): Promise<[] | [{ gameIdProvided: boolean; gameId: number | null }]> {
     if (dto.gameId === undefined) return [];
     if (dto.gameId != null) {

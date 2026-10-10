@@ -342,7 +342,7 @@ export function buildBumpEmbed(
   const embed = createChannelEmbed({
     state: 'announcing',
     authorLine: NOTIFICATION_EMBED_AUTHORS.RECRUITMENT_BUMP,
-    communityName,
+    ...(communityName !== undefined ? { communityName } : {}),
     timestamp: false,
   })
     .setTitle(`📢 Spots still available — event ${timeLabel}!`)

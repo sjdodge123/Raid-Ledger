@@ -118,7 +118,7 @@ export function fireVotingOpen(
         {
           id: lineupId,
           title: row.title,
-          votingDeadline: phaseDeadline ?? undefined,
+          ...(phaseDeadline != null ? { votingDeadline: phaseDeadline } : {}),
           visibility: row.visibility,
         },
         games,

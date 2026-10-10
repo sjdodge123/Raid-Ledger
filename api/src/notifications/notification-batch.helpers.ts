@@ -138,7 +138,7 @@ function dispatchDiscordBatch(
       type: input.type,
       title: input.title,
       message: input.message,
-      payload: input.payload,
+      ...(input.payload !== undefined ? { payload: input.payload } : {}),
     }));
   if (jobs.length === 0) return;
   discordService.dispatchMany(jobs).catch((err: unknown) => {

@@ -86,8 +86,10 @@ async function notifyAbortSafe(
       {
         id: lineup.id,
         channelOverrideId: lineup.channelOverrideId,
-        title: lineup.title,
-        visibility: lineup.visibility,
+        ...(lineup.title !== undefined ? { title: lineup.title } : {}),
+        ...(lineup.visibility !== undefined
+          ? { visibility: lineup.visibility }
+          : {}),
         preAbortStatus,
       },
       reason,

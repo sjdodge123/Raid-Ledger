@@ -180,7 +180,7 @@ function buildRepollDeps(
         options: opts,
         durationHours: dur,
         round: rnd,
-        details: det,
+        ...(det !== undefined ? { details: det } : {}),
       }),
     tryDeletePollMessage: (p) => deps.tryDeletePollMessage(p),
     schedulePollClose: (id, ms) => deps.schedulePollClose(id, ms),

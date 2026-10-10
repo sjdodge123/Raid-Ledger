@@ -23,9 +23,9 @@ export interface CharacterSelectOptions {
   characters: CharacterDto[];
   emojiService: DiscordEmojiService;
   /** Optional suffix appended after eventId (e.g. 'tentative') */
-  customIdSuffix?: string;
+  customIdSuffix?: string | undefined;
   /** Optional event embed to show alongside the dropdown */
-  embed?: EmbedBuilder;
+  embed?: EmbedBuilder | undefined;
 }
 
 export interface RoleSelectOptions {
@@ -33,14 +33,14 @@ export interface RoleSelectOptions {
   customIdPrefix: string;
   eventId: number;
   emojiService: DiscordEmojiService;
-  characterId?: string;
-  characterInfo?: { name: string; role: string | null };
+  characterId?: string | undefined;
+  characterInfo?: { name: string; role: string | null } | undefined;
   /** Optional suffix appended after the last segment (e.g. 'tentative') */
-  customIdSuffix?: string;
+  customIdSuffix?: string | undefined;
   /** Content text prefix for the character line. Defaults to "Signing up as" */
-  characterVerb?: string;
+  characterVerb?: string | undefined;
   /** Optional event embed to show alongside the dropdown */
-  embed?: EmbedBuilder;
+  embed?: EmbedBuilder | undefined;
 }
 
 /** Build character dropdown option entries from character data. */
@@ -61,11 +61,12 @@ function buildCharacterOptions(opts: CharacterSelectOptions): Array<{
     const classEmoji = char.class
       ? opts.emojiService.getClassEmojiComponent(char.class)
       : undefined;
+    const description = parts.join(' \u2014 ') || undefined;
     return {
       label: char.name,
       value: char.id,
-      description: parts.join(' \u2014 ') || undefined,
-      emoji: classEmoji,
+      ...(description !== undefined ? { description } : {}),
+      ...(classEmoji !== undefined ? { emoji: classEmoji } : {}),
       default: false,
     };
   });
@@ -99,23 +100,15 @@ export async function showCharacterSelect(
 function buildRoleOptions(
   emojiService: DiscordEmojiService,
 ): Array<{ label: string; value: string; emoji?: ComponentEmojiResolvable }> {
-  return [
-    {
-      label: 'Tank',
-      value: 'tank',
-      emoji: emojiService.getRoleEmojiComponent('tank'),
-    },
-    {
-      label: 'Healer',
-      value: 'healer',
-      emoji: emojiService.getRoleEmojiComponent('healer'),
-    },
-    {
-      label: 'DPS',
-      value: 'dps',
-      emoji: emojiService.getRoleEmojiComponent('dps'),
-    },
-  ];
+  const roles = [
+    { label: 'Tank', value: 'tank' },
+    { label: 'Healer', value: 'healer' },
+    { label: 'DPS', value: 'dps' },
+  ] as const;
+  return roles.map(({ label, value }) => {
+    const emoji = emojiService.getRoleEmojiComponent(value);
+    return { label, value, ...(emoji !== undefined ? { emoji } : {}) };
+  });
 }
 
 /** Build the content text for the role select prompt. */

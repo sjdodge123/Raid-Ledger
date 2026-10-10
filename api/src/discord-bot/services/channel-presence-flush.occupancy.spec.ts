@@ -178,7 +178,7 @@ function flush(
   roomRecaps?: Map<string, { endedAt: number; recap: RoomRecap }>,
 ) {
   return {
-    roomRecaps,
+    ...(roomRecaps !== undefined ? { roomRecaps } : {}),
     deps: {
       db,
       clientService: {
@@ -388,7 +388,9 @@ describe('the room summary is read once per empty transition (MAJOR 2)', () => {
 describe('a room with no member map is a bug, not an empty room (MINOR 6)', () => {
   it('warns and writes nothing rather than closing every stay', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn');
-    m.resolveRoom.mockResolvedValue(room({ members: undefined }) as never);
+    const memberless = room();
+    delete memberless.members;
+    m.resolveRoom.mockResolvedValue(memberless as never);
     m.findOpenRow.mockResolvedValue(presenceRow({ payloadHash: 'stale' }));
 
     await flushChannel(flush());

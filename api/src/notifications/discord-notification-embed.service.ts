@@ -29,7 +29,7 @@ interface NotificationEmbedInput {
 interface EmbedResult {
   embed: EmbedBuilder;
   row: ActionRowBuilder<ButtonBuilder>;
-  rows?: ActionRowBuilder<ButtonBuilder>[];
+  rows?: ActionRowBuilder<ButtonBuilder>[] | undefined;
 }
 
 /**

@@ -31,7 +31,7 @@ type GameInsertRow = typeof schema.games.$inferInsert;
 export interface DiscoveryDeps {
   db: PostgresJsDatabase<typeof schema>;
   lookupBySteamAppId: (appId: number) => Promise<ItadGame | null>;
-  queryIgdb?: (body: string) => Promise<IgdbApiGame[]>;
+  queryIgdb?: ((body: string) => Promise<IgdbApiGame[]>) | undefined;
   adultFilterEnabled: boolean;
 }
 

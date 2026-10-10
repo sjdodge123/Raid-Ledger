@@ -191,8 +191,8 @@ export function readPeerPortHistogram(): {
 interface TestServerPortResult {
   status: 'ok' | 'no-app' | 'no-server' | 'no-address' | 'error';
   port?: number;
-  family?: string;
-  address?: string;
+  family?: string | undefined;
+  address?: string | undefined;
   error?: string;
 }
 

@@ -145,7 +145,9 @@ export class DemoTestDeactivationController {
         type: (body?.type as DiscordNotificationJobData['type']) ?? 'system',
         title: 'ROK-1260 smoke test',
         message: 'This DM is part of the ROK-1260 deactivation smoke test.',
-        __simulateError: body?.simulate,
+        ...(body?.simulate !== undefined
+          ? { __simulateError: body.simulate }
+          : {}),
       },
       {
         attempts: 1,

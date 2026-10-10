@@ -138,7 +138,7 @@ export function buildLeadEmbed(
 ): ChannelEmbed {
   const embed = createChannelEmbed({
     state: 'done',
-    communityName: context.communityName,
+    communityName: context.communityName ?? null,
   });
   embed.setTimestamp(openedAt);
   embed.setTitle(leadTitle(room));

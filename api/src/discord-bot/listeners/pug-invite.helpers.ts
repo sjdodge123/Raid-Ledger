@@ -117,10 +117,11 @@ export function buildCharacterOptions(
     }
     if (char.level) parts.push(`Level ${char.level}`);
     if (char.isMain) parts.push('\u2B50');
+    const description = parts.join(' \u2014 ');
     return {
       label: char.name,
       value: `${char.id}`,
-      description: parts.join(' \u2014 ') || undefined,
+      ...(description ? { description } : {}),
       default: characters.length > 1 && mainChar?.id === char.id,
     };
   });

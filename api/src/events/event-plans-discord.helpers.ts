@@ -83,7 +83,10 @@ export async function postDiscordPoll(
     params.round > 1
       ? `Not everyone was available \u2014 here are new time options! (Round ${params.round})`
       : undefined;
-  await textChannel.send({ content, embeds: [embed] });
+  await textChannel.send({
+    ...(content !== undefined ? { content } : {}),
+    embeds: [embed],
+  });
   const pollAnswers = [
     ...params.options.map((opt) => ({ text: opt.label })),
     { text: 'None of these work' },

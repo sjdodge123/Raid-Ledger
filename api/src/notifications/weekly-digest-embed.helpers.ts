@@ -175,7 +175,9 @@ export function buildWeeklyDigestEmbed(
   const links = digestLinks(input.clientUrl);
   const embed = createChannelEmbed({
     state: 'announcing',
-    communityName: input.communityName,
+    ...(input.communityName !== undefined
+      ? { communityName: input.communityName }
+      : {}),
     footerLabel: DIGEST_FOOTER_LABEL,
     ...(links ? { authorUrl: links.playing } : {}),
   });

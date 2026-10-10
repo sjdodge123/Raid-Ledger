@@ -193,7 +193,7 @@ export class DiscordNotificationProcessor
         type: data.type as NotificationType,
         title: data.title,
         message: data.message,
-        payload: data.payload,
+        ...(data.payload !== undefined ? { payload: data.payload } : {}),
       },
       communityName,
     );

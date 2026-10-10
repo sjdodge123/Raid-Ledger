@@ -95,8 +95,12 @@ export async function notifyTiebreakerOpen(
   // ROK-1461: the author line reads `⚔️ TIEBREAKER · round N` and closes on
   // the round deadline, so both travel on the context.
   const ctx = await resolveEmbedCtx(dispatchDeps(deps), lineup.id, 'voting', {
-    phaseDeadline: tiebreaker.roundDeadline ?? undefined,
-    tiebreakerRound: tiebreaker.round,
+    ...(tiebreaker.roundDeadline != null
+      ? { phaseDeadline: tiebreaker.roundDeadline }
+      : {}),
+    ...(tiebreaker.round !== undefined
+      ? { tiebreakerRound: tiebreaker.round }
+      : {}),
   });
   await postChannelEmbed(
     dispatchDeps(deps),

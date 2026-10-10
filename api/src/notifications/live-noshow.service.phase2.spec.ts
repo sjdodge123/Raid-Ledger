@@ -80,10 +80,7 @@ describe('LiveNoShowService — phase2', () => {
       startTime,
       endTime,
       slotConfig: 'slotConfig' in overrides ? overrides.slotConfig : null,
-      maxAttendees:
-        'maxAttendees' in overrides
-          ? (overrides.maxAttendees as number | null)
-          : 10,
+      maxAttendees: 'maxAttendees' in overrides ? overrides.maxAttendees : 10,
     };
   };
 

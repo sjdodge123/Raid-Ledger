@@ -4,9 +4,9 @@ import type { DecodedAddonPaste } from './addon-import.decoder';
 
 /** The result fields both import routes share. */
 interface ImportOutcome {
-  status?: string;
-  section?: string;
-  sections?: { section: string; status: string }[];
+  status?: string | undefined;
+  section?: string | undefined;
+  sections?: { section: string; status: string }[] | undefined;
 }
 
 /**

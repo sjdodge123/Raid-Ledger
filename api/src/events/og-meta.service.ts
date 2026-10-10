@@ -70,7 +70,10 @@ export class OgMetaService {
       title: string;
       startTime?: string;
       endTime?: string;
-      game?: { name: string; coverUrl?: string | null } | null;
+      game?:
+        | { name: string; coverUrl?: string | null | undefined }
+        | null
+        | undefined;
     },
     canonicalUrl: string,
   ): Promise<string> {
@@ -84,7 +87,8 @@ export class OgMetaService {
     title: string;
     startTime?: string;
     endTime?: string;
-    game?: { name: string; coverUrl?: string | null } | null;
+    game?:
+      { name: string; coverUrl?: string | null | undefined } | null | undefined;
   }): Promise<string> {
     const lines: string[] = [`You're invited to join ${event.title}!`, ''];
 

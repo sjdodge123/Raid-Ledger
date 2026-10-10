@@ -254,6 +254,7 @@ export class EventReminderService {
     windowLabel: string,
     defaultTimezone: string,
   ): Promise<void> {
+    const timezone = fetchCtx.tzMap.get(userId);
     await this.sendReminder({
       eventId: event.id,
       userId,
@@ -266,7 +267,7 @@ export class EventReminderService {
         userId,
         event.gameId ?? null,
       ),
-      timezone: fetchCtx.tzMap.get(userId),
+      ...(timezone !== undefined ? { timezone } : {}),
       defaultTimezone,
     });
   }

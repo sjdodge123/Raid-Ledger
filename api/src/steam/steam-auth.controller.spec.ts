@@ -52,7 +52,10 @@ function createMockResponse(): Response {
 }
 
 /** Defaults to a browser holding the cookie for 'valid-nonce'. */
-function createMockRequest(overrides: Partial<Request> = {}): Request {
+/** `undefined` is a real override here: it clears a default (no cookie). */
+type RequestOverrides = { [K in keyof Request]?: Request[K] | undefined };
+
+function createMockRequest(overrides: RequestOverrides = {}): Request {
   return {
     protocol: 'https',
     headers: { host: 'raid.gamernight.net' },

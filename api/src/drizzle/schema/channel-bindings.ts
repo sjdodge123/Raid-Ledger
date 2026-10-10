@@ -9,6 +9,7 @@ import {
   index,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import type { ChannelBindingConfig } from '@raid-ledger/contract';
 import { games } from './games';
 
 /**
@@ -33,11 +34,7 @@ export const channelBindings = pgTable(
     }),
     /** ROK-435: Optional recurrence group ID to bind a specific event series to this channel. */
     recurrenceGroupId: uuid('recurrence_group_id'),
-    config: jsonb('config').default({}).$type<{
-      minPlayers?: number;
-      autoClose?: boolean;
-      gracePeriod?: number;
-    }>(),
+    config: jsonb('config').default({}).$type<ChannelBindingConfig>(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

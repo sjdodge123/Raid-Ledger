@@ -44,8 +44,8 @@ export async function handleSelectMenuInteraction(
  * Parse optional characterId and signupStatus from role_select customId parts.
  */
 function parseRoleSelectParts(parts: string[]): {
-  characterId?: string;
-  signupStatus?: 'tentative';
+  characterId?: string | undefined;
+  signupStatus?: 'tentative' | undefined;
 } {
   let characterId: string | undefined;
   let signupStatus: 'tentative' | undefined;
@@ -88,7 +88,7 @@ async function handleRoleSelectMenu(
         deps,
         characterId,
         roleCtx,
-        signupStatus,
+        ...(signupStatus !== undefined ? { signupStatus } : {}),
       });
     } else {
       await handleUnlinkedRoleSelect(

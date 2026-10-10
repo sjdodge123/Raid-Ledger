@@ -106,7 +106,9 @@ function enrichSingleGame(
   game: ItadSearchGame,
   steamAppId: number | undefined,
 ): Promise<GameDetailDto> {
-  const enrichedGame = { ...game, steamAppId };
+  const enrichedGame: ItadSearchGame = { ...game };
+  if (steamAppId === undefined) delete enrichedGame.steamAppId;
+  else enrichedGame.steamAppId = steamAppId;
   if (!steamAppId) return Promise.resolve(buildItadOnlyDetail(enrichedGame));
   return deps
     .enrichFromIgdb(steamAppId)

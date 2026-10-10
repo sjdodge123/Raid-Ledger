@@ -8,9 +8,11 @@ import { buildBullRootOptions } from './queue.module';
  */
 function resolveIoredisOptions(url: string): RedisOptions {
   const { connection } = buildBullRootOptions(url);
+  // ioredis's RedisOptions types replyMapping as `| undefined`, which its own
+  // constructor rejects under exactOptionalPropertyTypes; nothing here sets it.
   const { url: connUrl, ...rest } = connection as {
     url?: string;
-  } & RedisOptions;
+  } & Omit<RedisOptions, 'replyMapping'>;
   // BullMQ's RedisConnection seeds these defaults before init() hands
   // `(url, rest)` to ioredis — the URL must still win over them.
   const withDefaults = { port: 6379, host: '127.0.0.1', ...rest };

@@ -41,9 +41,9 @@ export const CORS_FORBIDDEN_BODY = {
 } as const;
 
 export interface CorsEnv {
-  corsOrigin?: string;
-  autoMode?: string;
-  clientUrl?: string;
+  corsOrigin?: string | undefined;
+  autoMode?: string | undefined;
+  clientUrl?: string | undefined;
 }
 
 /** The slice of INestApplication this needs (keeps tests adapter-free). */
@@ -73,16 +73,24 @@ function header(req: Request, name: string): string | undefined {
   return Array.isArray(value) ? value.join(',') : value;
 }
 
+/** `{ [key]: value }`, or `{}` when the value is undefined. */
+function optional<K extends string, V>(
+  key: K,
+  value: V | undefined,
+): Partial<Record<K, V>> {
+  return value === undefined ? {} : ({ [key]: value } as Record<K, V>);
+}
+
 function reportFacts(req: Request, reason: string, env: CorsEnv) {
   return {
     reason,
-    origin: header(req, 'origin'),
-    host: header(req, 'host'),
-    xfh: header(req, 'x-forwarded-host'),
-    sfs: header(req, 'sec-fetch-site'),
+    ...optional('origin', header(req, 'origin')),
+    ...optional('host', header(req, 'host')),
+    ...optional('xfh', header(req, 'x-forwarded-host')),
+    ...optional('sfs', header(req, 'sec-fetch-site')),
     method: req.method,
     path: req.path,
-    clientUrl: env.clientUrl,
+    ...optional('clientUrl', env.clientUrl),
   };
 }
 
@@ -90,7 +98,7 @@ function reportFacts(req: Request, reason: string, env: CorsEnv) {
 function modeResolver(
   logger: CorsReportLogger,
 ): (raw?: string) => CorsAutoMode {
-  let cached: { raw?: string; mode: CorsAutoMode } | null = null;
+  let cached: { raw?: string | undefined; mode: CorsAutoMode } | null = null;
   return (raw) => {
     if (cached?.raw !== raw || !cached) {
       cached = { raw, mode: parseCorsAutoMode(raw, (m) => logger.warn(m)) };
@@ -108,16 +116,16 @@ interface GateContext {
 }
 
 function decideRequest(req: Request, env: CorsEnv, isProduction: boolean) {
-  const origin = header(req, 'origin');
+  const origin = optional('origin', header(req, 'origin'));
   return env.corsOrigin === 'auto'
     ? decideAutoOrigin({
-        origin,
-        hostHeader: header(req, 'host'),
+        ...origin,
+        ...optional('hostHeader', header(req, 'host')),
         isProduction,
       })
     : decideExplicitOrigin({
-        origin,
-        corsOrigin: env.corsOrigin,
+        ...origin,
+        ...optional('corsOrigin', env.corsOrigin),
         isProduction,
       });
 }

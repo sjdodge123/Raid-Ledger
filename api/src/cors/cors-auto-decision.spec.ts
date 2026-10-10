@@ -20,7 +20,11 @@ function auto(
   hostHeader?: string,
   isProduction = true,
 ) {
-  return decideAutoOrigin({ origin, hostHeader, isProduction });
+  return decideAutoOrigin({
+    ...(origin !== undefined ? { origin } : {}),
+    ...(hostHeader !== undefined ? { hostHeader } : {}),
+    isProduction,
+  });
 }
 
 describe('decideAutoOrigin — allows', () => {
@@ -145,7 +149,12 @@ describe('decideExplicitOrigin (unchanged allow list, AC4)', () => {
     origin: string | undefined,
     corsOrigin: string | undefined,
     isProduction = true,
-  ) => decideExplicitOrigin({ origin, corsOrigin, isProduction }).allow;
+  ) =>
+    decideExplicitOrigin({
+      ...(origin !== undefined ? { origin } : {}),
+      ...(corsOrigin !== undefined ? { corsOrigin } : {}),
+      isProduction,
+    }).allow;
 
   it('allows no Origin, the configured origin and `*`', () => {
     expect(explicit(undefined, 'https://app.com')).toBe(true);

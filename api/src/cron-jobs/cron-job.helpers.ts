@@ -115,7 +115,13 @@ async function recordExecution(
   deferRun?: DeferRun,
 ): Promise<boolean> {
   const durationMs = finishedAt.getTime() - startedAt.getTime();
-  const values = { status, startedAt, finishedAt, durationMs, error };
+  const values = {
+    status,
+    startedAt,
+    finishedAt,
+    durationMs,
+    ...(error !== undefined ? { error } : {}),
+  };
   perfLog('CRON', jobName, durationMs, { status });
   if (deferRun?.(job, jobName, values)) return false;
   const inserted = await insertExecutionRow(
