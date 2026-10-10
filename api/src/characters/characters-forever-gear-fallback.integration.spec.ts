@@ -3,7 +3,9 @@
  * gear carries raw item links renders the LINK's name + quality on
  * GET /characters/:id with `resolved:false` (not "Item #id"), and a resolved
  * Wowhead row still wins. The TestApp's no-network Wowhead deps answer every
- * lookup with a 404, so the post-commit enqueue stores `not_found` rows.
+ * lookup with a 404, so the post-commit enqueue stores `not_found` rows — a
+ * terminal miss whose fallback is final (`resolved:true`). The "before
+ * Wowhead resolves" state is therefore asserted with no meta row at all.
  * Request shape + auth mirror `characters-forever-talents-import.integration.spec.ts`.
  */
 import { readFileSync } from 'node:fs';
@@ -47,6 +49,8 @@ function gearExport(): string {
   ];
   return buildImportString(payload);
 }
+
+const GEAR_IDS = [6120, 16921];
 
 let testApp: TestApp;
 
@@ -132,34 +136,55 @@ afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
+/** Wait until both gear items hold a `not_found` row (no-network Wowhead 404). */
+async function waitForNotFoundRows(): Promise<void> {
+  await waitFor(async () => {
+    const rows = await testApp.db
+      .select()
+      .from(schema.wowItemMeta)
+      .where(inArray(schema.wowItemMeta.itemId, GEAR_IDS));
+    expect(rows.map((r) => r.status)).toEqual(['not_found', 'not_found']);
+  }, 10_000);
+}
+
+/** Both linked items, carrying the link's name + quality. */
+function linkFallbackItems(resolved: boolean): unknown[] {
+  return [
+    expect.objectContaining({
+      slot: 'HEAD',
+      itemId: 16921,
+      name: 'Halo of Transcendence',
+      quality: 'EPIC',
+      resolved,
+    }),
+    expect.objectContaining({
+      slot: 'SHIRT',
+      itemId: 6120,
+      name: "Recruit's Shirt",
+      quality: 'COMMON',
+      resolved,
+    }),
+  ];
+}
+
 describe('Forever gear raw-link fallback (ROK-1760)', () => {
   it('shows the link name + quality, unresolved, until Wowhead resolves', async () => {
     const charId = await importLinkedGear();
-    await waitFor(async () => {
-      const rows = await testApp.db
-        .select()
-        .from(schema.wowItemMeta)
-        .where(inArray(schema.wowItemMeta.itemId, [6120, 16921]));
-      expect(rows.map((r) => r.status)).toEqual(['not_found', 'not_found']);
-    }, 10_000);
+    // Let the import's own enqueue settle so it cannot write after the reset.
+    await waitForNotFoundRows();
 
+    // Before Wowhead has answered: no meta row at all -> link fallback, not final.
+    await testApp.db
+      .delete(schema.wowItemMeta)
+      .where(inArray(schema.wowItemMeta.itemId, GEAR_IDS));
     const before = await equipmentOf(charId);
-    expect(before.items).toEqual([
-      expect.objectContaining({
-        slot: 'HEAD',
-        itemId: 16921,
-        name: 'Halo of Transcendence',
-        quality: 'EPIC',
-        resolved: false,
-      }),
-      expect.objectContaining({
-        slot: 'SHIRT',
-        itemId: 6120,
-        name: "Recruit's Shirt",
-        quality: 'COMMON',
-        resolved: false,
-      }),
-    ]);
+    expect(before.items).toEqual(linkFallbackItems(false));
+
+    // That view re-enqueued both ids; the 404 lands as a terminal miss, whose
+    // link fallback is final (43c74a903) -> same name, resolved:true.
+    await waitForNotFoundRows();
+    const missed = await equipmentOf(charId);
+    expect(missed.items).toEqual(linkFallbackItems(true));
 
     await testApp.db
       .update(schema.wowItemMeta)
