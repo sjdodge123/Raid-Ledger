@@ -140,6 +140,20 @@ describe('snapshotToForeverTalents — addon hints (D5)', () => {
     ]);
   });
 
+  it('derives from positions when only some nodes carry hints', () => {
+    const cells = allCells();
+    const nodes = positioned(cells).map((n, i) =>
+      i < 5 ? { ...n, tree: 2, row: 9, col: 3 } : n,
+    );
+    const out = snapshotToForeverTalents(snap(nodes));
+    expect(out.layout).toBe('grid');
+    out.nodes.forEach((n, i) => {
+      expect({ tree: n.tree, col: n.col, row: n.row }).toEqual(cells[i]);
+    });
+  });
+});
+
+describe('snapshotToForeverTalents — invalid addon hints (D5 fallback)', () => {
   it('invalid hints (collision) + valid positions → grid from derivation', () => {
     const cells = allCells();
     const nodes = positioned(cells).map((n) => ({
@@ -177,18 +191,6 @@ describe('snapshotToForeverTalents — addon hints (D5)', () => {
     ];
     const out = snapshotToForeverTalents(snap(nodes));
     expect(out.layout).toBe('list');
-  });
-
-  it('derives from positions when only some nodes carry hints', () => {
-    const cells = allCells();
-    const nodes = positioned(cells).map((n, i) =>
-      i < 5 ? { ...n, tree: 2, row: 9, col: 3 } : n,
-    );
-    const out = snapshotToForeverTalents(snap(nodes));
-    expect(out.layout).toBe('grid');
-    out.nodes.forEach((n, i) => {
-      expect({ tree: n.tree, col: n.col, row: n.row }).toEqual(cells[i]);
-    });
   });
 });
 
