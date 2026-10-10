@@ -101,6 +101,26 @@ describe('CharacterQuestsService.getForCharacter', () => {
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
   });
 
+  it.each([
+    ['completed holds a string', { completed: [5001, 'x'], inProgress: [] }],
+    [
+      'a log entry has no questId',
+      { completed: [], inProgress: [{ title: 'T' }] },
+    ],
+    [
+      'an objective has no done flag',
+      {
+        completed: [],
+        inProgress: [{ questId: 1, objectives: [{ text: 'a' }] }],
+      },
+    ],
+  ])('returns null (no 500) when %s', async (_label, quests) => {
+    loader.mockResolvedValue(snapshot({ quests }));
+    const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
+    await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
+    expect(builder).not.toHaveBeenCalled();
+  });
+
   it('passes the quests slice, known rows and names into the builder', async () => {
     loader.mockResolvedValue(snapshot({ gear: [], quests: QUESTS }));
     const built = { marker: 'built' } as never;
