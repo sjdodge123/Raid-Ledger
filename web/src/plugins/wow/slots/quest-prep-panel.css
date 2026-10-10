@@ -149,10 +149,23 @@
     text-decoration: none;
     line-height: 1;
     flex-shrink: 0;
+    /* 44x28 tap target for the 12px glyph (design-system tap targets, ROK-1758).
+       The padding is real layout, so the header beside it shrinks instead of
+       being covered; the -8px margins only reach into the 0.5rem gap on the
+       left and the card's 0.625rem padding on the right. A ::before overhang
+       does not work here: `.quest-card { overflow: hidden }` clips it. */
+    padding: 8px 16px;
+    margin: -8px;
 }
 
 .quest-card__wowhead-icon:hover {
     color: var(--color-indigo-400);
+}
+
+/* Inset the focus ring: the right-hand 8px overhang sits in the card's
+   padding, and `.quest-card { overflow: hidden }` would clip an outset ring. */
+.quest-card__wowhead-icon:focus-visible {
+    outline-offset: -2px;
 }
 
 .quest-card__chevron {
@@ -243,6 +256,7 @@
 
 .quest-card__details {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     gap: 0.5rem;
@@ -259,11 +273,14 @@
     min-width: 0;
 }
 
+/* Wraps and shrinks so the "via addon · <date>" line drops below the status on a phone (ROK-1758). */
 .quest-card__details-right {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 0.375rem;
-    flex-shrink: 0;
+    justify-content: flex-end;
+    gap: 0.125rem 0.375rem;
+    min-width: 0;
     font-size: 0.6875rem;
 }
 
