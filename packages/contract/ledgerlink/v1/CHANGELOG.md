@@ -3,6 +3,19 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-10 — Export clock window — **additive** (server acceptance rule)
+
+- **Wire format unchanged; stays v1** (operator ruling 2026-10-10, ROK-1756).
+  The server now rejects, with 422 `INVALID_PAYLOAD`, any export whose
+  `exportedAt` (or guild `data.snapshotAt`) is more than **1 day ahead of** or
+  more than **365 days behind** the server clock. Raid `pulls[]` timestamps get
+  only the 1-day future bound. LedgerLink stamps the current time, so only a
+  year-old re-paste or a badly wrong client clock is affected. The
+  user-facing message asks the user to check the computer's date and export
+  again. See `CONTRACT.md` §6.
+- Golden fixtures are unchanged. The conformance specs pin the server clock
+  (`testing/pin-export-clock.ts`), so the 2026-09-21 fixtures never age out.
+
 ## v1 — 2026-10-09 — Forever character fields — **additive**
 
 - **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):
