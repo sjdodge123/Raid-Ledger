@@ -18,6 +18,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CharacterEquipmentDto,
   CreateCharacterDto,
+  ForeverTalentsDto,
   UpdateCharacterDto,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
@@ -28,6 +29,15 @@ export interface DisplayEquipmentRow {
   gameVariant: string | null;
   /** The stored (Armory) equipment, as mapped onto the DTO. */
   equipment: CharacterEquipmentDto | null;
+}
+
+/** The character fields a display-talents resolver may read (ROK-1744). */
+export interface DisplayTalentsRow {
+  id: string;
+  gameVariant: string | null;
+  /** The stored (Armory) talents jsonb. */
+  talents: unknown;
+  lastSyncedAt: string | null;
 }
 
 /** Provides character data fetch + sync capabilities for a game */
@@ -67,6 +77,10 @@ export interface CharacterSyncAdapter {
   resolveDisplayEquipment?(
     row: DisplayEquipmentRow,
   ): Promise<CharacterEquipmentDto | null | undefined>;
+  /** ROK-1744: displayed talents override; undefined = keep the stored value. */
+  resolveDisplayTalents?(
+    row: DisplayTalentsRow,
+  ): Promise<ForeverTalentsDto | null | undefined>;
 }
 
 /** Provides game content data (realms, instances) */

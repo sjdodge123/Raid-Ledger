@@ -25,3 +25,37 @@ export async function withDisplayEquipment(
     return dto;
   }
 }
+
+/**
+ * ROK-1744 (D3): let the variant's plugin substitute displayed talents.
+ * Same best-effort contract as gear — a failure warns and keeps the DTO.
+ */
+export async function withDisplayTalents(
+  dto: CharacterDto,
+  adapter: CharacterSyncAdapter | undefined,
+  logger: Pick<Logger, 'warn'>,
+): Promise<CharacterDto> {
+  try {
+    const talents = await adapter?.resolveDisplayTalents?.({
+      id: dto.id,
+      gameVariant: dto.gameVariant ?? null,
+      talents: dto.talents ?? null,
+      lastSyncedAt: dto.lastSyncedAt ?? null,
+    });
+    return talents === undefined ? dto : { ...dto, talents };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Display talents for character ${dto.id} failed: ${msg}`);
+    return dto;
+  }
+}
+
+/** All display overrides: equipment, then talents (each isolated). */
+export async function withDisplayOverrides(
+  dto: CharacterDto,
+  adapter: CharacterSyncAdapter | undefined,
+  logger: Pick<Logger, 'warn'>,
+): Promise<CharacterDto> {
+  const withGear = await withDisplayEquipment(dto, adapter, logger);
+  return withDisplayTalents(withGear, adapter, logger);
+}

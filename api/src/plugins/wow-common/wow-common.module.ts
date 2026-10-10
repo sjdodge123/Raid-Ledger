@@ -35,6 +35,7 @@ import { AddonImportAuditService } from './addon-import/addon-import.audit';
 import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
+import { ForeverDisplayTalentsService } from './forever-display-talents.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 
@@ -73,6 +74,7 @@ import { CharacterQuestsService } from './character-quests.service';
     // Empty partial ⇒ real defaults; the integration TestApp overrides it.
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
     ForeverDisplayEquipmentService,
+    ForeverDisplayTalentsService,
     CharacterQuestsService,
   ],
   exports: [

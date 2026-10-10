@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import type { ForeverTalentsDto } from '@raid-ledger/contract';
 import { getWowheadTalentCalcUrl, getWowheadTalentCalcEmbedUrl } from '../lib/wowhead-urls';
 import { buildWowheadTalentString } from '../lib/classic-talent-positions';
 import { FOREVER_ADDON_HINT_TALENTS, getWowVariantIntegrations } from '../lib/wow-variant-config';
+import { ForeverTalentDisplay } from './forever-talent-display';
 
 /** Retail talent data shape from Blizzard API */
 interface RetailTalents {
@@ -32,7 +34,7 @@ interface ClassicTalents {
     summary: string;
 }
 
-type TalentData = RetailTalents | ClassicTalents;
+type TalentData = RetailTalents | ClassicTalents | ForeverTalentsDto;
 
 function isRetailTalents(data: TalentData): data is RetailTalents {
     return data.format === 'retail';
@@ -45,7 +47,7 @@ function isClassicTalents(data: TalentData): data is ClassicTalents {
 function isTalentData(value: unknown): value is TalentData {
     if (!value || typeof value !== 'object') return false;
     const obj = value as Record<string, unknown>;
-    return obj.format === 'retail' || obj.format === 'classic';
+    return obj.format === 'retail' || obj.format === 'classic' || obj.format === 'forever';
 }
 
 /** Wowhead talent calculator iframe embed for Classic builds */
@@ -76,20 +78,25 @@ function WowheadTalentEmbed({ embedUrl }: { embedUrl: string }) {
     );
 }
 
+/** The gold "View on Wowhead" talent-calc link (Classic + Forever). */
+export function WowheadCalcLink({ href }: { href: string }) {
+    return (
+        <a href={href} target="_blank" rel="noopener noreferrer"
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded border border-amber-700/50 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 transition-colors">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+            View on Wowhead
+        </a>
+    );
+}
+
 function ClassicSummaryLine({ talents, totalPoints, wowheadUrl }: { talents: ClassicTalents; totalPoints: number; wowheadUrl: string | null }) {
     return (
         <div className="flex items-center gap-3">
             <span className="text-lg font-mono font-bold text-foreground tracking-wider">{talents.summary}</span>
             {totalPoints > 0 && <span className="text-xs text-muted">({totalPoints} points)</span>}
-            {wowheadUrl && (
-                <a href={wowheadUrl} target="_blank" rel="noopener noreferrer"
-                    className="ml-auto inline-flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded border border-amber-700/50 bg-amber-950/40 text-amber-300 hover:bg-amber-900/50 transition-colors">
-                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                    </svg>
-                    View on Wowhead
-                </a>
-            )}
+            {wowheadUrl && <WowheadCalcLink href={wowheadUrl} />}
         </div>
     );
 }
@@ -135,7 +142,8 @@ function ClassicTalentDisplay({ talents, wowheadUrl, embedUrl }: { talents: Clas
     );
 }
 
-function TalentPillSection({ label, talents, pillClass }: { label: string; talents: Array<{ name: string }>; pillClass: string }) {
+/** A labelled row of talent-name pills. */
+export function TalentPillSection({ label, talents, pillClass }: { label: string; talents: Array<{ name: string }>; pillClass: string }) {
     if (talents.length === 0) return null;
     return (
         <div>
@@ -197,6 +205,7 @@ function resolveClassicUrls(characterClass: string | null | undefined, talents: 
 export function TalentDisplay({ talents, isArmoryImported, characterClass, gameVariant }: TalentDisplayProps) {
     if (!talents || !isTalentData(talents)) return <NoTalentData isArmoryImported={isArmoryImported} gameVariant={gameVariant} />;
     if (isRetailTalents(talents)) return <RetailTalentDisplay talents={talents} />;
+    if (talents.format === 'forever') return <ForeverTalentDisplay talents={talents} characterClass={characterClass} />;
     if (isClassicTalents(talents)) {
         const { embedUrl, talentCalcUrl } = resolveClassicUrls(characterClass, talents, gameVariant);
         return <ClassicTalentDisplay talents={talents} wowheadUrl={talentCalcUrl} embedUrl={embedUrl} />;
