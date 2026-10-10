@@ -324,9 +324,10 @@ describe('truncation (completedTruncated, ROK-1758)', () => {
     expect(doneFn(50)).toEqual({ done: false, source: null, unknown: true });
     expect(doneFn(1)).toEqual({ done: false, source: null, unknown: false });
     expect(state.neededCount).toBe(1);
+    // 50 is unknown: no step state, so the chain shows it unmarked rather
+    // than as "needed" beside "All pre-reqs done".
     expect(state.steps).toEqual([
       { questId: 1, name: 'Q1', done: false, source: null },
-      { questId: 50, name: 'Q50', done: false, source: null },
     ]);
   });
 

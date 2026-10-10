@@ -14,6 +14,15 @@ const readData = (file: string): Array<Record<string, unknown>> =>
 const classicData = readData('dungeon-quest-data.json');
 const foreverData = readData('forever-dungeon-quest-data.json');
 
+describe('bundled dungeon-quest datasets (ROK-1758)', () => {
+  it('questIds are unique across the Classic and Forever files', () => {
+    // DO UPDATE fails on a repeat inside a batch and is last-file-wins across files.
+    const ids = [...classicData, ...foreverData].map((q) => q['questId']);
+    const dups = ids.filter((id, i) => ids.indexOf(id) !== i);
+    expect(dups).toEqual([]);
+  });
+});
+
 jest.mock('fs/promises', () => {
   const actual =
     jest.requireActual<typeof import('fs/promises')>('fs/promises');

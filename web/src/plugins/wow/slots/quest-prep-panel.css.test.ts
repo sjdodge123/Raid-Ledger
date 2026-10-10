@@ -27,11 +27,15 @@ describe('quest-prep-panel.css (ROK-1758)', () => {
         expect(rule('.quest-card__details')).toMatch(/flex-wrap:\s*wrap/);
     });
 
-    it('gives the Wowhead link a 44x44 hit area', () => {
+    it('gives the Wowhead link a 44px-wide hit area that stays inside the 8px gaps around it', () => {
         expect(rule('.quest-card__wowhead-icon'), 'anchors the hit area').toMatch(/position:\s*relative/);
         const hit = rule('.quest-card__wowhead-icon::before');
         expect(hit).toMatch(/position:\s*absolute/);
-        expect(hit).toMatch(/width:\s*44px/);
-        expect(hit).toMatch(/height:\s*44px/);
+        const inset = (side: string) => Number(new RegExp(`${side}:\\s*(-?\\d+)px`).exec(hit)?.[1]);
+        // Left/top/bottom ≤ the 0.5rem gaps: never over the card header (left) or a neighbour row.
+        expect([inset('left'), inset('top'), inset('bottom')]).toEqual([-8, -8, -8]);
+        // 12px glyph + 8px left + 24px right = 44px wide.
+        expect(inset('left') + inset('right')).toBe(-32);
+        expect(hit, 'a 44px box centred on the glyph overhangs 16px into the header').not.toMatch(/width:\s*44px/);
     });
 });

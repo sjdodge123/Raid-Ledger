@@ -139,4 +139,17 @@ describe('buildViewerPrereqs (ROK-1758)', () => {
     const full = member([1]);
     expect(buildViewerPrereqs(progress(full), full, []).neededTotal).toBe(1);
   });
+
+  it('no race: same-name faction variants collapse to the one the panel shows', () => {
+    // Web deduplicateByName/pickBestVariant: no race → first variant (2).
+    const shared = known.map((q) =>
+      q.questId === 2 || q.questId === 12 ? { ...q, name: 'Shared' } : q,
+    );
+    const m: ForeverMember = { ...member([]), charRace: null };
+    const p = { ...selectEventQuests(shared, [90]), members: [m] };
+    const out = buildViewerPrereqs(p, m, []);
+    expect(out.quests.map((q) => q.questId)).toEqual([2, 3, 13]);
+    // Steps 1, 2 (Alliance) and 11, 12 (the chain of Horde 13, which still shows).
+    expect(out.neededTotal).toBe(4);
+  });
 });

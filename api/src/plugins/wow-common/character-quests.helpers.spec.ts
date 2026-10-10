@@ -225,12 +225,15 @@ describe('buildCharacterQuests — ordering and edge cases', () => {
     );
     // 50 is above the cut (10) and not in the log → unknown, out of the total.
     expect(cut?.counts.knownTotal).toBe(2);
+    // The per-instance "c/k" agrees with knownTotal: 50 is out of k too.
+    expect(cut?.completedKnown[0]?.knownCount).toBe(2);
     const full = buildCharacterQuests(
       snap([1, 10], [{ questId: 90 }]),
       list,
       names,
     );
     expect(full?.counts.knownTotal).toBe(3);
+    expect(full?.completedKnown[0]?.knownCount).toBe(3);
   });
 });
 
