@@ -236,6 +236,16 @@ export const LineupEntryResponseSchema = z.object({
     /** ROK-1314: has the CURRENT viewer wishlisted this nominated game? */
     currentUserWishlisted: z.boolean().optional(),
     /**
+     * ROK-1375: the CURRENT viewer's lifetime Steam playtime for this game, in
+     * minutes, read from their synced library row (`game_interests` with
+     * `source='steam_library'`, `playtime_forever`). Pairs with
+     * `currentUserOwns` so the card can say "You own · 12h played".
+     *
+     * `null` when the viewer is signed in but does not own the game, or owns it
+     * with no synced playtime. OMITTED when there is no viewer. Additive — v1.
+     */
+    currentUserPlaytimeMinutes: z.number().int().nonnegative().nullable().optional(),
+    /**
      * ROK-1314: the remaining co-op inputs and the shared card chrome, so a
      * nomination card renders the same badges as Common Ground and `/games`.
      * The card already warned "Fits N online / group is M" without showing the
