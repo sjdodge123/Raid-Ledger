@@ -224,7 +224,8 @@ two shapes — tell them apart by the presence of `sections`:
 
 Each decoded payload is
 display strings have WoW UI escapes (`|cAARRGGBB…|r`, `|H…|h`, …) stripped,
-and char gear `link` is replaced by the parsed `itemId` + `bonusIds`. So a
+and char gear `link` is replaced by the parsed `itemId` + `bonusIds` (plus
+the optional `name` and `quality` decoded from the link, see CHANGELOG). So a
 `.json` is the decoded view, not the raw addon emit. `fixtures/invalid/<name>.txt`
 must fail with the `code` in its `.json`. The generator and the conformance
 spec share one shape function

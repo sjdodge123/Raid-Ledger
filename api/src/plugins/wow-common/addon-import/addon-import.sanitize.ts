@@ -4,6 +4,7 @@ import {
   type AddonCharSnapshotData,
   type AddonSnapshotGearItem,
 } from '@raid-ledger/contract';
+import { parseLinkDisplay } from './addon-import.link-name';
 
 /**
  * WoW UI escape sequences, matched left-to-right in ONE pass so `||` (a
@@ -114,6 +115,8 @@ function toSnapshotGear(
     bonusIds: parsed.bonusIds,
     ...(parsed.enchantId !== undefined ? { enchantId: parsed.enchantId } : {}),
     ...(parsed.gemIds ? { gemIds: parsed.gemIds } : {}),
+    // ROK-1760: parsed from the RAW link, before `sanitizeStrings` strips it.
+    ...(item.link ? parseLinkDisplay(item.link) : {}),
   };
 }
 

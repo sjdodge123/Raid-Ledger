@@ -3,6 +3,7 @@
  * consecutive-exhaustion breaker (TDB:1984).
  */
 import {
+  enqueuePriceSync,
   processPricingChunks,
   type PricingChunkOutcome,
 } from './itad-price-sync.helpers';
@@ -125,5 +126,65 @@ describe('processPricingChunks — retry pass without a trip', () => {
       retried: 1,
       tripped: false,
     });
+  });
+});
+
+/** ROK-1762: a mocked queue whose `itad-price-7` slot holds a job in `state`. */
+function makePriceQueue(state: string | null) {
+  const job =
+    state === null
+      ? undefined
+      : { getState: jest.fn().mockResolvedValue(state) };
+  return {
+    getJob: jest.fn().mockResolvedValue(job),
+    remove: jest.fn().mockResolvedValue(1),
+    add: jest.fn().mockResolvedValue({ id: 'job' }),
+  };
+}
+
+describe('enqueuePriceSync (ROK-1762 retained finished job)', () => {
+  it.each(['failed', 'completed'])(
+    'removes a retained %s itad-price-7 job before adding',
+    async (state) => {
+      const queue = makePriceQueue(state);
+
+      await enqueuePriceSync(queue, 7);
+
+      expect(queue.getJob).toHaveBeenCalledWith('itad-price-7');
+      expect(queue.remove).toHaveBeenCalledWith('itad-price-7');
+      expect(queue.add).toHaveBeenCalledWith(
+        'sync',
+        { gameId: 7 },
+        expect.objectContaining({
+          jobId: 'itad-price-7',
+          removeOnComplete: 100,
+          removeOnFail: 50,
+        }),
+      );
+      expect(queue.remove.mock.invocationCallOrder[0]).toBeLessThan(
+        queue.add.mock.invocationCallOrder[0] ?? 0,
+      );
+    },
+  );
+
+  it.each(['waiting', 'delayed', 'active'])(
+    'leaves a %s itad-price-7 job alone (same-id add still dedups)',
+    async (state) => {
+      const queue = makePriceQueue(state);
+
+      await enqueuePriceSync(queue, 7);
+
+      expect(queue.remove).not.toHaveBeenCalled();
+      expect(queue.add).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('adds directly when no job holds the id', async () => {
+    const queue = makePriceQueue(null);
+
+    await enqueuePriceSync(queue, 7);
+
+    expect(queue.remove).not.toHaveBeenCalled();
+    expect(queue.add).toHaveBeenCalledTimes(1);
   });
 });

@@ -15,6 +15,18 @@ Newest first. Every entry states **additive** or **breaking** (see
   again. See `CONTRACT.md` §6.
 - Golden fixtures are unchanged. The conformance specs pin the server clock
   (`testing/pin-export-clock.ts`), so the 2026-09-21 fixtures never age out.
+
+## v1 — 2026-10-10 — decoded gear name/quality from the raw link — **additive**
+
+- **Additive (stays v1). Wire format unchanged** — no `schema.json` change,
+  nothing new for the addon to emit (ROK-1760). Raid Ledger now reads the
+  item name (`|h[...]|h`, ≤ 128) and quality (`IQ<n>`, 0–7) out of the
+  existing raw gear `link` and keeps them as optional `name` / `quality` on
+  each decoded gear item, so a slot reads "Recruit's Shirt" before the
+  Wowhead resolver fills it in. The `char-*` and `mixed-char-*` golden
+  fixture `.json` files were regenerated (`api/scripts/gen-ledgerlink-fixtures.ts`)
+  to include the decoded `name`; the `.txt` pastes are unchanged.
+
 ## v1 — 2026-10-10 — golden fixture correction — **no format change**
 
 - **Fixture only (stays v1).** `fixtures/char-forever-talents-named` (`.txt` +

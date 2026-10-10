@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
 
 export const EMBED_SYNC_QUEUE = 'discord-embed-sync';
 
@@ -38,6 +39,9 @@ export class EmbedSyncQueueService {
     try {
       const coalesced = await this.tryCoalesce(jobId, eventId, reason);
       if (coalesced) return;
+      // ROK-1762: a retained completed/failed job would turn this add into a
+      // silent no-op. Pending jobs never reach here (tryCoalesce handled them).
+      await clearFinishedJob(this.queue, jobId);
       await this.queue.add(
         'sync-embed',
         { eventId, reason } satisfies EmbedSyncJobData,

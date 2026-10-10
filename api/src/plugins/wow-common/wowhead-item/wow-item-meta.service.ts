@@ -18,6 +18,8 @@ import {
   priorMisses,
 } from './wow-item-meta.backoff';
 import { conflictSet } from './wow-item-meta.upsert';
+import { isMetaDue } from './wow-item-meta.due';
+import { ResolverOutcomeLog } from './wow-item-meta.outcome-log';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 import { isWowheadResolverEnabled } from './wowhead-resolver.settings';
 
@@ -39,6 +41,8 @@ function uniqueIds(ids: readonly number[]): number[] {
 export class WowItemMetaService {
   private readonly logger = new Logger(WowItemMetaService.name);
   private readonly inFlight = new Set<number>();
+  /** ROK-1760: one log line per item per failure outcome. */
+  private readonly outcomes = new ResolverOutcomeLog();
   private readonly deps: WowheadResolverDeps;
 
   constructor(
@@ -73,19 +77,15 @@ export class WowItemMetaService {
   }
 
   /**
-   * Resolve every id with no row or a due `next_retry_at`.
+   * Resolve every id with no row, a due `next_retry_at`, or an `error` row
+   * past the view floor (ROK-1760, `isMetaDue`).
    * @returns how many rows were written.
    */
   async enqueue(ids: readonly number[]): Promise<number> {
     if (!(await this.isEnabled())) return 0;
     const meta = await this.getMeta(ids);
     const now = this.deps.now().getTime();
-    const due = uniqueIds(ids).filter((id) => {
-      const row = meta.get(id);
-      return (
-        !row || (row.nextRetryAt !== null && row.nextRetryAt.getTime() <= now)
-      );
-    });
+    const due = uniqueIds(ids).filter((id) => isMetaDue(meta.get(id), now));
     return this.resolveAll(due, meta);
   }
 
@@ -130,6 +130,9 @@ export class WowItemMetaService {
       const misses = priorMisses(prev);
       const row = await resolveItem(id, errors, this.deps, misses);
       await this.upsert(keepMissCount(row, prev));
+      // Log the probe's own outcome (ROK-1760), not the miss-count carry.
+      const line = this.outcomes.record(row);
+      if (line) this.logger.warn(line);
       return 'written';
     } catch (err: unknown) {
       if (err instanceof WowheadResolverDisabledError) return 'disabled';

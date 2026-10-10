@@ -11,6 +11,7 @@ import {
   NOT_FOUND_PARK_MS,
 } from './wow-item-meta.backoff';
 import { RECHECK_TTL_MS, RESOLVED_TTL_MS } from './wow-item-meta.resolve';
+import { ERROR_VIEW_RETRY_FLOOR_MS } from './wow-item-meta.due';
 import { createWowheadLimiter } from './wowhead-item.limiter';
 import type {
   WowheadFetch,
@@ -321,5 +322,109 @@ describe('WowItemMetaService — not_found re-probe cap (ROK-1756)', () => {
       attempts: 4,
       nextRetryAt: after(NOT_FOUND_PARK_MS),
     });
+  });
+});
+
+describe('WowItemMetaService — error view floor (ROK-1760)', () => {
+  it('enqueue re-probes an error row past the floor even before next_retry_at', async () => {
+    const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
+    const stale = after(-ERROR_VIEW_RETRY_FLOOR_MS);
+    const existing = [
+      row({
+        itemId: 8,
+        status: 'error',
+        attempts: 1,
+        fetchedAt: stale,
+        nextRetryAt: after(2 * HOUR),
+      }),
+      row({
+        itemId: 9,
+        status: 'error',
+        attempts: 1,
+        fetchedAt: after(-60_000),
+        nextRetryAt: after(2 * HOUR),
+      }),
+      row({
+        itemId: 10,
+        status: 'not_found',
+        fetchedAt: after(-24 * HOUR + HOUR),
+        nextRetryAt: after(HOUR),
+      }),
+    ];
+    const { service, writes } = setup({ fetch, existing });
+    await service.enqueue([8, 9, 10]);
+    expect(writes.map((w) => w.row.itemId)).toEqual([8]);
+  });
+});
+
+describe('WowItemMetaService — failure logging (ROK-1760)', () => {
+  it('logs ONE warn per item for a repeated not_found, re-armed after a hit', async () => {
+    const fetch = fetchStub({
+      16: [
+        { status: 404 },
+        { status: 404 },
+        { status: 200, body: HIT },
+        { status: 404 },
+      ],
+      4: [{ status: 404 }],
+    });
+    const { service } = setup({ fetch });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.enqueue([14]); // not_found → log
+    await service.enqueue([15]); // another item's not_found → log
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([
+      expect.stringContaining('Wowhead item 14 not found'),
+      expect.stringContaining('Wowhead item 15 not found'),
+    ]);
+    await service.enqueue([14]); // resolved → no log, re-armed
+    await service.enqueue([14]); // not_found again → logged again
+    await service.enqueue([14]); // same outcome repeated → silent
+    expect(warn).toHaveBeenCalledTimes(3);
+  });
+
+  it('logs an error outcome once with its attempt count', async () => {
+    const fetch = fetchStub({ 16: [{ status: 503 }] });
+    const { service } = setup({ fetch });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.enqueue([13]);
+    await service.enqueue([13]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      'Wowhead item 13 lookup failed (error, attempt 1)',
+    );
+  });
+});
+
+describe('WowItemMetaService — miss cap × failure logging (ROK-1756 + ROK-1760)', () => {
+  it('a transient error on a parked not_found row logs the probe (attempt 1) but stores the miss count', async () => {
+    const fetch = fetchStub({ 16: [{ status: 429 }] });
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch, due });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.retryDue();
+    expect(writes[0]?.set).toMatchObject({ attempts: 3 });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      'Wowhead item 9 lookup failed (error, attempt 1)',
+    );
+  });
+
+  it('a parked miss logs its 30-day re-check date', async () => {
+    const fetch = fetchStub({ 16: [{ status: 404 }], 4: [{ status: 404 }] });
+    const due = [row({ itemId: 9, attempts: 2, nextRetryAt: after(-1) })];
+    const { service } = setup({ fetch, due });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.retryDue();
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      `re-check at ${after(NOT_FOUND_PARK_MS).toISOString()}`,
+    );
   });
 });
