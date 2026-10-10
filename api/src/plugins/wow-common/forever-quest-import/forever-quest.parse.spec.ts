@@ -145,12 +145,20 @@ describe('toDungeonQuestRow', () => {
   });
 
   it('emits a null-instance row for a pre-req outside the zone set', () => {
-    const result = toDungeonQuestRow({ id: 4324, name: 'Yuka' }, parsed(), null);
+    const result = toDungeonQuestRow(
+      { id: 4324, name: 'Yuka' },
+      parsed(),
+      null,
+    );
     expect(result.ok && result.row.dungeonInstanceId).toBeNull();
   });
 
   it('maps a Horde-only quest to the Horde race list', () => {
-    const result = toDungeonQuestRow({ id: 9, name: 'H', side: 2 }, parsed(), 1);
+    const result = toDungeonQuestRow(
+      { id: 9, name: 'H', side: 2 },
+      parsed(),
+      1,
+    );
     expect(result.ok && result.row.raceRestriction).toEqual([
       'Orc',
       'Undead',

@@ -88,7 +88,8 @@ export function parseZoneQuestList(html: string): ZoneQuestList {
     const parsed = zoneQuestRowSchema.safeParse(item);
     if (!parsed.success) {
       list.skipped.push({ id: rawId(item), reason: 'off-shape zone row' });
-    } else if (isNotShown(parsed.data.notShown)) list.notShown.push(parsed.data);
+    } else if (isNotShown(parsed.data.notShown))
+      list.notShown.push(parsed.data);
     else list.rows.push(parsed.data);
   }
   return list;
@@ -113,9 +114,11 @@ export interface ParsedQuest {
   nextQuestId: number | null;
 }
 
-const INFOBOX_RE = /WH\.markup\.printHtml\("(\[ul\][\s\S]*?)", "infobox-contents/;
+const INFOBOX_RE =
+  /WH\.markup\.printHtml\("(\[ul\][\s\S]*?)", "infobox-contents/;
 const SERIES_RE = /<table class="series">([\s\S]*?)<\/table>/;
-const SERIES_ROW_RE = /<tr><th>\d+\.<\/th><td><div>([\s\S]*?)<\/div><\/td><\/tr>/g;
+const SERIES_ROW_RE =
+  /<tr><th>\d+\.<\/th><td><div>([\s\S]*?)<\/div><\/td><\/tr>/g;
 
 /** The infobox Markup string, JSON-unescaped (`[\/li]` → `[/li]`). */
 function infoboxMarkup(html: string): string | null {
@@ -133,12 +136,15 @@ function intMatch(re: RegExp, src: string): number | null {
   return m ? Number(m[1]) : null;
 }
 
-function parseSeries(html: string, env: string): SeriesStep[] {
+const SERIES_LINK_RE =
+  /<a href="\/(?:[a-z-]+\/)?quest=(\d+)[^"]*">([^<]+)<\/a>/;
+
+function parseSeries(html: string): SeriesStep[] {
   const table = SERIES_RE.exec(html)?.[1] ?? '';
-  const linkRe = new RegExp(`<a href="/${env}/quest=(\\d+)[^"]*">([^<]+)</a>`);
   return [...table.matchAll(SERIES_ROW_RE)].map(([, cell]) => {
-    const link = linkRe.exec(cell);
-    if (link) return { questId: Number(link[1]), name: link[2], current: false };
+    const link = SERIES_LINK_RE.exec(cell);
+    if (link)
+      return { questId: Number(link[1]), name: link[2], current: false };
     const bold = /<b>([^<]+)<\/b>/.exec(cell)?.[1] ?? '';
     return { questId: null, name: bold, current: true };
   });
@@ -154,8 +160,10 @@ export function parseQuestPage(
   const start = new RegExp(
     `Start: \\[url=/${opts.env}/npc=(\\d+)/[^\\]]*\\]([^[]+)\\[/url\\]`,
   ).exec(info);
-  const side = /\[li\]Side: (?:\[span[^\]]*\])?(Alliance|Horde|Both)/.exec(info);
-  const series = parseSeries(html, opts.env);
+  const side = /\[li\]Side: (?:\[span[^\]]*\])?(Alliance|Horde|Both)/.exec(
+    info,
+  );
+  const series = parseSeries(html);
   const at = series.findIndex((s) => s.current);
   return {
     questLevel: intMatch(/\[li\]Level: (\d+)\[\/li\]/, info),

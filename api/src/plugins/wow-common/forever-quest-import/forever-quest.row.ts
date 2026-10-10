@@ -4,7 +4,11 @@
  */
 import { z } from 'zod';
 import { FOREVER_SEED_ID_BASE } from '../forever-instance-data';
-import type { ParsedQuest, ParseSkip, ZoneQuestRow } from './forever-quest.parse';
+import type {
+  ParsedQuest,
+  ParseSkip,
+  ZoneQuestRow,
+} from './forever-quest.parse';
 
 /** Exact shape of a `data/*dungeon-quest-data.json` row. */
 export const dungeonQuestRowSchema = z.strictObject({
@@ -31,14 +35,16 @@ export const dungeonQuestRowSchema = z.strictObject({
 export type DungeonQuestRow = z.infer<typeof dungeonQuestRowSchema>;
 
 export type DungeonQuestRowResult =
-  | { ok: true; row: DungeonQuestRow }
-  | { ok: false; skip: ParseSkip };
+  { ok: true; row: DungeonQuestRow } | { ok: false; skip: ParseSkip };
 
 const ALLIANCE_RACES = ['Human', 'Dwarf', 'Night Elf', 'Gnome'];
 const HORDE_RACES = ['Orc', 'Undead', 'Tauren', 'Troll'];
 
 /** Wowhead side (1 Alliance / 2 Horde / 3 both) → the Classic race lists. */
-function raceRestriction(zoneRow: ZoneQuestRow, parsed: ParsedQuest): string[] | null {
+function raceRestriction(
+  zoneRow: ZoneQuestRow,
+  parsed: ParsedQuest,
+): string[] | null {
   if (zoneRow.side === 1 || (!zoneRow.side && parsed.side === 'Alliance')) {
     return ALLIANCE_RACES;
   }
@@ -49,7 +55,10 @@ function raceRestriction(zoneRow: ZoneQuestRow, parsed: ParsedQuest): string[] |
 }
 
 function rewardIds(zoneRow: ZoneQuestRow): number[] | null {
-  const pairs = [...(zoneRow.itemrewards ?? []), ...(zoneRow.itemchoices ?? [])];
+  const pairs = [
+    ...(zoneRow.itemrewards ?? []),
+    ...(zoneRow.itemchoices ?? []),
+  ];
   return pairs.length > 0 ? pairs.map(([itemId]) => itemId) : null;
 }
 

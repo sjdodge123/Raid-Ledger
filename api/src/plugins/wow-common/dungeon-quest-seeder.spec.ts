@@ -12,7 +12,8 @@ const classicData = readData('dungeon-quest-data.json');
 const foreverData = readData('forever-dungeon-quest-data.json');
 
 jest.mock('fs/promises', () => {
-  const actual = jest.requireActual<typeof import('fs/promises')>('fs/promises');
+  const actual =
+    jest.requireActual<typeof import('fs/promises')>('fs/promises');
   return { ...actual, readFile: jest.fn(actual.readFile) };
 });
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -71,24 +72,30 @@ describe('DungeonQuestSeeder', () => {
   });
 
   describe('seed() — Forever file (ROK-1748)', () => {
-    const actual = jest.requireActual<typeof import('fs/promises')>('fs/promises');
+    const actual =
+      jest.requireActual<typeof import('fs/promises')>('fs/promises');
     afterEach(() => fsPromises.readFile.mockImplementation(actual.readFile));
 
     it('reads both bundled files; the shipped [] forever file is a no-op', async () => {
       const result = await seeder.seed();
       const paths = fsPromises.readFile.mock.calls.map((c) => String(c[0]));
-      expect(paths.some((p) => p.endsWith('dungeon-quest-data.json'))).toBe(true);
-      expect(paths.some((p) => p.endsWith('forever-dungeon-quest-data.json'))).toBe(true);
+      expect(paths.some((p) => p.endsWith('dungeon-quest-data.json'))).toBe(
+        true,
+      );
+      expect(
+        paths.some((p) => p.endsWith('forever-dungeon-quest-data.json')),
+      ).toBe(true);
       expect(foreverData).toEqual([]);
       expect(result.total).toBe(classicData.length);
     });
 
     it('appends forever rows to the same upsert', async () => {
       const row = { ...classicData[0], questId: 999001, expansion: 'forever' };
-      fsPromises.readFile.mockImplementation((p: string, enc: BufferEncoding) =>
-        String(p).endsWith('forever-dungeon-quest-data.json')
-          ? Promise.resolve(JSON.stringify([row]))
-          : actual.readFile(p, enc),
+      fsPromises.readFile.mockImplementation(
+        (p: string, enc: BufferEncoding) =>
+          String(p).endsWith('forever-dungeon-quest-data.json')
+            ? Promise.resolve(JSON.stringify([row]))
+            : actual.readFile(p, enc),
       );
       const result = await seeder.seed();
       expect(result.total).toBe(classicData.length + 1);
