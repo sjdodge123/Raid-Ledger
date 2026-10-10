@@ -94,7 +94,9 @@ describe('CharacterQuestsService.getForCharacter', () => {
   });
 
   it('returns null when quests is malformed (not arrays)', async () => {
-    loader.mockResolvedValue(snapshot({ quests: { completed: 'x', inProgress: [] } }));
+    loader.mockResolvedValue(
+      snapshot({ quests: { completed: 'x', inProgress: [] } }),
+    );
     const svc = new CharacterQuestsService(makeDb([{ id: CHAR_ID }]));
     await expect(svc.getForCharacter(CHAR_ID)).resolves.toBeNull();
   });
