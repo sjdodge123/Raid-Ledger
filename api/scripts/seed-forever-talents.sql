@@ -20,13 +20,13 @@ WITH admin AS (
 fg AS (SELECT id FROM games WHERE slug = 'world-of-warcraft-forever'),
 cg AS (SELECT id FROM games WHERE slug = 'world-of-warcraft-classic'),
 grid_char AS (
-  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region)
-  SELECT admin.id, fg.id, 'Brakgrid', 'Forever', 'Warrior', 'Arms', 60, 'us'
+  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region, ruleset)
+  SELECT admin.id, fg.id, 'Brakgrid', 'Forever', 'Warrior', 'Arms', 60, 'us', 'normal'
   FROM admin, fg RETURNING id
 ),
 list_char AS (
-  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region)
-  SELECT admin.id, fg.id, 'Brakpills', 'Forever', 'Warrior', 'Fury', 12, 'us'
+  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region, ruleset)
+  SELECT admin.id, fg.id, 'Brakpills', 'Forever', 'Warrior', 'Fury', 12, 'us', 'normal'
   FROM admin, fg RETURNING id
 ),
 classic_char AS (
