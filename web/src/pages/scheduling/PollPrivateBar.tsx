@@ -1,7 +1,7 @@
 /**
  * PollPrivateBar (ROK-1750) — the private-poll row in the poll page header:
- * a "Private" chip, a Copy link control (the `LineupShareCopy` icon-button
- * pattern; any participant may copy, ruling R2) and, for the creator / admin /
+ * a "Private" chip, a Copy link control (the `Button` primitive — ROK-1646
+ * guard; any participant may copy, ruling R2) and, for the creator / admin /
  * operator, Reset link behind a confirm. Renders only when the poll is
  * private AND the viewer was handed a token (a private community lineup
  * reports `visibility:'private'` with no token — nothing to share).
@@ -17,7 +17,6 @@ import { Modal } from '../../components/ui/modal';
 import { Button } from '../../components/ui/button';
 
 const RESET_COPY = "Anyone who hasn't opened the old link yet will need the new one. People already in the poll keep access.";
-const ICON_BTN = 'inline-flex items-center justify-center min-h-[32px] px-2.5 py-1.5 text-xs text-muted hover:text-foreground rounded border border-edge/50 hover:bg-overlay/50 transition-colors flex-shrink-0';
 
 function ResetLinkConfirm({ isOpen, onClose, onConfirm, isPending }: {
     isOpen: boolean; onClose: () => void; onConfirm: () => void; isPending: boolean;
@@ -39,7 +38,7 @@ function ResetLinkControl({ matchId }: { matchId: number }): JSX.Element {
     const confirm = () => reset.mutate(matchId, { onSettled: () => setOpen(false) });
     return (
         <>
-            <button type="button" className={ICON_BTN} onClick={() => setOpen(true)} data-testid="poll-share-reset">Reset link</button>
+            <Button variant="secondary" size="sm" onClick={() => setOpen(true)} data-testid="poll-share-reset">Reset link</Button>
             <ResetLinkConfirm isOpen={open} onClose={() => setOpen(false)} onConfirm={confirm} isPending={reset.isPending} />
         </>
     );
@@ -53,11 +52,11 @@ export function PollPrivateBar({ poll }: { poll: SchedulePollPageResponseDto }):
     return (
         <div className="flex items-center gap-2 flex-wrap" data-testid="poll-private-bar">
             <span className="inline-flex px-2.5 py-1 text-xs font-medium rounded-full border bg-warning/10 text-warning border-warning/30">Private</span>
-            <button type="button" className={ICON_BTN} onClick={() => copyPollShareLink(token)}
+            <Button variant="secondary" size="sm" onClick={() => copyPollShareLink(token)}
                 aria-label="Copy poll link" title="Copy poll link" data-testid="poll-share-copy">
                 <LinkIcon className="w-4 h-4" aria-hidden="true" />
-                <span className="ml-1">Copy link</span>
-            </button>
+                Copy link
+            </Button>
             {canReset && <ResetLinkControl matchId={poll.match.id} />}
         </div>
     );
