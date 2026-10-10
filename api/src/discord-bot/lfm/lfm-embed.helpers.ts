@@ -451,11 +451,14 @@ export function buildLfmEmbed(
   options: LfmEmbedOptions = {},
 ): LfmEmbedResult {
   const clientUrl = context.clientUrl ?? undefined;
+  const footer = footerLabel(group, context.timezone);
   const embed = createChannelEmbed({
     state: chromeState(group),
-    communityName: context.communityName,
+    ...(context.communityName !== undefined
+      ? { communityName: context.communityName }
+      : {}),
     authorLine: authorLine(group),
-    footerLabel: footerLabel(group, context.timezone),
+    ...(footer !== undefined ? { footerLabel: footer } : {}),
   });
   embed.setTitle(group.gameName);
   const titleUrl = gameDetailUrl(clientUrl, group.gameId);

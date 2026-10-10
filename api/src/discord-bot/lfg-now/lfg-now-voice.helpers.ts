@@ -159,7 +159,9 @@ export function lfgNowDeps(deps: {
   return {
     db: deps.db ?? null,
     participantService: deps.adHocParticipantService ?? null,
-    usersService: deps.usersService,
+    ...(deps.usersService !== undefined
+      ? { usersService: deps.usersService }
+      : {}),
     logger: deps.logger,
   };
 }
