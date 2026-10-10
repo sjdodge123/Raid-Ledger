@@ -110,9 +110,8 @@ export class AiChatListener {
 
   /** Build a Discord reply payload with content + button rows. */
   private buildReplyPayload(res: AiChatResponse) {
-    return {
-      content: res.content,
-      components: res.rows.length > 0 ? res.rows : undefined,
-    };
+    return res.rows.length > 0
+      ? { content: res.content, components: res.rows }
+      : { content: res.content };
   }
 }

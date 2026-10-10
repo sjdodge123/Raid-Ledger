@@ -355,9 +355,10 @@ export class SteamLinkListener implements OnModuleDestroy {
 
   /** Build the deps object for the nomination button click handler. */
   private buildNominateDeps() {
+    const lineupsService = this.getLineupsService();
     return {
       db: this.db,
-      lineupsService: this.getLineupsService() ?? undefined,
+      ...(lineupsService ? { lineupsService } : {}),
       findActiveBuildingLineupId: async () =>
         (await findActiveBuildingLineup(this.db))?.id ?? null,
       addInterest: (userId: number, gameId: number) =>

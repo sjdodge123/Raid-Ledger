@@ -87,11 +87,12 @@ export async function handleRoleSelect(
     return;
   }
   const isTentative = signupStatus === 'tentative';
+  const slotRole = roles.length === 1 ? roles[0] : undefined;
   const opts: ReconfirmOptions = {
-    characterId,
+    ...(characterId !== undefined ? { characterId } : {}),
     preferredRoles: roles,
-    slotRole: roles.length === 1 ? roles[0] : undefined,
-    signupStatus,
+    ...(slotRole !== undefined ? { slotRole } : {}),
+    ...(signupStatus !== undefined ? { signupStatus } : {}),
   };
   await reconfirmAndReply(ctx, event, characterId, roles, isTentative, opts);
   await ctx.editDm(ctx.interaction, isTentative ? 'tentative' : 'confirmed');
@@ -259,7 +260,7 @@ async function finalizeCharSelect(
 ): Promise<void> {
   await reconfirmSignup(ctx.deps, ctx.interaction, event, linkedUser.id, {
     characterId,
-    signupStatus,
+    ...(signupStatus !== undefined ? { signupStatus } : {}),
   });
   const character = await ctx.deps.charactersService.findOne(
     linkedUser.id,

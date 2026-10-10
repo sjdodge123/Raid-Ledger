@@ -61,5 +61,11 @@ function leaf(
   emptyMessage: string | null,
   systemHint?: string,
 ): TreeResult {
-  return { data, emptyMessage, buttons: [], isLeaf: true, systemHint };
+  return {
+    data,
+    emptyMessage,
+    buttons: [],
+    isLeaf: true,
+    ...(systemHint !== undefined ? { systemHint } : {}),
+  };
 }
