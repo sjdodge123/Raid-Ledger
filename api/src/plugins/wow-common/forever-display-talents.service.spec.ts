@@ -1,4 +1,5 @@
 import { Logger } from '@nestjs/common';
+import type { AddonTalentNode } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { DisplayTalentsRow } from '../plugin-host/extension-points';
@@ -16,7 +17,7 @@ const CAPTURED = new Date('2026-10-09T12:00:00.000Z');
 const ORIGINS = [1020, 5020, 9080];
 
 /** One node per (tree, col) at row 0 for the given group origins. */
-function positioned(origins: number[]): Record<string, number>[] {
+function positioned(origins: number[]): AddonTalentNode[] {
   return origins.flatMap((o, t) =>
     [0, 1].map((c) => ({
       nodeId: 100 + t * 10 + c,
@@ -31,12 +32,12 @@ type Snapshot = NonNullable<
   Awaited<ReturnType<typeof loadForeverCharSnapshot>>
 >;
 
-/** A loader row whose talents carry the given raw nodes. */
-function snapshot(nodes: unknown[]): Snapshot {
+/** A loader row whose talents carry the given typed snapshot nodes. */
+function snapshot(nodes: AddonTalentNode[]): Snapshot {
   return {
     data: { gear: [], lockouts: [], talents: { configId: 7, nodes } },
     capturedAt: CAPTURED,
-  } as unknown as Snapshot;
+  };
 }
 
 const row = (over: Partial<DisplayTalentsRow> = {}): DisplayTalentsRow => ({
@@ -130,13 +131,38 @@ describe('ForeverDisplayTalentsService newest-wins + mapping (D4)', () => {
     loadMock.mockResolvedValue(snapshot([]));
     expect(await service.resolve(row())).toBeUndefined();
   });
+});
 
-  it('drops malformed nodes from the raw jsonb', async () => {
+describe('ForeverDisplayTalentsService typed snapshot nodes (ROK-1742 schema)', () => {
+  const db = {} as PostgresJsDatabase<typeof schema>;
+  let service: ForeverDisplayTalentsService;
+
+  beforeEach(() => {
+    loadMock.mockReset();
+    service = new ForeverDisplayTalentsService(db);
+  });
+
+  it('a schema-1 node set (nodeId/rank/entryId only) is a list without entryId', async () => {
     loadMock.mockResolvedValue(
-      snapshot([{ nodeId: 'x', rank: 1 }, null, { nodeId: 3, rank: 1 }]),
+      snapshot([
+        { nodeId: 3, rank: 1, entryId: 30 },
+        { nodeId: 4, rank: 2 },
+      ]),
     );
     const dto = await service.resolve(row());
-    expect(dto?.nodes).toEqual([{ nodeId: 3, rank: 1 }]);
+    expect(dto?.layout).toBe('list');
+    expect(dto?.nodes).toEqual([
+      { nodeId: 3, rank: 1 },
+      { nodeId: 4, rank: 2 },
+    ]);
+  });
+
+  it('a legacy row with no talents block is undefined', async () => {
+    loadMock.mockResolvedValue({
+      data: { gear: [], lockouts: [] },
+      capturedAt: CAPTURED,
+    } as unknown as Snapshot);
+    expect(await service.resolve(row())).toBeUndefined();
   });
 });
 

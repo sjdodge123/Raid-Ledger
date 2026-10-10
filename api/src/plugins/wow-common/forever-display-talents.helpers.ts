@@ -1,7 +1,8 @@
 /**
  * ROK-1744: pure helpers for the Forever display-talents resolver — reading
- * snapshot nodes out of the raw jsonb and the D4 / origin sanity checks.
+ * typed snapshot nodes into adapter input and the D4 / origin sanity checks.
  */
+import type { AddonTalentNode } from '@raid-ledger/contract';
 import {
   clusterOrigins,
   type ForeverTalentNodeInput,
@@ -10,44 +11,22 @@ import {
 /** Sub-tree origins confirmed for Warrior + Druid (2026-10-09 addon probes). */
 export const KNOWN_TALENT_ORIGINS = [1020, 5020, 9080];
 
-const NUMERIC_KEYS = [
-  'maxRanks',
-  'spellId',
-  'posX',
-  'posY',
-  'tree',
-  'row',
-  'col',
-  'entryId',
-] as const;
-
 const isNum = (v: unknown): v is number =>
   typeof v === 'number' && Number.isFinite(v);
 
-/**
- * Narrow one raw jsonb node. Snapshot schema 2 on main validates only
- * nodeId/rank/entryId; the optional display keys pass through when present.
- */
-export function toNodeInput(raw: unknown): ForeverTalentNodeInput | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as Record<string, unknown>;
-  if (!isNum(r.nodeId) || !isNum(r.rank)) return null;
-  const node: ForeverTalentNodeInput = { nodeId: r.nodeId, rank: r.rank };
-  for (const key of NUMERIC_KEYS) {
-    const v = r[key];
-    if (isNum(v)) node[key] = v;
-  }
-  if (typeof r.name === 'string') node.name = r.name;
-  return node;
+/** One typed snapshot node (schema 2, ROK-1742) as adapter input. */
+export function toNodeInput(node: AddonTalentNode): ForeverTalentNodeInput {
+  return { ...node };
 }
 
-/** Every well-formed node of a raw `talents.nodes` value. */
-export function toNodeInputs(raw: unknown): ForeverTalentNodeInput[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((n) => {
-    const node = toNodeInput(n);
-    return node ? [node] : [];
-  });
+/**
+ * The typed `talents.nodes` of a snapshot. Schema-1 rows predate the display
+ * keys and simply lack them; the only fallback is a row with no node array.
+ */
+export function toNodeInputs(
+  nodes: readonly AddonTalentNode[] | undefined,
+): ForeverTalentNodeInput[] {
+  return Array.isArray(nodes) ? nodes.map(toNodeInput) : [];
 }
 
 /** D4: stored (Armory) talents synced at/after the capture are kept. */
