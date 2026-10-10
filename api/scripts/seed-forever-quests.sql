@@ -25,18 +25,18 @@ WITH admin AS (
 fg AS (SELECT id FROM games WHERE slug = 'world-of-warcraft-forever'),
 cg AS (SELECT id FROM games WHERE slug = 'world-of-warcraft-classic'),
 quest_char AS (
-  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region)
-  SELECT admin.id, fg.id, 'Questbrak', 'Forever', 'Warrior', 'Arms', 27, 'us'
+  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region, ruleset)
+  SELECT admin.id, fg.id, 'Questbrak', 'Forever', 'Warrior', 'Arms', 27, 'us', 'normal'
   FROM admin, fg RETURNING id
 ),
 log_char AS (
-  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region)
-  SELECT admin.id, fg.id, 'Logbrak', 'Forever', 'Warrior', 'Fury', 9, 'us'
+  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region, ruleset)
+  SELECT admin.id, fg.id, 'Logbrak', 'Forever', 'Warrior', 'Fury', 9, 'us', 'normal'
   FROM admin, fg RETURNING id
 ),
 hidden_char AS (
-  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region)
-  SELECT admin.id, fg.id, 'Hiddenbrak', 'Forever', 'Warrior', 'Protection', 30, 'us'
+  INSERT INTO characters (user_id, game_id, name, realm, class, spec, level, region, ruleset)
+  SELECT admin.id, fg.id, 'Hiddenbrak', 'Forever', 'Warrior', 'Protection', 30, 'us', 'normal'
   FROM admin, fg RETURNING id
 ),
 classic_char AS (
