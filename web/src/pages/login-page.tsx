@@ -29,6 +29,12 @@ function useOAuthErrorHandler(): void {
             searchParams.delete('error');
             searchParams.delete('reason');
             setSearchParams(searchParams, { replace: true });
+        } else if (oauthError === 'deactivated') {
+            // ROK-1753: the API 401s a deactivated session (USER_DEACTIVATED);
+            // the web ends it and lands here — same toast idiom as a ban.
+            toast.error('Your account has been deactivated.');
+            searchParams.delete('error');
+            setSearchParams(searchParams, { replace: true });
         }
     }, [searchParams, setSearchParams]);
 }

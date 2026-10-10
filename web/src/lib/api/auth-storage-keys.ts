@@ -17,3 +17,6 @@ export const AUTH_METHOD_KEY = 'raid_ledger_auth_method';
 
 /** sessionStorage one-shot guard preventing a silent-reauth redirect loop. */
 export const SILENT_GUARD_KEY = 'raid_ledger_silent_attempted';
+
+/** localStorage key caching the last /auth/me user for instant boot. */
+export const USER_CACHE_KEY = 'raid_ledger_user_cache';
