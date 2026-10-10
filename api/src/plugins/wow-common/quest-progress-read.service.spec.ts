@@ -112,8 +112,7 @@ describe('QuestProgressReadService — Classic (AC6)', () => {
 
 describe('QuestProgressReadService — Forever', () => {
   beforeEach(() => {
-    mockLoad.mockResolvedValue(forever());
-    mockMember.mockResolvedValue(forever());
+    for (const m of [mockLoad, mockMember]) m.mockResolvedValue(forever());
   });
 
   it('merges addon rows (id 0, source addon, asOf capturedAt) after manual rows', async () => {
