@@ -11,7 +11,9 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { lazyWithRetry } from './lazy-routes';
 import App from './App';
 
-const passthrough = ({ children }: { children?: ReactNode }) => <>{children}</>;
+const { passthrough } = vi.hoisted(() => ({
+    passthrough: ({ children }: { children?: ReactNode }) => children,
+}));
 vi.mock('./app-routes', () => ({ AppRoutes: () => null }));
 vi.mock('./components/layout', () => ({ Layout: passthrough }));
 vi.mock('./components/ui/StartupGate', () => ({ StartupGate: passthrough }));
