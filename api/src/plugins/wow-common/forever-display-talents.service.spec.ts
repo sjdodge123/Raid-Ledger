@@ -71,6 +71,19 @@ describe('ForeverDisplayTalentsService (ROK-1744)', () => {
     expect(await service.resolve(row())).toBeUndefined();
     expect(loadMock).toHaveBeenCalledWith(db, 'char-1');
   });
+});
+
+describe('ForeverDisplayTalentsService newest-wins + mapping (D4)', () => {
+  const db = {} as PostgresJsDatabase<typeof schema>;
+  let service: ForeverDisplayTalentsService;
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    loadMock.mockReset();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    service = new ForeverDisplayTalentsService(db);
+  });
+  afterEach(() => warn.mockRestore());
 
   it('stored talents synced at/after the capture win (D4)', async () => {
     loadMock.mockResolvedValue(snapshot(positioned(ORIGINS)));
@@ -125,6 +138,19 @@ describe('ForeverDisplayTalentsService (ROK-1744)', () => {
     const dto = await service.resolve(row());
     expect(dto?.nodes).toEqual([{ nodeId: 3, rank: 1 }]);
   });
+});
+
+describe('ForeverDisplayTalentsService origin sanity check (Druid ruling)', () => {
+  const db = {} as PostgresJsDatabase<typeof schema>;
+  let service: ForeverDisplayTalentsService;
+  let warn: jest.SpyInstance;
+
+  beforeEach(() => {
+    loadMock.mockReset();
+    warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    service = new ForeverDisplayTalentsService(db);
+  });
+  afterEach(() => warn.mockRestore());
 
   it('warns once for a shifted origin set, never bails', async () => {
     loadMock.mockResolvedValue(snapshot(positioned([1020, 5020, 9200])));
