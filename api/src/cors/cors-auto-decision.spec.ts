@@ -200,6 +200,17 @@ describe('isCspReportRequest (ROK-1732 enforce: Origin: null exemption)', () => 
     expect(isCspReportRequest('GET', '/csp-report')).toBe(false);
     expect(isCspReportRequest('OPTIONS', '/csp-report')).toBe(false);
     expect(isCspReportRequest('POST', '/csp-report/x')).toBe(false);
+  });
+
+  it('refuses path tricks around the exempt route (trailing slash, case, double slash, prefix)', () => {
+    for (const tricky of [
+      '/csp-report/',
+      '/CSP-REPORT',
+      '//csp-report',
+      '/csp-report-x',
+    ]) {
+      expect(isCspReportRequest('POST', tricky)).toBe(false);
+    }
     expect(isCspReportRequest('POST', '/api/csp-report')).toBe(false);
     expect(isCspReportRequest('POST', '/auth/refresh')).toBe(false);
   });
