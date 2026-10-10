@@ -6,6 +6,8 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { server } from '../../../test/mocks/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { CharacterEquipmentDto } from '@raid-ledger/contract';
 import { CharacterDetailSections } from './character-detail-sections';
@@ -23,11 +25,12 @@ const EQUIPMENT: CharacterEquipmentDto = {
     items: [{ slot: 'HEAD', name: 'Test Helm', itemId: 19019, quality: 'EPIC', itemLevel: 60, itemSubclass: 'Plate' }],
 };
 
-interface Case { gameVariant: string | null; ruleset?: string | null; isArmoryImported?: boolean; equipment?: CharacterEquipmentDto | null }
+interface Case { gameVariant: string | null; ruleset?: string | null; isArmoryImported?: boolean; equipment?: CharacterEquipmentDto | null; gameSlug?: string }
 
-function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null }: Case) {
+function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null, gameSlug }: Case) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    client.setQueryData(['characters', 'char-1'], { id: 'char-1', gameVariant, ruleset });
+    client.setQueryData(['characters', 'char-1'], { id: 'char-1', gameId: 1, gameVariant, ruleset });
+    if (gameSlug) client.setQueryData(['game-registry'], { data: [{ id: 1, slug: gameSlug, name: 'WoW' }] });
     const { container } = render(
         <QueryClientProvider client={client}>
             <CharacterDetailSections equipment={equipment} talents={null} professions={null} gameVariant={gameVariant}
@@ -87,5 +90,31 @@ describe('CharacterDetailSections — via-addon source line', () => {
     ])('%s → no via-addon line', (_label, equipment) => {
         renderSections({ gameVariant: 'classic_era', isArmoryImported: true, equipment });
         expect(screen.queryByText(/via addon/)).toBeNull();
+    });
+});
+
+/** ROK-1751: LedgerLink exports carry `ruleset: null`; the character's game slug resolves Forever. */
+describe('CharacterDetailSections — Forever resolved from the game slug', () => {
+    const QUESTS = {
+        source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z', inProgress: [], completedKnown: [],
+        counts: { completedKnown: 0, knownTotal: 3, completedTotal: 5, inProgress: 0 },
+    };
+
+    it('Forever game + null variant + null ruleset → addon hints and the Quests section', async () => {
+        let questsRequested = false;
+        server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => {
+            questsRequested = true;
+            return HttpResponse.json({ quests: QUESTS });
+        }));
+        renderSections({ gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-forever' });
+        expect(hintUnder('No equipment data')).toBe(FOREVER_ADDON_HINT_EQUIPMENT);
+        expect(await screen.findByRole('heading', { name: 'Quests' })).toBeInTheDocument();
+        expect(questsRequested).toBe(true);
+    });
+
+    it('Classic game + null ruleset → Armory copy, no Quests section', () => {
+        renderSections({ gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-classic' });
+        expect(hintUnder('No equipment data')).toBe(ARMORY_EQUIPMENT);
+        expect(screen.queryByRole('heading', { name: 'Quests' })).toBeNull();
     });
 });

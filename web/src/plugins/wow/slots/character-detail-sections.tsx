@@ -6,11 +6,14 @@
  * to the grid, the item modal, talents and the empty states. Manual WoW:
  * Forever characters carry `gameVariant: null` + a `ruleset`; the ruleset is
  * read from the page's own character query (same cache key, no extra
- * request), so core's slot context needs no WoW field.
+ * request), so core's slot context needs no WoW field. ROK-1751: the game
+ * slug (from the cached game registry) resolves LedgerLink Forever characters
+ * whose ruleset is null.
  */
 import { useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
-import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations, resolveWowVariant } from '../lib/wow-variant-config';
+import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
+import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { useWowheadTooltips } from '../hooks/use-wowhead-tooltips';
 import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
@@ -84,7 +87,7 @@ export function CharacterDetailSections({
 }: CharacterDetailSectionsProps) {
     useWowheadTooltips(equipment ? [equipment] : []);
     const { data: character } = useCharacterDetail(characterId);
-    const variant = resolveWowVariant({ gameVariant, ruleset: character?.ruleset });
+    const variant = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
 
     return (
         <>
