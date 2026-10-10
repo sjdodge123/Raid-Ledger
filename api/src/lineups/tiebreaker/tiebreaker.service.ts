@@ -40,6 +40,11 @@ import {
   findSurvivor,
 } from './tiebreaker-veto.helpers';
 import { buildTiebreakerDetail } from './tiebreaker-response.helpers';
+import {
+  assertCallerMayTiebreak,
+  assertMatchupVotable,
+} from './tiebreaker-authz.helpers';
+import type { EligibilityCaller } from '../lineups-eligibility.helpers';
 import { findVetoes } from './tiebreaker-query.helpers';
 import {
   assertCanPickTiebreaker,
@@ -171,16 +176,23 @@ export class TiebreakerService {
     await clearActiveTiebreaker(this.db, lineupId);
   }
 
-  /** Cast a bracket vote. */
+  /**
+   * Cast a bracket vote. ROK-1752: the caller must be able to participate in
+   * the lineup, and the matchup must be an open one of THIS tiebreaker's
+   * current round.
+   */
   async castBracketVote(
     lineupId: number,
     dto: CastBracketVoteDto,
-    userId: number,
+    caller: EligibilityCaller,
   ): Promise<TiebreakerDetailDto> {
+    const userId = caller.id;
+    await assertCallerMayTiebreak(this.db, lineupId, caller);
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb || tb.status !== 'active') {
       throw new BadRequestException('No active tiebreaker');
     }
+    await assertMatchupVotable(this.db, tb.id, dto.matchupId, dto.gameId);
 
     await this.db
       .insert(schema.communityLineupTiebreakerBracketVotes)
@@ -194,12 +206,14 @@ export class TiebreakerService {
     return buildTiebreakerDetail(this.db, updated ?? tb, userId);
   }
 
-  /** Submit a veto. */
+  /** Submit a veto. ROK-1752: private lineups are invitee-only. */
   async castVeto(
     lineupId: number,
     dto: CastVetoDto,
-    userId: number,
+    caller: EligibilityCaller,
   ): Promise<TiebreakerDetailDto> {
+    const userId = caller.id;
+    await assertCallerMayTiebreak(this.db, lineupId, caller);
     const [tb] = await findPendingOrActiveTiebreaker(this.db, lineupId);
     if (!tb || tb.status !== 'active') {
       throw new BadRequestException('No active tiebreaker');
