@@ -191,6 +191,7 @@ payload are unchanged — this only widens what one paste may contain.
 | `ADDON_QUESTS_COMPLETED_MAX` | 10 000 | `char` `data.quests.completed` — the one array exempt from the 2000 structural cap; the addon cuts to the first 10 000 ids ascending and sets `quests.completedTruncated: true` | `INVALID_PAYLOAD` |
 | `ADDON_QUESTS_IN_PROGRESS_MAX` | 35 | `char` `data.quests.inProgress` | `INVALID_PAYLOAD` |
 | `ADDON_QUEST_OBJECTIVES_MAX` | 10 | objectives per in-progress quest | `INVALID_PAYLOAD` |
+| export clock window (server-internal, `addon-import.clock.ts`) | +1 day / −365 days | every `exportedAt`, plus guild `data.snapshotAt`, checked against the **server** clock at decode time; raid `pulls[].startAt`/`endAt` get only the +1 day future bound (old pull history is legitimate). Export strings are unsigned, so this stops a far-future snapshot from locking a guild against honest imports (ROK-1756) | `INVALID_PAYLOAD` |
 | structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000 (except `quests.completed`, above), any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |
 
 ## 7. Error codes (`AddonImportErrorCodeSchema`)

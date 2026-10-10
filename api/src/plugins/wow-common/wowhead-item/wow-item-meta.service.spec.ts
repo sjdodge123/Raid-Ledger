@@ -6,6 +6,10 @@
 import { SETTING_KEYS } from '../../../drizzle/schema/app-settings';
 import type { SettingsService } from '../../../settings/settings.service';
 import { WowItemMetaService } from './wow-item-meta.service';
+import {
+  NOT_FOUND_MAX_MISSES,
+  NOT_FOUND_PARK_MS,
+} from './wow-item-meta.backoff';
 import { RECHECK_TTL_MS, RESOLVED_TTL_MS } from './wow-item-meta.resolve';
 import { ERROR_VIEW_RETRY_FLOOR_MS } from './wow-item-meta.due';
 import { createWowheadLimiter } from './wowhead-item.limiter';
@@ -144,7 +148,7 @@ describe('WowItemMetaService.enqueue — resolution (ROK-1727)', () => {
       env: null,
       name: null,
       nextRetryAt: after(RECHECK_TTL_MS),
-      attempts: 0,
+      attempts: 1,
     });
   });
 
@@ -252,6 +256,75 @@ describe('WowItemMetaService — due selection + kill switch (ROK-1727)', () => 
   });
 });
 
+describe('WowItemMetaService — not_found re-probe cap (ROK-1756)', () => {
+  const miss = () => fetchStub({ 16: [{ status: 404 }], 4: [{ status: 404 }] });
+
+  it('caps daily re-probes at 3 misses, then parks the id for 30 days', async () => {
+    const due = [row({ itemId: 9, attempts: 2, nextRetryAt: after(-HOUR) })];
+    const { service, writes } = setup({ fetch: miss(), due });
+    await service.retryDue();
+    expect(NOT_FOUND_MAX_MISSES).toBe(3);
+    expect(NOT_FOUND_PARK_MS).toBe(30 * 24 * HOUR);
+    expect(writes[0]?.row).toMatchObject({
+      status: 'not_found',
+      attempts: 3,
+      nextRetryAt: after(NOT_FOUND_PARK_MS),
+    });
+  });
+
+  it('below the cap a miss is re-probed in 24 h and counts up', async () => {
+    const due = [row({ itemId: 9, attempts: 1, nextRetryAt: after(-HOUR) })];
+    const { service, writes } = setup({ fetch: miss(), due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({
+      attempts: 2,
+      nextRetryAt: after(RECHECK_TTL_MS),
+    });
+  });
+
+  it('a parked id is not re-probed by enqueue before its park ends', async () => {
+    const fetch = miss();
+    const parked = row({ itemId: 9, attempts: 3, nextRetryAt: after(HOUR) });
+    const { service, writes } = setup({ fetch, existing: [parked] });
+    await expect(service.enqueue([9])).resolves.toBe(0);
+    expect(fetch.fn).not.toHaveBeenCalled();
+    expect(writes).toEqual([]);
+  });
+
+  it('an error streak is not a miss streak: error → not_found starts at 1', async () => {
+    const due = [
+      row({ itemId: 9, status: 'error', attempts: 4, nextRetryAt: after(-1) }),
+    ];
+    const { service, writes } = setup({ fetch: miss(), due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({
+      status: 'not_found',
+      attempts: 1,
+      nextRetryAt: after(RECHECK_TTL_MS),
+    });
+  });
+
+  it('a transient error on a parked not_found row keeps its miss count (3 stays 3)', async () => {
+    const fetch = fetchStub({ 16: [{ status: 429 }] });
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch, due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({ status: 'error', attempts: 3 });
+    expect(writes[0]?.set).toMatchObject({ attempts: 3 });
+  });
+
+  it('…so the next definitive miss after the error re-parks it', async () => {
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch: miss(), due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({
+      status: 'not_found',
+      attempts: 4,
+      nextRetryAt: after(NOT_FOUND_PARK_MS),
+    });
+  });
+});
+
 describe('WowItemMetaService — error view floor (ROK-1760)', () => {
   it('enqueue re-probes an error row past the floor even before next_retry_at', async () => {
     const fetch = fetchStub({ 16: [{ status: 200, body: HIT }] });
@@ -322,6 +395,36 @@ describe('WowItemMetaService — failure logging (ROK-1760)', () => {
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0]?.[0])).toContain(
       'Wowhead item 13 lookup failed (error, attempt 1)',
+    );
+  });
+});
+
+describe('WowItemMetaService — miss cap × failure logging (ROK-1756 + ROK-1760)', () => {
+  it('a transient error on a parked not_found row logs the probe (attempt 1) but stores the miss count', async () => {
+    const fetch = fetchStub({ 16: [{ status: 429 }] });
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch, due });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.retryDue();
+    expect(writes[0]?.set).toMatchObject({ attempts: 3 });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      'Wowhead item 9 lookup failed (error, attempt 1)',
+    );
+  });
+
+  it('a parked miss logs its 30-day re-check date', async () => {
+    const fetch = fetchStub({ 16: [{ status: 404 }], 4: [{ status: 404 }] });
+    const due = [row({ itemId: 9, attempts: 2, nextRetryAt: after(-1) })];
+    const { service } = setup({ fetch, due });
+    const warn = jest
+      .spyOn(service['logger'], 'warn')
+      .mockImplementation(() => undefined);
+    await service.retryDue();
+    expect(String(warn.mock.calls[0]?.[0])).toContain(
+      `re-check at ${after(NOT_FOUND_PARK_MS).toISOString()}`,
     );
   });
 });
