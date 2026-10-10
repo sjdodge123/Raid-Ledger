@@ -95,7 +95,13 @@ async function importLinkedGear(): Promise<string> {
   const created = await testApp.request
     .post('/users/me/characters')
     .set('Authorization', `Bearer ${token}`)
-    .send({ gameId, name: 'Gear Forever', class: 'Warrior', region: 'us' });
+    .send({
+      gameId,
+      name: 'Gear Forever',
+      class: 'Warrior',
+      region: 'us',
+      ruleset: 'normal',
+    });
   expect(created.status).toBe(201);
   const charId = created.body.id as string;
   const imported = await testApp.request
