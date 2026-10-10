@@ -74,7 +74,7 @@ export async function assertCallerMayViewPoll(
   try {
     await assertUserCanParticipate(db, lineup, {
       id: caller.id,
-      role: caller.role ?? undefined,
+      ...(caller.role != null ? { role: caller.role } : {}),
     });
   } catch (err) {
     if (err instanceof ForbiddenException) throw hidden;
@@ -115,7 +115,7 @@ export function assertPollOpen(
     lineupStatus: lineup.status ?? null,
     phaseDeadline: lineup.phaseDeadline ?? null,
     linkedEventId: match.linkedEventId ?? null,
-    slotTimes,
+    ...(slotTimes !== undefined ? { slotTimes } : {}),
   });
   if (pollStatus !== 'open') {
     throw new BadRequestException('This poll is no longer accepting votes');

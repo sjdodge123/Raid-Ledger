@@ -52,7 +52,7 @@ type SignupTxArgs = {
   event: EventRow;
   user: UserRow | undefined;
   benchPromo: BenchPromotionService;
-  dto?: CreateSignupDto;
+  dto?: CreateSignupDto | undefined;
 };
 
 export async function executeSignupTx(args: SignupTxArgs) {

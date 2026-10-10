@@ -56,6 +56,16 @@ function definedOnly(
   );
 }
 
+/** Optional fields with their `undefined` holes dropped (exactOptionalPropertyTypes). */
+type Compact<T> = { [K in keyof T]?: Exclude<T[K], undefined> };
+
+/** Drops `undefined`-valued keys so an optional field stays absent, not `undefined`. */
+function compact<T extends object>(fields: T): Compact<T> {
+  return Object.fromEntries(
+    Object.entries(fields).filter(([, value]) => value !== undefined),
+  ) as Compact<T>;
+}
+
 /**
  * Overrides a caller may layer onto the resolved context.
  *
@@ -109,11 +119,13 @@ export async function resolveCreatedCtx(
     loadEffectiveNominationCapById(deps.db, lineup.id),
   ]);
   return resolveEmbedCtx(deps, lineup.id, 'nominations', {
-    title: lineup.title,
-    // Never synthesise `null` here: an id-only refresh means "load it", and
-    // `definedOnly` must not mistake the placeholder for a real override.
-    description: lineup.description ?? undefined,
-    phaseDeadline: lineup.phaseDeadline ?? undefined,
+    ...compact({
+      title: lineup.title,
+      // Never synthesise `null` here: an id-only refresh means "load it", and
+      // `definedOnly` must not mistake the placeholder for a real override.
+      description: lineup.description ?? undefined,
+      phaseDeadline: lineup.phaseDeadline ?? undefined,
+    }),
     nominationCount: entryRows?.[0]?.count ?? 0,
     nominationCap,
   });
@@ -149,13 +161,15 @@ export async function resolveEmbedCtx(
     lineupId,
     communityName: community ?? 'Raid Ledger',
     phase,
-    lineupTitle: merged.title,
     lineupDescription: merged.description ?? null,
-    phaseDeadline: merged.phaseDeadline ?? undefined,
-    nominationCount: overrides?.nominationCount,
-    nominationCap: overrides?.nominationCap,
-    tiebreakerRound: overrides?.tiebreakerRound,
-    nominationTargetPct: overrides?.nominationTargetPct,
+    ...compact({
+      lineupTitle: merged.title,
+      phaseDeadline: merged.phaseDeadline ?? undefined,
+      nominationCount: overrides?.nominationCount,
+      nominationCap: overrides?.nominationCap,
+      tiebreakerRound: overrides?.tiebreakerRound,
+      nominationTargetPct: overrides?.nominationTargetPct,
+    }),
   };
 }
 

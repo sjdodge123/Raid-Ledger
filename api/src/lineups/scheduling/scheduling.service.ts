@@ -136,10 +136,11 @@ export class SchedulingService {
     assertSchedulingEnabled(match);
     assertSchedulable(match);
     if (userId) {
+      const role = callerRole !== undefined ? { role: callerRole } : {};
       await assertCallerMayVote(
         this.db,
         match.lineupId,
-        { id: userId, role: callerRole },
+        { id: userId, ...role },
         match,
       );
     }
@@ -214,7 +215,7 @@ export class SchedulingService {
     await assertCallerMayVote(
       this.db,
       match.lineupId,
-      { id: userId, role: callerRole },
+      { id: userId, ...(callerRole !== undefined ? { role: callerRole } : {}) },
       match,
     );
     const slot = await assertSlotBelongsToMatch(this.db, slotId, matchId);
@@ -276,7 +277,7 @@ export class SchedulingService {
     assertSchedulable(match);
     await assertCallerMayVote(this.db, match.lineupId, {
       id: userId,
-      role: callerRole,
+      ...(callerRole !== undefined ? { role: callerRole } : {}),
     });
     // ROK-1544: no votes left → the member has no answer on record again.
     // Delete + stamp share one tx so the two can never diverge.
@@ -310,7 +311,7 @@ export class SchedulingService {
     const slot = await findSlotOrThrow(this.db, slotId);
     await assertMayLockInSlot(this.db, match, matchId, slot, {
       id: userId,
-      role: callerRole,
+      ...(callerRole !== undefined ? { role: callerRole } : {}),
     });
     return {
       eventId: await createLockedInEvent(

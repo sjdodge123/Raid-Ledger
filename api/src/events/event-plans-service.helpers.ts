@@ -62,7 +62,7 @@ export async function postPollForPlan(
       options,
       durationHours,
       round,
-      details,
+      ...(details !== undefined ? { details } : {}),
     });
     await db
       .update(schema.eventPlans)

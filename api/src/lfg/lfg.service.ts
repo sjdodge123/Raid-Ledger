@@ -54,6 +54,7 @@ import {
   isGroupParticipant,
   reviveIntent,
   toIntentDto,
+  type LfgConversionTarget,
   type LfgIntentRow,
   type LfgUrgencyRequest,
 } from './lfg-write.helpers';
@@ -319,24 +320,25 @@ export class LfgService {
     dto: ConvertLfgIntentsDto,
   ): Promise<{ converted: number }> {
     await this.requireGame(gameId);
-    const participant = await isGroupParticipant(this.db, userId, gameId, dto);
+    const target = toConversionTarget(dto);
+    const participant = await isGroupParticipant(
+      this.db,
+      userId,
+      gameId,
+      target,
+    );
     if (!participant) {
       throw new ForbiddenException(
         'Only a member of this LFG group can convert it',
       );
     }
-    await this.requireConversionTarget(gameId, dto);
-    const converted = await convertGroup(this.db, gameId, dto);
+    await this.requireConversionTarget(gameId, target);
+    const converted = await convertGroup(this.db, gameId, target);
     // Zero rows means this is a retry of an already-converted group (E5): the
     // target message is terminal, so re-announcing it would re-render a card
     // nobody changed.
     if (converted > 0) {
-      this.emitGroupChanged({
-        gameId,
-        reason: 'converted',
-        pollId: dto.pollId,
-        eventId: dto.eventId,
-      });
+      this.emitGroupChanged({ gameId, reason: 'converted', ...target });
     }
     return { converted };
   }
@@ -348,7 +350,7 @@ export class LfgService {
    */
   private async requireConversionTarget(
     gameId: number,
-    target: ConvertLfgIntentsDto,
+    target: LfgConversionTarget,
   ): Promise<void> {
     const targetGameId = await resolveTargetGameId(this.db, target);
     if (targetGameId === undefined) {
@@ -456,4 +458,12 @@ export class LfgService {
     const group = await getGroupSummary(this.db, game, userId);
     return { ...toIntentDto(fresh ?? row), group };
   }
+}
+
+/** The DTO's one supplied provenance id, without the absent one's key. */
+function toConversionTarget(dto: ConvertLfgIntentsDto): LfgConversionTarget {
+  return {
+    ...(dto.pollId !== undefined ? { pollId: dto.pollId } : {}),
+    ...(dto.eventId !== undefined ? { eventId: dto.eventId } : {}),
+  };
 }

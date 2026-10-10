@@ -77,8 +77,11 @@ type WideCtx = EmbedContext & {
   nominationTargetPct?: number | null;
 };
 
-function ctx(overrides: Partial<WideCtx> = {}): EmbedContext {
-  const wide: WideCtx = {
+/** An explicit `undefined` clears a default (e.g. a card with no deadline). */
+type CtxOverrides = { [K in keyof WideCtx]?: WideCtx[K] | undefined };
+
+function ctx(overrides: CtxOverrides = {}): EmbedContext {
+  const wide = {
     baseUrl: BASE_URL,
     lineupId: LINEUP_ID,
     communityName: COMMUNITY,
@@ -87,7 +90,7 @@ function ctx(overrides: Partial<WideCtx> = {}): EmbedContext {
     phaseDeadline: DEADLINE,
     ...overrides,
   };
-  return wide;
+  return wide as WideCtx;
 }
 
 const NOMINATIONS: NominationEntry[] = [
