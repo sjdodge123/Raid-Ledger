@@ -11,6 +11,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { NotDeactivatedGuard } from '../../auth/not-deactivated.guard';
 import type { Response } from 'express';
 import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
@@ -81,7 +82,7 @@ export class QuestProgressController {
    * Update the current user's progress on a quest for an event.
    */
   @Put('events/:eventId/quest-progress')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async updateProgress(
     @Param('eventId', ParseIntPipe) eventId: number,
     @Body() body: { questId: number; pickedUp?: boolean; completed?: boolean },
