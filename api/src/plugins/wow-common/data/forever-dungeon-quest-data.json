@@ -332,7 +332,7 @@
   },
   {
     "questId": 92459,
-    "dungeonInstanceId": 90000002,
+    "dungeonInstanceId": 90000004,
     "name": "Friend of the Kirin Tor",
     "questLevel": 33,
     "requiredLevel": 24,
@@ -1119,7 +1119,7 @@
   },
   {
     "questId": 97287,
-    "dungeonInstanceId": 90000002,
+    "dungeonInstanceId": 90000004,
     "name": "Shrewd Negotiations",
     "questLevel": 33,
     "requiredLevel": 24,

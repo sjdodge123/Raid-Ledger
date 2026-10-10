@@ -23,6 +23,7 @@ import {
   type BuildSummary,
   type QuestPageSource,
 } from '../src/plugins/wow-common/forever-quest-import/forever-quest.build';
+import { createRetryingGetter } from '../src/plugins/wow-common/forever-quest-import/forever-quest.fetch';
 import {
   FOREVER_WOWHEAD_ZONES,
   unmappedZones,
@@ -66,22 +67,13 @@ function fixtureSource(dir: string): QuestPageSource {
 
 function liveSource(maxRequests: number): QuestPageSource {
   const limiter = createWowheadLimiter();
-  let sent = 0;
-  const get = async (url: string): Promise<string | null> => {
-    for (let tryN = 1; tryN <= WOWHEAD_MAX_TRIES_PER_RUN; tryN++) {
-      if (++sent > maxRequests)
-        throw new Error(`request cap ${maxRequests} reached`);
-      const res = await limiter.schedule(() =>
-        fetch(url, {
-          headers: { 'User-Agent': WOWHEAD_USER_AGENT },
-          redirect: 'follow',
-        }),
-      );
-      if (res.ok) return res.text();
-      if (res.status === 404) return null;
-    }
-    return null;
-  };
+  const get = createRetryingGetter({
+    fetchFn: (url, init) => fetch(url, init),
+    schedule: (task) => limiter.schedule(task),
+    maxRequests,
+    maxTries: WOWHEAD_MAX_TRIES_PER_RUN,
+    userAgent: WOWHEAD_USER_AGENT,
+  });
   return {
     zonePage: (n) => {
       const zoneId = FOREVER_WOWHEAD_ZONES[n];
@@ -99,11 +91,24 @@ function printSummary(
   log(`rows: ${total}`);
   for (const [name, count] of Object.entries(summary.rowsPerInstance))
     log(`  ${name}: ${count}`);
-  log(`null-instance pre-reqs: ${summary.nullInstancePrereqs}`);
+  log(`out-of-zone chain steps: ${summary.nullInstanceSteps}`);
+  log(`outOfBand: ${summary.outOfBand.length}`);
+  for (const o of summary.outOfBand)
+    log(`  ${o.questId} "${o.name}" L${o.questLevel} (seed ${o.seedN})`);
   log(`notShown: ${summary.notShown.length} ${summary.notShown.join(',')}`);
   log(`skipped: ${summary.skipped.length}`);
   for (const s of summary.skipped) log(`  ${s.id ?? '-'}: ${s.reason}`);
   for (const line of summary.zoneReports) log(line);
+}
+
+/** `--max-requests` as a positive integer (default 400), or an error line. */
+function maxRequestsArg(argv: string[]): number | string {
+  const raw = argValue(argv, '--max-requests');
+  if (raw === undefined) return 400;
+  const n = Number(raw);
+  return raw.trim() !== '' && Number.isInteger(n) && n > 0
+    ? n
+    : `--max-requests must be a positive integer (got "${raw}")`;
 }
 
 function pickSource(
@@ -114,13 +119,15 @@ function pickSource(
   const dir = argValue(argv, '--fixtures');
   if (!live && !dir)
     return 'usage: --fixtures <dir> | --live [--max-requests N] [--out file]';
+  const maxRequests = maxRequestsArg(argv);
+  if (typeof maxRequests === 'string') return maxRequests;
   const underTest = Boolean(opts.env.JEST_WORKER_ID || opts.env.CI);
   if (underTest && (live || !opts.allowUnderTest))
     return 'refusing to run under jest/CI';
   if (!live) return fixtureSource(dir as string);
   if (unmappedZones().length === Object.keys(FOREVER_WOWHEAD_ZONES).length)
     return 'zones not mapped';
-  return liveSource(Number(argValue(argv, '--max-requests') ?? 400));
+  return liveSource(maxRequests);
 }
 
 /** CLI entry; resolves the process exit code. */

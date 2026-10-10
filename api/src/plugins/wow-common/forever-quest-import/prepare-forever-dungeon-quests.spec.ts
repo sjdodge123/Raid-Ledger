@@ -60,9 +60,10 @@ describe('prepare-forever-dungeon-quests (fixtures mode)', () => {
     expect(rows[1]?.dungeonInstanceId).toBeNull();
     const summary = lines.join('\n');
     expect(summary).toMatch(/Alcaz Prison: 1/);
-    expect(summary).toMatch(/null-instance pre-reqs: 1/);
+    expect(summary).toMatch(/out-of-zone chain steps: 1/);
     expect(summary).toMatch(/zone 8 .*title/);
     expect(summary).toMatch(/skipped: \d+/);
+    expect(summary).toMatch(/outOfBand: 0/);
   });
 
   it('refuses to run under jest without the explicit test bypass', async () => {
@@ -80,6 +81,19 @@ describe('prepare-forever-dungeon-quests (fixtures mode)', () => {
     expect(await exit).toBe(1);
     expect(lines.join('\n')).toMatch(/refusing/i);
   });
+
+  it.each([['abc'], ['0'], ['-5'], ['']])(
+    'rejects --max-requests %p with a clear error',
+    async (value) => {
+      const { exit, lines } = run(['--live', '--max-requests', value], {
+        CI: 'true',
+      });
+      expect(await exit).toBe(1);
+      expect(lines.join('\n')).toMatch(
+        /--max-requests must be a positive integer/,
+      );
+    },
+  );
 
   it('rejects missing arguments with usage', async () => {
     const { exit, lines } = run([], process.env);

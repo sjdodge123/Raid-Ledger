@@ -21,12 +21,26 @@ export interface QuestPageSource {
   questPage(questId: number): Promise<string | null>;
 }
 
+/** A zone row whose level sits >5 above its seed instance's band max. */
+export interface OutOfBandRow {
+  questId: number;
+  name: string;
+  questLevel: number;
+  seedN: number;
+}
+
+/** Levels a zone quest may exceed its seed's `maximumLevel` before it is reported. */
+const BAND_SLACK = 5;
+
 export interface BuildSummary {
   rowsPerInstance: Record<string, number>;
   skipped: ParseSkip[];
   notShown: number[];
   zoneReports: string[];
-  nullInstancePrereqs: number;
+  /** Out-of-zone chain steps (pre-reqs or later steps) imported with a null instance. */
+  nullInstanceSteps: number;
+  /** Reported, still written — the Lead re-keys by hand. */
+  outOfBand: OutOfBandRow[];
 }
 
 interface BuildState {
@@ -56,11 +70,27 @@ async function importQuest(
     state.summary.skipped.push(result.skip);
     return null;
   }
+  if (parsed.seriesIssue)
+    state.summary.skipped.push({ id: zoneRow.id, reason: parsed.seriesIssue });
   state.rows.set(result.row.questId, result.row);
   for (const step of parsed.series) {
     if (step.questId !== null) state.prereqs.set(step.questId, step.name);
   }
   return result.row;
+}
+
+function checkBand(
+  state: BuildState,
+  row: DungeonQuestRow,
+  seedN: number,
+): void {
+  const max = FOREVER_INSTANCES.find(
+    (i) => i.id === FOREVER_SEED_ID_BASE + seedN,
+  )?.maximumLevel;
+  if (max === undefined || row.questLevel === null) return;
+  if (row.questLevel <= max + BAND_SLACK) return;
+  const { questId, name, questLevel } = row;
+  state.summary.outOfBand.push({ questId, name, questLevel, seedN });
 }
 
 async function importZone(
@@ -84,7 +114,10 @@ async function importZone(
   let count = 0;
   for (const zoneRow of list.rows) {
     if (state.rows.has(zoneRow.id)) continue;
-    if (await importQuest(source, state, zoneRow, seedN)) count++;
+    const row = await importQuest(source, state, zoneRow, seedN);
+    if (!row) continue;
+    checkBand(state, row, seedN);
+    count++;
   }
   state.summary.rowsPerInstance[instanceName] = count;
 }
@@ -95,12 +128,13 @@ function emptyState(): BuildState {
     skipped: [],
     notShown: [],
     zoneReports: [],
-    nullInstancePrereqs: 0,
+    nullInstanceSteps: 0,
+    outOfBand: [],
   };
   return { rows: new Map(), prereqs: new Map(), summary };
 }
 
-/** Build every row (zone quests, then out-of-zone pre-reqs), sorted by questId. */
+/** Build every row (zone quests, then out-of-zone chain steps), sorted by questId. */
 export async function buildForeverQuestDataset(
   source: QuestPageSource,
 ): Promise<{ rows: DungeonQuestRow[]; summary: BuildSummary }> {
@@ -116,7 +150,7 @@ export async function buildForeverQuestDataset(
   for (const [id, name] of state.prereqs) {
     if (state.rows.has(id)) continue;
     if (await importQuest(source, state, { id, name }, null)) {
-      state.summary.nullInstancePrereqs++;
+      state.summary.nullInstanceSteps++;
     }
   }
   const rows = [...state.rows.values()].sort((a, b) => a.questId - b.questId);
