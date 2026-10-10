@@ -18,7 +18,8 @@ export const TALENT_ROW_ORIGIN = 2130;
 export const TALENT_ROW_STEP = 600;
 const TREE_COUNT = 3;
 const MAX_COL = 3;
-const MAX_ROW = 9;
+/** Hardened rule (vanilla 7-row shape): a row outside 0–6 bails to list. The wire bound stays 9. */
+const MAX_ROW = 6;
 
 /** One snapshot node as the adapter consumes it (1742's schema maps onto this). */
 export interface ForeverTalentNodeInput {
@@ -80,17 +81,27 @@ function deriveSlots(nodes: ForeverTalentNodeInput[]): Slot[] | null {
   });
 }
 
-/** D5 source order: addon hints on every node → positions on every node → none. */
+/**
+ * D5 source order: valid addon hints on every node → positions on every node
+ * → none. Complete-but-invalid hints fall through to derivation.
+ */
 function pickSlots(nodes: ForeverTalentNodeInput[]): Slot[] | null {
   if (nodes.length === 0) return null;
   const hinted = nodes.every(
     (n) => n.tree !== undefined && n.row !== undefined && n.col !== undefined,
   );
-  if (hinted)
-    return nodes.map((n) => ({ tree: n.tree!, row: n.row!, col: n.col! }));
-  if (nodes.every((n) => n.posX !== undefined && n.posY !== undefined))
-    return deriveSlots(nodes);
-  return null;
+  if (hinted) {
+    const hints = nodes.map((n) => ({
+      tree: n.tree!,
+      row: n.row!,
+      col: n.col!,
+    }));
+    if (slotsValid(hints)) return hints;
+  }
+  if (!nodes.every((n) => n.posX !== undefined && n.posY !== undefined))
+    return null;
+  const derived = deriveSlots(nodes);
+  return derived && slotsValid(derived) ? derived : null;
 }
 
 /** In-range integers with no two nodes on the same (tree,row,col). */
@@ -124,8 +135,7 @@ function treeSpend(nodes: ForeverTalentNodeDto[]): ForeverTalentsDto['trees'] {
 export function snapshotToForeverTalents(
   snapshot: ForeverTalentSnapshotInput,
 ): ForeverTalentsDto {
-  const picked = pickSlots(snapshot.nodes);
-  const slots = picked && slotsValid(picked) ? picked : null;
+  const slots = pickSlots(snapshot.nodes);
   const nodes = snapshot.nodes.map((n, i) => ({
     ...copyNode(n),
     ...(slots ? slots[i] : {}),

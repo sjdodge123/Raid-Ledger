@@ -140,6 +140,45 @@ describe('snapshotToForeverTalents — addon hints (D5)', () => {
     ]);
   });
 
+  it('invalid hints (collision) + valid positions → grid from derivation', () => {
+    const cells = allCells();
+    const nodes = positioned(cells).map((n) => ({
+      ...n,
+      tree: 0,
+      row: 0,
+      col: 0,
+    }));
+    const out = snapshotToForeverTalents(snap(nodes));
+    expect(out.layout).toBe('grid');
+    out.nodes.forEach((n, i) => {
+      expect({ tree: n.tree, col: n.col, row: n.row }).toEqual(cells[i]);
+    });
+  });
+
+  it('invalid hints (out of range) + valid positions → grid from derivation', () => {
+    const cells = allCells();
+    const nodes = positioned(cells).map((n, i) => ({
+      ...n,
+      tree: 5,
+      row: i,
+      col: 0,
+    }));
+    const out = snapshotToForeverTalents(snap(nodes));
+    expect(out.layout).toBe('grid');
+    out.nodes.forEach((n, i) => {
+      expect({ tree: n.tree, col: n.col, row: n.row }).toEqual(cells[i]);
+    });
+  });
+
+  it('invalid hints and no positions → list', () => {
+    const nodes = [
+      { nodeId: 1, rank: 1, tree: 0, row: 0, col: 0 },
+      { nodeId: 2, rank: 1, tree: 0, row: 0, col: 0 },
+    ];
+    const out = snapshotToForeverTalents(snap(nodes));
+    expect(out.layout).toBe('list');
+  });
+
   it('derives from positions when only some nodes carry hints', () => {
     const cells = allCells();
     const nodes = positioned(cells).map((n, i) =>
@@ -201,9 +240,14 @@ describe('snapshotToForeverTalents — grid sanity bails', () => {
     expectList(nodes);
   });
 
-  it('a row beyond 9 → list', () => {
+  it('a row beyond 6 (row 7, outside the vanilla 0–6 shape) → list', () => {
     const nodes = positioned(allCells());
-    nodes.push({ nodeId: 4444, rank: 1, posX: 1020, posY: 2130 + 600 * 10 });
+    nodes.push({ nodeId: 4444, rank: 1, posX: 1020, posY: 2130 + 600 * 7 });
+    expectList(nodes);
+  });
+
+  it('a hinted row 7 (no positions) → list', () => {
+    const nodes = [{ nodeId: 1, rank: 1, tree: 0, row: 7, col: 0 }];
     expectList(nodes);
   });
 
