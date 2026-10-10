@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { WOW_FOREVER_GAME_SLUG } from '../lib/forever-identity';
 import {
     fetchEnrichedQuests,
     fetchQuestProgress,
@@ -76,18 +77,15 @@ export function useQuestCoverage(eventId: number | undefined) {
     });
 }
 
-/** Only WoW: Forever events carry per-character pre-req state (ROK-1748 AC6). */
-const FOREVER_GAME_SLUG = 'world-of-warcraft-forever';
-
 /**
  * Fetch the viewer's pre-req chain state for an event (ROK-1748 D11).
- * Enabled only for WoW: Forever events — Classic events never request it.
+ * Enabled only for WoW: Forever events (AC6) — Classic events never request it.
  */
 export function useQuestPrereqs(eventId: number | undefined, gameSlug: string | undefined) {
     return useQuery<EventQuestPrereqsResponse>({
         queryKey: ['quest-prereqs', eventId],
         queryFn: () => fetchEventQuestPrereqs(eventId!),
-        enabled: !!eventId && gameSlug === FOREVER_GAME_SLUG,
+        enabled: !!eventId && gameSlug === WOW_FOREVER_GAME_SLUG,
         staleTime: 1000 * 30,
     });
 }
