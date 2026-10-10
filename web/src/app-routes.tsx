@@ -11,7 +11,7 @@ import { AuthSuccessPage } from './pages/auth-success-page';
 import { PublicLineupPage } from './pages/public/PublicLineupPage';
 
 import {
-  JoinPage, InvitePage,
+  JoinPage, InvitePage, PollSharePage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
   GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage,
   PlayersPage, EventMetricsPage,
@@ -130,6 +130,7 @@ export function AppRoutes() {
       <Route path="/join" element={<JoinPage />} />
       <Route path="/i/:code" element={<InvitePage />} />
       <Route path="/p/lineup/:slug" element={<PublicLineupPage />} />
+      <Route path="/p/poll/:token" element={<PollSharePage />} />
 
       <Route element={<AuthGuard />}>
         <Route path="/onboarding" element={<OnboardingWizardPage />} />

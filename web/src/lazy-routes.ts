@@ -45,6 +45,10 @@ function lazyWithRetry<
 export const JoinPage = lazyWithRetry(() =>
     import('./pages/join-page').then((m) => ({ default: m.JoinPage })),
 );
+/** ROK-1750: private poll share link landing (`/p/poll/:token`). */
+export const PollSharePage = lazyWithRetry(() =>
+    import('./pages/poll-share-page').then((m) => ({ default: m.PollSharePage })),
+);
 export const InvitePage = lazyWithRetry(() =>
     import('./pages/invite-page').then((m) => ({ default: m.InvitePage })),
 );
