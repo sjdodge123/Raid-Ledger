@@ -91,13 +91,24 @@ function toWowheadEnv(env: number | null): 16 | 4 {
   return env === 4 ? 4 : 16;
 }
 
+/**
+ * ROK-1760: until Wowhead resolves the item, show the name/quality parsed
+ * from the addon's raw item link, else an `Item #<id>` placeholder.
+ */
+function fallbackFields(gear: EquippedGear): ResolvedFields {
+  return {
+    name: gear.name ?? `Item #${gear.itemId}`,
+    quality: QUALITY_NAMES[gear.quality ?? 1] ?? 'COMMON',
+    resolved: false,
+  };
+}
+
+/** A resolved Wowhead row always wins over the link fallback. */
 function metaFields(
-  itemId: number,
+  gear: EquippedGear,
   meta: AddonItemMeta | undefined,
 ): ResolvedFields {
-  if (!isResolved(meta)) {
-    return { name: `Item #${itemId}`, quality: 'COMMON', resolved: false };
-  }
+  if (!isResolved(meta)) return fallbackFields(gear);
   return {
     name: meta.name,
     quality: QUALITY_NAMES[meta.quality ?? 1] ?? 'COMMON',
@@ -116,7 +127,7 @@ function toItem(
     itemId: gear.itemId,
     itemLevel: gear.ilvl ?? 0,
     itemSubclass: null,
-    ...metaFields(gear.itemId, meta.get(gear.itemId)),
+    ...metaFields(gear, meta.get(gear.itemId)),
   };
 }
 
