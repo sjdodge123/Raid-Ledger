@@ -1,7 +1,8 @@
 /**
  * ROK-1758: layout rules jsdom can't measure — read the stylesheet itself.
  * The coverage row must wrap on a phone (the "via addon · <date>" line was
- * clipped), and the Wowhead "↗" link needs a 44px hit area (design-system §tap targets).
+ * clipped), and the Wowhead "↗" link needs a 44px hit area (design-system §tap targets) —
+ * a transparent ::before, so the 12px glyph keeps its layout footprint.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -27,9 +28,10 @@ describe('quest-prep-panel.css (ROK-1758)', () => {
     });
 
     it('gives the Wowhead link a 44x44 hit area', () => {
-        const icon = rule('.quest-card__wowhead-icon');
-        expect(icon).toMatch(/min-width:\s*44px/);
-        expect(icon).toMatch(/min-height:\s*44px/);
-        expect(icon).toMatch(/justify-content:\s*center/);
+        expect(rule('.quest-card__wowhead-icon'), 'anchors the hit area').toMatch(/position:\s*relative/);
+        const hit = rule('.quest-card__wowhead-icon::before');
+        expect(hit).toMatch(/position:\s*absolute/);
+        expect(hit).toMatch(/width:\s*44px/);
+        expect(hit).toMatch(/height:\s*44px/);
     });
 });
