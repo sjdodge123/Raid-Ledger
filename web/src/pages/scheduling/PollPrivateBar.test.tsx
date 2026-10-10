@@ -5,7 +5,7 @@
  * no token (a private community lineup reports private with no token).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import type { User } from '../../hooks/use-auth';
@@ -94,7 +94,8 @@ describe('PollPrivateBar (ROK-1750)', () => {
         expect(calls, 'opening and cancelling the confirm must not reset').toEqual([]);
 
         await user.click(screen.getByTestId('poll-share-reset'));
-        await user.click(await screen.findByRole('button', { name: 'Reset link' }));
+        const dialog = await screen.findByRole('dialog', { name: 'Reset link?' });
+        await user.click(within(dialog).getByRole('button', { name: 'Reset link' }));
         await waitFor(() => expect(calls).toEqual(['55']));
     });
 });
