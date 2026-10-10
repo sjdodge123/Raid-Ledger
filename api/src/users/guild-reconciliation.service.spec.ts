@@ -94,7 +94,9 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
     );
     await h.run();
     expect(h.deactivateUser).toHaveBeenCalledTimes(1);
-    expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep');
+    expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep', {
+      seenBefore: expect.any(Date),
+    });
   });
 
   it('logs how many never-seen users were skipped', async () => {
@@ -123,7 +125,9 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
       ],
     );
     await h.run();
-    expect(h.deactivateUser.mock.calls).toEqual([[5, 'reconciliation-sweep']]);
+    expect(h.deactivateUser.mock.calls).toEqual([
+      [5, 'reconciliation-sweep', { seenBefore: expect.any(Date) }],
+    ]);
   });
 
   it('does not stamp or deactivate when the bot is disconnected', async () => {

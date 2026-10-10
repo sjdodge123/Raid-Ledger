@@ -86,4 +86,10 @@ describe('Discord sign-in stamps guild_member_seen_at (ROK-1759)', () => {
     await signIn(user.id, 'discord-bot-offline', new Error('bot offline'));
     expect(await seenAt(user.id)).toBeNull();
   });
+
+  it('stamps only the row for payload.userId, not another row holding the discord id', async () => {
+    const user = await createUnstampedUser('discord-moved');
+    await signIn(user.id + 1000, 'discord-moved', true);
+    expect(await seenAt(user.id)).toBeNull();
+  });
 });
