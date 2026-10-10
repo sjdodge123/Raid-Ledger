@@ -8,7 +8,7 @@
 --                Blackfathom Deeps 6563 971 1199 (3/11; 6563 chain 6562 NOT done -> 6563 done)
 --                + 5 non-dungeon ids (7 15 21 33 54) -> "7 completed ... · 12 quests total"
 --                in progress: 6562 mixed objectives with have/need, 783 no objectives,
---                6921 with dungeonInstanceId 227
+--                6921 (instance tag comes from the known-quest table, not the addon)
 --   Logbrak      Forever, schema-2, completed [] + 1 in progress -> "0 of M known"
 --   Hiddenbrak   Forever, schema-1 snapshot without quests -> section hidden
 --   Questclassic Classic Era, schema-2 snapshot WITH quests -> no request, no section
@@ -55,7 +55,7 @@ quests AS (
         {"text":"Twilight Acolyte slain","done":false,"have":3,"need":8},
         {"text":"Aku''mai Servant slain","done":false,"have":0,"need":4}]},
       {"questId":783,"title":"A Threat Within","objectives":[]},
-      {"questId":6921,"title":"Amongst the Ruins","dungeonInstanceId":227,
+      {"questId":6921,"title":"Amongst the Ruins",
        "objectives":[{"text":"Fathom Core","done":false,"have":0,"need":1}]}]}'::jsonb AS q
 ),
 snaps AS (
