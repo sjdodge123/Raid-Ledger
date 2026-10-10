@@ -12,10 +12,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
-import {
-  AUTH_EVENTS,
-  type DiscordLoginPayload,
-} from '../../auth/auth.service';
+import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { isGuildMemberSeen } from '../../notifications/discord-notification-deactivate.helpers';
 import { defined } from '../../common/testing/narrow';
@@ -52,40 +49,41 @@ async function seenAt(userId: number): Promise<Date | null> {
 }
 
 /** Sign in through the event bus with the bot lookup answering `answer`. */
-async function signIn(user: UserRow, answer: boolean | Error): Promise<void> {
+async function signIn(
+  userId: number,
+  discordId: string,
+  answer: boolean | Error,
+): Promise<void> {
   const bot = testApp.app.get(DiscordBotClientService);
   const spy = jest.spyOn(bot, 'isGuildMember');
   memberSpy = spy;
   if (answer instanceof Error) spy.mockRejectedValue(answer);
   else spy.mockResolvedValue(answer);
-  const discordId = defined(user.discordId, 'discordId');
-  await testApp.app
-    .get(EventEmitter2)
-    .emitAsync(AUTH_EVENTS.DISCORD_LOGIN, {
-      userId: user.id,
-      discordId,
-    } satisfies DiscordLoginPayload);
+  await testApp.app.get(EventEmitter2).emitAsync(AUTH_EVENTS.DISCORD_LOGIN, {
+    userId,
+    discordId,
+  } satisfies DiscordLoginPayload);
   expect(spy).toHaveBeenCalledWith(discordId);
 }
 
 describe('Discord sign-in stamps guild_member_seen_at (ROK-1759)', () => {
   it('stamps a current guild member, making them a 50278-deactivation candidate', async () => {
     const user = await createUnstampedUser('discord-joined-first');
-    await signIn(user, true);
+    await signIn(user.id, 'discord-joined-first', true);
     expect(await seenAt(user.id)).toBeInstanceOf(Date);
     expect(await isGuildMemberSeen(testApp.db, user.id)).toBe(true);
   });
 
   it('leaves a non-member (OAuth guest) unstamped', async () => {
     const user = await createUnstampedUser('discord-guest');
-    await signIn(user, false);
+    await signIn(user.id, 'discord-guest', false);
     expect(await seenAt(user.id)).toBeNull();
     expect(await isGuildMemberSeen(testApp.db, user.id)).toBe(false);
   });
 
   it('leaves the row unstamped when the bot lookup fails', async () => {
     const user = await createUnstampedUser('discord-bot-offline');
-    await signIn(user, new Error('bot offline'));
+    await signIn(user.id, 'discord-bot-offline', new Error('bot offline'));
     expect(await seenAt(user.id)).toBeNull();
   });
 });

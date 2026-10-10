@@ -9,6 +9,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { UsersService } from '../../users/users.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 
 /**
  * Re-activate users when they rejoin the Discord guild (ROK-1260).
@@ -62,6 +63,21 @@ export class GuildMemberAddListener {
     }
     this.registered = false;
     this.boundHandler = null;
+  }
+
+  /**
+   * ROK-1759: Discord OAuth sign-in / account link. When the person joined the
+   * guild BEFORE their account existed, the GuildMemberAdd stamp matched no
+   * row — so stamp here if the bot confirms membership. Runs off the event bus
+   * (fire-and-forget for the login request) and never throws: a bot that is
+   * offline or unconfigured makes `isGuildMember` false and nothing is written.
+   */
+  @OnEvent(AUTH_EVENTS.DISCORD_LOGIN)
+  async handleDiscordLogin(payload: DiscordLoginPayload): Promise<void> {
+    const isMember = await this.clientService
+      .isGuildMember(payload.discordId)
+      .catch(() => false);
+    if (isMember) await this.stampGuildMemberSeen(payload.discordId);
   }
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {

@@ -88,7 +88,10 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
   });
 
   it('deactivates a stamped user absent from the guild with the sweep reason', async () => {
-    const h = setup(['111'], [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }]);
+    const h = setup(
+      ['111'],
+      [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }],
+    );
     await h.run();
     expect(h.deactivateUser).toHaveBeenCalledTimes(1);
     expect(h.deactivateUser).toHaveBeenCalledWith(5, 'reconciliation-sweep');
@@ -124,7 +127,10 @@ describe('GuildReconciliationService (ROK-1749 sweep scoping)', () => {
   });
 
   it('does not stamp or deactivate when the bot is disconnected', async () => {
-    const h = setup([], [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }]);
+    const h = setup(
+      [],
+      [{ id: 5, discordId: '999', avatar: null, guildMemberSeenAt: OLD }],
+    );
     const svc = new GuildReconciliationService(
       h.db as never,
       {} as never,
