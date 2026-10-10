@@ -12,7 +12,11 @@ import {
   WowheadResolverDisabledError,
   type WowheadResolverDeps,
 } from './wow-item-meta.resolve';
-import { priorErrors, priorMisses } from './wow-item-meta.backoff';
+import {
+  keepMissCount,
+  priorErrors,
+  priorMisses,
+} from './wow-item-meta.backoff';
 import { conflictSet } from './wow-item-meta.upsert';
 import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 import { isWowheadResolverEnabled } from './wowhead-resolver.settings';
@@ -124,7 +128,8 @@ export class WowItemMetaService {
     try {
       const errors = priorErrors(prev);
       const misses = priorMisses(prev);
-      await this.upsert(await resolveItem(id, errors, this.deps, misses));
+      const row = await resolveItem(id, errors, this.deps, misses);
+      await this.upsert(keepMissCount(row, prev));
       return 'written';
     } catch (err: unknown) {
       if (err instanceof WowheadResolverDisabledError) return 'disabled';

@@ -302,4 +302,24 @@ describe('WowItemMetaService — not_found re-probe cap (ROK-1756)', () => {
       nextRetryAt: after(RECHECK_TTL_MS),
     });
   });
+
+  it('a transient error on a parked not_found row keeps its miss count (3 stays 3)', async () => {
+    const fetch = fetchStub({ 16: [{ status: 429 }] });
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch, due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({ status: 'error', attempts: 3 });
+    expect(writes[0]?.set).toMatchObject({ attempts: 3 });
+  });
+
+  it('…so the next definitive miss after the error re-parks it', async () => {
+    const due = [row({ itemId: 9, attempts: 3, nextRetryAt: after(-1) })];
+    const { service, writes } = setup({ fetch: miss(), due });
+    await service.retryDue();
+    expect(writes[0]?.row).toMatchObject({
+      status: 'not_found',
+      attempts: 4,
+      nextRetryAt: after(NOT_FOUND_PARK_MS),
+    });
+  });
 });

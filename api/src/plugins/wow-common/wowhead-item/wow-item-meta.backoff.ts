@@ -1,4 +1,4 @@
-import type { WowItemMetaRow } from './wowhead-item.types';
+import type { WowItemMetaInsert, WowItemMetaRow } from './wowhead-item.types';
 
 /**
  * ROK-1756 — re-probe policy for `not_found` items. Gear item ids come from
@@ -24,4 +24,17 @@ export function priorMisses(row: WowItemMetaRow | undefined): number {
 /** Consecutive errors carried by a stored row (a miss count is not one). */
 export function priorErrors(row: WowItemMetaRow | undefined): number {
   return row?.status === 'not_found' ? 0 : (row?.attempts ?? 0);
+}
+
+/**
+ * An `error` probe of a stored `not_found` row is neither a hit nor a miss:
+ * the conflict set keeps `status = not_found`, so carry the miss count
+ * through instead of overwriting it with an error count (1).
+ */
+export function keepMissCount(
+  row: WowItemMetaInsert,
+  prev: WowItemMetaRow | undefined,
+): WowItemMetaInsert {
+  if (row.status !== 'error' || prev?.status !== 'not_found') return row;
+  return { ...row, attempts: prev.attempts };
 }
