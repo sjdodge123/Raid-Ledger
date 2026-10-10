@@ -16,6 +16,7 @@ import { SettingsService } from '../settings/settings.service';
 import {
   deactivateUserViaModuleRef,
   isGuildMemberSeen,
+  type DeactivationGuard,
   type DeactivationReason,
 } from './discord-notification-deactivate.helpers';
 import { resolveUserTimezone } from './timezone.helpers';
@@ -153,6 +154,7 @@ export class DiscordNotificationService {
   async deactivateUser(
     userId: number,
     reason: DeactivationReason = 'unknown',
+    guard: DeactivationGuard = {},
   ): Promise<void> {
     await deactivateUserViaModuleRef(
       this.db,
@@ -160,6 +162,7 @@ export class DiscordNotificationService {
       this.moduleRef,
       userId,
       reason,
+      guard,
     );
   }
 
