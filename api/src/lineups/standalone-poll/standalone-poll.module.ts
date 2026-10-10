@@ -18,6 +18,8 @@ import { StandalonePollController } from './standalone-poll.controller';
 import { StandalonePollService } from './standalone-poll.service';
 import { StandalonePollNotificationService } from './standalone-poll-notification.service';
 import { StandalonePollReminderService } from './standalone-poll-reminder.service';
+import { StandalonePollShareController } from './standalone-poll-share.controller';
+import { StandalonePollShareService } from './standalone-poll-share.service';
 
 @Module({
   imports: [
@@ -33,11 +35,12 @@ import { StandalonePollReminderService } from './standalone-poll-reminder.servic
     // DiscordBotModule imports EventsModule, so the cycle must resolve lazily.
     forwardRef(() => DiscordBotModule),
   ],
-  controllers: [StandalonePollController],
+  controllers: [StandalonePollController, StandalonePollShareController],
   providers: [
     StandalonePollService,
     StandalonePollNotificationService,
     StandalonePollReminderService,
+    StandalonePollShareService,
   ],
   exports: [StandalonePollService, StandalonePollReminderService],
 })

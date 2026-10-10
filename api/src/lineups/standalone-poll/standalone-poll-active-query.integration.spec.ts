@@ -16,6 +16,9 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { findActiveStandalonePolls } from './standalone-poll-query.helpers';
+
+/** ROK-1750: an admin sees every poll, so these cases test lifecycle only. */
+const LIFECYCLE_CALLER = { id: 0, isAdmin: true };
 import { nonEmpty } from '../../common/testing/narrow';
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -87,7 +90,7 @@ function describeActiveStandalonePolls(): void {
   }
 
   async function activeMatchIds(): Promise<number[]> {
-    const rows = await findActiveStandalonePolls(testApp.db);
+    const rows = await findActiveStandalonePolls(testApp.db, LIFECYCLE_CALLER);
     return rows.map((r) => r.matchId);
   }
 
@@ -147,7 +150,7 @@ function describeActiveStandalonePolls(): void {
   it('returns the unchanged DTO shape for a listed poll', async () => {
     const live = await seedPoll({ deadlineHours: 48, slotHours: [5, 9] });
 
-    const row = (await findActiveStandalonePolls(testApp.db)).find(
+    const row = (await findActiveStandalonePolls(testApp.db, LIFECYCLE_CALLER)).find(
       (r) => r.matchId === live,
     );
 

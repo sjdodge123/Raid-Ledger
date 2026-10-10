@@ -83,6 +83,35 @@ export class StandalonePollNotificationService {
     }
   }
 
+  /**
+   * ROK-1750: a private poll is never broadcast — DM only the members the
+   * creator picked (creator excluded). Fire-and-forget, never throws.
+   */
+  async notifyPickedMembers(
+    recipientIds: number[],
+    gameName: string,
+    ids: { lineupId: number; matchId: number; creatorId: number },
+    gameCoverUrl?: string | null,
+  ): Promise<void> {
+    try {
+      const recipients = recipientIds.filter((id) => id !== ids.creatorId);
+      if (recipients.length === 0) return;
+      const creatorName = await this.getCreatorName(ids.creatorId);
+      const payload = this.buildBasePayload(
+        ids.lineupId,
+        ids.matchId,
+        gameName,
+        creatorName,
+        gameCoverUrl,
+      );
+      await this.dispatchGeneric(recipients, gameName, payload, creatorName);
+    } catch (error) {
+      this.logger.error(
+        `Failed to notify picked poll members: ${error instanceof Error ? error.message : 'Unknown'}`,
+      );
+    }
+  }
+
   /** DM a voter that a different timeslot was chosen (ROK-1031). */
   async notifyPollOutcome(
     userId: number,
