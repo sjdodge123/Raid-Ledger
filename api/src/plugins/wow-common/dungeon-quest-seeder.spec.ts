@@ -1,8 +1,26 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { DungeonQuestSeeder } from './dungeon-quest-seeder';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const readData = (file: string): Array<Record<string, unknown>> =>
+  JSON.parse(readFileSync(join(__dirname, 'data', file), 'utf-8')) as Array<
+    Record<string, unknown>
+  >;
+const classicData = readData('dungeon-quest-data.json');
+const foreverData = readData('forever-dungeon-quest-data.json');
+
+jest.mock('fs/promises', () => {
+  const actual =
+    jest.requireActual<typeof import('fs/promises')>('fs/promises');
+  return { ...actual, readFile: jest.fn(actual.readFile) };
+});
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const fsPromises = require('fs/promises') as { readFile: jest.Mock };
 
 let seeder: DungeonQuestSeeder;
+let mockValues: jest.Mock;
 let mockDb: {
   insert: jest.Mock;
   delete: jest.Mock;
@@ -13,7 +31,7 @@ async function setupEach() {
   const mockOnConflictDoNothing = jest
     .fn()
     .mockReturnValue({ returning: mockReturning });
-  const mockValues = jest
+  mockValues = jest
     .fn()
     .mockReturnValue({ onConflictDoNothing: mockOnConflictDoNothing });
 
@@ -50,6 +68,40 @@ describe('DungeonQuestSeeder', () => {
 
       // The bundled data should have a reasonable number of quests
       expect(result.total).toBeGreaterThanOrEqual(100);
+    });
+  });
+
+  describe('seed() — Forever file (ROK-1748)', () => {
+    const actual =
+      jest.requireActual<typeof import('fs/promises')>('fs/promises');
+    afterEach(() => fsPromises.readFile.mockImplementation(actual.readFile));
+
+    it('reads both bundled files; the shipped forever rows ride the same upsert', async () => {
+      const result = await seeder.seed();
+      const paths = fsPromises.readFile.mock.calls.map((c) => String(c[0]));
+      expect(paths.some((p) => p.endsWith('dungeon-quest-data.json'))).toBe(
+        true,
+      );
+      expect(
+        paths.some((p) => p.endsWith('forever-dungeon-quest-data.json')),
+      ).toBe(true);
+      expect(foreverData.length).toBeGreaterThan(0);
+      expect(foreverData.every((r) => r.expansion === 'forever')).toBe(true);
+      expect(result.total).toBe(classicData.length + foreverData.length);
+    });
+
+    it('appends forever rows to the same upsert', async () => {
+      const row = { ...classicData[0], questId: 999001, expansion: 'forever' };
+      fsPromises.readFile.mockImplementation(
+        (p: string, enc: BufferEncoding) =>
+          String(p).endsWith('forever-dungeon-quest-data.json')
+            ? Promise.resolve(JSON.stringify([row]))
+            : actual.readFile(p, enc),
+      );
+      const result = await seeder.seed();
+      expect(result.total).toBe(classicData.length + 1);
+      const inserted = mockValues.mock.calls.flatMap((c) => c[0] as unknown[]);
+      expect(inserted).toContainEqual(row);
     });
   });
 
