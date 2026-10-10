@@ -21,7 +21,13 @@ const quest = (
 describe('contentInstanceIds', () => {
   it('accepts numeric-string ids and the legacy instanceId key like the web panels', () => {
     expect(
-      contentInstanceIds([{ id: '63' }, { instanceId: 36 }, { id: 'abc' }, { id: 0 }, { id: -1 }]),
+      contentInstanceIds([
+        { id: '63' },
+        { instanceId: 36 },
+        { id: 'abc' },
+        { id: 0 },
+        { id: -1 },
+      ]),
     ).toEqual([63, 36]);
   });
 
