@@ -40,7 +40,7 @@ function queueRows(): void {
 beforeEach(() => {
   clearKnownQuestMemo();
   db = createDrizzleMock();
-  single.mockReset().mockResolvedValue(undefined);
+  single.mockReset().mockResolvedValue(null);
   batch.mockReset().mockResolvedValue(new Map());
 });
 
