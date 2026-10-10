@@ -23,7 +23,8 @@ function TalentCell({ node }: { node: PositionedNode }) {
         <div data-testid="forever-talent-cell" title={label}
             className={`min-w-0 rounded px-1.5 py-1 text-[10px] leading-tight ${cellClass(node)}`}
             style={{ gridRow: node.row + 1, gridColumn: node.col + 1 }}>
-            <span className="block truncate">{label}</span>
+            {/* Wraps, never truncates: a `title` alone is unreachable on touch and keyboard (ROK-1758). */}
+            <span className="block break-words hyphens-auto">{label}</span>
             <span className="font-mono">{formatForeverRank(node)}</span>
         </div>
     );
