@@ -120,7 +120,7 @@ function QuestCardHeader({ quest, isExpanded, hasPrereqs, completed, wowheadVari
                 </div>
             </div>
             <a className="quest-card__wowhead-icon" href={getWowheadQuestUrl(quest.questId, wowheadVariant)}
-                target="_blank" rel="noopener noreferrer" title="View on Wowhead">&#x2197;</a>
+                target="_blank" rel="noopener noreferrer" title="View on Wowhead" aria-label="View on Wowhead">&#x2197;</a>
         </div>
     );
 }

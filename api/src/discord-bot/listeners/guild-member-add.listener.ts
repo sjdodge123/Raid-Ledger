@@ -9,6 +9,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { UsersService } from '../../users/users.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { DISCORD_BOT_EVENTS } from '../discord-bot.constants';
+import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
 
 /**
  * Re-activate users when they rejoin the Discord guild (ROK-1260).
@@ -64,6 +65,22 @@ export class GuildMemberAddListener {
     this.boundHandler = null;
   }
 
+  /**
+   * ROK-1759: Discord OAuth sign-in / account link. When the person joined the
+   * guild BEFORE their account existed, the GuildMemberAdd stamp matched no
+   * row — so stamp here if the bot confirms membership. Runs off the event bus
+   * (fire-and-forget for the login request) and never throws: a bot that is
+   * offline or unconfigured makes `isGuildMember` false and nothing is written.
+   */
+  @OnEvent(AUTH_EVENTS.DISCORD_LOGIN)
+  async handleDiscordLogin(payload: DiscordLoginPayload): Promise<void> {
+    const isMember = await this.clientService
+      .isGuildMember(payload.discordId)
+      .catch(() => false);
+    if (isMember)
+      await this.stampGuildMemberSeen(payload.discordId, payload.userId);
+  }
+
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
     const discordId = member.user.id;
     await this.stampGuildMemberSeen(discordId);
@@ -93,13 +110,23 @@ export class GuildMemberAddListener {
    * a reconciliation / 50278-deactivation candidate from now on. Written for
    * every join/rejoin (banned or not — the stamp is a membership fact, not a
    * reactivation). Best-effort: a failure must never block reactivation.
+   * ROK-1759: a sign-in stamp also pins `userId`, so an unlink/re-link that
+   * moved the id during the async membership lookup can't stamp another row.
    */
-  private async stampGuildMemberSeen(discordId: string): Promise<void> {
+  private async stampGuildMemberSeen(
+    discordId: string,
+    userId?: number,
+  ): Promise<void> {
+    const byDiscordId = eq(schema.users.discordId, discordId);
     try {
       await this.db
         .update(schema.users)
         .set({ guildMemberSeenAt: new Date() })
-        .where(eq(schema.users.discordId, discordId));
+        .where(
+          userId === undefined
+            ? byDiscordId
+            : and(byDiscordId, eq(schema.users.id, userId)),
+        );
     } catch (err: unknown) {
       this.logger.warn(
         `ROK-1749: guild_member_seen_at stamp failed for discord ${discordId}: ${err instanceof Error ? err.message : 'Unknown error'}`,

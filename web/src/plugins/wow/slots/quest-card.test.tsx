@@ -103,5 +103,10 @@ describe('QuestCardHeader — Done pill (ROK-1748)', () => {
         renderCard();
         expect(screen.queryByText('Done')).toBeNull();
     });
+
+    it('names the "↗" Wowhead link "View on Wowhead" for screen readers (ROK-1758)', () => {
+        renderCard();
+        expect(screen.getByRole('link', { name: 'View on Wowhead' })).toHaveAttribute('href', expect.stringContaining('quest=100'));
+    });
 });
 

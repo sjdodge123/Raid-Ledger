@@ -54,15 +54,12 @@ export class AuthController {
       throw new BadRequestException('Auth code is required');
     }
 
-    const redisKey = `auth_code:${body.code}`;
-    const token = await this.redis.get(redisKey);
+    // ROK-1755: atomic read-and-consume — two concurrent exchanges of the
+    // same code cannot both receive the token (was GET then DEL).
+    const token = await this.redis.getdel(`auth_code:${body.code}`);
     if (!token) {
       throw new UnauthorizedException('Invalid or expired auth code');
     }
-
-    // Consume the code (single-use)
-    await this.redis.del(redisKey);
-
     return { access_token: token };
   }
 

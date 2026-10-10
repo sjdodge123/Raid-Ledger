@@ -124,6 +124,32 @@ describe('ForeverTalentDisplay — list layout', () => {
     });
 });
 
+describe('ForeverTalentDisplay — singular counts (ROK-1758)', () => {
+    it('says "1 point" for a single rank in the grid header', () => {
+        renderForever(talents('grid', [{ nodeId: 1, rank: 1, maxRanks: 1, name: 'Mortal Strike', tree: 0, row: 0, col: 0 }]));
+        expect(screen.getByText('1 point')).toBeInTheDocument();
+    });
+
+    it('says "1 point in 1 talent" for the summary-only fallback', () => {
+        renderForever(talents('list', [{ nodeId: 1, rank: 1 }]));
+        expect(screen.getByText('1 point in 1 talent')).toBeInTheDocument();
+    });
+
+    it('says "+1 unnamed talent" for a single unnamed ranked node', () => {
+        renderForever(talents('list', [{ nodeId: 1, rank: 2, maxRanks: 3, name: 'Improved Rend' }, { nodeId: 2, rank: 1 }]));
+        expect(screen.getByText('+1 unnamed talent')).toBeInTheDocument();
+    });
+});
+
+describe('ForeverTalentGrid — full talent names (ROK-1758)', () => {
+    it('wraps the name instead of truncating it, so touch and keyboard users can read it', () => {
+        renderForever(talents('grid', GRID_NODES));
+        const name = screen.getByText('Mortal Strike');
+        expect(name, 'a truncated name is readable only through title').not.toHaveClass('truncate');
+        expect(name).toHaveClass('break-words');
+    });
+});
+
 describe('foreverTreeNames', () => {
     it.each([
         ['Druid', ['Balance', 'Feral', 'Restoration']],

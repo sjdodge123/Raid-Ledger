@@ -84,6 +84,29 @@ function loadKnownQuests(db: Db): Promise<DungeonQuestDto[]> {
   return rows;
 }
 
+/** A signup row as selected; null class/race when the character has none. */
+interface SignupCharRow {
+  userId: number | null;
+  characterId: string | null;
+  username: string;
+  charClass?: string | null | undefined;
+  charRace?: string | null | undefined;
+}
+
+/** Keep rows with a user and a character, class/race defaulted to null. */
+function toSignupChar(r: SignupCharRow): EventSignupChar[] {
+  if (r.userId === null || !r.characterId) return [];
+  return [
+    {
+      userId: r.userId,
+      characterId: r.characterId,
+      username: r.username,
+      charClass: r.charClass ?? null,
+      charRace: r.charRace ?? null,
+    },
+  ];
+}
+
 /** Active signups (D8) that carry a character. */
 async function loadSignupChars(
   db: Db,
@@ -96,9 +119,12 @@ async function loadSignupChars(
       userId: s.userId,
       characterId: s.characterId,
       username: schema.users.username,
+      charClass: schema.characters.class,
+      charRace: schema.characters.race,
     })
     .from(s)
     .innerJoin(schema.users, eq(schema.users.id, s.userId))
+    .leftJoin(schema.characters, eq(schema.characters.id, s.characterId))
     .where(
       and(
         eq(s.eventId, eventId),
@@ -107,9 +133,7 @@ async function loadSignupChars(
         userId === undefined ? undefined : eq(s.userId, userId),
       ),
     );
-  return rows.flatMap(({ userId, characterId, username }) =>
-    userId !== null && characterId ? [{ userId, characterId, username }] : [],
-  );
+  return rows.flatMap(toSignupChar);
 }
 
 /** One user's snapshot via the single loader; everyone's via the batch. */
