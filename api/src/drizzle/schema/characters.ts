@@ -58,6 +58,8 @@ export const characters = pgTable(
     level: integer('level'),
     /** Character race (e.g., "Blood Elf") */
     race: varchar('race', { length: 50 }),
+    /** ROK-1742: 'male' | 'female' from the WoW addon's `who.gender`; null = unknown */
+    gender: varchar('gender', { length: 10 }),
     /** Faction: "alliance" or "horde" */
     faction: varchar('faction', { length: 20 }),
     /** Last time character data was synced from external API */

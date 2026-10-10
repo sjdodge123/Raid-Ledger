@@ -156,6 +156,13 @@
               "type": "string",
               "maxLength": 32
             },
+            "gender": {
+              "type": "string",
+              "enum": [
+                "male",
+                "female"
+              ]
+            },
             "level": {
               "type": "integer",
               "minimum": 1,
@@ -257,6 +264,45 @@
                         "type": "integer",
                         "minimum": 0,
                         "maximum": 2147483647
+                      },
+                      "name": {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      "spellId": {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "maxRanks": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 255
+                      },
+                      "tree": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2
+                      },
+                      "row": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9
+                      },
+                      "col": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "posX": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "posY": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
                       }
                     },
                     "required": [
@@ -318,6 +364,81 @@
                 ],
                 "additionalProperties": false
               }
+            },
+            "quests": {
+              "type": "object",
+              "properties": {
+                "completed": {
+                  "maxItems": 10000,
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 2147483647
+                  }
+                },
+                "inProgress": {
+                  "maxItems": 35,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "questId": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 2147483647
+                      },
+                      "title": {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      "objectives": {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "text": {
+                              "type": "string",
+                              "maxLength": 128
+                            },
+                            "done": {
+                              "type": "boolean"
+                            },
+                            "have": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2147483647
+                            },
+                            "need": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 2147483647
+                            }
+                          },
+                          "required": [
+                            "text",
+                            "done"
+                          ],
+                          "additionalProperties": false
+                        }
+                      }
+                    },
+                    "required": [
+                      "questId"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "completedTruncated": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "completed",
+                "inProgress"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -493,6 +614,13 @@
             "race": {
               "type": "string",
               "maxLength": 32
+            },
+            "gender": {
+              "type": "string",
+              "enum": [
+                "male",
+                "female"
+              ]
             },
             "level": {
               "type": "integer",
@@ -781,6 +909,13 @@
             "race": {
               "type": "string",
               "maxLength": 32
+            },
+            "gender": {
+              "type": "string",
+              "enum": [
+                "male",
+                "female"
+              ]
             },
             "level": {
               "type": "integer",

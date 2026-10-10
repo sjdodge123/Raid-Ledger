@@ -14,7 +14,11 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
-import type { AddonImportErrorCode } from '@raid-ledger/contract';
+import {
+  ADDON_IMPORT_MAX_BYTES,
+  ADDON_QUESTS_COMPLETED_MAX,
+  type AddonImportErrorCode,
+} from '@raid-ledger/contract';
 import { decodeImportPaste } from '../src/plugins/wow-common/addon-import/addon-import.decoder';
 import { AddonImportError } from '../src/plugins/wow-common/addon-import/addon-import.errors';
 import {
@@ -28,6 +32,11 @@ import {
   buildWho,
   wrapImportBytes,
 } from '../src/plugins/wow-common/addon-import/testing/addon-fixture.builder';
+import {
+  buildForeverQuestsPayload,
+  buildForeverQuestsTruncatedPayload,
+  buildForeverTalentsPayload,
+} from '../src/plugins/wow-common/addon-import/testing/addon-fixture.forever';
 import { ledgerLinkFixtureView } from '../src/plugins/wow-common/addon-import/testing/ledgerlink-fixture-view';
 
 const OUT = join(__dirname, '../../packages/contract/ledgerlink/v1/fixtures');
@@ -84,6 +93,11 @@ const VALID: Record<string, () => string> = {
       buildCharPayload({ who: buildWho({ ruleset: 'roleplaying' }) }),
     ),
   'char-null-ruleset-no-guild': charNoGuild,
+  'char-forever-quests': () => buildImportString(buildForeverQuestsPayload()),
+  'char-forever-quests-truncated': () =>
+    buildImportString(buildForeverQuestsTruncatedPayload()),
+  'char-forever-talents-named': () =>
+    buildImportString(buildForeverTalentsPayload()),
   'guild-1-page': () => guildPaste(40),
   'guild-3-pages': () => guildPaste(600),
   'guild-8-pages-2000-members': () => guildPaste(2000),
@@ -155,6 +169,21 @@ const INVALID: Record<string, [AddonImportErrorCode, () => string]> = {
       buildImportString({
         ...buildCharPayload(),
         who: { ...buildWho(), ruleset: 'rp' },
+      }),
+  ],
+  'quests-completed-over-cap': [
+    'INVALID_PAYLOAD',
+    () =>
+      buildImportString(
+        buildForeverQuestsPayload(ADDON_QUESTS_COMPLETED_MAX + 1),
+      ),
+  ],
+  'gender-unknown-value': [
+    'INVALID_PAYLOAD',
+    () =>
+      buildImportString({
+        ...buildCharPayload(),
+        who: { ...buildWho(), gender: 'unknown' },
       }),
   ],
   'region-as-string': [
@@ -235,7 +264,23 @@ function codeOf(paste: string): AddonImportErrorCode | null {
   }
 }
 
+/** ROK-1742 AC7: 8 guild pages + a max-quests char + raid fit one paste. */
+function assertWorstCasePasteFits(): void {
+  const paste = [
+    guildPaste(2000),
+    buildImportString(buildForeverQuestsPayload()),
+    buildImportString(buildRaidPayload()),
+  ].join('\n');
+  const bytes = Buffer.byteLength(paste, 'utf8');
+  if (bytes > ADDON_IMPORT_MAX_BYTES)
+    throw new Error(
+      `worst-case paste is ${bytes} B > ${ADDON_IMPORT_MAX_BYTES}`,
+    );
+  console.log(`worst-case combined paste: ${bytes} B`);
+}
+
 function main(): void {
+  assertWorstCasePasteFits();
   mkdirSync(join(OUT, 'invalid'), { recursive: true });
   for (const [name, build] of Object.entries(VALID)) {
     const paste = build();

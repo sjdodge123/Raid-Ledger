@@ -1,0 +1,44 @@
+{
+  "pages": 1,
+  "payload": {
+    "schema": 1,
+    "addonVersion": "0.1.0",
+    "client": {
+      "interface": 11507,
+      "build": "1.15.7",
+      "locale": "enUS",
+      "region": 1
+    },
+    "exportedAt": 1790000000,
+    "who": {
+      "guid": "Player-4395-0ABCDEF0",
+      "fullName": "Ana Forever",
+      "raw": {
+        "getUnitName": "Ana Forever",
+        "unitName": ["Ana Forever",null]
+      },
+      "ruleset": "normal",
+      "class": "WARRIOR",
+      "race": "NightElf",
+      "gender": "male",
+      "level": 8,
+      "faction": "Alliance",
+      "guildName": "Night Shift"
+    },
+    "section": "char",
+    "data": {
+      "gear": [
+        {"slot":5,"itemId":6120,"ilvl":5,"bonusIds":[7890],"enchantId":1900,"gemIds":[2000]},
+        {"slot":4,"itemId":2105,"ilvl":4,"bonusIds":[],"gemIds":[3000,3001]},
+        {"slot":1,"itemId":16921,"ilvl":76,"bonusIds":[]}
+      ],
+      "talents": {
+        "configId": 7,
+        "nodes": [{"nodeId":105901,"rank":3,"entryId":130631,"name":"Tactical Mastery","spellId":12295,"maxRanks":5,"tree":0,"row":0,"col":1,"posX":1980,"posY":2130},{"nodeId":105926,"rank":0,"entryId":130656,"name":"Improved Intercept","spellId":20504,"maxRanks":2,"tree":1,"row":3,"col":2,"posX":6820,"posY":4530},{"nodeId":105940,"rank":2,"entryId":130670,"name":"Cruelty","spellId":12320,"maxRanks":5,"tree":1,"row":0,"col":2,"posX":6820,"posY":2130},{"nodeId":105961,"rank":1,"entryId":130691,"name":"Shield Specialization","spellId":12298,"maxRanks":5,"tree":2,"row":0,"col":1,"posX":8920,"posY":2130}]
+      },
+      "lockouts": [
+        {"name":"Molten Core","instanceId":409,"difficultyId":9,"resetAt":1790500000,"killed":3,"total":10}
+      ]
+    }
+  }
+}

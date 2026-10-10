@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { AddonGuildExport, AddonRaidExport } from '@raid-ledger/contract';
+import {
+  ADDON_CHAR_SNAPSHOT_SCHEMA,
+  type AddonGuildExport,
+  type AddonRaidExport,
+} from '@raid-ledger/contract';
 import type { DecodedAddonCharExport } from './addon-import.decoder';
 import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
@@ -117,11 +121,12 @@ function charTx(reads: unknown[][], upserted: unknown[]) {
   const conflict = jest.fn().mockReturnValue({
     returning: jest.fn().mockResolvedValue(upserted),
   });
+  const values = jest.fn().mockReturnValue({ onConflictDoUpdate: conflict });
   const tx = {
     select: () => ({ from: () => ({ where }) }),
-    insert: () => ({ values: () => ({ onConflictDoUpdate: conflict }) }),
+    insert: () => ({ values }),
   };
-  return { tx: tx as never, conflict };
+  return { tx: tx as never, conflict, values };
 }
 
 describe('char apply — overlapping applies (Codex P2)', () => {
@@ -157,6 +162,14 @@ describe('char apply — overlapping applies (Codex P2)', () => {
     expect(arg.setWhere).toBeDefined();
   });
 
+  it('stores snapshot schema 2 whatever the payload schema (ROK-1742)', async () => {
+    const { tx, values } = charTx([[]], [{ characterId: CTX.characterId }]);
+    await applyChar({ ...CTX, tx }, older);
+    const [row] = values.mock.calls[0] as [{ schema: number }];
+    expect(row.schema).toBe(ADDON_CHAR_SNAPSHOT_SCHEMA);
+    expect(row.schema).toBe(2);
+  });
+
   it('the guarded upsert returning its row → applied', async () => {
     const { tx } = charTx([[]], [{ characterId: CTX.characterId }]);
     expect((await applyChar({ ...CTX, tx }, older)).status).toBe('applied');
@@ -189,6 +202,20 @@ describe('character-row binding updates', () => {
       class: 'Mage',
       level: 60,
     });
+  });
+
+  it('maps race + gender (ROK-1742 R9); never touches lastSyncedAt', () => {
+    const set = bindingUpdates({
+      ...base,
+      setRace: 'NightElf',
+      setGender: 'female',
+    });
+    expect(set).toEqual({ race: 'NightElf', gender: 'female' });
+    expect(set).not.toHaveProperty('lastSyncedAt');
+  });
+
+  it('no setRace/setGender → race/gender untouched', () => {
+    expect(bindingUpdates(base)).not.toHaveProperty('gender');
   });
 });
 

@@ -31,6 +31,16 @@ export const ADDON_IMPORT_MAX_TOKENS = 10;
  * `INVALID_PAYLOAD`.
  */
 export const ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS = 600;
+/**
+ * `char` `data.quests.completed` ids (ROK-1742) — `GetAllCompletedQuestIDs()`
+ * at max level runs past the 2000 structural array cap, so this path has its
+ * own ceiling (operator ruling R5). ~4.5 B/id encoded: 10 000 ≈ 45 KB.
+ */
+export const ADDON_QUESTS_COMPLETED_MAX = 10_000;
+/** `char` `data.quests.inProgress` entries (the quest log holds 35). */
+export const ADDON_QUESTS_IN_PROGRESS_MAX = 35;
+/** Objectives per in-progress quest. */
+export const ADDON_QUEST_OBJECTIVES_MAX = 10;
 
 /**
  * One page token: `!RL<version>!<section>[-<n>of<m>]!<std base64>`.
