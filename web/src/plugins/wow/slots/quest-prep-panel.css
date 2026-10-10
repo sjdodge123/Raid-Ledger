@@ -142,7 +142,6 @@
 }
 
 .quest-card__wowhead-icon {
-    position: relative;
     display: inline-flex;
     align-items: center;
     font-size: 0.75rem;
@@ -150,19 +149,13 @@
     text-decoration: none;
     line-height: 1;
     flex-shrink: 0;
-}
-
-/* Wider hit area for the 12px glyph (design-system tap targets, ROK-1758) — a
-   transparent ::before like Switch's, so the row's layout doesn't change. It
-   reaches 8px left/up/down (the 0.5rem gaps: never over the card's expand
-   header or a neighbouring row) and 24px right, so it is 44px wide. */
-.quest-card__wowhead-icon::before {
-    content: '';
-    position: absolute;
-    top: -8px;
-    bottom: -8px;
-    left: -8px;
-    right: -24px;
+    /* 44x28 tap target for the 12px glyph (design-system tap targets, ROK-1758).
+       The padding is real layout, so the header beside it shrinks instead of
+       being covered; the -8px margins only reach into the 0.5rem gap on the
+       left and the card's 0.625rem padding on the right. A ::before overhang
+       does not work here: `.quest-card { overflow: hidden }` clips it. */
+    padding: 8px 16px;
+    margin: -8px;
 }
 
 .quest-card__wowhead-icon:hover {
