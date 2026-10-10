@@ -53,6 +53,7 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
         <>
             <div className="bg-panel border border-edge rounded-lg p-6">
                 <h2 className="text-lg font-semibold text-foreground mb-4">Equipment</h2>
+                <EquipmentSourceLine equipment={equipment} />
                 {equipment.items.length > 0 ? (
                     <EquipmentGrid equipment={equipment} gameVariant={gameVariant}
                         renderUrl={renderUrl} onItemClick={handleItemClick} />
@@ -65,6 +66,19 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
                 onNavigate={setSelectedItemIndex} gameVariant={gameVariant} />
         </>
     );
+}
+
+/** "via addon · 1 Oct 2026" — the addon snapshot date (ROK-1727 Q4: source + date always shown). */
+function formatAddonSourceLine(syncedAt: string): string {
+    const date = new Date(syncedAt);
+    if (Number.isNaN(date.getTime())) return 'via addon';
+    return `via addon · ${date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+}
+
+/** Source line under the Equipment heading; Armory equipment (or absent source) shows nothing new. */
+function EquipmentSourceLine({ equipment }: { equipment: CharacterEquipmentDto }) {
+    if (equipment.source !== 'addon') return null;
+    return <p className="-mt-3 mb-4 text-xs text-muted">{formatAddonSourceLine(equipment.syncedAt)}</p>;
 }
 
 /** Main character detail sections component */

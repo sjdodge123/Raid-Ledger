@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   AddonImportRequestDto,
@@ -33,6 +33,8 @@ import {
   runForCharacter,
   type LoadedCharacter,
 } from './addon-import.run';
+import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
+import { enqueueAppliedGear } from './addon-import.gear-enqueue';
 
 /**
  * ROK-1724 §4.3 — owner check → limit (atomically reserves the audit row) →
@@ -44,11 +46,14 @@ import {
  */
 @Injectable()
 export class AddonImportService {
+  private readonly logger = new Logger(AddonImportService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly characters: CharactersService,
     private readonly audit: AddonImportAuditService,
+    private readonly itemMeta: WowItemMetaService,
   ) {}
 
   async importString(
@@ -95,7 +100,12 @@ export class AddonImportService {
     // Codex P2: bind EVERY section (the decoder also requires one exporter);
     // any section's reject rejects the whole paste before anything runs.
     const binding = bindPaste(paste, character, request);
-    return this.run(userId, character, paste, binding, request);
+    const res = await this.run(userId, character, paste, binding, request);
+    // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
+    if (!request.dryRun) {
+      enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    }
+    return res;
   }
 
   /** Preview/apply every section + the binding's writes, in ONE tx. */

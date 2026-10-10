@@ -1,0 +1,14 @@
+HTTP/2 404 
+content-type: application/json; charset=utf-8
+date: Fri, 09 Oct 2026 19:05:02 GMT
+cache-control: max-age=0, s-maxage=600
+access-control-allow-origin: *
+server: nginx
+x-origin-timestamp: 2026-10-09T14:05:02-05:00
+expires: Tue, 23 Nov 2004 03:00:00 GMT
+vary: Accept-Encoding
+x-cache: Error from cloudfront
+via: 1.1 ac75ba477a96a3693bf81523573ffee2.cloudfront.net (CloudFront)
+x-amz-cf-pop: ATL58-P13
+x-amz-cf-id: iZLYKge0Tst-jsPib1lpqF0F1vusxEY7_gt112H0SVl3jWamdUJTIA==
+

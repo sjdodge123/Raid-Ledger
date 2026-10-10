@@ -9,6 +9,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../../drizzle/schema';
 import type { CharactersService } from '../../../characters/characters.service';
 import type { AddonImportAuditService } from './addon-import.audit';
+import type { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { bindToCharacter } from './addon-import.binding';
 import { applyBinding } from './addon-import-binding.apply';
 import { applyChar } from './addon-import-char.apply';
@@ -77,12 +78,14 @@ function setup() {
     recordAttempt: jest.fn().mockResolvedValue(undefined),
     recordSections: jest.fn().mockResolvedValue(undefined),
   };
+  const itemMeta = { enqueue: jest.fn().mockResolvedValue(0) };
   const service = new AddonImportService(
     makeDb(),
     characters as unknown as CharactersService,
     audit as unknown as AddonImportAuditService,
+    itemMeta as unknown as WowItemMetaService,
   );
-  return { service, characters, audit };
+  return { service, characters, audit, itemMeta };
 }
 
 const binding = (errors: AddonImportError[] = []) => ({
@@ -153,6 +156,45 @@ describe('AddonImportService', () => {
       expect.objectContaining({ tx: 'TX', characterId: CHAR_ID }),
       expect.objectContaining({ pinGuid: 'Player-1-A' }),
     );
+  });
+
+  describe('Wowhead gear enqueue (ROK-1727)', () => {
+    const gear = [
+      { slot: 1, itemId: 16921, bonusIds: [] },
+      { slot: 4, bonusIds: [] },
+      { slot: 16, itemId: 19019, bonusIds: [] },
+    ];
+    beforeEach(() => {
+      (decodeImportString as jest.Mock).mockReturnValue({
+        payload: { section: 'char', exportedAt: 1_790_000_000, data: { gear } },
+        pages: 1,
+        sha256: 'a'.repeat(64),
+        inputBytes: 10,
+      });
+    });
+
+    it('enqueues the gear item ids after the import transaction', async () => {
+      const { service, itemMeta } = setup();
+      (applyChar as jest.Mock).mockResolvedValue({
+        status: 'applied',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, body);
+      expect(itemMeta.enqueue).toHaveBeenCalledWith([16921, 19019]);
+      const applied = (applyChar as jest.Mock).mock.invocationCallOrder[0];
+      const enqueued = itemMeta.enqueue.mock.invocationCallOrder[0];
+      expect(enqueued).toBeGreaterThan(applied ?? Infinity);
+    });
+
+    it('does not enqueue for a dry run or a stale char section', async () => {
+      const { service, itemMeta } = setup();
+      (applyChar as jest.Mock).mockResolvedValue({
+        status: 'stale',
+        summary: SUMMARY,
+      });
+      await service.importString(1, CHAR_ID, body);
+      expect(itemMeta.enqueue).not.toHaveBeenCalled();
+    });
   });
 
   it("someone else's character → 403 before decode or audit", async () => {

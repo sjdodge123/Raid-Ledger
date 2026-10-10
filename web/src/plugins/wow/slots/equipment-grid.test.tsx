@@ -350,3 +350,32 @@ describe('EquipmentGrid — image loading (ROK-1159)', () => {
         for (const img of renders) expect(img).toHaveClass('w-auto');
     });
 });
+
+/** ROK-1727: addon-sourced items — unresolved placeholder + per-item Wowhead env. */
+describe('EquipmentSlot — addon items (ROK-1727)', () => {
+    afterEach(() => vi.restoreAllMocks());
+
+    it('an unresolved item shows its "Item #id" name and the ilvl placeholder box, no icon', () => {
+        mockMatchMedia(false);
+        const item = createItem({ name: 'Item #16921', itemId: 16921, quality: 'COMMON', itemLevel: 66, resolved: false, iconUrl: undefined });
+        const { container } = render(<EquipmentSlot item={item} slotName="HEAD" gameVariant="wow_forever" />);
+        expect(screen.getByText('Item #16921')).toBeInTheDocument();
+        expect(container.querySelector('img')).toBeNull();
+        const box = screen.getByText('66');
+        expect(box.className).toContain('bg-faint');
+        expect(box.className).not.toContain('hidden');
+    });
+
+    it.each<[EquipmentItemDto['wowheadEnv'], string, string]>([
+        [16, 'https://www.wowhead.com/forever/item=19019', 'item=19019&domain=forever'],
+        [4, 'https://www.wowhead.com/classic/item=19019', 'item=19019&domain=classic&dataEnv=1'],
+        [undefined, 'https://www.wowhead.com/forever/item=19019', 'item=19019&domain=forever'],
+    ])('wowheadEnv %j on a Forever character → %s', (wowheadEnv, href, data) => {
+        mockMatchMedia(false);
+        const item = createItem({ itemId: 19019, ...(wowheadEnv !== undefined && { wowheadEnv }) });
+        const { container } = render(<EquipmentSlot item={item} slotName="HEAD" gameVariant="wow_forever" />);
+        const link = container.querySelector('a[href*="wowhead.com"]');
+        expect(link?.getAttribute('href')).toBe(href);
+        expect(link?.getAttribute('data-wowhead')).toBe(data);
+    });
+});

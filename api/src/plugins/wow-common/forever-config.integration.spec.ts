@@ -88,6 +88,7 @@ describe('GET /blizzard/capabilities (ROK-1717)', () => {
       namespacePrefix: 'foo',
       namespacePrefixIsDefault: false,
       armoryImportEnabled: true,
+      wowheadResolverEnabled: true,
     });
 
     const res = await testApp.request.get('/blizzard/capabilities');
@@ -123,6 +124,7 @@ describe('/admin/plugins/blizzard/forever guards (ROK-1717)', () => {
       namespacePrefix: 'classicforever',
       namespacePrefixIsDefault: true,
       armoryImportEnabled: false,
+      wowheadResolverEnabled: true,
     });
   });
 });

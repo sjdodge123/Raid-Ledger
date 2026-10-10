@@ -72,3 +72,20 @@ describe('CharacterDetailSections — Wowhead item links use the resolved varian
         expect(container.querySelector('a[href*="wowhead.com"]')?.getAttribute('href')).toBe(href);
     });
 });
+
+/** ROK-1727 (Q4): addon equipment shows its source + snapshot date; Armory shows nothing new. */
+describe('CharacterDetailSections — via-addon source line', () => {
+    it('source addon → "via addon · <date>" in muted text under the heading', () => {
+        renderSections({ gameVariant: 'wow_forever', equipment: { ...EQUIPMENT, source: 'addon', syncedAt: '2026-10-01T12:00:00.000Z' } });
+        const line = screen.getByText('via addon · 1 Oct 2026');
+        expect(line).toHaveClass('text-xs', 'text-muted');
+    });
+
+    it.each<[string, CharacterEquipmentDto]>([
+        ['source armory', { ...EQUIPMENT, source: 'armory' }],
+        ['source absent', EQUIPMENT],
+    ])('%s → no via-addon line', (_label, equipment) => {
+        renderSections({ gameVariant: 'classic_era', isArmoryImported: true, equipment });
+        expect(screen.queryByText(/via addon/)).toBeNull();
+    });
+});

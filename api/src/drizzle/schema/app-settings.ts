@@ -78,6 +78,11 @@ export const SETTING_KEYS = {
   AD_HOC_EVENTS_ENABLED: 'ad_hoc_events_enabled',
   /** ROK-1591: Calendar Sync master kill switch. Unset ⇒ off. */
   CALENDAR_SYNC_ENABLED: 'calendar_sync_enabled',
+  /**
+   * ROK-1727: Wowhead item resolver kill switch. Unset ⇒ ON (D2 — the opposite
+   * of CALENDAR_SYNC_ENABLED); only the string 'false' turns it off.
+   */
+  WOWHEAD_RESOLVER_ENABLED: 'wowhead_resolver_enabled',
   /** ROK-1591: Google OAuth client for Calendar Sync (secret encrypted at rest). */
   CALENDAR_GOOGLE_CLIENT_ID: 'calendar_google_client_id',
   CALENDAR_GOOGLE_CLIENT_SECRET: 'calendar_google_client_secret',

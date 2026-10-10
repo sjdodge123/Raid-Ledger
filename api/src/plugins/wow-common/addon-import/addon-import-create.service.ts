@@ -1,4 +1,4 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   AddonImportNewRequestSchema,
@@ -32,6 +32,8 @@ import {
   type AttemptOutcome,
 } from './addon-import.finish';
 import { pasteSections } from './addon-import.paste-run';
+import { enqueueAppliedGear } from './addon-import.gear-enqueue';
+import { WowItemMetaService } from '../wowhead-item/wow-item-meta.service';
 import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
 
 /**
@@ -44,11 +46,14 @@ import { parseImportRequest, rawFacts } from './addon-import.service.helpers';
  */
 @Injectable()
 export class AddonImportCreateService {
+  private readonly logger = new Logger(AddonImportCreateService.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly characters: CharactersService,
     private readonly audit: AddonImportAuditService,
+    private readonly itemMeta: WowItemMetaService,
   ) {}
 
   async importNew(
@@ -100,9 +105,11 @@ export class AddonImportCreateService {
     input.onTarget = (id) => {
       outcome.characterId = id;
     };
-    return request.dryRun
-      ? previewImport(this.db, input)
-      : applyImport(this.db, this.characters, input);
+    if (request.dryRun) return previewImport(this.db, input);
+    const res = await applyImport(this.db, this.characters, input);
+    // ROK-1727: AFTER the tx committed — fire-and-forget gear resolution.
+    enqueueAppliedGear(this.itemMeta, paste, res, this.logger);
+    return res;
   }
 
   /** Region, name and GUID from the AUTHORITATIVE section (ruling Q7). */
