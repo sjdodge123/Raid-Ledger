@@ -97,7 +97,7 @@ async function importLinkedGear(): Promise<string> {
     .set('Authorization', `Bearer ${token}`)
     .send({
       gameId,
-      name: 'Gear Forever',
+      name: 'Ana Forever', // must match the fixture's character
       class: 'Warrior',
       region: 'us',
       ruleset: 'normal',
