@@ -1,7 +1,8 @@
 import { and, eq, sql } from 'drizzle-orm';
-import type {
-  AddonCharSnapshotData,
-  AddonCharImportSummarySchema,
+import {
+  ADDON_CHAR_SNAPSHOT_SCHEMA,
+  type AddonCharSnapshotData,
+  type AddonCharImportSummarySchema,
 } from '@raid-ledger/contract';
 import type { z } from 'zod';
 import { characterAddonSnapshots } from '../../../drizzle/schema';
@@ -127,7 +128,7 @@ async function upsertChar(
   payload: DecodedAddonCharExport,
 ): Promise<boolean> {
   const values = {
-    schema: payload.schema,
+    schema: ADDON_CHAR_SNAPSHOT_SCHEMA,
     data: payload.data,
     capturedAt: fromUnix(payload.exportedAt),
     importedAt: new Date(),

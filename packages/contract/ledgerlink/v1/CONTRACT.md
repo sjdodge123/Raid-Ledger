@@ -69,7 +69,8 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 | `who.raw` | object | raw identity calls as returned: `getUnitName?` string, `unitName?` / `unitFullName?` `[string\|null, (string\|null)?]` (Lua drops a trailing nil), `realmName?` string |
 | `who.ruleset` | `"normal"` \| `"pvp"` \| `"roleplaying"` \| `"hardcore"` \| `null` | spelled **`roleplaying`** (not `rp`/`roleplay`); `null` when the addon can't tell |
 | `who.class` | string | client class token `^[A-Z]{2,16}$`, e.g. `PALADIN` |
-| `who.race` | string ≤ 32 | |
+| `who.race` | string ≤ 32 | client race token, e.g. `NightElf` |
+| `who.gender` | `"male"` \| `"female"`, optional | `UnitSex`: 2 → `"male"`, 3 → `"female"`; omit on 1 (unknown). Additive, ROK-1742 |
 | `who.level` | int 1–100 | |
 | `who.faction` | `"Alliance"` \| `"Horde"` \| `"Neutral"` | |
 | `who.guildName` | string ≤ 64, optional | omit when guildless |
@@ -80,8 +81,26 @@ All numbers are JSON numbers (never strings); every "int" is an integer
 
 **`char`** — `data`:
 - `gear[]` ≤ 19: `{ slot 1–19, itemId?, link? (≤ 512, raw `|Hitem:…|h`), ilvl? }`
-- `talents`: `{ configId?, importString? (≤ 2048), nodes[] ≤ 200: { nodeId, rank, entryId? } }`
+- `talents`: `{ configId?, importString? (≤ 2048), nodes[] ≤ 200: { nodeId, rank, entryId?, name? (≤ 64), spellId? (int ≥ 1), maxRanks? (1–255), tree? (0–2), row? (0–9), col? (0–3), posX?, posY? } }`
 - `lockouts[]` ≤ 100: `{ name ≤ 128, instanceId, difficultyId, resetAt (unix s), killed, total }`
+- `quests?` (additive, ROK-1742): `{ completed[] ≤ 10 000 questIds, inProgress[] ≤ 35: { questId, title? ≤ 128, objectives[]? ≤ 10: { text ≤ 128, done: boolean, have?, need? } }, completedTruncated?: boolean }`. When `quests` is present both arrays are required (empty is fine). `completed` = `GetAllCompletedQuestIDs()`; `have`/`need` = `numFulfilled`/`numRequired`. A character with more than `ADDON_QUESTS_COMPLETED_MAX` completed quests is not rejected by the addon: it sends the first 10 000 ids ascending and sets `completedTruncated: true` (absent = `false`).
+
+**Talent node position (ROK-1742).** Forever has one `C_Traits` tree per
+class, laid out like vanilla: **3 sub-trees side by side × 4 columns** and
+**7 tiers**. The addon derives `tree`/`row`/`col` from the raw node
+position with this published rule:
+- **`tree`**: cluster the nodes' `posX` values by gaps well over 600 (the
+  gap between sub-trees is ~2200) → 3 clusters = 3 sub-trees, numbered
+  0–2 in the in-game tab order (left to right);
+- **`col`** = `round((posX − cluster min posX) / 600)` (0–3);
+- **`row`** = `round((posY − 2130) / 600)` (0–6, 0 = top tier).
+
+Positions are not exact (e.g. `posX` 5020 and 5030 share a column — hence
+`round`, never an index into the distinct values) and node totals vary by
+class (50–52). Confirmed on Warrior, Druid and Paladin (beta build 70291).
+The addon **always sends the raw `posX`/`posY`** with the derived
+`tree`/`row`/`col`; the server treats the raw position as authoritative
+and may recompute the grid with this rule without a wire change.
 
 **`guild`** — `data`:
 - `name` 1–64, `rawRealm?` ≤ 64, `snapshotAt` (unix s)
@@ -169,7 +188,10 @@ payload are unchanged — this only widens what one paste may contain.
 | `ADDON_IMPORT_SAME_EXPORT_WINDOW_SECONDS` | 600 | `exportedAt` spread across the sections of a mixed paste | `INVALID_PAYLOAD` |
 | `ADDON_IMPORT_MAX_DECODED_BYTES` | 1 048 576 | inflated JSON, **per page** | `DECODED_TOO_LARGE` |
 | guild `members` | 2000 | per page and merged | `INVALID_PAYLOAD` |
-| structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000, any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |
+| `ADDON_QUESTS_COMPLETED_MAX` | 10 000 | `char` `data.quests.completed` — the one array exempt from the 2000 structural cap; the addon cuts to the first 10 000 ids ascending and sets `quests.completedTruncated: true` | `INVALID_PAYLOAD` |
+| `ADDON_QUESTS_IN_PROGRESS_MAX` | 35 | `char` `data.quests.inProgress` | `INVALID_PAYLOAD` |
+| `ADDON_QUEST_OBJECTIVES_MAX` | 10 | objectives per in-progress quest | `INVALID_PAYLOAD` |
+| structural (server-internal, `addon-import.limits.ts`) | depth ≤ 12, arrays ≤ 2000 (except `quests.completed`, above), any string or key ≤ 2048 UTF-8 bytes | decoded JSON | `INVALID_PAYLOAD` |
 
 ## 7. Error codes (`AddonImportErrorCodeSchema`)
 

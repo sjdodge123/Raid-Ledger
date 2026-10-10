@@ -3,6 +3,38 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-09 — Forever character fields — **additive**
+
+- **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):
+  `who.gender` (`"male"` | `"female"`; omit when `UnitSex` is unknown);
+  `talents.nodes[]` gains `name?` (≤ 64), `spellId?`, `maxRanks?` (1–255),
+  `tree?` (0–2), `row?` (0–9), `col?` (0–3) and the raw `posX?` / `posY?`;
+  `data.quests?` = `{ completed: questId[] ≤ 10 000, inProgress: [{ questId,
+  title? ≤ 128, objectives? ≤ 10: [{ text ≤ 128, done, have?, need? }] }] ≤ 35 }`.
+  Every new object is `.strict()`; an export without the new keys decodes
+  exactly as before.
+- **Server ships first.** The addon may emit these keys only after
+  re-syncing this `schema.json` (and the fixtures) into its pinned copy;
+  until then an older server rejects them as unknown keys.
+- New constants `ADDON_QUESTS_COMPLETED_MAX = 10 000`,
+  `ADDON_QUESTS_IN_PROGRESS_MAX = 35`, `ADDON_QUEST_OBJECTIVES_MAX = 10`.
+  `quests.completed` is the one array allowed past the 2000 structural cap.
+- Talent position rule: CONTRACT.md §3. Raw `posX` / `posY` are
+  authoritative; `tree` / `row` / `col` are the addon's derived hint, by the
+  published rule (cluster `posX` by ~2200 gaps → sub-tree; `col` / `row` =
+  rounded 600-unit steps from the cluster min / `posY` 2130), confirmed on
+  Warrior, Druid and Paladin (beta build 70291).
+- Fixtures: new valid `char-forever-quests` (`completed` at the 10 000 cap,
+  enchanted + socketed gear links), `char-forever-talents-named`; new
+  invalid `gender-unknown-value`, `quests-completed-over-cap` (10 001 ids).
+  Every existing fixture unchanged byte-for-byte. Server-side only: the
+  stored snapshot (schema 2) also keeps `enchantId` / `gemIds` parsed from
+  the gear link; the wire format is unaffected.
+- `quests.completedTruncated?: boolean` (absent = `false`): set by the addon
+  when `completed` was cut to `ADDON_QUESTS_COMPLETED_MAX` ids (first ids
+  ascending); kept in the stored snapshot. New valid fixture
+  `char-forever-quests-truncated` (3 ids + `completedTruncated: true`).
+
 ## v1 — 2026-10-07 — two apply-time error codes — **additive**
 
 - **Additive (stays v1).** `AddonImportErrorCodeSchema` gains
