@@ -7,7 +7,9 @@ import { clearFinishedJob } from './clear-finished-job.helpers';
 
 function makeQueue(state: string | null) {
   const job =
-    state === null ? undefined : { getState: jest.fn().mockResolvedValue(state) };
+    state === null
+      ? undefined
+      : { getState: jest.fn().mockResolvedValue(state) };
   return {
     getJob: jest.fn().mockResolvedValue(job),
     remove: jest.fn().mockResolvedValue(1),

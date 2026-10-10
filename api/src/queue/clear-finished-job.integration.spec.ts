@@ -34,9 +34,15 @@ describe('clearFinishedJob against real Redis (ROK-1762)', () => {
   beforeAll(() => {
     const [q, w, idle] = [newConnection(), newConnection(), newConnection()];
     connections.push(q, w, idle);
-    queue = new Queue(`rok1762-finished-${RUN}`, { connection: q, prefix: PREFIX });
+    queue = new Queue(`rok1762-finished-${RUN}`, {
+      connection: q,
+      prefix: PREFIX,
+    });
     // No worker on this queue: its jobs stay waiting/delayed for the test.
-    idleQueue = new Queue(`rok1762-idle-${RUN}`, { connection: idle, prefix: PREFIX });
+    idleQueue = new Queue(`rok1762-idle-${RUN}`, {
+      connection: idle,
+      prefix: PREFIX,
+    });
     worker = new Worker(
       queue.name,
       (job: Job) => {
@@ -72,18 +78,32 @@ describe('clearFinishedJob against real Redis (ROK-1762)', () => {
   async function seedFinished(jobId: string, outcome: Outcome): Promise<void> {
     const done = workerFinished(jobId, outcome);
     const name = outcome === 'failed' ? 'fail' : 'ok';
-    await queue.add(name, {}, {
-      jobId, attempts: 1, removeOnComplete: 100, removeOnFail: 50,
-    });
+    await queue.add(
+      name,
+      {},
+      {
+        jobId,
+        attempts: 1,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
     await done;
     expect(await queue.getJobState(jobId)).toBe(outcome);
   }
 
   /** The fixed-jobId enqueue every affected site performs. */
   function reAdd(jobId: string) {
-    return queue.add('ok', { rerun: true }, {
-      jobId, delay: ONE_HOUR_MS, removeOnComplete: 100, removeOnFail: 50,
-    });
+    return queue.add(
+      'ok',
+      { rerun: true },
+      {
+        jobId,
+        delay: ONE_HOUR_MS,
+        removeOnComplete: 100,
+        removeOnFail: 50,
+      },
+    );
   }
 
   it.each<Outcome>(['completed', 'failed'])(
@@ -132,6 +152,8 @@ describe('clearFinishedJob against real Redis (ROK-1762)', () => {
   });
 
   it('reports missing for an id no job holds', async () => {
-    await expect(clearFinishedJob(queue, 'never-added')).resolves.toBe('missing');
+    await expect(clearFinishedJob(queue, 'never-added')).resolves.toBe(
+      'missing',
+    );
   });
 });
