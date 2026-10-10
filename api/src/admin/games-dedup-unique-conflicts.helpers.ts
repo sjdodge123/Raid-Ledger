@@ -31,7 +31,7 @@
  *     dup-side row at all, IF the canonical also has a row. We emit
  *     `tasteVectors = 1` in that case (else 0).
  */
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { characterUniqueKeyJoin } from '../characters/characters-unique-keys.helpers';
@@ -72,8 +72,9 @@ function takeInt(rows: { c: number }[]): number {
 }
 
 /**
- * SQL-injection guard for the sql.raw interpolations below: canonicalId and
- * every dupId MUST be integers before being stitched into raw SQL text.
+ * Input guard: canonicalId and every dupId MUST be integers. The queries
+ * below bind them as parameters (ROK-1757); the guard still rejects bad input
+ * before any SQL is built.
  * All current callers pass typed games.id values; this makes the guarantee
  * explicit instead of relying on caller discipline.
  */
@@ -97,6 +98,14 @@ function assertIntegerIds(input: UniqueConflictInput): void {
  * compile-time literals below, NEVER with user input. Numeric inputs are
  * asserted integer at the `computeUniqueConflicts` entry point.
  */
+/** `ARRAY[$1, $2, …]::int[]` — each id is a bound parameter. */
+function intArray(ids: number[]): SQL {
+  return sql`ARRAY[${sql.join(
+    ids.map((id) => sql`${id}`),
+    sql`, `,
+  )}]::int[]`;
+}
+
 async function countCompositeConflicts(
   db: Db,
   tableName: string,
@@ -104,20 +113,26 @@ async function countCompositeConflicts(
   input: UniqueConflictInput,
 ): Promise<number> {
   if (input.dupIds.length === 0) return 0;
+  const table = sql.identifier(tableName);
+  // The function form is a code-owned join over fixed column names (no input).
   const joinCondition =
     typeof otherCols === 'function'
-      ? otherCols('dup', 'canon')
-      : otherCols
-          .map((col) => `dup.${col} IS NOT DISTINCT FROM canon.${col}`)
-          .join(' AND ');
-  const query = sql.raw(`
+      ? sql.raw(otherCols('dup', 'canon'))
+      : sql.join(
+          otherCols.map(
+            (col) =>
+              sql`dup.${sql.identifier(col)} IS NOT DISTINCT FROM canon.${sql.identifier(col)}`,
+          ),
+          sql` AND `,
+        );
+  const query = sql`
     SELECT COUNT(*)::int AS c
-    FROM ${tableName} dup
-    JOIN ${tableName} canon
+    FROM ${table} dup
+    JOIN ${table} canon
       ON ${joinCondition}
      AND canon.game_id = ${input.canonicalId}
-    WHERE dup.game_id = ANY(ARRAY[${input.dupIds.join(',')}]::int[])
-  `);
+    WHERE dup.game_id = ANY(${intArray(input.dupIds)})
+  `;
   const rows = (await db.execute(query)) as { c: number }[];
   return takeInt(rows);
 }
@@ -129,14 +144,15 @@ async function countSingleColumnConflict(
   input: UniqueConflictInput,
 ): Promise<number> {
   if (input.dupIds.length === 0) return 0;
-  const query = sql.raw(`
+  const table = sql.identifier(tableName);
+  const query = sql`
     SELECT
       (
-        EXISTS(SELECT 1 FROM ${tableName} WHERE game_id = ${input.canonicalId})
-        AND EXISTS(SELECT 1 FROM ${tableName}
-                   WHERE game_id = ANY(ARRAY[${input.dupIds.join(',')}]::int[]))
+        EXISTS(SELECT 1 FROM ${table} WHERE game_id = ${input.canonicalId})
+        AND EXISTS(SELECT 1 FROM ${table}
+                   WHERE game_id = ANY(${intArray(input.dupIds)}))
       )::int AS c
-  `);
+  `;
   const rows = (await db.execute(query)) as { c: number }[];
   return takeInt(rows);
 }
