@@ -165,3 +165,4 @@ restore-drill-report.json
 web/.bundle-report/
 # ROK-1527: flag file that switches the opt-in integration heap probe on
 api/.rl-heap-probe
+!scripts/contrast-audit-aggregate.spec.mjs
