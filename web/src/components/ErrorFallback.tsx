@@ -1,13 +1,5 @@
-import { CHUNK_RELOAD_KEY } from '../App';
-
-function isChunkError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (/dynamically imported module/i.test(error.message) ||
-      /failed to fetch/i.test(error.message) ||
-      /loading (?:css )?chunk/i.test(error.message))
-  );
-}
+import { CHUNK_RELOAD_KEY } from '../lazy-routes';
+import { isChunkLoadError } from '../lib/chunk-error';
 
 const reloadBtnStyle = {
   marginTop: '1rem',
@@ -18,7 +10,7 @@ const reloadBtnStyle = {
 } as const;
 
 export function ErrorFallback({ error }: { error: unknown }) {
-  const isChunk = isChunkError(error);
+  const isChunk = isChunkLoadError(error);
   const message = isChunk
     ? 'The app has been updated. Please reload to get the latest version.'
     : error instanceof Error
