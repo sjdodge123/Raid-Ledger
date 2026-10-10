@@ -119,7 +119,10 @@ export class TiebreakerController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.tiebreakerService.castBracketVote(id, parsed.data, req.user.id);
+    return this.tiebreakerService.castBracketVote(id, parsed.data, {
+      id: req.user.id,
+      role: req.user.role,
+    });
   }
 
   /** POST /lineups/:id/tiebreaker/veto — submit a veto. */
@@ -135,7 +138,10 @@ export class TiebreakerController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.flatten().fieldErrors);
     }
-    return this.tiebreakerService.castVeto(id, parsed.data, req.user.id);
+    return this.tiebreakerService.castVeto(id, parsed.data, {
+      id: req.user.id,
+      role: req.user.role,
+    });
   }
 
   /** POST /lineups/:id/tiebreaker/resolve — force-resolve (operator). */
