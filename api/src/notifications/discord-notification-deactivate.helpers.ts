@@ -1,6 +1,6 @@
 import { Logger } from '@nestjs/common';
 import type { ModuleRef } from '@nestjs/core';
-import { eq, and, isNotNull, isNull, sql } from 'drizzle-orm';
+import { eq, and, isNotNull, isNull, lt, or, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { UsersService } from '../users/users.service';
@@ -31,6 +31,32 @@ const REASON_SUFFIX: Record<DeactivationReason, string> = {
   unknown: 'left the Discord guild and was deactivated.',
 };
 
+/**
+ * ROK-1759: optional atomic guard. `seenBefore` (the sweep's member-fetch
+ * start) makes the deactivation UPDATE itself skip a user whose
+ * `guild_member_seen_at` was stamped at/after it — a join or Discord sign-in
+ * that landed after the sweep loaded its candidates is not a leaver.
+ */
+export interface DeactivationGuard {
+  seenBefore?: Date;
+}
+
+/** WHERE clause for the deactivation UPDATE (idempotent + optional guard). */
+function deactivationTarget(userId: number, guard: DeactivationGuard) {
+  const base = and(
+    eq(schema.users.id, userId),
+    isNull(schema.users.deactivatedAt),
+  );
+  if (!guard.seenBefore) return base;
+  return and(
+    base,
+    or(
+      isNull(schema.users.guildMemberSeenAt),
+      lt(schema.users.guildMemberSeenAt, guard.seenBefore),
+    ),
+  );
+}
+
 /** Admin-notification body for a deactivation (ROK-1749). */
 export function deactivationMessage(
   username: string,
@@ -52,6 +78,7 @@ export async function deactivateUserViaModuleRef(
   moduleRef: ModuleRef | undefined,
   userId: number,
   reason: DeactivationReason = 'unknown',
+  guard: DeactivationGuard = {},
 ): Promise<void> {
   if (!moduleRef) {
     logger.warn(`ROK-1260: deactivateUser(${userId}) — no moduleRef, skipping`);
@@ -76,6 +103,7 @@ export async function deactivateUserViaModuleRef(
     },
     userId,
     reason,
+    guard,
   );
 }
 
@@ -139,15 +167,16 @@ export async function deactivateUserOrchestrated(
   },
   userId: number,
   reason: DeactivationReason = 'unknown',
+  guard: DeactivationGuard = {},
 ): Promise<void> {
   const [row] = await deps.db
     .update(schema.users)
     .set({ deactivatedAt: sql`NOW()` })
-    .where(and(eq(schema.users.id, userId), isNull(schema.users.deactivatedAt)))
+    .where(deactivationTarget(userId, guard))
     .returning({ id: schema.users.id, username: schema.users.username });
   if (!row) {
     deps.logger.debug(
-      `ROK-1260: deactivateUser(${userId}) — already deactivated, skipping cascade`,
+      `ROK-1260: deactivateUser(${userId}) — already deactivated (or seen in the guild since the sweep's fetch), skipping cascade`,
     );
     return;
   }

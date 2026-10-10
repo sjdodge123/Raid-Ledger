@@ -77,7 +77,8 @@ export class GuildMemberAddListener {
     const isMember = await this.clientService
       .isGuildMember(payload.discordId)
       .catch(() => false);
-    if (isMember) await this.stampGuildMemberSeen(payload.discordId);
+    if (isMember)
+      await this.stampGuildMemberSeen(payload.discordId, payload.userId);
   }
 
   private async handleGuildMemberAdd(member: GuildMember): Promise<void> {
@@ -109,13 +110,23 @@ export class GuildMemberAddListener {
    * a reconciliation / 50278-deactivation candidate from now on. Written for
    * every join/rejoin (banned or not — the stamp is a membership fact, not a
    * reactivation). Best-effort: a failure must never block reactivation.
+   * ROK-1759: a sign-in stamp also pins `userId`, so an unlink/re-link that
+   * moved the id during the async membership lookup can't stamp another row.
    */
-  private async stampGuildMemberSeen(discordId: string): Promise<void> {
+  private async stampGuildMemberSeen(
+    discordId: string,
+    userId?: number,
+  ): Promise<void> {
+    const byDiscordId = eq(schema.users.discordId, discordId);
     try {
       await this.db
         .update(schema.users)
         .set({ guildMemberSeenAt: new Date() })
-        .where(eq(schema.users.discordId, discordId));
+        .where(
+          userId === undefined
+            ? byDiscordId
+            : and(byDiscordId, eq(schema.users.id, userId)),
+        );
     } catch (err: unknown) {
       this.logger.warn(
         `ROK-1749: guild_member_seen_at stamp failed for discord ${discordId}: ${err instanceof Error ? err.message : 'Unknown error'}`,

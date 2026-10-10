@@ -120,7 +120,7 @@ export class GuildReconciliationService {
     const candidates = await this.loadActiveDbUsers();
     const skipped = await this.countNeverSeen();
     const gaps = candidates.filter((u) => isGap(u, members, fetchStartedAt));
-    await this.deactivateGap(gaps);
+    await this.deactivateGap(gaps, fetchStartedAt);
     this.logger.log(
       `[ROK-1282] Reconciliation deactivated ${gaps.length} user(s) ` +
         `(checked ${candidates.length} active DB user(s) against ${members.size} guild member(s); ` +
@@ -200,13 +200,21 @@ export class GuildReconciliationService {
     return rows as ActiveUser[];
   }
 
-  /** Deactivate each gap via the shared notification path (idempotent). */
-  private async deactivateGap(gaps: { id: number }[]): Promise<void> {
+  /**
+   * Deactivate each gap via the shared notification path (idempotent). ROK-1759:
+   * `seenBefore` makes the UPDATE itself spare a user stamped after the fetch
+   * started — closes the window between the candidate load and this write.
+   */
+  private async deactivateGap(
+    gaps: { id: number }[],
+    fetchStartedAt: Date,
+  ): Promise<void> {
     for (const u of gaps) {
       try {
         await this.discordNotificationService.deactivateUser(
           u.id,
           'reconciliation-sweep',
+          { seenBefore: fetchStartedAt },
         );
       } catch (err: unknown) {
         this.logger.warn(
