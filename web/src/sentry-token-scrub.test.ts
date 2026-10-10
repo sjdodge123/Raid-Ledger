@@ -151,4 +151,29 @@ describe('ROK-1750: beforeSend scrubs the poll share token from error events', (
         expect(JSON.stringify(out)).not.toContain(SHARE_TOKEN);
         expect(out.transaction).toBe('/p/poll/[Filtered]');
     });
+
+    // R6: HttpContext copies document.referrer into request.headers.Referer,
+    // and same-origin Referrer-Policy keeps the full /p/poll/<t> path.
+    const REFERER = `https://rl.test/p/poll/${SHARE_TOKEN}`;
+    const REFERER_SCRUBBED = 'https://rl.test/p/poll/[Filtered]';
+    type WithHeaders = { request: { headers: Record<string, string> } };
+
+    it('scrubs request.headers.Referer on an error event', () => {
+        const hook = config.beforeSend ?? identity;
+        const out = hook({
+            exception: { values: [{ type: 'TypeError', value: 'boom' }] },
+            request: { url: 'https://rl.test/events', headers: { Referer: REFERER } },
+        }) as WithHeaders;
+        expect(out.request.headers.Referer).toBe(REFERER_SCRUBBED);
+    });
+
+    it('scrubs request.headers.Referer on a transaction event', () => {
+        const hook = config.beforeSendTransaction ?? identity;
+        const out = hook({
+            type: 'transaction',
+            transaction: '/events',
+            request: { url: 'https://rl.test/events', headers: { Referer: REFERER } },
+        }) as WithHeaders;
+        expect(out.request.headers.Referer).toBe(REFERER_SCRUBBED);
+    });
 });
