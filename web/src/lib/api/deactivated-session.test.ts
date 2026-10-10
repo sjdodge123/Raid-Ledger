@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
     DEACTIVATED_LOGIN_PATH,
@@ -12,6 +12,9 @@ import {
     ORIGINAL_TOKEN_KEY,
     USER_CACHE_KEY,
 } from './auth-storage-keys';
+import { toast } from '../toast';
+
+vi.mock('../toast', () => ({ toast: { error: vi.fn() } }));
 
 /**
  * ROK-1753: the API answers a deactivated user's requests AND refresh with
@@ -74,5 +77,29 @@ describe('endDeactivatedSession', () => {
         expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
         expect(redirect).toHaveBeenCalledWith(DEACTIVATED_LOGIN_PATH);
         expect(DEACTIVATED_LOGIN_PATH).toBe('/login?error=deactivated');
+    });
+
+    describe('already on /login (password sign-in hits USER_DEACTIVATED)', () => {
+        beforeEach(() => vi.mocked(toast.error).mockClear());
+        afterEach(() => window.history.replaceState({}, '', '/'));
+
+        it('toasts the deactivated notice in place and does NOT redirect', () => {
+            window.history.replaceState({}, '', '/login');
+            const redirect = vi.fn();
+
+            const redirecting = endDeactivatedSession(redirect);
+
+            expect({ redirecting, redirects: redirect.mock.calls }).toEqual({ redirecting: false, redirects: [] });
+            expect(toast.error).toHaveBeenCalledWith('Your account has been deactivated.');
+            expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+        });
+
+        it('leaves the toast to the login page when ?error=deactivated is already showing it', () => {
+            window.history.replaceState({}, '', '/login?error=deactivated');
+
+            endDeactivatedSession(vi.fn());
+
+            expect(toast.error).not.toHaveBeenCalled();
+        });
     });
 });

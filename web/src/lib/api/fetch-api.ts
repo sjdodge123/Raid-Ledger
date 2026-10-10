@@ -88,8 +88,10 @@ export async function fetchWithAuth(
     }
     const response = await sendRequest(endpoint, options);
     // ROK-1753: a deactivated account is terminal — no refresh, no retry.
+    // While the redirect to /login lands, never settle: a caller's onError
+    // toast would otherwise flash over the deactivated notice.
     if (await isDeactivatedResponse(response)) {
-        endDeactivatedSession();
+        if (endDeactivatedSession()) return new Promise<Response>(() => {});
         return response;
     }
     if (response.status === 401 && getAuthMethod()) {

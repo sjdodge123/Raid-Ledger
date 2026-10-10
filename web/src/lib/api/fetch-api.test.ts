@@ -315,12 +315,19 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
             }),
         );
 
-        await expect(fetchApi('/thing')).rejects.toThrow('Account deactivated');
+        const settled = vi.fn();
+        fetchApi('/thing').then(settled, settled);
+
+        await vi.waitFor(() => expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull());
+        // Give a would-be rejection every chance to land (body parse + throw).
+        await new Promise((resolve) => setTimeout(resolve, 50));
 
         expect(refreshCalls).toBe(0);
         expect(dataCalls).toBe(1);
         expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
-        expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+        // Never settles while the /login redirect lands, so no caller onError
+        // toast flashes over the deactivated notice.
+        expect(settled).not.toHaveBeenCalled();
     });
 });
 

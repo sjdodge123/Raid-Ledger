@@ -4,6 +4,7 @@ import {
   ORIGINAL_TOKEN_KEY,
   USER_CACHE_KEY,
 } from './auth-storage-keys';
+import { toast } from '../toast';
 
 /**
  * ROK-1753: a deactivated user's session is terminal. The API answers every
@@ -21,6 +22,7 @@ import {
 
 export const USER_DEACTIVATED_CODE = 'USER_DEACTIVATED';
 export const DEACTIVATED_LOGIN_PATH = '/login?error=deactivated';
+export const DEACTIVATED_MESSAGE = 'Your account has been deactivated.';
 
 const SESSION_KEYS = [ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY, USER_CACHE_KEY, AUTH_METHOD_KEY];
 
@@ -44,8 +46,18 @@ function goTo(path: string): void {
   window.location.assign(path);
 }
 
-/** End the session in every tab and show the deactivated notice on /login. */
-export function endDeactivatedSession(redirect: (path: string) => void = goTo): void {
+/**
+ * End the session in every tab and show the deactivated notice on /login.
+ * Already on /login (e.g. a password sign-in whose /auth/me 401s) → toast in
+ * place, no redirect. Returns true when a redirect is under way.
+ */
+export function endDeactivatedSession(redirect: (path: string) => void = goTo): boolean {
   for (const key of SESSION_KEYS) localStorage.removeItem(key);
-  if (window.location.pathname !== '/login') redirect(DEACTIVATED_LOGIN_PATH);
+  if (window.location.pathname !== '/login') {
+    redirect(DEACTIVATED_LOGIN_PATH);
+    return true;
+  }
+  // The login page's ?error=deactivated handler already toasts that case.
+  if (!window.location.search.includes('error=deactivated')) toast.error(DEACTIVATED_MESSAGE);
+  return false;
 }

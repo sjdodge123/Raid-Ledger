@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
 import { consumeAuthRedirect } from '../components/auth';
 import { setAuthMethod, clearSilentGuard } from '../lib/api/silent-reauth';
+import { DEACTIVATED_MESSAGE } from '../lib/api/deactivated-session';
 import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
@@ -32,7 +33,7 @@ function useOAuthErrorHandler(): void {
         } else if (oauthError === 'deactivated') {
             // ROK-1753: the API 401s a deactivated session (USER_DEACTIVATED);
             // the web ends it and lands here — same toast idiom as a ban.
-            toast.error('Your account has been deactivated.');
+            toast.error(DEACTIVATED_MESSAGE);
             searchParams.delete('error');
             setSearchParams(searchParams, { replace: true });
         }
