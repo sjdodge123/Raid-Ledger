@@ -53,6 +53,22 @@
 #                                        # run only the diff-gated e2e steps.
 #                                        # Use in post-deploy gates where the
 #                                        # static checks already ran upstream.
+#   ./scripts/validate-ci.sh --only-e2e --contrast-audit
+#                                        # ROK-1203 report-only light-mode
+#                                        # contrast sweep. Valid ONLY with
+#                                        # --only-e2e (exit 2 otherwise). Runs
+#                                        # INSTEAD of the normal Playwright
+#                                        # suite and Discord smoke: exports
+#                                        # CONTRAST_AUDIT=1, runs
+#                                        # scripts/smoke/contrast-audit.config.ts
+#                                        # (desktop project, --workers=2)
+#                                        # against the resolved BASE_URL with
+#                                        # the usual global-setup login, then
+#                                        # scripts/smoke/contrast-audit.aggregate.mjs
+#                                        # (writes test-results/contrast-audit/
+#                                        # REPORT.md). PASS when the sweep and
+#                                        # aggregator exit 0, even if contrast
+#                                        # violations are reported.
 #   ./scripts/validate-ci.sh --only-integration
 #                                        # Run ONLY the sharded integration
 #                                        # suite — same Redis sidecar, shard
@@ -205,6 +221,9 @@ only_mode=""
 # only_e2e: derived from only_mode="e2e". Kept as its own flag because the e2e
 # narrowing predates only_mode and is threaded through several checks below.
 only_e2e=false
+# contrast_audit (--contrast-audit): ROK-1203 report-only contrast sweep. Only
+# meaningful with --only-e2e; swaps the e2e tier for the sweep + aggregator.
+contrast_audit=false
 # no_coverage (--no-coverage): drop --coverage from the unit step and pin the V8
 # heap. Composes with --only-unit and with the default/--full gate.
 no_coverage=false
@@ -1814,6 +1833,22 @@ run_playwright_e2e() {
   fi
 }
 
+# ROK-1203: report-only light-mode contrast sweep. Replaces the Playwright and
+# Discord-smoke steps under --only-e2e --contrast-audit. Reports violations but
+# never fails on them: PASS = sweep AND aggregator both exit 0.
+run_contrast_audit() {
+  if ! check_env_up; then
+    echo -e "${RED}--contrast-audit needs a live target but the env is not responding at $(_resolve_health_url).${NC}"
+    return 1
+  fi
+  # Same BASE_URL / PLAYWRIGHT_BASE_URL / API_URL / auth-dir wiring as the
+  # normal Playwright step, so global setup logs in against the same host.
+  _export_e2e_target || return 1
+  export CONTRAST_AUDIT=1
+  npx playwright test -c scripts/smoke/contrast-audit.config.ts --project=desktop --workers=2 || return $?
+  node scripts/smoke/contrast-audit.aggregate.mjs
+}
+
 run_discord_smoke() {
   case "$e2e_mode" in
     off)
@@ -2085,7 +2120,9 @@ run_default_gate() {
   # E2E checks are auto-scoped (diff + env gated). They SKIP cleanly when the
   # diff doesn't touch their surface or when the dev env isn't running.
   # In --static mode they're skipped entirely (deferred to GitHub CI).
-  if ! $static_mode; then
+  if $contrast_audit; then
+    run_step "Contrast audit (report-only)" run_contrast_audit
+  elif ! $static_mode; then
     _prepare_playwright_scope
     RUN_STEP_DEFER_FAIL=1
     run_step "$PLAYWRIGHT_STEP_LABEL" run_playwright_e2e
@@ -2131,6 +2168,7 @@ main() {
       --no-e2e) e2e_mode="off"; e2e_explicit=false; shift ;;
       --with-e2e) e2e_mode="on"; e2e_explicit=true; shift ;;
       --only-e2e) _set_only_mode e2e; shift ;;
+      --contrast-audit) contrast_audit=true; shift ;;
       --only-integration) _set_only_mode integration; shift ;;
       --only-unit) _set_only_mode unit; shift ;;
       --no-coverage) no_coverage=true; shift ;;
@@ -2186,6 +2224,11 @@ main() {
     local detail=""
     if [ "$only_mode" = "e2e" ]; then detail=" (static skips all e2e)"; fi
     echo -e "${RED}--static and --only-${only_mode} are mutually exclusive${detail}.${NC}" >&2
+    exit 2
+  fi
+
+  if $contrast_audit && ! $only_e2e; then
+    echo -e "${RED}--contrast-audit is only valid together with --only-e2e.${NC}" >&2
     exit 2
   fi
 
