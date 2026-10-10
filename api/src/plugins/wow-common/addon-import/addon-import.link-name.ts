@@ -12,8 +12,8 @@ export const LINK_NAME_MAX = 128;
 const DISPLAY_RE = /\|h\[([^\]|]{1,600})\]\|h/;
 /** `|cnIQ<n>:` — the client's item-quality colour token. */
 const QUALITY_RE = /\|cnIQ([0-7]):/;
-// eslint-disable-next-line no-control-regex
-const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g;
+/** C0/C1 controls plus format chars (bidi overrides, zero-width, BOM). */
+const CONTROL_RE = /[\p{Cc}\p{Cf}]/gu;
 
 export interface LinkDisplay {
   name?: string;

@@ -52,4 +52,11 @@ describe('parseLinkDisplay (ROK-1760)', () => {
     });
     expect(parseLinkDisplay('|h[\u0001\u0002 ]|h')).toEqual({});
   });
+
+  it('strips bidi overrides and zero-width format chars (U+202E, U+200B, U+2066, U+FEFF)', () => {
+    expect(
+      parseLinkDisplay('|h[Evil\u202Edrows\u200B \u2066Blade\u2069\uFEFF]|h'),
+    ).toEqual({ name: 'Evildrows Blade' });
+    expect(parseLinkDisplay('|h[\u202E\u200B]|h')).toEqual({});
+  });
 });
