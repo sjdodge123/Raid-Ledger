@@ -10,6 +10,7 @@ import type {
     QuestProgressResponse,
     QuestProgressDto,
     QuestCoverageResponse,
+    EventQuestPrereqsResponse,
     UpdateQuestProgressBody,
     BossEncounterDto,
     BossLootDto,
@@ -25,6 +26,7 @@ import {
     BlizzardCapabilitiesSchema,
     WowForeverConfigResponseSchema,
     ForeverProbeStateSchema,
+    EventQuestPrereqsResponseSchema,
     ForeverProbeResultSchema,
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api-client';
@@ -135,6 +137,15 @@ export async function fetchQuestCoverage(
     eventId: number,
 ): Promise<QuestCoverageResponse> {
     return fetchApi(`/plugins/wow-classic/events/${eventId}/quest-coverage`);
+}
+
+/**
+ * Fetch the viewer's pre-req chain state for an event (ROK-1748 D11) — null without a Forever character.
+ */
+export async function fetchEventQuestPrereqs(
+    eventId: number,
+): Promise<EventQuestPrereqsResponse> {
+    return fetchApi(`/plugins/wow-classic/events/${eventId}/quest-prereqs/me`, {}, EventQuestPrereqsResponseSchema);
 }
 
 /**
