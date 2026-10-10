@@ -206,10 +206,31 @@ describe('buildCharacterQuests — ordering and edge cases', () => {
     });
   });
 
-  it('ignores the completedTruncated flag safely', () => {
+  it('keeps the DTO shape when completedTruncated is set', () => {
     const dto = buildCharacterQuests(snap([1], [], true), known, names)!;
     expect(dto.counts.completedKnown).toBe(1);
     expect(dto).not.toHaveProperty('completedTruncated');
+  });
+
+  it('truncated: known quests above the highest sent id are not counted as not-done (ROK-1758)', () => {
+    const list = [
+      quest({ questId: 1 }),
+      quest({ questId: 50 }),
+      quest({ questId: 90 }),
+    ];
+    const cut = buildCharacterQuests(
+      snap([1, 10], [{ questId: 90 }], true),
+      list,
+      names,
+    );
+    // 50 is above the cut (10) and not in the log → unknown, out of the total.
+    expect(cut?.counts.knownTotal).toBe(2);
+    const full = buildCharacterQuests(
+      snap([1, 10], [{ questId: 90 }]),
+      list,
+      names,
+    );
+    expect(full?.counts.knownTotal).toBe(3);
   });
 });
 

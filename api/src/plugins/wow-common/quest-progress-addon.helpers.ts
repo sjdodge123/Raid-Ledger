@@ -18,6 +18,8 @@ import { walkChainInMemory } from './dungeon-quests.helpers';
 /** The `quests` slice of a schema-2 LedgerLink character snapshot. */
 export interface AddonQuestsSlice {
   completed: number[];
+  /** CONTRACT §char: above the cap only the LOWEST ids ascending are sent. */
+  completedTruncated?: boolean | undefined;
   inProgress: Array<{ questId: number }>;
 }
 
@@ -57,10 +59,15 @@ export interface MergedProgressRow extends Omit<
   characterId: string | null;
 }
 
-/** Done state of one quest for one viewer (D12). */
+/**
+ * Done state of one quest for one viewer (D12). `unknown` marks a quest the
+ * data cannot speak to: no row, and its id sits above a truncated snapshot's
+ * highest sent id (ROK-1758) — it is shown not-done but never counted needed.
+ */
 export interface QuestDoneState {
   done: boolean;
   source: QuestProgressSource | null;
+  unknown: boolean;
 }
 
 /** Resolves a quest id to the viewer's done state. */
@@ -136,16 +143,68 @@ export function fillFromAddon(
   };
 }
 
-/** Build a D12 done lookup from ONE viewer's merged rows. */
-export function doneLookupFromRows(rows: MergedProgressRow[]): QuestDoneFn {
+/**
+ * Highest completed id of a truncated snapshot (ROK-1758). The addon keeps the
+ * lowest ids when it truncates, so anything above this is unknown, not undone.
+ * @returns undefined when the list is complete (or empty).
+ */
+export function truncationCutoff(quests: {
+  completed: number[];
+  completedTruncated?: boolean | undefined;
+}): number | undefined {
+  if (!quests.completedTruncated || quests.completed.length === 0) {
+    return undefined;
+  }
+  return quests.completed.reduce((max, id) => (id > max ? id : max));
+}
+
+/**
+ * Build a D12 done lookup from ONE viewer's merged rows. With a `cutoff`
+ * (see {@link truncationCutoff}) a row-less id above it is `unknown`.
+ */
+export function doneLookupFromRows(
+  rows: MergedProgressRow[],
+  cutoff?: number,
+): QuestDoneFn {
   const byQuest = new Map(rows.map((r) => [r.questId, r]));
   return (questId) => {
     const row = byQuest.get(questId);
-    return row
-      ? { done: row.completed, source: row.source }
-      : { done: false, source: null };
+    if (row) return { done: row.completed, source: row.source, unknown: false };
+    const unknown = cutoff !== undefined && questId > cutoff;
+    return { done: false, source: null, unknown };
   };
 }
+
+/** Restriction fields of a quest (the web's `isQuestUsable` reads the same). */
+type QuestRestrictions = Pick<
+  DungeonQuestDto,
+  'classRestriction' | 'raceRestriction'
+>;
+
+/** True when `value` passes a restriction list (empty list / value = no limit). */
+function passes(list: string[] | null, value: string | null): boolean {
+  if (!list || list.length === 0 || !value) return true;
+  const wanted = value.toLowerCase();
+  return list.some((entry) => entry.toLowerCase() === wanted);
+}
+
+/**
+ * Whether a character of this class/race can take the quest. Mirrors
+ * `web/src/plugins/wow/utils/quest-dedup.ts::isQuestUsable` (ROK-1758).
+ */
+export function isQuestUsableBy(
+  quest: QuestRestrictions,
+  charClass: string | null,
+  charRace: string | null,
+): boolean {
+  return (
+    passes(quest.classRestriction, charClass) &&
+    passes(quest.raceRestriction, charRace)
+  );
+}
+
+/** A step still to do: not done, and not unknown (ROK-1758). */
+const isNeeded = (s: QuestDoneState): boolean => !s.done && !s.unknown;
 
 /** Chain state for one quest: steps strictly before it in its chain. */
 function prereqStateFor(
@@ -156,16 +215,16 @@ function prereqStateFor(
   const chain = walkChainInMemory(quest, lookup);
   const idx = chain.findIndex((q) => q.questId === quest.questId);
   const before = chain.slice(0, idx);
-  const steps: QuestPrereqStep[] = before.map((q) => ({
-    questId: q.questId,
-    name: q.name,
-    ...doneFn(q.questId),
-  }));
+  const steps: QuestPrereqStep[] = before.map((q) => {
+    const { done, source } = doneFn(q.questId);
+    return { questId: q.questId, name: q.name, done, source };
+  });
+  const needed = before.filter((q) => isNeeded(doneFn(q.questId)));
   const self = doneFn(quest.questId);
   return {
     questId: quest.questId,
     steps,
-    neededCount: steps.filter((s) => !s.done).length,
+    neededCount: needed.length,
     completed: self.done,
     completedSource: self.source,
   };
@@ -180,7 +239,17 @@ export function buildPrereqState(
   return quests.map((q) => prereqStateFor(q, lookup, doneFn));
 }
 
-/** Total pre-req steps still needed across all quests (`neededTotal`). */
-export function countNeeded(states: QuestPrereqState[]): number {
-  return states.reduce((sum, s) => sum + s.neededCount, 0);
+/**
+ * Distinct pre-req quests still needed across all states (`neededTotal`). A
+ * step shared by several event quests counts once (ROK-1758); ids the caller
+ * marks unknown are left out.
+ */
+export function countNeeded(
+  states: QuestPrereqState[],
+  isUnknown: (questId: number) => boolean = () => false,
+): number {
+  const ids = states.flatMap((s) =>
+    s.steps.filter((st) => !st.done).map((st) => st.questId),
+  );
+  return new Set(ids.filter((id) => !isUnknown(id))).size;
 }

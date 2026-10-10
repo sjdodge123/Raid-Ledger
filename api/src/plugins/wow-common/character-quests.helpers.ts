@@ -12,6 +12,7 @@ import {
   type CharacterQuestsDto,
 } from '@raid-ledger/contract';
 import { walkChainInMemory } from './dungeon-quests.helpers';
+import { truncationCutoff } from './quest-progress-addon.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 
 /** Quest log entry as the addon exports it (fields optional). */
@@ -175,6 +176,25 @@ function hasQuestData(
 }
 
 /**
+ * Known in-instance quests the snapshot can speak to. When the completed list
+ * is truncated (the addon keeps the lowest ids), a quest above the highest
+ * sent id that is not in the log is unknown, so it is left out of the total
+ * rather than counted as not completed (ROK-1758).
+ */
+function countAssessable(
+  knownQuests: DungeonQuestDto[],
+  quests: NonNullable<ForeverQuestSnapshotInput['quests']>,
+): number {
+  const cutoff = truncationCutoff(quests);
+  const inLog = new Set(quests.inProgress.map((q) => q.questId));
+  const unknown = (id: number): boolean =>
+    cutoff !== undefined && id > cutoff && !inLog.has(id);
+  return knownQuests.filter(
+    (q) => q.dungeonInstanceId !== null && !unknown(q.questId),
+  ).length;
+}
+
+/**
  * Build the character quest section DTO, or `null` when the snapshot carries
  * no quest data (absent block, or both lists empty — R-6).
  */
@@ -199,8 +219,7 @@ export function buildCharacterQuests(
         (n, g) => n + g.completed.length,
         0,
       ),
-      knownTotal: knownQuests.filter((q) => q.dungeonInstanceId !== null)
-        .length,
+      knownTotal: countAssessable(knownQuests, quests),
       completedTotal: quests.completed.length,
       inProgress: inProgress.length,
     },

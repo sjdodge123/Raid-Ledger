@@ -13,7 +13,9 @@ import {
   deriveAddonProgress,
   doneLookupFromRows,
   fillFromAddon,
+  isQuestUsableBy,
   mergeProgress,
+  truncationCutoff,
   type AddonProgressRow,
   type ManualProgressRow,
 } from './quest-progress-addon.helpers';
@@ -243,24 +245,93 @@ describe('buildPrereqState (D12)', () => {
   });
 });
 
-describe('countNeeded', () => {
-  it('sums neededCount across states', () => {
+describe('countNeeded (distinct steps, ROK-1758)', () => {
+  const step = (questId: number, done: boolean) => ({
+    questId,
+    name: `Q${questId}`,
+    done,
+    source: null,
+  });
+  const state = (questId: number, steps: ReturnType<typeof step>[]) => ({
+    questId,
+    steps,
+    neededCount: steps.filter((s) => !s.done).length,
+    completed: false,
+    completedSource: null,
+  });
+
+  it('counts a chain step shared by two event quests once', () => {
+    // Chain 1 → 2 → 3 → 4; event quests 2, 3 and 4 share steps 1..3.
     const states = [
-      {
-        questId: 1,
-        steps: [],
-        neededCount: 2,
-        completed: false,
-        completedSource: null,
-      },
-      {
-        questId: 2,
-        steps: [],
-        neededCount: 3,
-        completed: false,
-        completedSource: null,
-      },
+      state(2, [step(1, false)]),
+      state(3, [step(1, false), step(2, false)]),
+      state(4, [step(1, false), step(2, false), step(3, false)]),
     ];
-    expect(countNeeded(states)).toBe(5);
+    expect(countNeeded(states)).toBe(3);
+  });
+
+  it('ignores done steps and steps the caller marks unknown', () => {
+    const states = [state(4, [step(1, true), step(2, false), step(3, false)])];
+    expect(countNeeded(states)).toBe(2);
+    expect(countNeeded(states, (id) => id === 3)).toBe(1);
+  });
+});
+
+describe('isQuestUsableBy (mirrors web isQuestUsable)', () => {
+  const restricted = (race: string[] | null, cls: string[] | null) => ({
+    raceRestriction: race,
+    classRestriction: cls,
+  });
+
+  it('drops a quest restricted to other races, case-insensitively', () => {
+    const horde = restricted(['Orc', 'Undead'], null);
+    expect(isQuestUsableBy(horde, 'Mage', 'Human')).toBe(false);
+    expect(isQuestUsableBy(horde, 'Mage', 'orc')).toBe(true);
+  });
+
+  it('drops a quest restricted to other classes', () => {
+    expect(isQuestUsableBy(restricted(null, ['Paladin']), 'Mage', null)).toBe(
+      false,
+    );
+  });
+
+  it('keeps everything when restrictions or the character fields are empty', () => {
+    expect(isQuestUsableBy(restricted([], null), 'Mage', 'Human')).toBe(true);
+    expect(isQuestUsableBy(restricted(['Orc'], ['Mage']), null, null)).toBe(
+      true,
+    );
+  });
+});
+
+describe('truncation (completedTruncated, ROK-1758)', () => {
+  it('cutoff is the highest completed id only when truncated', () => {
+    expect(truncationCutoff({ completed: [5, 90, 12] })).toBeUndefined();
+    expect(
+      truncationCutoff({ completed: [5, 90, 12], completedTruncated: true }),
+    ).toBe(90);
+    expect(
+      truncationCutoff({ completed: [], completedTruncated: true }),
+    ).toBeUndefined();
+  });
+
+  it('a step above the cutoff with no row is unknown, not needed', () => {
+    const q1 = quest(1, null, 50);
+    const q50 = quest(50, 1, 99);
+    const q99 = quest(99, 50, null);
+    const lookup = new Map([q1, q50, q99].map((q) => [q.questId, q]));
+    const doneFn = doneLookupFromRows([], 10);
+    const state = only(buildPrereqState([q99], lookup, doneFn));
+    expect(doneFn(50)).toEqual({ done: false, source: null, unknown: true });
+    expect(doneFn(1)).toEqual({ done: false, source: null, unknown: false });
+    expect(state.neededCount).toBe(1);
+    expect(state.steps).toEqual([
+      { questId: 1, name: 'Q1', done: false, source: null },
+      { questId: 50, name: 'Q50', done: false, source: null },
+    ]);
+  });
+
+  it('a row above the cutoff (manual tick or in-progress) is definite', () => {
+    const doneFn = doneLookupFromRows([{ ...addon(50), id: 0 }], 10);
+    expect(doneFn(50).unknown).toBe(false);
   });
 });

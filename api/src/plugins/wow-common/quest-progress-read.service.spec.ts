@@ -5,12 +5,16 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../common/testing/drizzle-mock';
-import { loadForeverEventProgress } from './event-forever-progress.query';
+import {
+  loadForeverEventProgress,
+  loadForeverMemberProgress,
+} from './event-forever-progress.query';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
 import type { DungeonQuestDto } from './dungeon-quests.types';
 
 jest.mock('./event-forever-progress.query');
 const mockLoad = jest.mocked(loadForeverEventProgress);
+const mockMember = jest.mocked(loadForeverMemberProgress);
 
 const AT = new Date('2026-10-02T00:00:00.000Z');
 const CAPTURED = '2026-10-01T00:00:00.000Z';
@@ -48,6 +52,8 @@ function forever(): ForeverEventProgress {
         userId: 1,
         username: 'Roknua',
         characterId: 'char-1',
+        charClass: null,
+        charRace: null,
         snapshot: {
           quests: { completed: [100], inProgress: [{ questId: 200 }] },
           capturedAt: CAPTURED,
@@ -63,6 +69,7 @@ let mockDb: MockDb;
 beforeEach(async () => {
   mockDb = createDrizzleMock();
   mockLoad.mockReset().mockResolvedValue(null);
+  mockMember.mockReset().mockResolvedValue(null);
   const module = await Test.createTestingModule({
     providers: [
       QuestProgressReadService,
@@ -104,7 +111,10 @@ describe('QuestProgressReadService — Classic (AC6)', () => {
 });
 
 describe('QuestProgressReadService — Forever', () => {
-  beforeEach(() => mockLoad.mockResolvedValue(forever()));
+  beforeEach(() => {
+    mockLoad.mockResolvedValue(forever());
+    mockMember.mockResolvedValue(forever());
+  });
 
   it('merges addon rows (id 0, source addon, asOf capturedAt) after manual rows', async () => {
     mockDb.where.mockResolvedValueOnce([manualRow(100, false, false)]);
@@ -163,5 +173,16 @@ describe('QuestProgressReadService — Forever', () => {
 
   it('prereqs are null for a viewer without a snapshot member', async () => {
     expect(await service.getPrereqsForViewer(10, 99)).toBeNull();
+  });
+});
+
+describe('QuestProgressReadService — prereqs read scope (ROK-1758)', () => {
+  it('loads only the viewer, never the whole roster', async () => {
+    mockMember.mockResolvedValue(forever());
+    mockDb.where.mockResolvedValueOnce([]);
+    const out = await service.getPrereqsForViewer(10, 1);
+    expect(mockMember).toHaveBeenCalledWith(mockDb, 10, 1);
+    expect(mockLoad).not.toHaveBeenCalled();
+    expect(out?.characterId).toBe('char-1');
   });
 });

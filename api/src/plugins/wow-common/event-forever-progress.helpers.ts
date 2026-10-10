@@ -18,17 +18,21 @@ import {
   countNeeded,
   deriveAddonProgress,
   doneLookupFromRows,
+  isQuestUsableBy,
   mergeProgress,
+  truncationCutoff,
   type AddonProgressRow,
   type AddonQuestSnapshot,
   type ManualProgressRow,
 } from './quest-progress-addon.helpers';
 
-/** An active signup with a character (D8). */
+/** An active signup with a character (D8); class/race gate quests (ROK-1758). */
 export interface EventSignupChar {
   userId: number;
   username: string;
   characterId: string;
+  charClass: string | null;
+  charRace: string | null;
 }
 
 /** A signed-up character whose snapshot carries a `quests` slice. */
@@ -156,7 +160,11 @@ export function groupCoverage(rows: CoverageRow[]): QuestCoverageEntry[] {
   return [...map].map(([questId, coveredBy]) => ({ questId, coveredBy }));
 }
 
-/** The viewer's chain state over the event's quests (D11/D12). */
+/**
+ * The viewer's chain state over the event's quests (D11/D12). Only quests the
+ * viewer's class/race can take count, each pre-req step once, and steps a
+ * truncated snapshot cannot speak to are not counted needed (ROK-1758).
+ */
 export function buildViewerPrereqs(
   progress: ForeverEventProgress,
   member: ForeverMember,
@@ -166,15 +174,18 @@ export function buildViewerPrereqs(
     viewerManual,
     addonRowsFor(progress, member.userId),
   );
-  const quests = buildPrereqState(
-    progress.eventQuests,
-    progress.lookup,
-    doneLookupFromRows(rows),
+  const doneFn = doneLookupFromRows(
+    rows,
+    truncationCutoff(member.snapshot.quests),
   );
+  const usable = progress.eventQuests.filter((q) =>
+    isQuestUsableBy(q, member.charClass, member.charRace),
+  );
+  const quests = buildPrereqState(usable, progress.lookup, doneFn);
   return {
     characterId: member.characterId,
     asOf: member.snapshot.capturedAt,
     quests,
-    neededTotal: countNeeded(quests),
+    neededTotal: countNeeded(quests, (id) => doneFn(id).unknown),
   };
 }
