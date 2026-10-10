@@ -37,10 +37,11 @@ interface FallbackProps {
     children: ReactNode;
 }
 
+/** Race badge type floors at 10px (`0.625rem`) on the smallest tile so the letters stay legible. */
 const SIZES: Record<ForeverPortraitSize, { box: string; icon: string; badge: string }> = {
-    sm: { box: 'w-8 h-8', icon: 'w-5 h-5', badge: 'min-w-4 h-4 text-[8px]' },
-    md: { box: 'w-10 h-10', icon: 'w-6 h-6', badge: 'min-w-[1.125rem] h-[1.125rem] text-[9px]' },
-    lg: { box: 'w-20 h-20', icon: 'w-12 h-12', badge: 'min-w-7 h-7 text-xs' },
+    sm: { box: 'w-8 h-8', icon: 'w-5 h-5', badge: 'min-w-[1.125rem] h-[1.125rem] text-[0.625rem]' },
+    md: { box: 'w-10 h-10', icon: 'w-6 h-6', badge: 'min-w-5 h-5 text-[0.6875rem]' },
+    lg: { box: 'w-20 h-20', icon: 'w-12 h-12', badge: 'min-w-8 h-8 text-sm' },
 };
 
 function NeutralGlyph({ className }: { className: string }) {
@@ -51,7 +52,7 @@ function NeutralGlyph({ className }: { className: string }) {
     );
 }
 
-/** The tile itself. A class icon that fails to load degrades to the neutral glyph — never a broken image. */
+/** The tile itself, labelled with the character name like every other character avatar. A class icon that fails to load degrades to the neutral glyph — never a broken image. */
 export function ForeverPortraitTile({ portrait, size }: { portrait: Exclude<ForeverPortrait, { kind: 'none' }>; size: ForeverPortraitSize }) {
     const [failedUrl, setFailedUrl] = useState<string | null>(null);
     const s = SIZES[size];
