@@ -123,6 +123,10 @@ function buildRosterCharacter(characters: CharacterRow | null) {
     className: characters.class,
     role: characters.roleOverride ?? characters.role,
     avatarUrl: characters.avatarUrl,
+    // ROK-1761: the web draws the Forever fallback portrait from these.
+    race: characters.race,
+    ruleset: characters.ruleset,
+    gameVariant: characters.gameVariant,
   };
 }
 
