@@ -20,10 +20,11 @@
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true,
-    // ROK-1161: on for every api file — shipped code, specs and test infra.
+    // ROK-1161: both flags on for every api file — shipped code, specs and test infra.
     // Narrow with src/common/defined.helpers.ts (app code) or
     // src/common/testing/narrow.ts (specs).
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true
   },
   "ts-node": {
     "files": true
