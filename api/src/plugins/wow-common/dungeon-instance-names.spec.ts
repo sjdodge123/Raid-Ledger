@@ -3,7 +3,9 @@ import { join } from 'path';
 import { DUNGEON_INSTANCE_NAMES, instanceName } from './dungeon-instance-names';
 import { findForeverSeedInstance } from './forever-instance-data';
 
-const readQuests = (file: string): Array<{ dungeonInstanceId: number | null }> =>
+const readQuests = (
+  file: string,
+): Array<{ dungeonInstanceId: number | null }> =>
   JSON.parse(readFileSync(join(__dirname, 'data', file), 'utf8')) as Array<{
     dungeonInstanceId: number | null;
   }>;
