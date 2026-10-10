@@ -112,6 +112,8 @@ export interface ParsedQuest {
   series: SeriesStep[];
   prevQuestId: number | null;
   nextQuestId: number | null;
+  /** Set when a Series table has rows but no bold current step. */
+  seriesIssue: 'series-no-current' | null;
 }
 
 const INFOBOX_RE =
@@ -145,8 +147,8 @@ function parseSeries(html: string): SeriesStep[] {
     const link = SERIES_LINK_RE.exec(cell);
     if (link)
       return { questId: Number(link[1]), name: link[2] ?? '', current: false };
-    const bold = /<b>([^<]+)<\/b>/.exec(cell)?.[1] ?? '';
-    return { questId: null, name: bold, current: true };
+    const bold = /<b>([^<]+)<\/b>/.exec(cell)?.[1];
+    return { questId: null, name: bold ?? '', current: bold !== undefined };
   });
 }
 
@@ -175,6 +177,7 @@ export function parseQuestPage(
     series,
     prevQuestId: at > 0 ? (series[at - 1]?.questId ?? null) : null,
     nextQuestId: at >= 0 ? (series[at + 1]?.questId ?? null) : null,
+    seriesIssue: series.length > 0 && at < 0 ? 'series-no-current' : null,
   };
 }
 

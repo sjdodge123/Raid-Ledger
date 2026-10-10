@@ -105,6 +105,28 @@ describe('parseQuestPage', () => {
     expect(parsed?.series).toHaveLength(6);
   });
 
+  it('flags a series table that has rows but no bold current step', () => {
+    const info = fixture('quest-4136-forever.html').match(
+      /WH\.markup\.printHtml\("[\s\S]*?", "infobox-contents[^\n]*/,
+    )?.[0];
+    const series =
+      '<table class="series"><tr><th>1.</th><td><div><a href="/forever/quest=10/a">A</a></div></td></tr>' +
+      '<tr><th>2.</th><td><div>B</div></td></tr></table>';
+    const result = parseQuestPage(`${info}\n${series}`, { env: 'forever' });
+    expect(result).toMatchObject({
+      seriesIssue: 'series-no-current',
+      prevQuestId: null,
+      nextQuestId: null,
+    });
+  });
+
+  it('leaves seriesIssue null when the current step is bold', () => {
+    const result = parseQuestPage(fixture('quest-4136-forever.html'), {
+      env: 'forever',
+    });
+    expect(result?.seriesIssue).toBeNull();
+  });
+
   it('returns null for a page with no infobox', () => {
     expect(parseQuestPage('<html></html>', { env: 'forever' })).toBeNull();
   });
