@@ -125,8 +125,9 @@ async function getPrInfo(branch: string): Promise<PrInfo | null> {
 /** Parse the first PR from gh JSON output. */
 function parseFirstPr(stdout: string): PrInfo | null {
   const prs: PrInfo[] = JSON.parse(stdout || '[]');
-  if (prs.length === 0) return null;
-  return { number: prs[0].number, state: prs[0].state, url: prs[0].url };
+  const [first] = prs;
+  if (first === undefined) return null;
+  return { number: first.number, state: first.state, url: first.url };
 }
 
 /** Check a single branch: merge status and PR info. */

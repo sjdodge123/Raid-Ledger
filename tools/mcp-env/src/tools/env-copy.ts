@@ -38,8 +38,10 @@ function readDemoModeFromMainRoot(): string | null {
   const content = readFileSync(rootEnv, 'utf-8');
   // Match the last DEMO_MODE= assignment, ignoring `export` prefix and surrounding whitespace.
   const matches = [...content.matchAll(/^\s*(?:export\s+)?DEMO_MODE=(.*)$/gm)];
-  if (matches.length === 0) return null;
-  const value = matches[matches.length - 1][1].trim();
+  const last = matches.at(-1);
+  if (last === undefined) return null;
+  // Group 1 is `(.*)`, so it always participates in a match (possibly empty).
+  const value = (last[1] ?? '').trim();
   return `DEMO_MODE=${value}`;
 }
 
@@ -93,7 +95,7 @@ function buildCopySummary(entries: CopyEntry[]): string {
 
 /** Execute the env_copy tool. */
 export async function execute(
-  params: { file?: string; all?: boolean },
+  params: { file?: string | undefined; all?: boolean | undefined },
 ): Promise<EnvCopyResult | { error: string }> {
   if (!IS_WORKTREE) {
     return {

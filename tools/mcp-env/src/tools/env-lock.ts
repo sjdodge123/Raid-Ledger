@@ -172,12 +172,12 @@ export const ACQUIRE_TOOL_DESCRIPTION =
   'of the queue with preempted:true. Auto-defaults branch via git and worktree to the MCP server cwd.';
 
 export interface AcquireParams {
-  branch?: string;
-  worktree?: string;
+  branch?: string | undefined;
+  worktree?: string | undefined;
   purpose: string;
-  pid?: number;
-  ttl_minutes?: number;
-  priority?: 'normal' | 'operator';
+  pid?: number | undefined;
+  ttl_minutes?: number | undefined;
+  priority?: 'normal' | 'operator' | undefined;
 }
 
 export async function executeAcquire(params: AcquireParams): Promise<unknown> {
@@ -210,8 +210,8 @@ export const RELEASE_TOOL_DESCRIPTION =
   'falls back to (branch, worktree) match for compatibility with the bare CLI.';
 
 export interface ReleaseParams {
-  branch?: string;
-  worktree?: string;
+  branch?: string | undefined;
+  worktree?: string | undefined;
 }
 
 export async function executeRelease(params: ReleaseParams): Promise<unknown> {
