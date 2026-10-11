@@ -24,8 +24,9 @@ function storageValues(): string[] {
     return [...Object.values({ ...localStorage }), ...Object.values({ ...sessionStorage })].map(String);
 }
 
-function renderAuth() {
+function renderAuth(seedUser?: object) {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    if (seedUser) queryClient.setQueryData(['auth', 'me'], seedUser);
     const wrapper = ({ children }: { children: ReactNode }) =>
         createElement(QueryClientProvider, { client: queryClient }, children);
     return renderHook(() => useAuth(), { wrapper });
@@ -70,9 +71,10 @@ describe('ROK-1754 C: impersonation is server-side, the token memory-only', () =
         expect(storageValues().filter((v) => v.includes(IMP) || v.includes(ADMIN))).toEqual([]);
     });
 
-    it('isImpersonating follows the in-memory claim, reactively', () => {
+    it('isImpersonating follows the in-memory claim, reactively (no other re-render trigger)', () => {
         setAccessToken(ADMIN);
-        const { result } = renderAuth();
+        // Seeded + fresh: the query never fetches, so only the token store can re-render.
+        const { result } = renderAuth({ id: 1, username: 'admin' });
         expect(result.current.isImpersonating).toBe(false);
         act(() => setAccessToken(IMP));
         expect(result.current.isImpersonating).toBe(true);

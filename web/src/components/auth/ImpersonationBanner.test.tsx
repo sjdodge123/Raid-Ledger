@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
@@ -30,7 +30,9 @@ describe('ROK-1754 C: ImpersonationBanner after a reload with a live marker', ()
         const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
         render(<QueryClientProvider client={client}><ImpersonationBanner /></QueryClientProvider>);
 
-        expect(await screen.findByText('target')).toBeInTheDocument();
+        await waitFor(() => expect(client.getQueryData(['auth', 'me'])).toEqual({ id: 7, username: 'target' }));
+        expect(screen.queryByText(/Viewing as/)).not.toBeNull();
+        expect(screen.getByText('target')).toBeInTheDocument();
         const endsAt = new Date(exp * 1000).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
         const text = screen.getByText(/Viewing as/).textContent;
         expect(text).toContain('applies to all tabs');
