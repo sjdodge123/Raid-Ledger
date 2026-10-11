@@ -5,12 +5,17 @@
  * kill switch is off; the nav entries hide on the same flag.
  */
 import type { JSX, ReactNode } from 'react';
+import type { CalendarConnection } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
 import { CalendarConnectionCard } from './CalendarConnectionCard';
+import { SendEventsSettings } from './SendEventsSettings';
+import { SendEventsEntryRow } from './SendEventsEntryRow';
+import { useMediaQuery } from '../../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useCalendarOAuthFeedback } from './use-calendar-oauth-feedback';
-import { CALENDARS_COPY as C, oauthErrorMessage } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S, oauthErrorMessage } from './calendar-sync.copy';
 
 function Section({ heading, children }: { heading: string; children: ReactNode }): JSX.Element {
     return (
@@ -53,6 +58,29 @@ function PrivacyNote(): JSX.Element {
     );
 }
 
+function liveConnections(connections: CalendarConnection[]): CalendarConnection[] {
+    return connections.filter((c) => c.status !== 'disconnecting');
+}
+
+/** ROK-1596 K4: desktop carries the send settings as inline cards after the grid. */
+function DesktopSendEvents({ connections }: { connections: CalendarConnection[] }): JSX.Element | null {
+    const desktop = useMediaQuery(DESKTOP_MQ);
+    if (!desktop) return null;
+    return <>{liveConnections(connections).map((c) => <SendEventsSettings key={c.id} connection={c} />)}</>;
+}
+
+/** ROK-1596 K2 (phone): "Write · send my Raid Ledger events" under the connection, before "Add a calendar"; each row opens K5 (W1b). */
+function PhoneWriteSection({ connections }: { connections: CalendarConnection[] }): JSX.Element | null {
+    const desktop = useMediaQuery(DESKTOP_MQ);
+    const live = liveConnections(connections);
+    if (desktop || live.length === 0) return null;
+    return (
+        <Section heading={S.writeHeading}>
+            {live.map((c) => <SendEventsEntryRow key={c.id} connection={c} />)}
+        </Section>
+    );
+}
+
 export function CalendarsPage(): JSX.Element {
     const { data, isLoading, isError } = useCalendarsOverview();
     const { errorCode, dismissError } = useCalendarOAuthFeedback();
@@ -71,11 +99,13 @@ export function CalendarsPage(): JSX.Element {
                         {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} />)}
                     </Section>
                 )}
+                <PhoneWriteSection connections={google} />
                 {/* Q15: several Google accounts are allowed, so the row stays once one is connected. */}
                 <Section heading={C.addHeading}>
                     <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
                 </Section>
             </div>
+            <DesktopSendEvents connections={google} />
             <PrivacyNote />
         </PageFrame>
     );

@@ -5,7 +5,7 @@
  * by field — never spread a DB row. The row select names its columns and
  * never includes `credentials_encrypted`.
  */
-import { asc, eq } from 'drizzle-orm';
+import { and, asc, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CALENDAR_LOOK_AHEAD_WEEKS,
@@ -134,7 +134,12 @@ export async function listUserConnections(
   const rows = await db
     .select(CONNECTION_COLUMNS)
     .from(calendarConnections)
-    .where(eq(calendarConnections.userId, userId))
+    .where(
+      and(
+        eq(calendarConnections.userId, userId),
+        ne(calendarConnections.status, 'disconnecting'), // D7: hidden at once
+      ),
+    )
     .orderBy(asc(calendarConnections.id));
   return rows.map(toCalendarConnection);
 }

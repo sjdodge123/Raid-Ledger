@@ -14,7 +14,10 @@
  * Credentials are stored as `encrypt(JSON.stringify(CalendarCredentials))`
  * and are decrypted only inside that helper.
  */
-import type { CalendarProvider as CalendarProviderId } from '@raid-ledger/contract';
+import type {
+  CalendarOAuthIntent,
+  CalendarProvider as CalendarProviderId,
+} from '@raid-ledger/contract';
 
 /** Provider id stored in `calendar_connections.provider`. */
 export type CalendarProviderKey = CalendarProviderId;
@@ -58,6 +61,8 @@ export interface AuthUrlInput {
   codeChallenge: string;
   /** Exact callback URL; the token exchange must send the same string. */
   redirectUri: string;
+  /** D8: `primary` adds the provider's write-to-primary scope. */
+  intent?: CalendarOAuthIntent;
 }
 
 /** What the callback hands an adapter to exchange the code. */
@@ -146,6 +151,11 @@ export interface CopyEventInput {
   end: Date;
   /** true → "(Tentative) " title + Free; false → Busy. */
   tentative: boolean;
+  /**
+   * F11: true → "(Bench) " title + Free; wins over `tentative`. Absent =
+   * not benched. Adapters render it via `copy-presentation.helpers`.
+   */
+  benched?: boolean;
 }
 
 export interface CopyRef {

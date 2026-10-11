@@ -1,8 +1,7 @@
 /**
  * Calendar Sync constants (ROK-1591, epic ROK-669).
  *
- * Queue names are added by the stories that create the queues, and must be
- * appended to `ALL_QUEUE_NAMES` (`queue/queue-registry.ts`) when they are.
+ * Queue names must be appended to `ALL_QUEUE_NAMES` (`queue/queue-registry.ts`).
  */
 import {
   CALENDAR_LOOK_AHEAD_WEEKS,
@@ -30,3 +29,21 @@ export const CALENDAR_OAUTH_PROVIDERS: readonly CalendarOAuthProvider[] = [
 export function oauthCallbackPath(provider: CalendarOAuthProvider): string {
   return `/api/calendar-sync/oauth/${provider}/callback`;
 }
+
+/** ROK-1596 D3: the single write queue (reconcile, write-off, disconnect). */
+export const CALENDAR_WRITE_QUEUE = 'calendar-write';
+
+/** Debounce for `reconcile` so a signup + auto-allocation burst writes once. */
+export const WRITE_DEBOUNCE_MS = 5000;
+
+/*
+ * Fixed job ids. BullMQ 6 rejects a custom id holding ':' unless it splits
+ * into exactly 3 parts ('Custom Id cannot contain :'), so the spec's
+ * `cal-write:<conn>:<event>:<user>` form is spelled with '-' instead.
+ */
+export const reconcileJobId = (conn: number, event: number, user: number) =>
+  `cal-write-${conn}-${event}-${user}`;
+export const writeOffJobId = (conn: number) => `cal-writeoff-${conn}`;
+export const disconnectJobId = (conn: number) => `cal-disconnect-${conn}`;
+/** The one follow-up queued while the plain-id job is ACTIVE (D3). */
+export const rerunJobId = (jobId: string) => `${jobId}-rerun`;

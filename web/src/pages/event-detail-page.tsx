@@ -38,6 +38,7 @@ import {
 } from './event-detail/EventDetailSubComponents';
 import { SchemaValidationError } from '../lib/api/fetch-api';
 import { RosterSlotSection } from './event-detail/EventDetailRosterSlot';
+import { EventCalendarLine } from '../components/features/calendar-sync/EventCalendarLine';
 import { ActivityTimeline } from '../components/common/ActivityTimeline';
 import './event-detail-page.css';
 
@@ -193,6 +194,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
+            {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
             <EventDetailRoster roster={page.roster} event={page.event} />

@@ -6,6 +6,8 @@ import type { CalendarAccountProvider } from './calendar-provider.interface';
 import {
   CalendarProviderRegistry,
   DEMO_FAKE_SUBJECT_PREFIX,
+  hasWriteCapability,
+  type CalendarWriteProvider,
   type DemoModeSource,
 } from './calendar-provider.registry';
 
@@ -20,6 +22,14 @@ const stubProvider = (key: 'google'): CalendarAccountProvider => ({
 
 const google = stubProvider('google');
 const fake = stubProvider('google');
+const withWrite = (p: CalendarAccountProvider): CalendarWriteProvider => ({
+  ...p,
+  ensureRaidLedgerCalendar: jest.fn(),
+  upsertEvent: jest.fn(),
+  deleteEvent: jest.fn(),
+  deleteRaidLedgerCalendar: jest.fn(),
+});
+const writeFake = withWrite(fake);
 const FAKE_ROW = {
   provider: 'google',
   accountSubject: `${DEMO_FAKE_SUBJECT_PREFIX}user-7`,
@@ -29,14 +39,19 @@ const REAL_ROW = {
   accountSubject: '109876543210987654321',
 };
 
-function registry(opts: { setting: boolean; withFake: boolean }) {
+function registry(opts: {
+  setting: boolean;
+  withFake: boolean;
+  google?: CalendarAccountProvider;
+  fake?: CalendarAccountProvider;
+}) {
   const settings: DemoModeSource = {
     getDemoMode: jest.fn().mockResolvedValue(opts.setting),
   };
   return new CalendarProviderRegistry(
     settings,
-    google,
-    opts.withFake ? fake : null,
+    opts.google ?? google,
+    opts.withFake ? (opts.fake ?? fake) : null,
   );
 }
 
@@ -91,5 +106,63 @@ describe('CalendarProviderRegistry.getAccountProviderForConnection', () => {
     const resolved = await reg.getAccountProviderForConnection(FAKE_ROW);
     expect(resolved).toBeNull();
     expect(resolved).not.toBe(google);
+  });
+});
+
+describe('CalendarProviderRegistry.getWriteProviderForConnection', () => {
+  it('returns null for a provider without write capability (Google until G2)', async () => {
+    const reg = registry({ setting: true, withFake: true });
+    await expect(
+      reg.getWriteProviderForConnection(REAL_ROW),
+    ).resolves.toBeNull();
+  });
+
+  it('routes a real row to its adapter once it implements write', async () => {
+    const writeGoogle = withWrite(google);
+    const reg = registry({
+      setting: false,
+      withFake: false,
+      google: writeGoogle,
+    });
+    await expect(reg.getWriteProviderForConnection(REAL_ROW)).resolves.toBe(
+      writeGoogle,
+    );
+  });
+
+  it('routes a demo-fake row to the write fake when env + setting + fake all hold', async () => {
+    process.env.DEMO_MODE = 'true';
+    const reg = registry({ setting: true, withFake: true, fake: writeFake });
+    await expect(reg.getWriteProviderForConnection(FAKE_ROW)).resolves.toBe(
+      writeFake,
+    );
+  });
+
+  it.each([
+    { env: 'false', setting: true, withFake: true, gate: 'env off' },
+    { env: undefined, setting: true, withFake: true, gate: 'env unset' },
+    { env: 'true', setting: false, withFake: true, gate: 'setting off' },
+    { env: 'true', setting: true, withFake: false, gate: 'no fake' },
+  ])(
+    'resolves a demo-fake row to null ($gate), never a writing Google',
+    async (c) => {
+      if (c.env === undefined) delete process.env.DEMO_MODE;
+      else process.env.DEMO_MODE = c.env;
+      const writeGoogle = withWrite(google);
+      const reg = registry({ ...c, google: writeGoogle, fake: writeFake });
+      const resolved = await reg.getWriteProviderForConnection(FAKE_ROW);
+      expect(resolved).toBeNull();
+      expect(resolved).not.toBe(writeGoogle);
+    },
+  );
+
+  it('hasWriteCapability needs all four write methods', () => {
+    const partial = {
+      ...withWrite(google),
+      deleteRaidLedgerCalendar: undefined,
+    };
+    expect(hasWriteCapability(withWrite(google))).toBe(true);
+    expect(hasWriteCapability(partial as never)).toBe(false);
+    expect(hasWriteCapability(google)).toBe(false);
+    expect(hasWriteCapability(null)).toBe(false);
   });
 });

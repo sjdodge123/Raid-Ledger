@@ -12,6 +12,7 @@ import {
     AppleConnectInputSchema,
     CalendarConnectionSchema,
     CalendarFeedSchema,
+    CalendarOAuthIntentSchema,
     CalendarsOverviewSchema,
     UpdateCalendarConnectionSchema,
 } from '../calendar-sync.schema.js';
@@ -187,5 +188,17 @@ describe('CalendarsOverviewSchema', () => {
         expect(issuesOf(CalendarsOverviewSchema, input)).toEqual([
             { code: 'invalid_value', path: ['readSettings', 'lookAheadWeeks'] },
         ]);
+    });
+});
+
+describe('CalendarOAuthIntentSchema (ROK-1596 D8)', () => {
+    it('accepts connect and primary', () => {
+        expect(CalendarOAuthIntentSchema.options).toEqual(['connect', 'primary']);
+    });
+
+    it('rejects anything else', () => {
+        for (const v of ['read', '', 'PRIMARY', undefined]) {
+            expect(CalendarOAuthIntentSchema.safeParse(v).success).toBe(false);
+        }
     });
 });

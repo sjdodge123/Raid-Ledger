@@ -4,11 +4,25 @@
  * the signed state, the browser-binding cookie, the single-use nonce, the
  * encrypted upsert and the 302 landing.
  */
+import { getQueueToken } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
-import { truncateAllTables } from '../common/testing/integration-helpers';
-import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import {
+  loginAsAdmin,
+  truncateAllTables,
+} from '../common/testing/integration-helpers';
+import {
+  createFutureEvent,
+  createMemberAndLogin,
+  signupViaDb,
+} from '../events/signups.integration.spec-helpers';
+import {
+  CALENDAR_WRITE_QUEUE,
+  reconcileJobId,
+  writeOffJobId,
+} from './calendar-sync.constants';
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
@@ -18,11 +32,14 @@ import {
 } from '../settings/settings-calendar-sync.helpers';
 import {
   GOOGLE_CONNECT_SCOPES,
+  GOOGLE_EVENTS_SCOPE,
   GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
 } from './providers/google/google-oauth.helpers';
 import { buildRedirectUris } from './services/calendar-sync-admin.helpers';
 import * as connectHelpers from './services/calendar-connect.helpers';
+import { TransientError } from './providers/calendar-provider.errors';
+import * as intentHelpers from './services/calendar-oauth-intent.helpers';
 import { mintCalendarOAuthState } from './services/calendar-oauth-state.helpers';
 import {
   decryptCalendarCredentials,
@@ -345,5 +362,203 @@ describe('GET /calendar-sync/oauth/:provider/callback — connect', () => {
     ).toMatchObject({
       refreshToken: FIXTURE_REFRESH,
     });
+  });
+});
+
+describe('OAuth with intent=primary (ROK-1596 D8)', () => {
+  const okJson = fixture('token-ok');
+  const WITH_EVENTS: GoogleStub = {
+    token: {
+      status: 200,
+      json: {
+        ...okJson,
+        scope: `${String(okJson.scope)} ${GOOGLE_EVENTS_SCOPE}`,
+      },
+    },
+  };
+
+  function writeQueue(): Queue {
+    return testApp.app.get<Queue>(getQueueToken(CALENDAR_WRITE_QUEUE));
+  }
+
+  async function startPrimary() {
+    const res = await testApp.request
+      .get(`${START}?intent=primary`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(res.status).toBe(200);
+    const url = new URL((res.body as { url: string }).url);
+    const raw = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
+    const set = raw.find((c) => c.startsWith(`${STATE_COOKIE}=`)) ?? '';
+    return {
+      url,
+      state: url.searchParams.get('state') ?? '',
+      cookie: set.split(';')[0] ?? '',
+    };
+  }
+
+  /** A first (connect-intent) grant, then write turned on. */
+  async function connectedWithWrite() {
+    await connectWith(OK);
+    jest.restoreAllMocks();
+    const [row] = nonEmpty(await rowsOf(user.userId), 'connection');
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ writeEnabled: true })
+      .where(eq(schema.calendarConnections.id, row.id));
+    return row.id;
+  }
+
+  it('start asks for the connect set + calendar.events; connect never does', async () => {
+    const primary = await startPrimary();
+    expect(primary.url.searchParams.get('scope')).toBe(
+      `${GOOGLE_CONNECT_SCOPES} ${GOOGLE_EVENTS_SCOPE}`,
+    );
+    const plain = await start();
+    expect(plain.url.searchParams.get('scope')).toBe(GOOGLE_CONNECT_SCOPES);
+  });
+
+  it('400s on an unknown intent', async () => {
+    const res = await testApp.request
+      .get(`${START}?intent=read`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(res.status).toBe(400);
+  });
+
+  it('grant with calendar.events → write_target primary + a reconcile per active sign-up', async () => {
+    const connectionId = await connectedWithWrite();
+    const adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+    const eventId = await createFutureEvent(testApp, adminToken);
+    await signupViaDb(testApp, eventId, user.userId);
+    const jobId = reconcileJobId(connectionId, eventId, user.userId);
+    await writeQueue().remove(jobId); // ids repeat across truncations
+    try {
+      stubGoogle(WITH_EVENTS);
+      const s = await startPrimary();
+      expect(
+        await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+      ).toEqual({ connected: 'google', error: null });
+      const [after] = await rowsOf(user.userId);
+      expect(after?.writeTarget).toBe('primary');
+      const job = await writeQueue().getJob(jobId);
+      expect(job?.data).toEqual({
+        kind: 'reconcile',
+        connectionId,
+        eventId,
+        userId: user.userId,
+      });
+    } finally {
+      await writeQueue().remove(jobId);
+    }
+  });
+
+  it('grant without calendar.events → ?error=scopes, row unchanged, no revoke', async () => {
+    await connectedWithWrite();
+    const [before] = await rowsOf(user.userId);
+    const spy = stubGoogle(OK);
+    const s = await startPrimary();
+    expect(
+      await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+    ).toEqual({
+      connected: null,
+      error: 'scopes',
+    });
+    expect(formsSentTo(spy, GOOGLE_TOKEN_URL)).toHaveLength(1);
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
+    expect(await rowsOf(user.userId)).toEqual([before]);
+  });
+
+  it('primary consent on a DIFFERENT account while the original writes → no second primary row (m4)', async () => {
+    const original = await connectedWithWrite();
+    stubGoogle({
+      token: {
+        status: 200,
+        json: {
+          ...okJson,
+          scope: `${String(okJson.scope)} ${GOOGLE_EVENTS_SCOPE}`,
+          id_token: idToken({ sub: 'other-sub-m4', email: 'm4@example.test' }),
+        },
+      },
+    });
+    const s = await startPrimary();
+    expect(
+      await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const rows = await rowsOf(user.userId);
+    const primaries = rows.filter((r) => r.writeTarget === 'primary');
+    expect(primaries).toEqual([]);
+    const kept = rows.find((r) => r.id === original);
+    expect([kept?.writeEnabled, kept?.writeTarget]).toEqual([
+      true,
+      'dedicated',
+    ]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('applyConsentIntent throwing after the grant is saved → ?error=unavailable, not exchange (m4)', async () => {
+    await connectedWithWrite();
+    stubGoogle(WITH_EVENTS);
+    jest
+      .spyOn(intentHelpers, 'applyConsentIntent')
+      .mockRejectedValue(new TransientError('consent_apply'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const s = await startPrimary();
+    expect(
+      await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+    ).toEqual({ connected: null, error: 'unavailable' });
+  });
+
+  it('a connect-intent reconnect without calendar.events demotes a primary target to dedicated (m1)', async () => {
+    const id = await connectedWithWrite();
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ writeTarget: 'primary', status: 'needs_reconnect' })
+      .where(eq(schema.calendarConnections.id, id));
+    stubGoogle(OK);
+    const s = await start();
+    expect(
+      await land({ code: 'auth-code-3', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const [after] = await rowsOf(user.userId);
+    expect([after?.status, after?.writeTarget]).toEqual([
+      'active',
+      'dedicated',
+    ]);
+  });
+
+  it('a reconnect resumes a write-off an auth error interrupted (pipe review m3)', async () => {
+    const id = await connectedWithWrite();
+    const eventId = await createFutureEvent(
+      testApp,
+      await loginAsAdmin(testApp.request, testApp.seed),
+    );
+    // What an auth-failed write-off leaves: write off, calendar + a live link.
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({
+        writeEnabled: false,
+        dedicatedCalendarId: 'rl-dedicated',
+        status: 'needs_reconnect',
+      })
+      .where(eq(schema.calendarConnections.id, id));
+    await testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId: id,
+      userId: user.userId,
+      eventId,
+      calendarId: 'rl-dedicated',
+      providerEventId: 'copy-1',
+    });
+    const jobId = writeOffJobId(id);
+    await writeQueue().remove(jobId); // ids repeat across truncations
+    try {
+      stubGoogle(OK);
+      const s = await start();
+      expect(
+        await land({ code: 'auth-code-4', state: s.state }, s.cookie),
+      ).toEqual({ connected: 'google', error: null });
+      const job = await writeQueue().getJob(jobId);
+      expect(job?.data).toEqual({ kind: 'write-off', connectionId: id });
+    } finally {
+      await writeQueue().remove(jobId);
+    }
   });
 });

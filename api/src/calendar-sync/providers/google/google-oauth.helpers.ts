@@ -7,8 +7,9 @@
  * is Google's `error` code (`invalid_grant`) or `http_<status>` — never a
  * token, code, verifier, the client secret or `error_description`.
  */
+import type { CalendarOAuthIntent } from '@raid-ledger/contract';
 import * as googleHttp from './google-http';
-import type { GoogleHttpResponse } from './google-http';
+import { parseRetryAfterMs, type GoogleHttpResponse } from './google-http';
 import {
   ProviderAuthError,
   RateLimitError,
@@ -22,11 +23,16 @@ export const GOOGLE_CALENDAR_APP_CREATED_SCOPE =
   'https://www.googleapis.com/auth/calendar.app.created';
 /** The RULED connect scope set (OPERATOR-1, 2026-10-08) — nothing else. */
 export const GOOGLE_CONNECT_SCOPES = `openid email ${GOOGLE_CALENDAR_APP_CREATED_SCOPE}`;
+/**
+ * ROK-1596 D8: write to the user's primary calendar. Sensitive (F13), so it
+ * is requested only by `intent=primary`, never at first connect.
+ */
+export const GOOGLE_EVENTS_SCOPE =
+  'https://www.googleapis.com/auth/calendar.events';
 /** Scopes a grant must hold to be stored (Q-F: partial grant → revoke). */
 export const GOOGLE_REQUIRED_SCOPES = [GOOGLE_CALENDAR_APP_CREATED_SCOPE];
 export const GOOGLE_REVOKE_TIMEOUT_MS = 5_000;
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
-const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 /**
  * The grant lacks a required scope (the user unticked it on Google's
@@ -51,6 +57,8 @@ export interface GoogleAuthUrlParams {
   redirectUri: string;
   state: string;
   codeChallenge: string;
+  /** Requested scopes; defaults to the connect set. */
+  scopes?: readonly string[];
 }
 
 /** A parsed token-endpoint reply. `refreshToken` is null when omitted. */
@@ -73,7 +81,7 @@ export function buildGoogleAuthUrl(p: GoogleAuthUrlParams): string {
     client_id: p.clientId,
     redirect_uri: p.redirectUri,
     response_type: 'code',
-    scope: GOOGLE_CONNECT_SCOPES,
+    scope: (p.scopes ?? googleScopesFor('connect')).join(' '),
     access_type: 'offline',
     prompt: 'consent',
     include_granted_scopes: 'true',
@@ -82,6 +90,17 @@ export function buildGoogleAuthUrl(p: GoogleAuthUrlParams): string {
     code_challenge_method: 'S256',
   });
   return `${GOOGLE_AUTH_URL}?${query.toString()}`;
+}
+
+/** The scope list for a consent intent (D8): `primary` adds events. */
+export function googleScopesFor(intent: CalendarOAuthIntent): string[] {
+  const scopes = GOOGLE_CONNECT_SCOPES.split(' ');
+  return intent === 'primary' ? [...scopes, GOOGLE_EVENTS_SCOPE] : scopes;
+}
+
+/** Whether a grant allows writing to the primary calendar. */
+export function hasGoogleEventsScope(granted: readonly string[]): boolean {
+  return granted.includes(GOOGLE_EVENTS_SCOPE);
 }
 
 /** Exchange an authorization code (PKCE) for tokens. */
@@ -208,14 +227,6 @@ function parseTokenSet(json: unknown, nowMs: number): GoogleTokenSet {
 function googleErrorCode(json: unknown): string | null {
   const code = asRecord(json).error;
   return typeof code === 'string' && /^[a-z_]{1,48}$/.test(code) ? code : null;
-}
-
-function parseRetryAfterMs(raw: string | null, nowMs = Date.now()): number {
-  if (!raw) return DEFAULT_RETRY_AFTER_MS;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-  const at = Date.parse(raw);
-  return Number.isNaN(at) ? DEFAULT_RETRY_AFTER_MS : Math.max(0, at - nowMs);
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> {

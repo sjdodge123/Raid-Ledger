@@ -7,6 +7,9 @@ import { join } from 'path';
 import * as googleHttp from './google-http';
 import {
   GOOGLE_CONNECT_SCOPES,
+  GOOGLE_EVENTS_SCOPE,
+  googleScopesFor,
+  hasGoogleEventsScope,
   GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
   buildGoogleAuthUrl,
@@ -299,5 +302,47 @@ describe('missingGoogleScopes', () => {
       'https://www.googleapis.com/auth/calendar.app.created',
     ]);
     expect(missingGoogleScopes(String(OK.scope).split(' '))).toEqual([]);
+  });
+});
+
+describe('consent intent scopes (ROK-1596 D8)', () => {
+  const base = {
+    clientId: CLIENT_ID,
+    redirectUri: REDIRECT,
+    state: 's',
+    codeChallenge: 'c',
+  };
+  const scopeOf = (url: string) => new URL(url).searchParams.get('scope');
+
+  it('connect requests exactly the ruled set — never calendar.events (F13)', () => {
+    const url = buildGoogleAuthUrl({
+      ...base,
+      scopes: googleScopesFor('connect'),
+    });
+    expect(scopeOf(url)).toBe(
+      'openid email https://www.googleapis.com/auth/calendar.app.created',
+    );
+  });
+
+  it('primary requests the connect set plus calendar.events', () => {
+    const url = buildGoogleAuthUrl({
+      ...base,
+      scopes: googleScopesFor('primary'),
+    });
+    expect(scopeOf(url)).toBe(
+      'openid email https://www.googleapis.com/auth/calendar.app.created' +
+        ' https://www.googleapis.com/auth/calendar.events',
+    );
+    expect(new URL(url).searchParams.get('include_granted_scopes')).toBe(
+      'true',
+    );
+  });
+
+  it('hasGoogleEventsScope reads the granted list', () => {
+    expect(GOOGLE_EVENTS_SCOPE).toBe(
+      'https://www.googleapis.com/auth/calendar.events',
+    );
+    expect(hasGoogleEventsScope(['openid', GOOGLE_EVENTS_SCOPE])).toBe(true);
+    expect(hasGoogleEventsScope(GOOGLE_CONNECT_SCOPES.split(' '))).toBe(false);
   });
 });

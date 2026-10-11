@@ -26,7 +26,9 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { AuthGuard } from '@nestjs/passport';
+import type { Queue } from 'bullmq';
 import * as Sentry from '@sentry/nestjs';
 import type { Request as ExpressRequest, Response } from 'express';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -49,6 +51,7 @@ import {
   type CalendarOAuthProvider,
 } from '../../settings/settings-calendar-sync.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
+import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
 import type { CalendarAccountProvider } from '../providers/calendar-provider.interface';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import {
@@ -60,7 +63,10 @@ import { buildRedirectUris } from '../services/calendar-sync-admin.helpers';
 import {
   mintCalendarOAuthState,
   verifyCalendarOAuthState,
+  type VerifiedCalendarOAuthState,
 } from '../services/calendar-oauth-state.helpers';
+import * as intents from '../services/calendar-oauth-intent.helpers';
+import { enqueuePendingWriteOff } from '../write/calendar-write-off.helpers';
 import {
   revokeUnstoredGrant,
   upsertCalendarConnection,
@@ -106,12 +112,14 @@ export class CalendarOAuthController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
     private readonly registry: CalendarProviderRegistry,
+    @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly writeQueue: Queue,
   ) {}
 
   @Get('users/me/calendars/oauth/:provider/start')
   @UseGuards(AuthGuard('jwt'), CalendarSyncEnabledGuard)
   async start(
     @Param('provider') raw: string,
+    @Query('intent') rawIntent: unknown,
     @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<OAuthStartResponse> {
@@ -119,9 +127,11 @@ export class CalendarOAuthController {
     if (!target || !(await target.provider.isConfigured())) {
       throw new NotFoundException();
     }
+    const intent = intents.parseOAuthIntentQuery(rawIntent);
     const { state, codeChallenge } = mintCalendarOAuthState({
       uid: req.user.id,
       provider: target.key,
+      intent,
       bindToBrowser: () => bindLinkStateToBrowser(res, target.link),
     });
     const redirectUri = await this.redirectUri(target.key);
@@ -129,6 +139,7 @@ export class CalendarOAuthController {
       state,
       codeChallenge,
       redirectUri,
+      intent,
     });
     return { url };
   }
@@ -175,33 +186,77 @@ export class CalendarOAuthController {
     if (error) return error === 'access_denied' ? 'denied' : 'exchange';
     const code = firstString(query.code);
     if (!code) return 'exchange';
-    return this.connect(target, verified.uid, code, verified.codeVerifier);
+    return this.connect(target, verified, code);
   }
 
   private async connect(
     target: OAuthTarget,
-    userId: number,
+    verified: VerifiedCalendarOAuthState,
     code: string,
-    codeVerifier: string,
-  ): Promise<'connected'> {
+  ): Promise<'connected' | 'scopes' | 'unavailable'> {
+    const { uid: userId, codeVerifier, intent } = verified;
     const redirectUri = await this.redirectUri(target.key);
     const result = await target.provider.connect({
       code,
       codeVerifier,
       redirectUri,
     });
-    try {
-      await upsertCalendarConnection(this.db, {
-        userId,
-        provider: target.key,
-        result,
-      });
-    } catch (err) {
+    const scopes = result.credentials.scopes;
+    // D8: the stored grant stays valid, so no revoke and no write.
+    if (!intents.grantCoversIntent(intent, target.key, scopes)) return 'scopes';
+    const { id } = await upsertCalendarConnection(this.db, {
+      userId,
+      provider: target.key,
+      result,
+    }).catch(async (err: unknown) => {
       // Google already issued this grant; nothing will hold it, so end it.
       await revokeUnstoredGrant(target.provider, result.credentials);
       throw err;
+    });
+    return this.applyIntent(intent, id, userId, target.key, scopes);
+  }
+
+  /** Review m4: the grant IS saved — a failure here is not an `exchange`. */
+  private async applyIntent(
+    intent: VerifiedCalendarOAuthState['intent'],
+    connectionId: number,
+    userId: number,
+    provider: CalendarOAuthProvider,
+    grantedScopes: readonly string[],
+  ): Promise<'connected' | 'unavailable'> {
+    // The contract has no dedicated code; `unavailable` + Sentry it is.
+    const applied = await this.runConsentIntent({
+      intent,
+      connectionId,
+      userId,
+      provider,
+      grantedScopes,
+      queue: this.writeQueue,
+    });
+    if (applied === 'failed') return 'unavailable';
+    if (applied === 'other_account') {
+      this.logger.warn('primary consent landed on a non-writing account');
     }
     return 'connected';
+  }
+
+  /** The consent intent + any interrupted write-off; a throw → `failed`. */
+  private runConsentIntent(
+    input: Parameters<typeof intents.applyConsentIntent>[1],
+  ) {
+    return intents
+      .applyConsentIntent(this.db, input)
+      .then(async (outcome) => {
+        // Pipe review m3: a write-off an auth error interrupted resumes now.
+        const deps = this.enqueueDeps();
+        await enqueuePendingWriteOff(this.db, deps, input.connectionId);
+        return outcome;
+      })
+      .catch((err: unknown) => {
+        Sentry.captureException(err);
+        this.logger.error(`calendar consent apply failed (${errorClass(err)})`);
+        return 'failed' as const;
+      });
   }
 
   /**
@@ -225,6 +280,13 @@ export class CalendarOAuthController {
     const link = LINK_KEYS[key];
     const provider = this.registry.getAccountProvider(key);
     return link && provider ? { key, link, provider } : null;
+  }
+
+  private enqueueDeps() {
+    return {
+      queue: this.writeQueue,
+      isSyncEnabled: () => Promise.resolve(true),
+    };
   }
 
   private async redirectUri(key: CalendarOAuthProvider): Promise<string> {

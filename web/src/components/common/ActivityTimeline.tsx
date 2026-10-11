@@ -125,6 +125,7 @@ export function ActivityTimeline({
       <button
         type="button"
         onClick={toggleOpen}
+        aria-expanded={open}
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-panel/50 transition"
       >
         <span

@@ -142,6 +142,16 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Posts the weekly community digest to its Discord channel. Ticks hourly; posts once per ISO week at the configured day + hour (community timezone) when enabled.',
     category: 'Notifications',
   },
+  CalendarWriteReconcileCron_reconcile: {
+    description:
+      'Re-checks calendar copies of upcoming sign-ups nightly at 4 AM and removes copies of deleted or cancelled events',
+    category: 'Data Sync',
+  },
+  CalendarDisconnectSweepCron_sweep: {
+    description:
+      'Every 15 minutes, re-queues calendar disconnects stuck for over 15 minutes so stored calendar credentials are always removed',
+    category: 'Data Sync',
+  },
   SteamSyncProcessor_scheduledSync: {
     description: 'Syncs Steam library data for all linked users daily at 4 AM',
     category: 'Data Sync',

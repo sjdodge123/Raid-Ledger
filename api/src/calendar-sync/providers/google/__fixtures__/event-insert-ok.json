@@ -1,0 +1,12 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"3381234567890000\"",
+  "id": "fixtureevt0001",
+  "status": "confirmed",
+  "htmlLink": "https://www.google.com/calendar/event?eid=Zml4dHVyZWV2dDAwMDE",
+  "summary": "Molten Core",
+  "transparency": "opaque",
+  "start": { "dateTime": "2026-10-20T19:00:00Z", "timeZone": "UTC" },
+  "end": { "dateTime": "2026-10-20T22:00:00Z", "timeZone": "UTC" },
+  "extendedProperties": { "private": { "rlCopyId": "rl:0123456789ab:42:7" } }
+}

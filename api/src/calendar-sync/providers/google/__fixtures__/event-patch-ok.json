@@ -1,0 +1,11 @@
+{
+  "kind": "calendar#event",
+  "etag": "\"3381234567899999\"",
+  "id": "fixtureevt0001",
+  "status": "confirmed",
+  "summary": "(Tentative) Molten Core",
+  "transparency": "transparent",
+  "start": { "dateTime": "2026-10-20T19:00:00Z", "timeZone": "UTC" },
+  "end": { "dateTime": "2026-10-20T22:00:00Z", "timeZone": "UTC" },
+  "extendedProperties": { "private": { "rlCopyId": "rl:0123456789ab:42:7" } }
+}

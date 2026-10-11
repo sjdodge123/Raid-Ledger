@@ -620,6 +620,14 @@ header shape (§4.10), not the page header.
 **DON'T** put a bespoke back arrow on each page — mobile back lives in the toolbar, and desktop navigates
 via `Header` / breadcrumb links.
 
+**Exception — phone sub-page back crumb (ROK-1596).** A settings sub-page that exists only below 1024px
+and is reached from a row on its parent (K5 "Send my events", `/profile/gaming/calendars/send/:id`, opened
+from Calendars' "Add events I sign up for" row) carries ONE back crumb to that parent, because the approved
+design draws it and the toolbar's back has no parent-row context: a `<Link>` with `ChevronLeftIcon` (h-5 w-5)
++ the parent's name, `-ml-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-sm text-muted
+hover:text-foreground` (`components/features/calendar-sync/SendEventsPage.tsx::BackCrumb`). Not for
+top-level pages, and not on desktop, where the same settings render inline on the parent.
+
 ### 4.10 Section titles
 
 **DO** — `<h2 className="text-lg font-semibold text-foreground">` with an optional `text-sm

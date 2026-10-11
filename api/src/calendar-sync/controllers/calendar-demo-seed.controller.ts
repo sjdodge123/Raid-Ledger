@@ -1,5 +1,7 @@
 /**
  * ROK-1592 L15: `POST /admin/test/calendar/seed-connection` — DEMO_MODE only.
+ * ROK-1596 W3: `writeEnabled?`/`writeTarget?` on it, and `POST seed-link`
+ * (a link row + a Fake copy for one user × event, without the queue).
  *
  * Creates a `google` connection with a `demo-fake:` subject and Fake
  * credentials, owned by the caller (or `userId`), so smoke specs and UI test
@@ -20,6 +22,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { randomBytes } from 'node:crypto';
+import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
@@ -32,11 +35,17 @@ import { SettingsService } from '../../settings/settings.service';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
+import {
+  SeedLinkSchema,
+  seedDemoLink,
+} from './calendar-demo-seed-link.helpers';
 
 const SeedConnectionSchema = z
   .object({
     userId: z.number().int().positive().optional(),
     accountLabel: z.string().min(1).max(255).optional(),
+    writeEnabled: z.boolean().optional(),
+    writeTarget: z.enum(['dedicated', 'primary']).optional(),
   })
   .strict();
 
@@ -70,7 +79,25 @@ export class CalendarDemoSeedController {
       provider: 'google',
       result,
     });
+    if (input.writeEnabled !== undefined || input.writeTarget) {
+      await this.db
+        .update(schema.calendarConnections)
+        .set({
+          writeEnabled: input.writeEnabled,
+          writeTarget: input.writeTarget,
+        })
+        .where(eq(schema.calendarConnections.id, id));
+    }
     return { id };
+  }
+
+  /** A link row (+ a Fake copy when `synced`) for one user × event, no queue. */
+  @Post('seed-link')
+  async seedLink(@Body() body: unknown): Promise<{ linkId: number }> {
+    const fake = await this.assertDemoMode();
+    const input = parseDemoBody(SeedLinkSchema, body ?? {});
+    const clientUrl = await this.settings.getClientUrl();
+    return seedDemoLink(this.db, fake, clientUrl, input);
   }
 
   /** Request-time gate, same checks as `DemoTestCoreController`. */
