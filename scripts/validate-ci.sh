@@ -1673,7 +1673,25 @@ _check_container_security_headers() {
     return 1
   fi
 
-  echo -e "${GREEN}Security headers: present on /, /api/health, and ${bundle_path}; HSTS always, upgrade-insecure-requests only behind HTTPS${NC}"
+  # ROK-1763: every route that serves the SPA shell revalidates (no-cache) and
+  # still carries the security headers; hashed bundles stay immutable.
+  local shell_url
+  for shell_url in "$index_url" "http://127.0.0.1:${host_port}/index.html" \
+    "http://127.0.0.1:${host_port}/events/123" "http://127.0.0.1:${host_port}/i/rok1763probe"; do
+    headers=$(_fetch_headers "$shell_url")
+    if ! echo "$headers" | grep -qiE '^cache-control:[[:space:]]*no-cache'; then
+      echo -e "${RED}index.html at ${shell_url} must be served with Cache-Control: no-cache${NC}"
+      return 1
+    fi
+    _assert_security_headers "$headers" "$shell_url" plain || return 1
+  done
+  headers=$(_fetch_headers "$bundle_url")
+  if ! echo "$headers" | grep -qiE '^cache-control:.*immutable'; then
+    echo -e "${RED}${bundle_path} must keep Cache-Control: public, immutable${NC}"
+    return 1
+  fi
+
+  echo -e "${GREEN}Security headers: present on /, /api/health, SPA deep links and ${bundle_path}; index.html no-cache; HSTS always, upgrade-insecure-requests only behind HTTPS${NC}"
 }
 
 # ---------------------------------------------------------------------------
