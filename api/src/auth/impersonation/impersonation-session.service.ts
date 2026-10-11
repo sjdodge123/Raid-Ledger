@@ -44,7 +44,12 @@ export class ImpersonationSessionService {
    * Start (or replace) the family's impersonation, fresh 1h cap. One
    * transaction: a live marker for another target is ended with a `replaced`
    * stop audit first, then the marker + `impersonate_start` audit are written
-   * together — an audit failure rolls the marker back.
+   * together — an audit failure rolls the marker back. A marker already past
+   * `expires_at` but not yet swept is ended as `expired`, not `replaced` (r5).
+   * Accepted race (r3): two concurrent starts on ONE family can both see no
+   * row to delete under READ COMMITTED; the `onConflictDoUpdate` guard then
+   * overwrites the first without a `replaced` stop. Same admin, both starts
+   * audited — bounded and audit-only.
    */
   async start(
     familyId: string,
@@ -60,7 +65,13 @@ export class ImpersonationSessionService {
       expiresAt: markerExpiry(now),
     };
     return this.db.transaction(async (tx) => {
-      await endMarkersWhere(tx, eq(markers.familyId, familyId), 'replaced');
+      const family = eq(markers.familyId, familyId);
+      await endMarkersWhere(
+        tx,
+        and(family, lte(markers.expiresAt, now)),
+        'expired',
+      );
+      await endMarkersWhere(tx, family, 'replaced');
       const [row] = await tx
         .insert(markers)
         .values(values)

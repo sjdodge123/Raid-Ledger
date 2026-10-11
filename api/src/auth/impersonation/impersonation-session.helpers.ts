@@ -3,6 +3,7 @@
  * (`refresh_family_impersonations`). No DB access — the service feeds rows in.
  */
 import type { UserRole } from '@raid-ledger/contract';
+import { KICK_COOLDOWN_MS } from '../auth-status.helpers';
 
 /** Absolute cap on one impersonation, from start (never slid). */
 export const IMPERSONATION_TTL_MS = 60 * 60 * 1000;
@@ -44,6 +45,20 @@ export function secondsUntil(expiresAt: Date, now: Date): number {
 }
 
 /**
+ * A kick still in its cooldown at `now`. Same boundary as `isKickExpired`
+ * (§9.3) — `kickedAt` is cleared lazily at the next login, so a stale value
+ * is not a suspension (review r4).
+ */
+function kickActive(kickedAt: Date | null | undefined, now: Date): boolean {
+  return !!kickedAt && now.getTime() < kickedAt.getTime() + KICK_COOLDOWN_MS;
+}
+
+/** Banned, or kicked and still in the cooldown (JwtStrategy would 401 it). */
+function suspended(user: UserLike, now: Date): boolean {
+  return !!user.bannedAt || kickActive(user.kickedAt, now);
+}
+
+/**
  * Spec §3.4.2 validity rules, in order. Returns the end reason, or null when
  * the impersonation may continue. A deactivated target is NOT a failure
  * (matches NotDeactivatedGuard's impersonation bypass).
@@ -59,11 +74,11 @@ export function markerEndReason(
   if (marker.impersonatorUserId !== refreshUserId) return 'session_mismatch';
   const role = impersonator?.role;
   if (role !== 'operator' && role !== 'admin') return 'impersonator_role_lost';
-  if (impersonator?.bannedAt || impersonator?.kickedAt) {
+  if (impersonator && suspended(impersonator, now)) {
     return 'impersonator_suspended';
   }
   if (!target || target.role === 'admin') return 'target_promoted';
-  if (target.bannedAt) return 'target_suspended';
+  if (suspended(target, now)) return 'target_suspended';
   return null;
 }
 

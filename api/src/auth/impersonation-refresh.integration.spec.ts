@@ -187,6 +187,14 @@ describe('POST /auth/refresh ends an invalid impersonation (ROK-1754)', () => {
     expect(await stopReasons()).toEqual(['target_suspended']);
   });
 
+  it('target kicked → own token, marker gone, `target_suspended` audit (review r1)', async () => {
+    const { admin, target, rt } = await impersonating();
+    await setUser(target.id, { kickedAt: new Date() });
+    expectOwnToken(await refresh(rt), admin.id);
+    expect(await markerRows()).toEqual([]);
+    expect(await stopReasons()).toEqual(['target_suspended']);
+  });
+
   it('target promoted to admin → own token + `target_promoted` audit', async () => {
     const { admin, target, rt } = await impersonating();
     await setUser(target.id, { role: 'admin' });

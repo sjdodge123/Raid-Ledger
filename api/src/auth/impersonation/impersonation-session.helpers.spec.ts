@@ -8,6 +8,7 @@ import {
   secondsUntil,
   type UserLike,
 } from './impersonation-session.helpers';
+import { KICK_COOLDOWN_MS } from '../auth-status.helpers';
 
 const NOW = new Date('2026-10-11T12:00:00Z');
 const ADMIN_ID = 1;
@@ -87,5 +88,17 @@ describe('markerEndReason', () => {
     expect(reason({ target: { ...member, bannedAt: NOW } })).toBe(
       'target_suspended',
     );
+  });
+
+  it('target_suspended when the target is kicked and still in the cooldown (review r1)', () => {
+    expect(reason({ target: { ...member, kickedAt: NOW } })).toBe(
+      'target_suspended',
+    );
+  });
+
+  it('a stale kick past the cooldown suspends neither side (review r4)', () => {
+    const stale = new Date(NOW.getTime() - KICK_COOLDOWN_MS);
+    expect(reason({ target: { ...member, kickedAt: stale } })).toBeNull();
+    expect(reason({ impersonator: { ...admin, kickedAt: stale } })).toBeNull();
   });
 });

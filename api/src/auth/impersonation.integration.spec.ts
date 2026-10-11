@@ -14,6 +14,7 @@ import { hashToken } from './refresh/refresh-token.helpers';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 import { wipeUserData } from '../users/users-delete.helpers';
+import * as markersDb from './impersonation/impersonation-markers.db';
 
 let testApp: TestApp;
 
@@ -420,5 +421,46 @@ describe('impersonation review fixes (ROK-1754)', () => {
     });
     expect(await testApp.db.select().from(markers)).toEqual([]);
     expect(await stopPairs()).toEqual([[target.id, 'session_mismatch']]);
+  });
+
+  it('start() is atomic: a failing start audit keeps the prior marker and writes nothing (review r2)', async () => {
+    const admin = await loginAdmin();
+    const first = await createUser('imp-atomic-first', 'member');
+    const second = await createUser('imp-atomic-second', 'member');
+    expect(
+      (await startImpersonation(first.id, admin.token, admin.rt)).status,
+    ).toBe(200);
+    const spy = jest
+      .spyOn(markersDb, 'auditImpersonationStart')
+      .mockRejectedValueOnce(new Error('audit insert failed'));
+    try {
+      const res = await startImpersonation(second.id, admin.token, admin.rt);
+      expect(res.status).toBeGreaterThanOrEqual(500);
+    } finally {
+      spy.mockRestore();
+    }
+    const rows = await testApp.db.select().from(markers);
+    expect(rows.map((r) => r.targetUserId)).toEqual([first.id]);
+    expect(await stopPairs()).toEqual([]);
+    const starts = await auditRows('impersonate_start');
+    expect(starts.map((r) => r.targetId)).toEqual([first.id]);
+  });
+
+  it('start over an expired, unswept marker audits it `expired`, not `replaced` (review r5)', async () => {
+    const admin = await loginAdmin();
+    const stale = await createUser('imp-stale-target', 'member');
+    const next = await createUser('imp-next-target', 'member');
+    await testApp.db.insert(markers).values({
+      familyId: await familyOf(admin.rt),
+      impersonatorUserId: testApp.seed.adminUser.id,
+      targetUserId: stale.id,
+      expiresAt: new Date(Date.now() - 1000),
+    });
+    expect(
+      (await startImpersonation(next.id, admin.token, admin.rt)).status,
+    ).toBe(200);
+    const rows = await testApp.db.select().from(markers);
+    expect(rows.map((r) => r.targetUserId)).toEqual([next.id]);
+    expect(await stopPairs()).toEqual([[stale.id, 'expired']]);
   });
 });
