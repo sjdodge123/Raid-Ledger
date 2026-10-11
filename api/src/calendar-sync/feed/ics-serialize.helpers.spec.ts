@@ -140,3 +140,20 @@ describe('serializeIcsCalendar', () => {
     expect(again).not.toContain('DESCRIPTION');
   });
 });
+
+describe('serializeIcsCalendar — revision fields (review NIT)', () => {
+  it('writes SEQUENCE and LAST-MODIFIED only when given', () => {
+    const lastModified = new Date('2026-10-02T10:00:00.000Z');
+    const withRev = serializeIcsCalendar({
+      prodId: '-//T//T//EN',
+      events: [event({ sequence: 3, lastModified })],
+    }).split('\r\n');
+    expect(withRev).toContain('SEQUENCE:3');
+    expect(withRev).toContain('LAST-MODIFIED:20261002T100000Z');
+    const without = serializeIcsCalendar({
+      prodId: '-//T//T//EN',
+      events: [event()],
+    });
+    expect(without).not.toMatch(/SEQUENCE|LAST-MODIFIED/);
+  });
+});

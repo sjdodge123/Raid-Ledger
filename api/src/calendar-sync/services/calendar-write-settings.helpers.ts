@@ -79,7 +79,17 @@ export async function updateCalendarWriteSettings(
   if (next.target === 'primary' && (next.enabled || flipsToPrimary)) {
     assertEventsScope(row);
   }
-  await deps.db.transaction(async (tx) => {
+  await persistWrite(deps.db, row, next);
+  await enqueueFollowUp(deps, row, next);
+}
+
+/** m2: check + write under a per-user advisory lock, one transaction. */
+async function persistWrite(
+  db: Db,
+  row: ConnectionRow,
+  next: NextWrite,
+): Promise<void> {
+  await db.transaction(async (tx) => {
     await tx.execute(
       sql`SELECT pg_advisory_xact_lock(${CALENDAR_WRITE_LOCK_CLASS}::int4, ${row.userId}::int4)`,
     );
@@ -93,7 +103,6 @@ export async function updateCalendarWriteSettings(
       })
       .where(eq(schema.calendarConnections.id, row.id));
   });
-  await enqueueFollowUp(deps, row, next);
 }
 
 /** 400 on a malformed body or any `read` key; the `write` block or null. */

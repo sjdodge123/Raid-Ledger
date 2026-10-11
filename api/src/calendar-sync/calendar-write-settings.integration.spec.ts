@@ -297,3 +297,37 @@ describe('PATCH write off — the write-off job (Q5, F8)', () => {
     expect(fake.store.allCopies()).toHaveLength(1);
   });
 });
+
+describe('PATCH write settings — review fixes (m1, m2)', () => {
+  it('two concurrent enables on two connections → exactly one 204, one 409 (advisory lock)', async () => {
+    for (let round = 0; round < 5; round += 1) {
+      const a = await seedConnection({ suffix: `-ra${round}` });
+      const b = await seedConnection({ suffix: `-rb${round}` });
+      const statuses = (
+        await Promise.all([
+          patch(a, { write: { enabled: true } }),
+          patch(b, { write: { enabled: true } }),
+        ])
+      ).map((r) => r.status);
+      expect(statuses.sort()).toEqual([204, 409]);
+      const writers = await testApp.db
+        .select({ id: conns.id })
+        .from(conns)
+        .where(eq(conns.writeEnabled, true));
+      expect(writers).toHaveLength(1);
+      await testApp.db.delete(conns).where(eq(conns.userId, user.userId));
+    }
+  });
+
+  it('enable on a row already targeting primary but missing calendar.events → 409 needs_consent', async () => {
+    const id = await seedConnection();
+    await testApp.db
+      .update(conns)
+      .set({ writeTarget: 'primary' })
+      .where(eq(conns.id, id));
+    const res = await patch(id, { write: { enabled: true } });
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('needs_consent');
+    expect((await rowOf(id))?.writeEnabled).toBe(false);
+  });
+});

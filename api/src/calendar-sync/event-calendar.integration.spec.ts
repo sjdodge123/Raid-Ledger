@@ -265,6 +265,12 @@ describe('GET /events/:id/ics (D9, F7, F10)', () => {
     expect(lines).toContain(`DTSTART:${formatIcsUtc(row!.duration[0])}`);
     expect(lines).toContain('SUMMARY:Raid Night');
     expect(lines.filter((l) => l === 'BEGIN:VEVENT')).toHaveLength(1);
+    // Review NIT: a named download + revision fields.
+    expect(res.headers['content-disposition']).toBe(
+      'attachment; filename="raid-night.ics"',
+    );
+    expect(lines).toContain(`LAST-MODIFIED:${formatIcsUtc(row!.updatedAt)}`);
+    expect(lines.some((l) => /^SEQUENCE:\d+$/.test(l))).toBe(true);
   });
 
   it('404s for an unknown event', async () => {

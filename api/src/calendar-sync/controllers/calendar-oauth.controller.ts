@@ -212,15 +212,25 @@ export class CalendarOAuthController {
       await revokeUnstoredGrant(target.provider, result.credentials);
       throw err;
     });
-    // Review m4: the grant IS saved — a failure here is not an `exchange`.
+    return this.applyIntent(intent, id, userId, target.key, scopes);
+  }
+
+  /** Review m4: the grant IS saved — a failure here is not an `exchange`. */
+  private async applyIntent(
+    intent: VerifiedCalendarOAuthState['intent'],
+    connectionId: number,
+    userId: number,
+    provider: CalendarOAuthProvider,
+    grantedScopes: readonly string[],
+  ): Promise<'connected' | 'unavailable'> {
     // The contract has no dedicated code; `unavailable` + Sentry it is.
     const applied = await intents
       .applyConsentIntent(this.db, {
         intent,
-        connectionId: id,
+        connectionId,
         userId,
-        provider: target.key,
-        grantedScopes: scopes,
+        provider,
+        grantedScopes,
         queue: this.writeQueue,
       })
       .catch((err: unknown) => {

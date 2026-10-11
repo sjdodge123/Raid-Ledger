@@ -37,6 +37,7 @@ import {
 } from './providers/google/google-oauth.helpers';
 import { buildRedirectUris } from './services/calendar-sync-admin.helpers';
 import * as connectHelpers from './services/calendar-connect.helpers';
+import * as intentHelpers from './services/calendar-oauth-intent.helpers';
 import { mintCalendarOAuthState } from './services/calendar-oauth-state.helpers';
 import {
   decryptCalendarCredentials,
@@ -462,5 +463,63 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
     expect(formsSentTo(spy, GOOGLE_TOKEN_URL)).toHaveLength(1);
     expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
     expect(await rowsOf(user.userId)).toEqual([before]);
+  });
+
+  it('primary consent on a DIFFERENT account while the original writes → no second primary row (m4)', async () => {
+    const original = await connectedWithWrite();
+    stubGoogle({
+      token: {
+        status: 200,
+        json: {
+          ...okJson,
+          scope: `${String(okJson.scope)} ${GOOGLE_EVENTS_SCOPE}`,
+          id_token: idToken({ sub: 'other-sub-m4', email: 'm4@example.test' }),
+        },
+      },
+    });
+    const s = await startPrimary();
+    expect(
+      await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const rows = await rowsOf(user.userId);
+    const primaries = rows.filter((r) => r.writeTarget === 'primary');
+    expect(primaries).toEqual([]);
+    const kept = rows.find((r) => r.id === original);
+    expect([kept?.writeEnabled, kept?.writeTarget]).toEqual([
+      true,
+      'dedicated',
+    ]);
+    expect(rows).toHaveLength(2);
+  });
+
+  it('applyConsentIntent throwing after the grant is saved → ?error=unavailable, not exchange (m4)', async () => {
+    await connectedWithWrite();
+    stubGoogle(WITH_EVENTS);
+    jest
+      .spyOn(intentHelpers, 'applyConsentIntent')
+      .mockRejectedValue(new Error('redis down'));
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const s = await startPrimary();
+    expect(
+      await land({ code: 'auth-code-2', state: s.state }, s.cookie),
+    ).toEqual({ connected: null, error: 'unavailable' });
+  });
+
+  it('a connect-intent reconnect without calendar.events demotes a primary target to dedicated (m1)', async () => {
+    const id = await connectedWithWrite();
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ writeTarget: 'primary', status: 'needs_reconnect' })
+      .where(eq(schema.calendarConnections.id, id));
+    stubGoogle(OK);
+    const s = await start();
+    expect(
+      await land({ code: 'auth-code-3', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const [after] = await rowsOf(user.userId);
+    expect([after?.status, after?.writeTarget]).toEqual([
+      'active',
+      'dedicated',
+    ]);
   });
 });
