@@ -1,10 +1,14 @@
-import { useCallback } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { ensureFreshToken, refreshWithOutcome } from '../lib/api/refresh-client';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
 import { USER_CACHE_KEY } from '../lib/api/auth-storage-keys';
-import { clearAccessToken, getAccessToken, isImpersonatingToken, setAccessToken } from '../lib/api/access-token-store';
+import {
+    clearAccessToken, getAccessToken, isImpersonatingToken, setAccessToken, subscribeAccessToken,
+} from '../lib/api/access-token-store';
+import { readClaims } from '../lib/api/token-expiry';
+import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
 import type { UserRole } from '@raid-ledger/contract';
@@ -168,19 +172,50 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
     }, [queryClient]);
 }
 
+/**
+ * ROK-1754 hook point — B2 (`cross-tab-auth.ts`) has not landed yet.
+ * TODO(ROK-1754 B2): bump `raid_ledger_identity_epoch` here (B2's helper) so
+ * every other tab clears its in-memory token and re-mints from the cookie.
+ */
+function signalIdentityChange(): void {
+    // no-op until B2's cross-tab helper exists
+}
+
+/**
+ * ROK-1754 end detection: a token without `impersonatedBy` replacing one that
+ * carried it (a refresh after the cap, a banned target, a demoted admin, a
+ * stop in another tab) means impersonation ended underneath us. A voluntary
+ * exit clears memory first, so it never trips this.
+ */
+let heldImpersonation = isImpersonatingToken();
+subscribeAccessToken(() => {
+    const next = getAccessToken();
+    const nowImpersonating = isImpersonatingToken(next);
+    if (heldImpersonation && next !== null && !nowImpersonating) toast.info('Impersonation ended');
+    heldImpersonation = nowImpersonating;
+});
+
+/** Seconds-epoch `exp` of the held token, or null. Used by the banner. */
+export function heldTokenExpiry(): number | null {
+    const token = getAccessToken();
+    const exp = token ? readClaims(token)?.exp : undefined;
+    return typeof exp === 'number' ? exp : null;
+}
+
+/** Start: the server writes the family marker (cookie); the token is memory-only. */
 async function performImpersonation(userId: number, queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
     const token = getAuthToken();
     if (!token) return false;
-
     try {
         const response = await fetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
             method: 'POST',
+            credentials: 'include',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        setAccessToken(data.access_token); // ROK-1754: memory only (lane C finishes start)
+        const data: { access_token: string } = await response.json();
+        setAccessToken(data.access_token);
+        signalIdentityChange();
         await queryClient.invalidateQueries();
         return true;
     } catch (error) {
@@ -189,13 +224,36 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
     }
 }
 
-// ROK-1754 interim (lane C adds POST /auth/impersonate/exit first): re-mint from the admin's cookie.
+/** POST the cookie-authenticated exit; true only when the server confirmed it. */
+async function postExitImpersonation(): Promise<boolean> {
+    try {
+        const res = await fetch(`${API_BASE_URL}/auth/impersonate/exit`, { method: 'POST', credentials: 'include' });
+        return res.ok;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Stop: end the server marker FIRST — a refresh while it is live re-mints the
+ * impersonation — then re-mint the admin token from the cookie. A failed exit
+ * keeps the impersonation token (and the banner) and never refreshes.
+ */
 async function performExitImpersonation(queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
-    if (!isImpersonatingToken()) return false;
+    if (!(await postExitImpersonation())) {
+        toast.error('Could not exit impersonation. Check your connection and try again.');
+        return false;
+    }
     clearAccessToken();
-    const ok = (await refreshWithOutcome()).kind === 'ok';
+    const outcome = await refreshWithOutcome();
+    if (outcome.kind === 'rejected') {
+        clearAllAuthStorage();
+        queryClient.setQueryData(['auth', 'me'], null);
+        return false;
+    }
+    signalIdentityChange();
     await queryClient.invalidateQueries();
-    return ok;
+    return outcome.kind === 'ok';
 }
 
 /**
@@ -229,6 +287,7 @@ export function useAuth() {
     });
 
     const login = useLogin(queryClient);
+    const impersonating = useSyncExternalStore(subscribeAccessToken, isImpersonating);
 
     const logout = () => {
         // ROK-1353: revoke the refresh family + clear the cookie server-side
@@ -245,7 +304,7 @@ export function useAuth() {
         user: user ?? null,
         isLoading,
         isAuthenticated: !!user,
-        isImpersonating: isImpersonating(),
+        isImpersonating: impersonating,
         error,
         refetch,
         login,
