@@ -9,6 +9,7 @@ import { Button } from '../../ui/button';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
 import { CalendarConnectionCard } from './CalendarConnectionCard';
+import { SendEventsSettings } from './SendEventsSettings';
 import { useCalendarOAuthFeedback } from './use-calendar-oauth-feedback';
 import { CALENDARS_COPY as C, oauthErrorMessage } from './calendar-sync.copy';
 
@@ -76,6 +77,8 @@ export function CalendarsPage(): JSX.Element {
                     <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
                 </Section>
             </div>
+            {/* ROK-1596 W1: K4/K5 send settings, one card per connected account. */}
+            {google.map((c) => <SendEventsSettings key={c.id} connection={c} />)}
             <PrivacyNote />
         </PageFrame>
     );

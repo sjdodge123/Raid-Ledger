@@ -81,3 +81,21 @@ export function oauthErrorMessage(code: string): string {
         ? OAUTH_ERROR_COPY[code as CalendarOAuthErrorCode]
         : OAUTH_ERROR_FALLBACK;
 }
+
+/** "Send my events" — K4 desktop / K5 phone, verbatim (ROK-1596 W1). No tentative toggle: tentative always syncs. */
+export const SEND_EVENTS_COPY = {
+    heading: 'Send my Raid Ledger events',
+    tag: 'two-way',
+    switchLabel: 'Add events I sign up for',
+    putThemIn: 'Put them in',
+    dedicated: 'A "Raid Ledger" calendar',
+    primary: 'My main calendar',
+    phone: { helper: 'New sign-ups show up within a minute', dedicated: 'We create it and only ever touch that one. Hide or delete it any time.', primary: 'Events sit with everything else.' },
+    desktop: { helper: 'To Google Calendar', dedicated: 'We only ever touch that one', primary: 'Next to everything else' },
+    noteTitle: 'Stays in step.',
+    noteBody: "A new time moves the event, a cancellation or leaving the roster removes it. We never read these copies back as busy time, so your own sign-up can't clash with itself.",
+    /* Not on the canvas (lane copy, F6 / errors). */
+    alreadyEnabled: 'Another connected calendar already gets your events. Turn it off there first.',
+    saveFailed: 'Could not save. Try again.',
+    consentFailed: 'Could not start the Google sign-in. Try again.',
+} as const;

@@ -10,6 +10,7 @@
 import { http, HttpResponse } from 'msw';
 import {
     UpdateAdminCalendarSyncSettingsSchema,
+    UpdateCalendarConnectionSchema,
     type AdminCalendarSyncSettings,
     type CalendarConnection,
     type CalendarsOverview,
@@ -96,12 +97,17 @@ export const calendarsOverviewVariants = {
     }),
 } satisfies Record<string, CalendarsOverview>;
 
-/** Overview answers with `overview`; start hands back the consent URL; DELETE → 202. */
+/** Overview answers with `overview`; start hands back the consent URL; DELETE → 202; PATCH echoes the merged connection. */
 export function userCalendarHandlers(overview: CalendarsOverview = calendarsOverviewVariants.available) {
     return [
         http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json(overview)),
         http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url: GOOGLE_CONSENT_URL_FIXTURE })),
         http.delete(CALENDAR_CONNECTION_URL, () => new HttpResponse(null, { status: 202 })),
+        http.patch(CALENDAR_CONNECTION_URL, async ({ request }) => {
+            const body = UpdateCalendarConnectionSchema.parse(await request.json());
+            const write = { ...calendarConnectionFixture.write, ...body.write };
+            return HttpResponse.json({ ...calendarConnectionFixture, write });
+        }),
     ];
 }
 
