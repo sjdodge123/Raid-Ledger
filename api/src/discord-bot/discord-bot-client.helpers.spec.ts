@@ -6,6 +6,7 @@ import {
 } from 'discord.js';
 import {
   REQUIRED_PERMISSIONS,
+  DEFAULT_ALLOWED_MENTIONS,
   createDiscordClient,
   botInvitePermissionsBits,
   buildBotInviteUrl,
@@ -106,6 +107,16 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
     const results = checkBotPermissions(null);
     expect(results).toHaveLength(17);
     expect(results.every((r) => !r.granted)).toBe(true);
+  });
+});
+
+describe('createDiscordClient allowedMentions default (ROK-1757)', () => {
+  it('parses no mentions by default so user text cannot ping everyone/roles/users', () => {
+    expect(createDiscordClient().options.allowedMentions).toEqual({
+      parse: [],
+      repliedUser: true,
+    });
+    expect(DEFAULT_ALLOWED_MENTIONS.parse).toEqual([]);
   });
 });
 

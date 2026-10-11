@@ -17,6 +17,7 @@ import {
   findAdminUser,
   countAllUsers,
 } from './users-query.helpers';
+import { linkDiscordFields } from './users-link-discord.helpers';
 import { deleteUserTransaction } from './users-delete.helpers';
 import { fetchSteamLibrary } from './users-steam-query.helpers';
 import { fetchSteamWishlist } from '../steam/steam-wishlist.helpers';
@@ -119,7 +120,7 @@ export class UsersService {
     }
     const [updated] = await this.db
       .update(schema.users)
-      .set({ discordId, username, avatar, updatedAt: new Date() })
+      .set(linkDiscordFields(discordId, username, avatar))
       .where(eq(schema.users.id, userId))
       .returning();
     invalidateAuthUser(userId);

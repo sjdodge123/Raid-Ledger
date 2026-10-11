@@ -26,7 +26,7 @@ import { PhoneWeekCheckStep } from '../../components/features/game-time/phone/Ph
 import { PROFILE_HOURS } from '../../components/features/game-time/phone/phone-week-check.helpers';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { GameTimeCheckSheet } from '../scheduling/GameTimeCheckSheet';
-import { safeReturnPath } from './game-time-return';
+import { safeReturnPath } from '../../lib/safe-return-path';
 import { DESKTOP_MQ } from '../../lib/breakpoints';
 
 /** ROK-1564: "Edit my week" on a scheduling poll lands here with `?return=`. */

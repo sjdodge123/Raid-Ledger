@@ -30,6 +30,11 @@ export interface GameBadgeData {
     currentUserOwns: boolean;
     /** ROK-1314: has the CURRENT viewer wishlisted this game? */
     currentUserWishlisted: boolean;
+    /**
+     * ROK-1375: the viewer's lifetime Steam playtime (minutes) on a game they
+     * own. Only lineup nominations carry it today; `null` renders no suffix.
+     */
+    currentUserPlaytimeMinutes: number | null;
     /** Current best price. */
     price: number | null;
     /** Current discount percentage (0-100). */
@@ -49,6 +54,7 @@ const EMPTY: GameBadgeData = {
     wishlistCount: null,
     currentUserOwns: false,
     currentUserWishlisted: false,
+    currentUserPlaytimeMinutes: null,
     price: null,
     cut: null,
     lowestPrice: null,
@@ -86,6 +92,7 @@ export function fromLineupEntry(entry: LineupEntryResponseDto): GameBadgeData {
         wishlistCount: entry.wishlistCount,
         currentUserOwns: entry.currentUserOwns === true,
         currentUserWishlisted: entry.currentUserWishlisted === true,
+        currentUserPlaytimeMinutes: entry.currentUserPlaytimeMinutes ?? null,
         price: entry.itadCurrentPrice,
         cut: entry.itadCurrentCut,
         lowestPrice: entry.itadLowestPrice ?? null,
@@ -165,4 +172,15 @@ export function fromVetoGameCard(card: VetoGameCardData): GameBadgeData {
         cut: card.itadCurrentCut ?? null,
         lowestPrice: card.itadLowestPrice ?? null,
     };
+}
+
+/**
+ * ROK-1375: compact playtime for the "You own" pill — `12h`, `45m`. Returns
+ * null for a missing or zero value so an unplayed game reads plain "You own"
+ * rather than "0m played".
+ */
+export function formatPlaytime(minutes: number | null | undefined): string | null {
+    if (minutes == null || minutes <= 0) return null;
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.floor(minutes / 60).toLocaleString()}h`;
 }

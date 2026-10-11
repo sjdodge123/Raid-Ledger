@@ -35,6 +35,21 @@ export const USER_SUSPENDED_CODE = 'USER_SUSPENDED';
  */
 export const USER_KICKED_CODE = 'USER_KICKED';
 
+/**
+ * ROK-1753: structured code for a deactivated session — the same code
+ * NotDeactivatedGuard's 403 carries, now thrown as a 401 by jwt.strategy and
+ * POST /auth/refresh so a deactivated user holds no working session.
+ */
+export const USER_DEACTIVATED_CODE = 'USER_DEACTIVATED';
+
+/** 401 for a deactivated user's access JWT or refresh cookie (ROK-1753). */
+export function deactivatedException(): UnauthorizedException {
+  return new UnauthorizedException({
+    code: USER_DEACTIVATED_CODE,
+    message: 'Account deactivated',
+  });
+}
+
 /** Minimal ban-status shape (a `users` row satisfies it structurally). */
 interface BanStatus {
   bannedAt: Date | null;

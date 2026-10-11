@@ -3,6 +3,37 @@
 Newest first. Every entry states **additive** or **breaking** (see
 `CONTRACT.md` → Versioning). Only a Raid Ledger PR may add an entry.
 
+## v1 — 2026-10-10 — Export clock window — **additive** (server acceptance rule)
+
+- **Wire format unchanged; stays v1** (operator ruling 2026-10-10, ROK-1756).
+  The server now rejects, with 422 `INVALID_PAYLOAD`, any export whose
+  `exportedAt` (or guild `data.snapshotAt`) is more than **1 day ahead of** or
+  more than **365 days behind** the server clock. Raid `pulls[]` timestamps get
+  only the 1-day future bound. LedgerLink stamps the current time, so only a
+  year-old re-paste or a badly wrong client clock is affected. The
+  user-facing message asks the user to check the computer's date and export
+  again. See `CONTRACT.md` §6.
+- Golden fixtures are unchanged. The conformance specs pin the server clock
+  (`testing/pin-export-clock.ts`), so the 2026-09-21 fixtures never age out.
+
+## v1 — 2026-10-10 — decoded gear name/quality from the raw link — **additive**
+
+- **Additive (stays v1). Wire format unchanged** — no `schema.json` change,
+  nothing new for the addon to emit (ROK-1760). Raid Ledger now reads the
+  item name (`|h[...]|h`, ≤ 128) and quality (`IQ<n>`, 0–7) out of the
+  existing raw gear `link` and keeps them as optional `name` / `quality` on
+  each decoded gear item, so a slot reads "Recruit's Shirt" before the
+  Wowhead resolver fills it in. The `char-*` and `mixed-char-*` golden
+  fixture `.json` files were regenerated (`api/scripts/gen-ledgerlink-fixtures.ts`)
+  to include the decoded `name`; the `.txt` pastes are unchanged.
+
+## v1 — 2026-10-10 — golden fixture correction — **no format change**
+
+- **Fixture only (stays v1).** `fixtures/char-forever-talents-named` (`.txt` +
+  `.json`) regenerated so every node's `tree`/`row`/`col` hint equals the
+  CONTRACT.md §3 rule applied to its own `posX`/`posY` (ROK-1758). No schema,
+  `schema.json` or Zod change; addon copies should re-sync the fixture pair.
+
 ## v1 — 2026-10-09 — Forever character fields — **additive**
 
 - **Additive (stays v1).** New optional keys in the `char` section (ROK-1742):

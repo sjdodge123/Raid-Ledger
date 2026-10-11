@@ -12,6 +12,7 @@
  * Anything the grammar below does not match stays a `text` token verbatim.
  */
 import type { ThreadMessageMentionDto } from '@raid-ledger/contract';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 
 /** The mention flavours Discord encodes in `<@id>` / `<@&id>` / `<#id>`. */
 export type MentionKind = ThreadMessageMentionDto['kind'];
@@ -47,12 +48,7 @@ export type Token =
  * @returns true only for an absolute `http:` or `https:` url
  */
 export function isHttpUrl(raw: string): boolean {
-    try {
-        const protocol = new URL(raw).protocol;
-        return protocol === 'http:' || protocol === 'https:';
-    } catch {
-        return false;
-    }
+    return safeHttpUrl(raw) !== undefined;
 }
 
 const FENCE = /```(?:([A-Za-z0-9+._-]*)\n)?([\s\S]*?)```/g;

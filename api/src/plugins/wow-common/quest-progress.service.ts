@@ -15,6 +15,7 @@ import {
   fillFromAddon,
   type AddonProgressRow,
 } from './quest-progress-addon.helpers';
+import { assertActiveSignup } from './quest-progress-signup.helpers';
 
 export type {
   QuestCoverageEntry,
@@ -65,6 +66,7 @@ export class QuestProgressService {
     questId: number,
     update: { pickedUp?: boolean; completed?: boolean },
   ): Promise<QuestProgressDto> {
+    await assertActiveSignup(this.db, eventId, userId);
     const existing = await this.findExistingProgress(eventId, userId, questId);
     const written = existing
       ? await this.updateExistingProgress(existing.id, update)

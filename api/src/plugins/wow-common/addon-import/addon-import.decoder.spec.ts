@@ -25,6 +25,9 @@ import {
   FIXTURE_ITEM_LINK,
   wrapImportBytes,
 } from './testing/addon-fixture.builder';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 /** Decode `input`, assert it fails with `code`, a contract-valid body and no echo. */
 function expectReject(
@@ -66,7 +69,13 @@ describe('decodeImportString — canonical sections', () => {
     expect(out.payload.section).toBe('char');
     if (out.payload.section !== 'char') return;
     expect(out.payload.data.gear).toEqual([
-      { slot: 16, itemId: 19019, ilvl: 80, bonusIds: [6646, 7890] },
+      {
+        slot: 16,
+        itemId: 19019,
+        ilvl: 80,
+        bonusIds: [6646, 7890],
+        name: 'Thunderfury', // ROK-1760: raw-link fallback name
+      },
       { slot: 1, itemId: 16921, ilvl: 76, bonusIds: [] },
     ]);
     expect(JSON.stringify(out.payload)).not.toContain('|H');

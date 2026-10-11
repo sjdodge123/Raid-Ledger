@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { safeReturnPath } from './game-time-return';
+import { safeReturnPath } from './safe-return-path';
 
 describe('safeReturnPath (ROK-1564)', () => {
   it('accepts a same-origin relative path', () => {

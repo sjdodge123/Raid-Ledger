@@ -2,6 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { EquipmentSlot, EquipmentGrid } from './equipment-grid';
+import { QUALITY_COLORS } from './equipment-constants';
 import type { EquipmentItemDto, CharacterEquipmentDto } from '@raid-ledger/contract';
 
 /**
@@ -364,6 +365,24 @@ describe('EquipmentSlot — addon items (ROK-1727)', () => {
         const box = screen.getByText('66');
         expect(box.className).toContain('bg-faint');
         expect(box.className).not.toContain('hidden');
+    });
+
+    it('ROK-1760: an unresolved item with a raw-link name shows that name in its quality colour, not "Item #id"', () => {
+        mockMatchMedia(false);
+        const item = createItem({ name: 'Fine Leather Gloves', itemId: 2312, quality: 'UNCOMMON', itemLevel: 15, resolved: false, iconUrl: undefined });
+        render(<EquipmentSlot item={item} slotName="HANDS" gameVariant="wow_forever" />);
+        const name = screen.getByText('Fine Leather Gloves');
+        expect(name.className).toContain(QUALITY_COLORS.UNCOMMON);
+        expect(screen.queryByText('Item #2312')).toBeNull();
+    });
+
+    it.each(['COMMON', 'HEIRLOOM'])('ROK-1760: a %s item name uses the text-secondary token so it reads on light schemes', (quality) => {
+        mockMatchMedia(false);
+        const item = createItem({ name: "Recruit's Shirt", itemId: 6120, quality, itemLevel: 1 });
+        render(<EquipmentSlot item={item} slotName="SHIRT" gameVariant="wow_forever" />);
+        const name = screen.getByText("Recruit's Shirt");
+        expect(name.className).toContain('text-secondary');
+        expect(name.className).not.toContain('text-gray-300');
     });
 
     it.each<[EquipmentItemDto['wowheadEnv'], string, string]>([

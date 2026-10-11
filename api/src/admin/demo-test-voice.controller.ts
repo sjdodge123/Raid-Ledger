@@ -9,6 +9,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DemoTestService } from './demo-test.service';
 import {
   TriggerClassifySchema,
@@ -21,7 +22,7 @@ import { parseDemoBody } from './demo-test.utils';
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestVoiceController {
   constructor(private readonly demoTestService: DemoTestService) {}
 

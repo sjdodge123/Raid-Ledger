@@ -59,9 +59,18 @@ export async function fetchTwitchToken(
   return parseTokenResponse(data);
 }
 
+/**
+ * Escape a value for an APIcalypse double-quoted string: backslashes first,
+ * then quotes, so a trailing `\` or an embedded `\"` cannot close the string
+ * and append clauses (ROK-1757).
+ */
+export function escapeApicalypseString(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
 /** Build IGDB search query body string. */
 function buildSearchBody(query: string, adultFilterEnabled: boolean): string {
-  const sanitizedQuery = query.replace(/"/g, '\\"');
+  const sanitizedQuery = escapeApicalypseString(query);
   const adultWhereClause = adultFilterEnabled
     ? ` where themes != (${ADULT_THEME_IDS.join(',')});`
     : '';

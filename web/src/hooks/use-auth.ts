@@ -3,11 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { ensureFreshToken } from '../lib/api/refresh-client';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
-import { ACCESS_TOKEN_KEY as TOKEN_KEY, ORIGINAL_TOKEN_KEY } from '../lib/api/auth-storage-keys';
+import { ACCESS_TOKEN_KEY as TOKEN_KEY, ORIGINAL_TOKEN_KEY, USER_CACHE_KEY } from '../lib/api/auth-storage-keys';
+import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
 import type { UserRole } from '@raid-ledger/contract';
-
-const USER_CACHE_KEY = 'raid_ledger_user_cache';
 
 export interface User {
     id: number;
@@ -130,6 +129,11 @@ export async function fetchCurrentUser(): Promise<User | null> {
     }
 
     let response = await fetchMe(token);
+    // ROK-1753: a deactivated account is terminal — don't spend a refresh on it.
+    if (await isDeactivatedResponse(response)) {
+        endDeactivatedSession();
+        return null;
+    }
 
     // ROK-1353: a 401 means the access token expired — refresh from the
     // httpOnly cookie and retry once before clearing storage.

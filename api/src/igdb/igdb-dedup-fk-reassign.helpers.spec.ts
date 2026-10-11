@@ -143,3 +143,15 @@ describe('reassignMiscFks — characters deleted from ANOTHER player (ROK-1721)'
     expect(warn).not.toHaveBeenCalled();
   });
 });
+
+describe('reassignMiscFks — games_dedup_audit delete is parameterised (ROK-1757)', () => {
+  it('binds the loser id and quotes the identifiers instead of stitching raw text', async () => {
+    const statements = await recordStatements(11, 22);
+    const del = statements.find(
+      (s) => s.startsWith('DELETE') && s.includes('games_dedup_audit'),
+    );
+    expect(del).toBe(
+      'DELETE FROM "games_dedup_audit" WHERE "canonical_game_id" = $1',
+    );
+  });
+});

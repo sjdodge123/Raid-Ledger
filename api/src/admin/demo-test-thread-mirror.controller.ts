@@ -34,6 +34,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
 import { insertMirroredMessages } from '../discord-bot/thread-mirror/thread-mirror.db-helpers';
@@ -61,7 +62,7 @@ export interface SeedThreadMirrorResult {
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestThreadMirrorController {
   constructor(
     private readonly settingsService: SettingsService,
