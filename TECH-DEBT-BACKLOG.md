@@ -2573,3 +2573,8 @@ same day (#1278, #1279, #1280).
 - **low** same service — the cancel path edits the card before cancelling the grace job, so the job can also end a just-cancelled event (double finalise). Suggested: cancel the grace job first, then finalise.
 - **low** same service — a roster flush already in flight can re-edit an ended card back to LIVE. Suggested: re-check the tracked row's `completed` state inside the edit.
 - **low** `ad-hoc-notification.service.ts` rehydration — a QP/monitor binding config change before an API restart can make rehydration reject the real tracked card (channel no longer matches). A proper fix records "tracked by the notification service" on the row (needs a migration). Suggested: a `tracked_by` column on `discord_event_messages`.
+
+### 2026-10-11 — feat/rok-1754-token-in-memory (surfaced during review of 41e71f223)
+
+- **[med]** `api/src/auth/refresh/refresh-token.service.ts:199-245` (`consumeRow` → `mintChild`) — pre-existing (ROK-1353): the child insert does not check whether the family was revoked meanwhile, so a `revokeFamily` that runs while a mint is in flight leaves a live child (fleet run 2c53b4959397: child c3f261ab stayed unrevoked after the family revoke). Wrapping consume → insert → parent update in one transaction does NOT fix it on its own: under READ COMMITTED the revoke's UPDATE snapshot cannot see the uncommitted child, and a long transaction would hold the parent row lock across any stall. Not fixed in the ROK-1754 review pass (scope guard).
+  Suggested: insert the child with `INSERT … SELECT … WHERE NOT EXISTS (SELECT 1 FROM refresh_tokens WHERE family_id = $f AND revoked_at IS NOT NULL)` and treat 0 rows as a 401, plus an integration case that revokes between consume and insert.
