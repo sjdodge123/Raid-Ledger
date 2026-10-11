@@ -6,7 +6,7 @@
  * not the app's `Date.now()` (a different clock from the one that stamped
  * `rotated_at`).
  */
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { IN_FLIGHT_MAX_MS } from './refresh-grace.helpers';
@@ -14,8 +14,11 @@ import { IN_FLIGHT_MAX_MS } from './refresh-grace.helpers';
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.refreshTokens;
 
-/** DB wall clock as a `timestamp` (the columns are without time zone). */
-export const DB_CLOCK = sql`clock_timestamp()::timestamp`;
+/**
+ * DB wall clock as a UTC `timestamp` (the columns are without time zone and
+ * the app writes UTC) — explicit, so it never depends on the session TimeZone.
+ */
+export const DB_CLOCK = sql`(clock_timestamp() AT TIME ZONE 'UTC')`;
 
 /** A compile-time constant, inlined (no bound-parameter type inference). */
 const IN_FLIGHT_INTERVAL = sql.raw(
@@ -65,5 +68,5 @@ export async function markFirstChildIssued(
       replacedBy: childId,
       rotatedAt: sql`LEAST(${DB_CLOCK}, ${t.rotatedAt} + ${IN_FLIGHT_INTERVAL})`,
     })
-    .where(eq(t.id, parentId));
+    .where(and(eq(t.id, parentId), isNull(t.replacedBy)));
 }

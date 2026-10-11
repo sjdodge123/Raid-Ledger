@@ -19,6 +19,7 @@ import {
   rotationAgeMs,
   IN_FLIGHT_MAX_MS,
   GRACE_KEY_TTL_MS,
+  GRACE_KEY_MARGIN_MS,
 } from './refresh-grace.helpers';
 
 /** SET NX PX that honours the TTL against `Date.now()` (the shared mock does not expire NX keys). */
@@ -80,7 +81,10 @@ describe('refresh race grace (ROK-1755)', () => {
   it('claims with SET NX and a TTL covering grace + in-flight (ROK-1754 W1)', async () => {
     const set = jest.fn().mockResolvedValue('OK');
     await claimGraceOnce({ set }, 'parent-4');
-    expect(GRACE_KEY_TTL_MS).toBe(RACE_GRACE_MS + IN_FLIGHT_MAX_MS);
+    expect(GRACE_KEY_TTL_MS).toBe(
+      RACE_GRACE_MS + IN_FLIGHT_MAX_MS + GRACE_KEY_MARGIN_MS,
+    );
+    expect(GRACE_KEY_MARGIN_MS).toBeGreaterThan(0);
     expect(set).toHaveBeenCalledWith(
       'refresh_grace:parent-4',
       '1',

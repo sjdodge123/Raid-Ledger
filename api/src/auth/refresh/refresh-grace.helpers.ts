@@ -56,8 +56,11 @@ export const IN_FLIGHT_MAX_MS = 60_000;
  * RACE_GRACE_MS + IN_FLIGHT_MAX_MS after any claim. A shorter key let a
  * replay during a stall and a second one after the re-stamp BOTH mint a
  * sibling — two forked live chains (breaks ROK-1755's one-sibling rule).
+ * GRACE_KEY_MARGIN_MS covers a claim that reaches Redis late (re-review nit).
  */
-export const GRACE_KEY_TTL_MS = RACE_GRACE_MS + IN_FLIGHT_MAX_MS;
+export const GRACE_KEY_MARGIN_MS = 5_000;
+export const GRACE_KEY_TTL_MS =
+  RACE_GRACE_MS + IN_FLIGHT_MAX_MS + GRACE_KEY_MARGIN_MS;
 
 /**
  * ROK-1754: the age the race grace measures — from when the rotation's new
