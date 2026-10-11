@@ -1,6 +1,7 @@
 /**
  * Member Calendar Sync hooks (ROK-1594): the Profile → Calendars overview,
- * the Google OAuth start, and disconnect.
+ * the Google OAuth start (with a consent `intent`, ROK-1596), the write
+ * settings PATCH (ROK-1596), and disconnect.
  *
  * Responses parse with the contract schemas (`.strict()`), so a server that
  * ever leaked a credential key fails the parse instead of reaching the page.
@@ -9,7 +10,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     CalendarsOverviewSchema,
     OAuthStartResponseSchema,
+    type CalendarOAuthIntent,
     type CalendarsOverview,
+    type UpdateCalendarConnection,
 } from '@raid-ledger/contract';
 import { getAuthToken } from './use-auth';
 import { fetchApi, fetchWithAuth } from '../lib/api/fetch-api';
@@ -39,14 +42,47 @@ function goToProvider(url: string): void {
     window.location.assign(url);
 }
 
-/** GET the signed Google consent URL, then send the browser there. */
-export function useStartGoogleConnect() {
+/**
+ * GET the signed Google consent URL, then send the browser there.
+ * `primary` asks for the extra `calendar.events` scope (ROK-1596 D8);
+ * `connect` sends no query, which the server reads as `connect`.
+ */
+export function useStartOAuth(intent: CalendarOAuthIntent = 'connect') {
     return useMutation<string, Error, void>({
         mutationFn: async () => {
-            const res = await fetchApi(`${BASE}/oauth/google/start`, {}, OAuthStartResponseSchema);
+            const query = intent === 'connect' ? '' : `?intent=${intent}`;
+            const res = await fetchApi(`${BASE}/oauth/google/start${query}`, {}, OAuthStartResponseSchema);
             return res.url;
         },
         onSuccess: goToProvider,
+    });
+}
+
+/** K1 "Connect": the plain sign-in. */
+export function useStartGoogleConnect() {
+    return useStartOAuth('connect');
+}
+
+export interface UpdateConnectionInput {
+    id: number;
+    body: UpdateCalendarConnection;
+}
+
+/**
+ * `PATCH /users/me/calendars/:id` (ROK-1596 D6, `write` only), then refetch
+ * the overview. A 409 rejects with the server's code as the message
+ * (`write_already_enabled` / `needs_consent`); read it with `httpStatusOf`.
+ */
+export function useUpdateConnection() {
+    const queryClient = useQueryClient();
+    return useMutation<void, Error, UpdateConnectionInput>({
+        // D6 names no response body, so none is parsed; the overview refetch is the source of truth.
+        mutationFn: async ({ id, body }) => {
+            await fetchApi<unknown>(`${BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
+        },
     });
 }
 
