@@ -179,7 +179,7 @@ describe('write-off job — review P2 fixes', () => {
     fake.store.failNext(new ProviderRequestError('http_400'));
     await expect(runCalendarWriteOff(deps, id)).resolves.toEqual({
       result: 'failed',
-      reason: 'http_400',
+      reason: 'rejected:http_400',
     });
   });
 
