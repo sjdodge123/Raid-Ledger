@@ -31,7 +31,7 @@ const PENDING = { provider: 'google', state: 'pending', openUrl: null };
 const SYNCED = { provider: 'google', state: 'synced', openUrl: 'https://www.google.com/calendar/event?eid=x' };
 
 /** Serves each body in turn (the last one repeats) and counts the GETs. */
-function serveSequence(...bodies: unknown[]) {
+function serveSequence(...bodies: Array<Record<string, unknown> | null>) {
     const calls = { n: 0 };
     server.use(http.get(COPY_URL, () => HttpResponse.json(bodies[Math.min(calls.n++, bodies.length - 1)])));
     return calls;
