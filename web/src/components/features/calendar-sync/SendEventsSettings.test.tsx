@@ -117,6 +117,9 @@ describe('SendEventsSettings', () => {
         expect(await screen.findByRole('alert')).toHaveTextContent(S.saveFailed);
     });
 
+});
+
+describe('SendEventsSettings — K4/K5 layout', () => {
     it('phone (K5): helper line describes the switch, the Stays-in-step note shows', () => {
         renderSettings();
         const helper = screen.getByTestId('send-events-helper');

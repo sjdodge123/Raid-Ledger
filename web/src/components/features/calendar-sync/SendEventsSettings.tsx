@@ -62,10 +62,26 @@ function StaysInStepNote(): JSX.Element {
     );
 }
 
+interface SendSwitchRowProps { checked: boolean; helper: string; disabled: boolean; onChange: (next: boolean) => void }
+
+/** "Add events I sign up for" + its helper line, which also describes the switch. */
+function SendSwitchRow({ checked, helper, disabled, onChange }: SendSwitchRowProps): JSX.Element {
+    const helperId = useId();
+    return (
+        <div className="flex items-start justify-between gap-3 py-2.5">
+            <div className="min-w-0">
+                <p className="text-base lg:text-sm text-foreground">{S.switchLabel}</p>
+                <p id={helperId} className="text-xs text-muted" data-testid="send-events-helper">{helper}</p>
+            </div>
+            <Switch checked={checked} onChange={onChange} label={S.switchLabel}
+                aria-describedby={helperId} disabled={disabled} testId="send-events-switch" />
+        </div>
+    );
+}
+
 export function SendEventsSettings({ connection }: { connection: CalendarConnection }): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const v = desktop ? S.desktop : S.phone;
-    const helperId = useId();
     const { write, save, message, busy } = useWriteSettings(connection);
     const options = [
         { value: 'dedicated' as const, label: S.dedicated, description: v.dedicated },
@@ -79,14 +95,7 @@ export function SendEventsSettings({ connection }: { connection: CalendarConnect
                 <TwoWayTag />
             </div>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-                <div className="flex items-start justify-between gap-3 py-2.5">
-                    <div className="min-w-0">
-                        <p className="text-base lg:text-sm text-foreground">{S.switchLabel}</p>
-                        <p id={helperId} className="text-xs text-muted" data-testid="send-events-helper">{v.helper}</p>
-                    </div>
-                    <Switch checked={write.enabled} onChange={(enabled) => save({ enabled })} label={S.switchLabel}
-                        aria-describedby={helperId} disabled={busy} testId="send-events-switch" />
-                </div>
+                <SendSwitchRow checked={write.enabled} helper={v.helper} disabled={busy} onChange={(enabled) => save({ enabled })} />
                 <RadioGroup<CalendarWriteTarget> label={S.putThemIn} hideLabel={desktop} options={options}
                     value={write.target} onChange={(target) => save({ target })} disabled={busy}
                     className="lg:col-span-2 lg:[&>div]:grid lg:[&>div]:grid-cols-2 lg:[&>div]:gap-4" />
