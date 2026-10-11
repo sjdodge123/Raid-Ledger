@@ -10,12 +10,18 @@
  * Origin matching is now derived from the resolved web target, with a fallback
  * to any origin that actually carries the token, so the helper is correct for
  * local dev, a local allinone, and a fleet env alike.
+ *
+ * ROK-1754: the app no longer stores its access token in localStorage, so the
+ * storageState global setup saves carries none. `readTokenFromStorageState`
+ * now reads the admin JWT from the token FILE written by the same login
+ * (`scripts/.auth/admin-token.json`); `pickTokenFromState` stays as the
+ * regression check global setup runs on the saved state (it must find none).
  */
 import fs from 'fs';
-import { STORAGE_STATE_PATH } from '../auth-paths';
+import { TOKEN_FILE_PATH } from '../auth-paths';
 import { resolveWebUrl } from './target';
 
-/** localStorage key written by `use-auth.ts` and by global setup. */
+/** The legacy localStorage token key (pre-ROK-1754); the app purges it at boot. */
 export const TOKEN_KEY = 'raid_ledger_token';
 
 /** The subset of Playwright's storageState file this module reads. */
@@ -66,10 +72,10 @@ export function pickTokenFromState(
 }
 
 /**
- * Read the admin JWT from the storageState file written by global setup.
+ * Read the admin JWT from the token file written by global setup.
  *
- * @param filePath - Override for the state file location (tests).
- * @param opts.maxAgeMs - Reject a state file older than this (default 50 min,
+ * @param filePath - Override for the token file location (tests).
+ * @param opts.maxAgeMs - Reject a token file older than this (default 50 min,
  *   matching `api-helpers.ts`'s TOKEN_MAX_AGE_MS).
  * @param opts.now - Clock injection for tests.
  * @returns The JWT, or null when the file is missing/unparsable/tokenless/stale.
@@ -77,22 +83,22 @@ export function pickTokenFromState(
 export const DEFAULT_MAX_AGE_MS = 50 * 60 * 1000;
 
 export function readTokenFromStorageState(
-    filePath: string = STORAGE_STATE_PATH,
+    filePath: string = TOKEN_FILE_PATH,
     opts: { maxAgeMs?: number; now?: number } = {},
 ): string | null {
     const maxAgeMs = opts.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
     const now = opts.now ?? Date.now();
     try {
-        // Reviewer W3: the JWT inside storageState ages exactly like the one in
-        // admin-token.json, and `readTokenFromDisk` already refuses that past
-        // the TTL. Returning a stale token here would hand every worker an
-        // expired JWT and 401 the whole file — strictly worse than re-logging
-        // in. The file's mtime is the write time of the login that produced it.
+        // Reviewer W3: a stale token would hand every worker an expired JWT
+        // and 401 the whole file — strictly worse than re-logging in. The
+        // file's mtime is the write time of the login that produced it.
         if (now - fs.statSync(filePath).mtimeMs > maxAgeMs) return null;
-        const state = JSON.parse(
-            fs.readFileSync(filePath, 'utf-8'),
-        ) as StorageStateShape;
-        return pickTokenFromState(state);
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf-8')) as {
+            access_token?: unknown;
+        };
+        return typeof parsed.access_token === 'string' && parsed.access_token
+            ? parsed.access_token
+            : null;
     } catch {
         return null;
     }
