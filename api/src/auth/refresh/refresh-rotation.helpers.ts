@@ -18,7 +18,9 @@ const t = schema.refreshTokens;
 export const DB_CLOCK = sql`clock_timestamp()::timestamp`;
 
 /** A compile-time constant, inlined (no bound-parameter type inference). */
-const IN_FLIGHT_INTERVAL = sql.raw(`interval '${IN_FLIGHT_MAX_MS} milliseconds'`);
+const IN_FLIGHT_INTERVAL = sql.raw(
+  `interval '${IN_FLIGHT_MAX_MS} milliseconds'`,
+);
 
 /**
  * The presented row plus `rotatedAgoMs`, computed in the SAME query on the

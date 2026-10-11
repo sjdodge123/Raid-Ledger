@@ -32,6 +32,12 @@ import * as schema from '../../drizzle/schema';
 // cookie helpers.
 import { RefreshTokenService } from './refresh-token.service';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
+import { hashToken } from './refresh-token.helpers';
+import { REFRESH_RACED_CODE } from './refresh-grace.helpers';
+import {
+  findReplayCandidate,
+  markFirstChildIssued,
+} from './refresh-rotation.helpers';
 import { DiscordNotificationService } from '../../notifications/discord-notification.service';
 
 let testApp: TestApp;
@@ -107,6 +113,42 @@ async function countActiveRefreshRows(userId: number): Promise<number> {
     .from(schema.refreshTokens)
     .where(eq(schema.refreshTokens.userId, userId));
   return rows.filter((r) => r.revokedAt === null).length;
+}
+
+/** Un-revoked rows in ONE family (not polluted by other tests' rows). */
+async function countActiveFamilyRows(familyId: string): Promise<number> {
+  const rows = await testApp.db
+    .select({ revokedAt: schema.refreshTokens.revokedAt })
+    .from(schema.refreshTokens)
+    .where(eq(schema.refreshTokens.familyId, familyId));
+  return rows.filter((r) => r.revokedAt === null).length;
+}
+
+/**
+ * Simulate a consume `agoMs` ago whose first child has not landed yet
+ * (fleet run 2c53b4959397: a 14 s API stall between the two). Scoped to the
+ * one row by hash.
+ */
+async function consumeWithoutChild(rawToken: string, agoMs: number) {
+  const [row] = await testApp.db
+    .update(schema.refreshTokens)
+    .set({ rotatedAt: new Date(Date.now() - agoMs), replacedBy: null })
+    .where(eq(schema.refreshTokens.tokenHash, hashToken(rawToken)))
+    .returning();
+  return defined(row, 'consumed parent refresh row');
+}
+
+/** The parent's link + its DB-clock age; throws if the row is gone. */
+async function parentState(rawToken: string) {
+  const row = await findReplayCandidate(testApp.db, hashToken(rawToken));
+  if (!row || row.rotatedAgoMs == null) throw new Error('parent not consumed');
+  return { replacedBy: row.replacedBy, rotatedAgoMs: row.rotatedAgoMs };
+}
+
+function refreshWith(rawToken: string) {
+  return testApp.request
+    .post('/auth/refresh')
+    .set('Cookie', cookieHeader(rawToken));
 }
 
 async function createDiscordMember(username: string) {
@@ -239,31 +281,6 @@ describe('POST /auth/refresh rotation (AC2)', () => {
     expect(familyRows.every((r) => !r.revokedAt)).toBe(true);
   });
 
-  it('ROK-1754: a replay while the rotation is still in flight (no child yet) is never reuse', async () => {
-    const login = await loginLocal();
-    const adminId = testApp.seed.adminUser.id;
-    const cookie = extractRefreshCookie(login) as string;
-    const adminJwt = (login.body as { access_token: string }).access_token;
-
-    // Simulate a consume whose child insert has not landed yet, 30 s ago
-    // (fleet run 2c53b4959397: a 14 s API stall between the two).
-    await testApp.db
-      .update(schema.refreshTokens)
-      .set({ rotatedAt: new Date(Date.now() - 30_000) })
-      .where(eq(schema.refreshTokens.userId, adminId));
-
-    const replay = await testApp.request
-      .post('/auth/refresh')
-      .set('Cookie', cookieHeader(cookie));
-    expect(replay.status).toBe(200);
-    expect(await countActiveRefreshRows(adminId)).toBeGreaterThan(0);
-    // The user's existing access tokens were NOT blocklisted.
-    const me = await testApp.request
-      .get('/auth/me')
-      .set('Authorization', `Bearer ${adminJwt}`);
-    expect(me.status).toBe(200);
-  });
-
   it('reuse of a consumed token revokes the WHOLE family', async () => {
     const login = await loginLocal();
     const adminId = testApp.seed.adminUser.id;
@@ -292,6 +309,82 @@ describe('POST /auth/refresh rotation (AC2)', () => {
 
     // No active refresh rows remain for the user.
     expect(await countActiveRefreshRows(adminId)).toBe(0);
+  });
+});
+
+// ── ROK-1754 — a rotation still in flight is never reuse ────────────────────
+
+describe('POST /auth/refresh while a rotation is in flight (ROK-1754)', () => {
+  it('ROK-1754: a replay while the rotation is still in flight (no child yet) is never reuse', async () => {
+    const login = await loginLocal();
+    const cookie = extractRefreshCookie(login) as string;
+    const adminJwt = (login.body as { access_token: string }).access_token;
+    const parent = await consumeWithoutChild(cookie, 30_000);
+
+    const replay = await refreshWith(cookie);
+    expect(replay.status).toBe(200);
+    // The consumed parent + the replay's sibling, both un-revoked.
+    expect(await countActiveFamilyRows(parent.familyId)).toBe(2);
+    // The user's existing access tokens were NOT blocklisted.
+    const me = await testApp.request
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${adminJwt}`);
+    expect(me.status).toBe(200);
+  });
+
+  it('ROK-1754 W2: a sibling minted mid-flight does not end the in-flight state', async () => {
+    const login = await loginLocal();
+    const cookie = extractRefreshCookie(login) as string;
+    const adminJwt = (login.body as { access_token: string }).access_token;
+    // Consumed 12 s ago (> the 10 s grace), first child still pending.
+    const parent = await consumeWithoutChild(cookie, 12_000);
+
+    const sibling = await refreshWith(cookie);
+    expect(sibling.status).toBe(200);
+    const after = await findReplayCandidate(testApp.db, hashToken(cookie));
+    expect(after?.replacedBy).toBeNull();
+
+    // A second replay, still before the first child lands: the sibling is
+    // spent (409 raced), but it is NOT reuse — no revoke, no blocklist.
+    const second = await refreshWith(cookie);
+    expect(second.status).toBe(409);
+    expect(second.body).toMatchObject({ code: REFRESH_RACED_CODE });
+    expect(await countActiveFamilyRows(parent.familyId)).toBe(2);
+    const me = await testApp.request
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${adminJwt}`);
+    expect(me.status).toBe(200);
+  });
+});
+
+// ── ROK-1754 — the first child re-stamps its parent (grace runs from issue) ──
+
+describe('markFirstChildIssued (ROK-1754)', () => {
+  it('re-stamps rotatedAt to the issue time (DB clock) and links the child', async () => {
+    const login = await loginLocal();
+    const cookie = extractRefreshCookie(login) as string;
+    const parent = await consumeWithoutChild(cookie, 5_000);
+    const childId = crypto.randomUUID();
+
+    await markFirstChildIssued(testApp.db, parent.id, childId);
+
+    const after = await parentState(cookie);
+    expect(after.replacedBy).toBe(childId);
+    // Measured from issue (just now), not from the consume 5 s ago.
+    expect(after.rotatedAgoMs).toBeLessThan(2_000);
+  });
+
+  it('caps the re-stamp at consume + 60 s so the grace never outlives the once-key (W1)', async () => {
+    const login = await loginLocal();
+    const cookie = extractRefreshCookie(login) as string;
+    const parent = await consumeWithoutChild(cookie, 80_000);
+
+    await markFirstChildIssued(testApp.db, parent.id, crypto.randomUUID());
+
+    const after = await parentState(cookie);
+    // consume (80 s ago) + 60 s = 20 s ago, not "just now".
+    expect(after.rotatedAgoMs).toBeGreaterThan(18_000);
+    expect(after.rotatedAgoMs).toBeLessThan(23_000);
   });
 });
 

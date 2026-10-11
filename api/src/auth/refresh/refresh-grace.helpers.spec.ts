@@ -25,7 +25,7 @@ import {
 function expiringRedis() {
   const expiries = new Map<string, number>();
   return {
-    set: (key: string, _v: string, _px: 'PX', ms: number, _nx: 'NX') => {
+    set: (key: string, _v: string, _px: 'PX', ms: number) => {
       const until = expiries.get(key);
       if (until !== undefined && until > Date.now()) {
         return Promise.resolve(null);
@@ -89,7 +89,9 @@ describe('refresh race grace (ROK-1755)', () => {
       'NX',
     );
   });
+});
 
+describe('grace once-key outlives the in-flight window (ROK-1754 W1)', () => {
   it('ROK-1754 W1: a second claim after a stall + re-stamp is still refused', async () => {
     // Consume at T0 then a stall: a replay at T0+1 s claims; the first child
     // lands at T0+14 s and re-stamps, so a replay at T0+20 s is in-window
@@ -141,7 +143,10 @@ describe('rotationAgeMs (ROK-1754 — grace runs from child issue)', () => {
   const incidentAgeMs = 14_444;
 
   it('a consumed row with no child yet is in flight: age 0, never reuse', async () => {
-    const age = rotationAgeMs({ rotatedAgoMs: incidentAgeMs, replacedBy: null });
+    const age = rotationAgeMs({
+      rotatedAgoMs: incidentAgeMs,
+      replacedBy: null,
+    });
     expect(age).toBe(0);
     const { client } = createRedisMock();
     expect(await replayVerdict(age, () => claimGraceOnce(client, 'p'))).toBe(
