@@ -17,6 +17,7 @@ import {
 } from './providers/calendar-provider.registry';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
+import { CalendarAccountDeleteListener } from './write/calendar-account-delete.listener';
 import { CalendarWriteListener } from './write/calendar-write.listener';
 import { CalendarWriteProcessor } from './write/calendar-write.processor';
 import { CalendarWriteReconcileCron } from './write/calendar-write-reconcile.cron';
@@ -64,6 +65,7 @@ const fakeProvider = {
     CalendarWriteProcessor,
     CalendarWriteListener,
     CalendarWriteReconcileCron,
+    CalendarAccountDeleteListener,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })
