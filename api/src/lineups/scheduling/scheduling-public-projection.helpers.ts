@@ -32,6 +32,8 @@ export function projectSchedulePollForViewer(
   if (isMember) return poll;
   return {
     ...poll,
+    // ROK-1750: a share-link token never reaches an anonymous viewer.
+    shareToken: null,
     match: {
       ...poll.match,
       members: poll.match.members.map(toPublicIdentity),

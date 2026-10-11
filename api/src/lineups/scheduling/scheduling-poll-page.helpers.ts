@@ -27,6 +27,7 @@ import {
   resolvePollTerminalState,
   type PollLineupContext,
 } from './scheduling-poll-state.helpers';
+import { shareFieldsForViewer } from '../standalone-poll/standalone-poll-share.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type TerminalArgs = Parameters<typeof resolvePollTerminalState>;
@@ -83,6 +84,7 @@ export async function assembleSchedulePollResponse(
     lineup:
       | (PollLineupContext & {
           phaseDurationOverride?: unknown;
+          shareToken?: string | null;
         })
       | undefined;
     members: Parameters<typeof buildPollResponse>[1];
@@ -117,6 +119,9 @@ export async function assembleSchedulePollResponse(
     phaseDeadline: lineup?.phaseDeadline
       ? lineup.phaseDeadline.toISOString()
       : null,
+    // ROK-1750: the view guard already limited a private poll's viewers to
+    // creator / invitee / admin — only they reach this with a token.
+    ...shareFieldsForViewer(lineup ?? {}, userId),
   };
 }
 

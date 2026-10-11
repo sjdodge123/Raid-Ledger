@@ -6,6 +6,9 @@ import type {
   ActiveStandalonePollDto,
   CreateSchedulingPollDto,
   SchedulingPollResponseDto,
+  PollSharePreviewDto,
+  PollShareJoinResponseDto,
+  PollShareTokenResponseDto,
 } from '@raid-ledger/contract';
 import { fetchApi } from './fetch-api';
 
@@ -36,4 +39,19 @@ export async function createSchedulingPoll(
     method: 'POST',
     body: JSON.stringify(dto),
   });
+}
+
+/** ROK-1750: public preview of a private poll's share link (no auth). */
+export async function getPollSharePreview(token: string): Promise<PollSharePreviewDto> {
+  return fetchApi(`/scheduling-polls/share/${encodeURIComponent(token)}`);
+}
+
+/** ROK-1750: redeem a share link — the viewer becomes an invitee (+ member while open). */
+export async function joinPollShare(token: string): Promise<PollShareJoinResponseDto> {
+  return fetchApi(`/scheduling-polls/share/${encodeURIComponent(token)}/join`, { method: 'POST' });
+}
+
+/** ROK-1750: rotate a private poll's share token (creator / admin only). */
+export async function resetPollShareToken(matchId: number): Promise<PollShareTokenResponseDto> {
+  return fetchApi(`/scheduling-polls/${matchId}/share-token/reset`, { method: 'POST' });
 }
