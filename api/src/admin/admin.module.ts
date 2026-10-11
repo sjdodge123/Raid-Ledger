@@ -30,6 +30,7 @@ import { DemoTestRenderDmEmbedController } from './demo-test-render-dm-embed.con
 import { DemoTestRenderPugInviteEmbedController } from './demo-test-render-pug-invite-embed.controller';
 import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
+import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
 import { CooptimusSettingsController } from './cooptimus-settings.controller';
@@ -126,6 +127,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestRenderPugInviteEmbedController,
     DemoTestBackupController,
     DemoTestSignInLinkController,
+    DemoTestBrowserSessionController,
     AiChatTestController,
     SlashCommandTestController,
     ItadSettingsController,
