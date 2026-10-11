@@ -14,7 +14,9 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { createChannelEmbed } from '../embeds/embed-chrome.helpers';
+import type { BindingPurpose } from '@raid-ledger/contract';
 import {
+  BINDING_PURPOSE_LABELS,
   COMMAND_REPLY_AUTHORS,
   bindingsListFooterLabel,
 } from './command-reply-chrome.helpers';
@@ -116,11 +118,8 @@ function formatBindingLine(
     ? (gameMap.get(binding.gameId) ?? 'Unknown')
     : 'Any';
   const label =
-    binding.bindingPurpose === 'game-announcements'
-      ? 'Announcements'
-      : binding.bindingPurpose === 'game-voice-monitor'
-        ? 'Activity Monitor'
-        : binding.bindingPurpose;
+    BINDING_PURPOSE_LABELS[binding.bindingPurpose as BindingPurpose] ??
+    binding.bindingPurpose;
   return `<#${binding.channelId}> \u2192 ${gameName} (${label})`;
 }
 
