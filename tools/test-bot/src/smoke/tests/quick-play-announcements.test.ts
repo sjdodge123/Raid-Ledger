@@ -39,6 +39,7 @@ import {
 } from '../fixtures.js';
 import type { ApiClient } from '../api.js';
 import type { DiscordChannel, SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 
 const QP_PURPOSE = 'quick-play-announcements';
 
@@ -231,7 +232,7 @@ const lobbySpawnPostsQuickPlayCard: SmokeTest = {
       const card = await openLobbyRoom(ctx, ch.voice.id, room);
       await withAdHocEventsEnabled(ctx.api, async () => {
         const before = await snapshotMessageIds(ch.qpText.id);
-        eventId = await spawnTwice(ctx, ch, lobbyId, [users[0].userId, users[1].userId]);
+        eventId = await spawnTwice(ctx, ch, lobbyId, [must(users[0], 'fixture user 0').userId, must(users[1], 'fixture user 1').userId]);
         await expectQuickPlayCard(ctx, ch, before);
       });
       await expectLobbyCardUnchanged(ctx, ch, room, card, eventId);
@@ -259,7 +260,7 @@ async function expectLobbyCardUnchanged(
         `lobby's notification channel #${ch.lobbyText.name} (${ch.lobbyText.id})`,
     );
   }
-  const linked = room.map((m) => ({ ...m, eventId: eventId ?? undefined }));
+  const linked = room.map((m) => (eventId !== null ? { ...m, eventId } : { ...m }));
   const now = await setLobbyPresence(ctx.api, ch.voice.id, linked);
   if (now.textChannelId !== card.textChannelId || now.messageId !== card.messageId) {
     throw new SmokeAssertionError(

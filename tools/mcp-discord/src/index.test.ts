@@ -119,7 +119,7 @@ describe('mcp-discord index — CDP error wrapper', () => {
 
       expect(Array.isArray(result.content)).toBe(true);
       expect(result.content).toHaveLength(1);
-      expect(result.content[0].type).toBe('text');
+      expect(result.content[0]?.type).toBe('text');
     });
 
     it('response text mentions Discord not running and the launch script', async () => {

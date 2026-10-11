@@ -44,6 +44,7 @@ import {
 } from '../scheduled-events-toggle.js';
 import type { ApiClient } from '../api.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 
 /** Minutes until the event starts. Creation skips an SE whose start is past. */
 const START_IN_MIN = 3;
@@ -196,7 +197,7 @@ const suppressionEndSync: SmokeTest = {
   name: 'ROK-1696: suppressed Quick Play join syncs extended end to the Discord Scheduled Event',
   category: 'voice',
   async run(ctx) {
-    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const vCh = must(pickChannel(ctx.voiceChannels, 0), 'voice channel 0');
     const gameId = await firstGameId(ctx.api);
     let bindingId: string | undefined;
     let eventId: number | undefined;

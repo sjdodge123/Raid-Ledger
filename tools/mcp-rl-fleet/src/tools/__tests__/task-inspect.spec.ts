@@ -3,6 +3,7 @@
 // Mirrors task.spec.ts structure: vi.mock('node:child_process') to stub SSH,
 // then assert on argv shape + parsed return shape.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -98,7 +99,7 @@ describe('rl_task_inspect — execute()', () => {
   it('passes task_id single-quoted into the SSH remote command', async () => {
     execFileOk(JSON.stringify(FIXTURE_FULL_TASK));
     await execute({ task_id: 'abc123def' });
-    const call = mockExecFile.mock.calls[0];
+    const call = must(mockExecFile.mock.calls[0], 'the first execFile call');
     const remote = String(call[1].at(-1));
     // The argument is single-quoted via shellQuote.
     expect(remote).toContain("'abc123def'");

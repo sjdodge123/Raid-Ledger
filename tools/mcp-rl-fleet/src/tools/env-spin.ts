@@ -135,22 +135,22 @@ export interface EnvSpinResult {
 
 export interface EnvSpinParams {
   slug: string;
-  image?: string;
-  ttl_hours?: number;
+  image?: string | undefined;
+  ttl_hours?: number | undefined;
   /** Same worktree_path used at rl_claim time (or rl_claim_wait if enqueued). */
-  worktree_path?: string;
+  worktree_path?: string | undefined;
   /**
    * A3-B P4: on spinEnv() (the synchronous core) this opts in to receiving
    * `admin_password` in the result. On the async execute() it does NOT return
    * the value — the dispatch / wait payload adds a `credentials_hint` naming the
    * single opt-in route, rl_task_status({task_id, include_credentials:true}).
    */
-  include_credentials?: boolean;
+  include_credentials?: boolean | undefined;
   /** wait:true blocks (≤120s) on the laptop task, then returns the terminal
    *  status OR a still_running snapshot. Default false (returns task_id). */
-  wait?: boolean;
+  wait?: boolean | undefined;
   /** Wait budget when wait:true. Capped at 120s by waitLocalTask. */
-  wait_timeout_seconds?: number;
+  wait_timeout_seconds?: number | undefined;
 }
 
 export interface EnvSpinDispatch {
@@ -173,7 +173,7 @@ export function credentialsHint(taskId: string): string {
  * omitted worktree_path must default to THIS server's cwd — the session folder
  * the synchronous spin used to run in — or RL_AGENT_ID hashes to the wrong agent.
  */
-export function withDefaultWorktree<T extends { worktree_path?: string }>(params: T): T {
+export function withDefaultWorktree<T extends { worktree_path?: string | undefined }>(params: T): T {
   return { ...params, worktree_path: params.worktree_path ?? process.cwd() };
 }
 

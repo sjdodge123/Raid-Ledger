@@ -29,6 +29,12 @@ vi.mock('node:child_process', () => ({
 // Import after mocks are registered.
 import { execute, TOOL_NAME, TOOL_DESCRIPTION } from './mcp-health.js';
 
+/** Return `value`, or throw naming `label` — a missing element must fail loudly. */
+function must<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`expected ${label} to be present`);
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -183,7 +189,7 @@ describe('mcp-health tool', () => {
 
       const result = await execute();
 
-      const discord = result.servers['mcp-discord'];
+      const discord = must(result.servers['mcp-discord'], 'mcp-discord');
       expect(discord.status).toBe('unhealthy');
       if (discord.status === 'unhealthy') {
         expect(discord.error.toLowerCase()).toMatch(/entrypoint/);
@@ -216,7 +222,7 @@ describe('mcp-health tool', () => {
 
       const result = await execute();
 
-      const env = result.servers['mcp-env'];
+      const env = must(result.servers['mcp-env'], 'mcp-env');
       expect(env.status).toBe('unhealthy');
       if (env.status === 'unhealthy') {
         // The error should reference either the exit code or the stderr text.
@@ -235,8 +241,8 @@ describe('mcp-health tool', () => {
 
       const result = await execute();
 
-      expect(result.servers['mcp-env'].status).toBe('unhealthy');
-      expect(result.servers['mcp-discord'].status).toBe('healthy');
+      expect(result.servers['mcp-env']?.status).toBe('unhealthy');
+      expect(result.servers['mcp-discord']?.status).toBe('healthy');
     });
   });
 
@@ -258,7 +264,7 @@ describe('mcp-health tool', () => {
       await vi.advanceTimersByTimeAsync(3_500);
 
       const result = await promise;
-      const env = result.servers['mcp-env'];
+      const env = must(result.servers['mcp-env'], 'mcp-env');
       expect(env.status).toBe('unhealthy');
       if (env.status === 'unhealthy') {
         expect(env.error.toLowerCase()).toMatch(/timeout|timed out/);
@@ -279,7 +285,7 @@ describe('mcp-health tool', () => {
 
       const result = await execute();
 
-      const pw = result.servers['playwright'];
+      const pw = must(result.servers['playwright'], 'playwright');
       expect(pw.status).toBe('skipped');
       if (pw.status === 'skipped') {
         expect(pw.reason.toLowerCase()).toMatch(/third-party|not local/);

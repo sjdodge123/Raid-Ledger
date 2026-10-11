@@ -33,9 +33,8 @@ export function slugFromBaseUrl(baseUrl: string): string | null {
   } catch {
     return null;
   }
-  const match = /^rl-env-(.+)-allinone$/.exec(host);
-  if (!match) return null;
-  const slug = match[1];
+  const slug = /^rl-env-(.+)-allinone$/.exec(host)?.[1];
+  if (slug === undefined) return null;
   return SLUG_RE.test(slug) ? slug : null;
 }
 
@@ -101,9 +100,9 @@ export type E2eScope = 'auto' | 'all' | 'none';
  * @returns A trailing-space-terminated env prefix, or '' when nothing applies.
  */
 export function resolveInnerEnv(opts: {
-  baseUrl?: string;
-  adminPassword?: string | null;
-  e2eScope?: E2eScope;
+  baseUrl?: string | undefined;
+  adminPassword?: string | null | undefined;
+  e2eScope?: E2eScope | undefined;
 }): string {
   let env = '';
   if (opts.baseUrl) {

@@ -1,5 +1,6 @@
 // ROK-1338 PR-1 — rl_infra_logs tests.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -94,7 +95,7 @@ describe('rl_infra_logs — execute()', () => {
     expect(result.container).toBe('rl-gc-sweeper');
     expect(result.lines).toEqual(['line1', 'line2', 'line3']);
     expect(result.truncated).toBe(false);
-    const call = mockExecFile.mock.calls[0];
+    const call = must(mockExecFile.mock.calls[0], 'the first execFile call');
     expect(call[0]).toBe('ssh');
     // argv-array: the final element is the remote command string.
     const remote = String(call[1].at(-1));
@@ -120,7 +121,7 @@ describe('rl_infra_logs — execute()', () => {
   it('defaults tail to 100 when omitted', async () => {
     execFileOk('');
     await execute({ service: 'dashboard' });
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('--tail 100');
     expect(remote).toContain('rl-dashboard');
   });
@@ -224,7 +225,7 @@ describe('rl_infra_logs — execute()', () => {
   it('maps docker-proxy → rl-docker-proxy (the dashed name)', async () => {
     execFileOk('');
     await execute({ service: 'docker-proxy', tail: 10 });
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('rl-docker-proxy');
   });
 });

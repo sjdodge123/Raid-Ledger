@@ -627,7 +627,7 @@ const unbindChannel: SmokeTest = {
       channelId: ch.id,
       channelType: 'text',
       purpose: 'game-announcements',
-      gameId: ctx.games[0]?.id,
+      ...(ctx.games[0] ? { gameId: ctx.games[0].id } : {}),
     });
     try {
       const res = await invokeCommand(ctx, {
@@ -675,7 +675,7 @@ const bindingsList: SmokeTest = {
       channelId: ch.id,
       channelType: 'text',
       purpose: 'game-announcements',
-      gameId: ctx.games[0]?.id,
+      ...(ctx.games[0] ? { gameId: ctx.games[0].id } : {}),
     });
     try {
       const res = await invokeCommand(ctx, {

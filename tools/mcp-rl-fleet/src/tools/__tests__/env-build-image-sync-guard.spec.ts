@@ -2,6 +2,7 @@
 // (Codex review 2026-06-02, high-1) so the standalone build + parallel-deploy
 // paths can't build stale source. Verify it gates dispatch.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const claimExecute = vi.fn();
 vi.mock('../claim.js', () => ({ execute: (...a: unknown[]) => claimExecute(...a) }));
@@ -76,7 +77,7 @@ beforeEach(() => {
 
 /** The remote command line handed to the SSH-arg builder for the dispatch. */
 function dispatchedRemote(): string {
-  return vi.mocked(buildSshArgs).mock.calls[0][0] as string;
+  return must(vi.mocked(buildSshArgs).mock.calls[0], 'the buildSshArgs call')[0] as string;
 }
 
 describe('rl_env_build_image_from_runner sync guard', () => {

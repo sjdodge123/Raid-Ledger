@@ -76,7 +76,7 @@ export class ApiClient {
   private relogin?: () => Promise<string>;
 
   /** The re-login in flight; every request that hit the same expiry awaits it. */
-  private reloginInFlight?: Promise<void>;
+  private reloginInFlight: Promise<void> | undefined;
 
   constructor(
     private baseUrl: string,
@@ -172,7 +172,7 @@ export class ApiClient {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${this.token}`,
       },
-      body,
+      ...(body !== undefined && { body }),
     });
   }
 }

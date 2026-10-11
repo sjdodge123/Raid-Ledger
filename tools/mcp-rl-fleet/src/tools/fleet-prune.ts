@@ -31,19 +31,19 @@ export interface FleetPruneParams {
 export interface PruneRung {
   rung: string;
   /** Only present on a real run. */
-  before_pct?: number;
-  after_pct?: number;
+  before_pct?: number | undefined;
+  after_pct?: number | undefined;
   /** Docker's human string, e.g. "14.5GB". */
-  reclaimed?: string;
+  reclaimed?: string | undefined;
   /** Same figure normalized to bytes so agents can compare/sum it. */
-  reclaimed_bytes?: number;
+  reclaimed_bytes?: number | undefined;
   /** Dry-run only: the exact command, and that it was not executed. */
-  command?: string;
-  would_run?: boolean;
+  command?: string | undefined;
+  would_run?: boolean | undefined;
   /** Non-zero when docker (or the proxy allowlist) refused the rung. */
-  exit_code?: number;
+  exit_code?: number | undefined;
   /** Tail of the rung's output when it failed. */
-  stderr?: string;
+  stderr?: string | undefined;
 }
 
 export interface FleetPruneResult {
@@ -77,9 +77,11 @@ export function parseReclaimedBytes(raw: string | undefined): number | undefined
   if (!raw) return undefined;
   const m = /^([\d.]+)\s*([KMGT]?B)$/i.exec(raw.trim());
   if (!m) return undefined;
-  const unit = UNITS[m[2].toUpperCase()];
+  const [, amount, unitName] = m;
+  if (amount === undefined || unitName === undefined) return undefined;
+  const unit = UNITS[unitName.toUpperCase()];
   if (!unit) return undefined;
-  return Math.round(parseFloat(m[1]) * unit);
+  return Math.round(parseFloat(amount) * unit);
 }
 
 /**
@@ -119,7 +121,7 @@ export function buildRemoteCommand(dryRun: boolean): string {
 }
 
 /** Split the ladder JSON (first line) from the optional system-df marker line. */
-function splitOutput(stdout: string): { ladder: string; systemDf?: unknown[] } {
+function splitOutput(stdout: string): { ladder: string; systemDf?: unknown[] | undefined } {
   let ladder = '';
   let systemDf: unknown[] | undefined;
   for (const line of stdout.split('\n')) {

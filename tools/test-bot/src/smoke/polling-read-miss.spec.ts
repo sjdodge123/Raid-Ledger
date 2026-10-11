@@ -63,7 +63,9 @@ await test('a truncated Discord body counts as a miss and names the channel', as
   });
   assert.deepEqual(result, [], `a SyntaxError must be an empty read (a miss), got ${String(result)}`);
   assert.equal(warnings.length, 1, `expected 1 warning, got ${warnings.length}`);
-  assert.match(warnings[0], /\[pollForEmbed\] channel 1234567890: unparseable Discord response \(Unterminated string/);
+  const [warning] = warnings;
+  assert.ok(warning !== undefined, 'expected a warning to have been captured');
+  assert.match(warning, /\[pollForEmbed\] channel 1234567890: unparseable Discord response \(Unterminated string/);
 });
 
 await test('any other read error still propagates', async () => {

@@ -12,6 +12,7 @@
 //   - tool-specific: lines param default + cap + invalid; follow:true defer.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -117,7 +118,7 @@ describe('rl_task_logs — execute() happy path', () => {
     expect(result.log_path).toBe('/srv/rl-infra/state/tasks/abc123def.log');
     expect(result.lines).toEqual(['line one', 'line two', 'line three']);
     expect(result.truncated).toBe(false);
-    const call = mockExecFile.mock.calls[0];
+    const call = must(mockExecFile.mock.calls[0], 'the first execFile call');
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
     expect(remote).toContain('tail -n 200');
@@ -132,7 +133,7 @@ describe('rl_task_logs — execute() happy path', () => {
   it('defaults lines to 100 when omitted', async () => {
     execFileOk('one\n');
     await execute({ task_id: 'abc123def' });
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('tail -n 100');
   });
 

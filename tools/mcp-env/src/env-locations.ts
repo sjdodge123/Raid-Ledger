@@ -57,7 +57,8 @@ export function parseVarNames(content: string): string[] {
   const names: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = regex.exec(content)) !== null) {
-    names.push(match[1]);
+    const [, name] = match;
+    if (name !== undefined) names.push(name);
   }
   return names;
 }

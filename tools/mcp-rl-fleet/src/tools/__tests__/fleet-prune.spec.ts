@@ -41,7 +41,8 @@ afterEach(() => vi.clearAllMocks());
  */
 const decodeRemoteScript = (args: string[] | undefined): string => {
   const m = /echo ([A-Za-z0-9+/=]+) \| base64 -d/.exec((args ?? []).join(' '));
-  return m ? Buffer.from(m[1], 'base64').toString('utf8') : '';
+  const b64 = m?.[1];
+  return b64 === undefined ? '' : Buffer.from(b64, 'base64').toString('utf8');
 };
 
 const LADDER_RESULT = {
@@ -71,7 +72,7 @@ describe('rl_fleet_prune', () => {
     expect(res.rungs).toHaveLength(3);
     expect(res.rungs?.[2]).toMatchObject({ rung: 'volume_prune', reclaimed: '14.5GB' });
     // "14.5GB" must reach the agent as a number it can compare, too.
-    expect(res.rungs?.[2].reclaimed_bytes).toBe(Math.round(14.5 * 1000 ** 3));
+    expect(res.rungs?.[2]?.reclaimed_bytes).toBe(Math.round(14.5 * 1000 ** 3));
 
     expect(lastExecFileArgs?.file).toBe('ssh');
     const script = decodeRemoteScript(lastExecFileArgs?.args);

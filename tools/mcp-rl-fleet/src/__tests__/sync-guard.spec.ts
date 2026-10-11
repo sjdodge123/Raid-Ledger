@@ -107,7 +107,7 @@ describe('ensureSyncedHead', () => {
     expect(runRl).not.toHaveBeenCalled();
     // Sentinel was written into the worktree under a per-call probe name and cleaned up.
     expect(writeFile).toHaveBeenCalledTimes(1);
-    expect(String(writeFile.mock.calls[0][0])).toContain(SENTINEL_PREFIX);
+    expect(String(writeFile.mock.calls[0]?.[0])).toContain(SENTINEL_PREFIX);
     expect(unlink).toHaveBeenCalledTimes(1);
   });
 

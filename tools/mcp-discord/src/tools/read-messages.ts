@@ -23,7 +23,7 @@ interface ScrapedMessage {
 }
 
 export async function execute(params: {
-  count?: number;
+  count?: number | undefined;
 }): Promise<{ messages: ScrapedMessage[] }> {
   const page = await getPage();
   const limit = params.count ?? 10;

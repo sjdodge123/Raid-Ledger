@@ -209,15 +209,15 @@ async function awaitPlayingPost(
     );
   });
   const embed = embedFor(msg, run.game.name);
-  const link = VOICE_LINK.exec(embed.description ?? '');
-  if (!link) {
+  const voiceChannelId = VOICE_LINK.exec(embed.description ?? '')?.[1];
+  if (!voiceChannelId) {
     throw new Error(
       'AC7: the PLAYING NOW post carries no voice-channel link — expected a ' +
         `description matching ${String(VOICE_LINK)}, got ` +
         `"${embed.description ?? ''}"`,
     );
   }
-  return { embed, voiceChannelId: link[1], count: headCount(embed, 'AC7') };
+  return { embed, voiceChannelId, count: headCount(embed, 'AC7') };
 }
 
 /** Wait for the head-count to reach `expected`, naming what it actually read. */

@@ -5,6 +5,7 @@
 // So the contract under test is the STDOUT contract: one line per current_step
 // change, one terminal verdict line, and an exit code bash can branch on.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const executeStatus = vi.fn();
 vi.mock('../task.js', () => ({
@@ -112,7 +113,7 @@ describe('runTaskWait', () => {
     const code = await runTaskWait(['abc12345', '--timeout', '60', '--interval', '30'], deps);
 
     expect(code, 'a timeout is not a FAIL — expected exit 2').toBe(2);
-    const last = lines[lines.length - 1];
+    const last = must(lines[lines.length - 1], 'a printed output line');
     expect(last.startsWith('TIMEOUT abc12345'), `expected a TIMEOUT line, got ${last}`).toBe(true);
     expect(
       lines.some((l) => l.startsWith('PASS') || l.startsWith('FAIL')),

@@ -567,7 +567,7 @@ async function assertExactlyOneThread(run: Run): Promise<void> {
   const threads = await readForumThreads(forumId(run));
   const mine = threads.filter((t) => isGroupThread(run, t));
   for (const t of mine) starterEmbed(run, t);
-  if (mine.length !== 1 || mine[0].id !== run.threadId) {
+  if (mine.length !== 1 || mine[0]?.id !== run.threadId) {
     throw new Error(
       `AC16 step 6: expected exactly 1 forum thread for "${run.game.name}" ` +
         `(the one T30 re-opened at the FIRST hand, ${run.threadId ?? '?'}) in ` +
@@ -587,7 +587,8 @@ function assertMirrorsCompanionReply(run: Run): Promise<void> {
     forumChannelId: forumId(run),
     timeoutMs: run.ctx.config.timeoutMs,
     trackProbe: (id) => {
-      run.probeMessageId = id;
+      if (id === undefined) delete run.probeMessageId;
+      else run.probeMessageId = id;
     },
   });
 }

@@ -2,6 +2,7 @@
 // so we replicate the exact schema fields it registers, single-sourcing the
 // teaching message from task-schemas so this can't drift from production.
 import { describe, it, expect } from 'vitest';
+import { must } from './must.js';
 import { z } from 'zod';
 import { WAIT_CAP_TEACHING_MESSAGE } from '../task-schemas.js';
 
@@ -28,7 +29,7 @@ describe('rl_task_wait timeout cap (rejects >120 with a teaching message)', () =
     const r = taskWaitTimeout.safeParse(1800);
     expect(r.success).toBe(false);
     if (!r.success) {
-      const msg = r.error.issues[0].message;
+      const msg = must(r.error.issues[0], 'the first zod issue').message;
       expect(msg).toContain('caps each blocking call at 120s');
       expect(msg).toMatch(/SAME\s+.*task_id|same task_id/i);
       expect(msg).toContain('rl_task_status');

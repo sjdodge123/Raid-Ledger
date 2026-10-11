@@ -233,18 +233,19 @@ export function loadRlInfraIp(): string | undefined {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) continue;
     const m = trimmed.match(/^RL_INFRA_IP=(.+)$/);
-    if (m) return m[1].trim();
+    const ip = m?.[1];
+    if (ip !== undefined) return ip.trim();
   }
   return undefined;
 }
 
 interface RlEnv {
   /** Override the SSH user. Defaults to rl-agent (limited identity). */
-  user?: string;
+  user?: string | undefined;
   /** Per-call agent ID override; if unset, rl CLI auto-derives. */
-  agentId?: string;
+  agentId?: string | undefined;
   /** Extra env vars merged in. */
-  extra?: Record<string, string>;
+  extra?: Record<string, string> | undefined;
   /**
    * cwd to invoke rl CLI from. The CLI runs `git rev-parse --show-toplevel`
    * to find the worktree (drives Mutagen sync source + RL_AGENT_ID hash).
@@ -252,14 +253,14 @@ interface RlEnv {
    * the CLI resolves to wherever the MCP server was spawned (typically the
    * main repo, NOT the agent's worktree). Defaults to process.cwd().
    */
-  cwd?: string;
+  cwd?: string | undefined;
   /**
    * Child-process timeout (ms). When set, the rl CLI invocation is killed if
    * it exceeds this — bounds long-running subcommands (e.g. `rl resync`, whose
    * Mutagen flush is otherwise unbounded) so a stuck VM can't pin the caller.
    * Unset = no timeout (legacy behavior for fast subcommands).
    */
-  timeoutMs?: number;
+  timeoutMs?: number | undefined;
 }
 
 // ROK-1331 M11 — per-tool perf instrumentation. Wraps runRl with a
@@ -363,7 +364,7 @@ export async function runRl(
   try {
     const result = await execFileP(RL_BIN, args, {
       env,
-      cwd: opts.cwd,
+      ...(opts.cwd !== undefined ? { cwd: opts.cwd } : {}),
       maxBuffer: 16 * 1024 * 1024, // 16 MB — enough for validate-ci output
       ...(opts.timeoutMs ? { timeout: opts.timeoutMs } : {}),
     });

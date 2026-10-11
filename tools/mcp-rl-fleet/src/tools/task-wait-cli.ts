@@ -56,6 +56,7 @@ function parseArgs(argv: string[]): ParseResult {
   const positional: string[] = [];
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
+    if (a === undefined) continue;
     if (a.startsWith('--')) {
       if (VALUE_FLAGS.has(a)) i++; // skip the flag's value, it is not the id
       continue;

@@ -31,6 +31,7 @@ import {
 } from "../scheduled-events-toggle.js";
 import type { ApiClient } from "../api.js";
 import type { SmokeTest, TestContext } from "../types.js";
+import { must } from "./must.js";
 
 /** Find one guild SE by exact title (HTTP fetch, not cache). Returns id+name. */
 async function findOneByTitle(
@@ -103,7 +104,7 @@ async function pickTwoGames(
       `Need ≥2 named games for rename test, found ${named.length}`,
     );
   }
-  return { a: named[0], b: named[1] };
+  return { a: must(named[0], 'named game a'), b: must(named[1], 'named game b') };
 }
 
 const renameOnGameSetChangeUnset: SmokeTest = {

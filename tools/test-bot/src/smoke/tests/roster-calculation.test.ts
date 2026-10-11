@@ -16,6 +16,7 @@ import {
   awaitProcessing,
 } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast } from './must.js';
 
 const MMO_SLOTS = {
   type: 'mmo',
@@ -64,7 +65,7 @@ function hasNameInSection(desc: string, sectionMarker: string): boolean {
  */
 function signupCountOf(e: { author: string | null }): number | null {
   const match = (e.author ?? '').match(/(\d+) of (\d+)/);
-  return match ? parseInt(match[1], 10) : null;
+  return match?.[1] ? parseInt(match[1], 10) : null;
 }
 
 /**
@@ -120,7 +121,7 @@ const multiPreferredRoles: SmokeTest = {
   category: 'embed',
   async run(ctx) {
     const users = demoUsers(ctx);
-    if (users.length < 1) throw new Error('Need demo users for roster tests');
+    assertAtLeast(users, 1, 'Need demo users for roster tests');
     const ev = await createEvent(ctx.api, 'roster-multi-pref', {
       gameId: ctx.mmoGameId,
       slotConfig: MMO_SLOTS,
@@ -156,7 +157,7 @@ const fullRosterFill: SmokeTest = {
   category: 'embed',
   async run(ctx) {
     const users = demoUsers(ctx);
-    if (users.length < 5) throw new Error('Need 5+ demo users');
+    assertAtLeast(users, 5, 'Need 5+ demo users');
     const ev = await createEvent(ctx.api, 'roster-full', {
       gameId: ctx.mmoGameId,
       slotConfig: MMO_SLOTS,
@@ -210,7 +211,7 @@ const roleShiftChain: SmokeTest = {
   category: 'embed',
   async run(ctx) {
     const users = demoUsers(ctx);
-    if (users.length < 5) throw new Error('Need 5+ demo users');
+    assertAtLeast(users, 5, 'Need 5+ demo users');
     // Slot config: tank:1, healer:1, dps:3
     // Sign up 4 players preferring dps — one must shift to tank/healer
     // Then 5th player joins preferring tank — should trigger rebalance
@@ -261,7 +262,7 @@ const tentativeDisplacement: SmokeTest = {
   category: 'embed',
   async run(ctx) {
     const users = demoUsers(ctx);
-    if (users.length < 6) throw new Error('Need 6+ demo users');
+    assertAtLeast(users, 6, 'Need 6+ demo users');
     // 5 main slots (tank:1, healer:1, dps:3) + 2 bench
     const ev = await createEvent(ctx.api, 'roster-tentative', {
       gameId: ctx.mmoGameId,

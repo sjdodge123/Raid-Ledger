@@ -14,6 +14,12 @@ vi.mock('../shell.js', () => ({
 // Import after mocks are registered
 import { execute, TOOL_NAME, TOOL_DESCRIPTION } from './story-status.js';
 
+/** Return `value`, or throw naming `label` — a missing element must fail loudly. */
+function must<T>(value: T | undefined, label: string): T {
+  if (value === undefined) throw new Error(`expected ${label} to be present`);
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -160,8 +166,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('not_started');
-      expect(result['ROK-867'].branches).toHaveLength(0);
+      expect(result['ROK-867']?.verdict).toBe('not_started');
+      expect(result['ROK-867']?.branches).toHaveLength(0);
     });
 
     it('returns not_started when remote branch list is empty', async () => {
@@ -172,7 +178,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-100'] });
 
-      expect(result['ROK-100'].verdict).toBe('not_started');
+      expect(result['ROK-100']?.verdict).toBe('not_started');
     });
 
     it('handles multiple stories all with no matching branches', async () => {
@@ -183,8 +189,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-1', 'ROK-2'] });
 
-      expect(result['ROK-1'].verdict).toBe('not_started');
-      expect(result['ROK-2'].verdict).toBe('not_started');
+      expect(result['ROK-1']?.verdict).toBe('not_started');
+      expect(result['ROK-2']?.verdict).toBe('not_started');
     });
   });
 
@@ -202,7 +208,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('in_flight');
+      expect(result['ROK-867']?.verdict).toBe('in_flight');
     });
 
     it('includes branch info for in_flight stories', async () => {
@@ -213,12 +219,12 @@ describe('story-status tool', () => {
       });
 
       const result = await execute({ stories: ['ROK-867'] });
-      const branches = result['ROK-867'].branches;
+      const branches = must(result['ROK-867'], 'ROK-867').branches;
 
       expect(branches).toHaveLength(1);
-      expect(branches[0].name).toBe('rok-867-add-feature');
-      expect(branches[0].on_origin).toBe(true);
-      expect(branches[0].merged_to_main).toBe(false);
+      expect(branches[0]?.name).toBe('rok-867-add-feature');
+      expect(branches[0]?.on_origin).toBe(true);
+      expect(branches[0]?.merged_to_main).toBe(false);
     });
   });
 
@@ -236,7 +242,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('done');
+      expect(result['ROK-867']?.verdict).toBe('done');
     });
 
     it('sets merged_to_main true when branch appears in merged list', async () => {
@@ -248,7 +254,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches[0].merged_to_main).toBe(true);
+      expect(result['ROK-867']?.branches[0]?.merged_to_main).toBe(true);
     });
 
     it('returns done when PR state is MERGED even if not in merged branch list', async () => {
@@ -260,7 +266,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('done');
+      expect(result['ROK-867']?.verdict).toBe('done');
     });
   });
 
@@ -277,8 +283,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-8'] });
 
-      expect(result['ROK-8'].verdict).toBe('not_started');
-      expect(result['ROK-8'].branches).toHaveLength(0);
+      expect(result['ROK-8']?.verdict).toBe('not_started');
+      expect(result['ROK-8']?.branches).toHaveLength(0);
     });
 
     it('does NOT match rok-867-extra when searching for ROK-86', async () => {
@@ -289,7 +295,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-86'] });
 
-      expect(result['ROK-86'].verdict).toBe('not_started');
+      expect(result['ROK-86']?.verdict).toBe('not_started');
     });
 
     it('matches rok-8 exactly (no suffix after number)', async () => {
@@ -301,8 +307,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-8'] });
 
-      expect(result['ROK-8'].branches).toHaveLength(1);
-      expect(result['ROK-8'].branches[0].name).toBe('rok-8');
+      expect(result['ROK-8']?.branches).toHaveLength(1);
+      expect(result['ROK-8']?.branches[0]?.name).toBe('rok-8');
     });
 
     it('matches rok-8-description (hyphen after number)', async () => {
@@ -314,8 +320,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-8'] });
 
-      expect(result['ROK-8'].branches).toHaveLength(1);
-      expect(result['ROK-8'].branches[0].name).toBe('rok-8-my-fix');
+      expect(result['ROK-8']?.branches).toHaveLength(1);
+      expect(result['ROK-8']?.branches[0]?.name).toBe('rok-8-my-fix');
     });
 
     it('does NOT match rok-81 when searching for ROK-8', async () => {
@@ -326,7 +332,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-8'] });
 
-      expect(result['ROK-8'].verdict).toBe('not_started');
+      expect(result['ROK-8']?.verdict).toBe('not_started');
     });
   });
 
@@ -348,7 +354,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches).toHaveLength(3);
+      expect(result['ROK-867']?.branches).toHaveLength(3);
     });
 
     it('returns done when ANY branch is merged (multiple branches)', async () => {
@@ -363,7 +369,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('done');
+      expect(result['ROK-867']?.verdict).toBe('done');
     });
 
     it('returns in_flight when branches exist but NONE are merged', async () => {
@@ -378,7 +384,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('in_flight');
+      expect(result['ROK-867']?.verdict).toBe('in_flight');
     });
   });
 
@@ -447,7 +453,7 @@ describe('story-status tool', () => {
       });
 
       const result = await execute({ stories: ['ROK-867'] });
-      const pr = result['ROK-867'].branches[0].pr;
+      const pr = must(must(result['ROK-867'], 'ROK-867').branches[0], 'first branch').pr;
 
       expect(pr).not.toBeNull();
       expect(pr).toMatchObject({
@@ -466,7 +472,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches[0].pr).toBeNull();
+      expect(result['ROK-867']?.branches[0]?.pr).toBeNull();
     });
 
     it('uses first PR when gh returns multiple PRs', async () => {
@@ -481,7 +487,7 @@ describe('story-status tool', () => {
       });
 
       const result = await execute({ stories: ['ROK-867'] });
-      const pr = result['ROK-867'].branches[0].pr;
+      const pr = must(must(result['ROK-867'], 'ROK-867').branches[0], 'first branch').pr;
 
       expect(pr?.number).toBe(10);
       expect(pr?.state).toBe('MERGED');
@@ -502,8 +508,8 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches[0].name).toBe('rok-867-feature');
-      expect(result['ROK-867'].branches[0].name).not.toMatch(/^origin\//);
+      expect(result['ROK-867']?.branches[0]?.name).toBe('rok-867-feature');
+      expect(result['ROK-867']?.branches[0]?.name).not.toMatch(/^origin\//);
     });
 
     it('sets on_origin to true for all matched branches', async () => {
@@ -515,7 +521,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches[0].on_origin).toBe(true);
+      expect(result['ROK-867']?.branches[0]?.on_origin).toBe(true);
     });
   });
 
@@ -534,8 +540,8 @@ describe('story-status tool', () => {
       const result = await execute({ stories: ['ROK-867'] });
 
       // Should find the feature branch — HEAD alias must not be in results
-      expect(result['ROK-867'].branches).toHaveLength(1);
-      expect(result['ROK-867'].branches[0].name).toBe('rok-867-feature');
+      expect(result['ROK-867']?.branches).toHaveLength(1);
+      expect(result['ROK-867']?.branches[0]?.name).toBe('rok-867-feature');
     });
 
     it('handles extra whitespace around branch names', async () => {
@@ -547,7 +553,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches[0].name).toBe('rok-867-feature');
+      expect(result['ROK-867']?.branches[0]?.name).toBe('rok-867-feature');
     });
 
     it('handles empty lines in branch output', async () => {
@@ -559,7 +565,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].branches).toHaveLength(1);
+      expect(result['ROK-867']?.branches).toHaveLength(1);
     });
   });
 
@@ -577,7 +583,7 @@ describe('story-status tool', () => {
       await execute({ stories: ['ROK-1', 'ROK-2', 'ROK-3'] });
 
       // First call should be git fetch
-      const firstCall = mockShell.mock.calls[0][0] as string;
+      const firstCall = must(mockShell.mock.calls[0], 'first shell call')[0] as string;
       expect(firstCall).toMatch(/git.*fetch origin/);
 
       // Count fetch calls
@@ -618,7 +624,7 @@ describe('story-status tool', () => {
 
       expect(storyResult).toHaveProperty('branches');
       expect(storyResult).toHaveProperty('verdict');
-      expect(Array.isArray(storyResult.branches)).toBe(true);
+      expect(Array.isArray(storyResult?.branches)).toBe(true);
     });
 
     it('returns a single story result for a single input', async () => {
@@ -649,7 +655,7 @@ describe('story-status tool', () => {
       const result = await execute({ stories: ['ROK-867'] });
 
       // Should find it even with uppercase ROK in branch name
-      expect(result['ROK-867'].branches).toHaveLength(1);
+      expect(result['ROK-867']?.branches).toHaveLength(1);
     });
   });
 
@@ -665,7 +671,7 @@ describe('story-status tool', () => {
 
       const result = await execute({ stories: ['ROK-867'] });
 
-      expect(result['ROK-867'].verdict).toBe('not_started');
+      expect(result['ROK-867']?.verdict).toBe('not_started');
     });
   });
 });

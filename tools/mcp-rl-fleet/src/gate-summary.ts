@@ -41,7 +41,8 @@ export function summaryRows(logTail?: string): GateRow[] {
   const lines = logTail.replace(ANSI, '').split('\n');
   let start = 0;
   for (let i = lines.length - 1; i >= 0; i -= 1) {
-    if (SUMMARY_BANNER.test(lines[i].trim())) {
+    const line = lines[i];
+    if (line !== undefined && SUMMARY_BANNER.test(line.trim())) {
       start = i + 1;
       break;
     }
@@ -49,11 +50,13 @@ export function summaryRows(logTail?: string): GateRow[] {
   const rows: GateRow[] = [];
   for (const line of lines.slice(start)) {
     const match = ROW.exec(line.trimEnd());
-    if (match)
-      rows.push({
-        name: match[1].trim().replace(/:$/, ''),
-        status: match[2] as GateRowStatus,
-      });
+    if (!match) continue;
+    const [, name, status] = match;
+    if (name === undefined || status === undefined) continue;
+    rows.push({
+      name: name.trim().replace(/:$/, ''),
+      status: status as GateRowStatus,
+    });
   }
   return rows;
 }
@@ -71,7 +74,8 @@ const PLAYWRIGHT_ROW = /^Playwright \(desktop \+ mobile[^)]*\)$/;
 /** Status of the last Playwright row, or null when the tier printed none. */
 export function playwrightRowStatus(logTail?: string): GateRowStatus | null {
   const rows = summaryRows(logTail).filter((r) => PLAYWRIGHT_ROW.test(r.name));
-  return rows.length ? rows[rows.length - 1].status : null;
+  const last = rows[rows.length - 1];
+  return last ? last.status : null;
 }
 
 // A green `--static` gate is Build + TypeScript + Lint. Anything narrower is a
