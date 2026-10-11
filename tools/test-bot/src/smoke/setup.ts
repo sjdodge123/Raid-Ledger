@@ -138,10 +138,11 @@ async function setupCharacters(api: ApiClient): Promise<{
   let mmoGameId: number | undefined;
   let testCharId: string | undefined;
   let testCharRole: string | undefined;
-  if (chars.length > 0) {
-    testCharId = chars[0].id;
-    mmoGameId = chars[0].gameId;
-    testCharRole = chars[0].role;
+  const [firstChar] = chars;
+  if (firstChar) {
+    testCharId = firstChar.id;
+    mmoGameId = firstChar.gameId;
+    testCharRole = firstChar.role;
     console.log(`  Using existing character (gameId=${mmoGameId}, role=${testCharRole})`);
   }
   return { mmoGameId, testCharId, testCharRole };
@@ -262,13 +263,14 @@ export async function setup(): Promise<TestContext> {
   const defaultChannelId = await discoverDefaultChannel(api, textChannels);
 
   // Set default voice channel so Discord Scheduled Events can be created (ROK-944)
-  if (voiceChannels.length > 0) {
+  const [defaultVoice] = voiceChannels;
+  if (defaultVoice) {
     console.log(
-      `  Setting default voice channel: ${voiceChannels[0].id} (${voiceChannels[0].name})`,
+      `  Setting default voice channel: ${defaultVoice.id} (${defaultVoice.name})`,
     );
     try {
       await api.put('/admin/settings/discord-bot/voice-channel', {
-        channelId: voiceChannels[0].id,
+        channelId: defaultVoice.id,
       });
     } catch (err) {
       console.warn(`  (Failed to set default voice channel: ${err})`);
@@ -301,7 +303,10 @@ export async function setup(): Promise<TestContext> {
     api, config: SMOKE, testUserId,
     testBotDiscordId: botDiscordId,
     defaultChannelId, textChannels, voiceChannels,
-    games, mmoGameId, testCharId, testCharRole,
+    games,
+    ...(mmoGameId !== undefined && { mmoGameId }),
+    ...(testCharId !== undefined && { testCharId }),
+    ...(testCharRole !== undefined && { testCharRole }),
     demoUserIds, dmRecipientUserId,
     operatorDiscordId: operator.discordId, channelPool,
   };

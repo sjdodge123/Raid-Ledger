@@ -74,14 +74,14 @@ async function main(): Promise<void> {
     assert.equal(isFromApiBot(msg('222')), false);
     const kept = filterByApiBot([msg('111', 'mine'), msg('222', 'other slot')]);
     assert.equal(kept.length, 1);
-    assert.equal(kept[0].content, 'mine');
+    assert.equal(kept[0]?.content, 'mine');
   });
 
   await test('filter drops a SIBLING slot bot posting the same content', () => {
     setApiBotUserId('111');
     const kept = filterByApiBot([msg('222', 'Raid Night'), msg('111', 'Raid Night')]);
     assert.equal(kept.length, 1);
-    assert.equal(kept[0].authorId, '111');
+    assert.equal(kept[0]?.authorId, '111');
   });
 
   await test('setApiBotUserId(null) clears a previously set filter', () => {

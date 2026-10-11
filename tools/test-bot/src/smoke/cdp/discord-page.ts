@@ -18,11 +18,11 @@ export async function connectDiscordCDP(): Promise<DiscordPageResult> {
   const browser = await chromium.connectOverCDP(CDP_URL, {
     timeout: 10_000,
   });
-  const contexts = browser.contexts();
-  if (contexts.length === 0) {
+  const [context] = browser.contexts();
+  if (!context) {
     throw new Error('No browser contexts — Discord may not expose CDP');
   }
-  const pages = contexts[0].pages();
+  const pages = context.pages();
   const page =
     pages.find((p) => p.url().includes('discord.com')) ??
     pages.find((p) => p.url().includes('discordapp.com')) ??
@@ -71,11 +71,11 @@ export async function readEphemeralResponse(
         el.childNodes.length <= 3 &&
         el.textContent?.trim() === 'Dismiss message',
     );
-    if (dismissEls.length === 0) {
-      return { content: '', hasEmbed: false, embedTitle: null };
-    }
     // Walk up from the last "Dismiss message" to find the message container
     const lastDismiss = dismissEls[dismissEls.length - 1];
+    if (!lastDismiss) {
+      return { content: '', hasEmbed: false, embedTitle: null };
+    }
     let container = lastDismiss.parentElement;
     for (let i = 0; i < 10 && container; i++) {
       // Embed selectors: embedFull (current) + embedWrapper (legacy)

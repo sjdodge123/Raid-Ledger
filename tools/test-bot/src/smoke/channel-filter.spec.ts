@@ -68,7 +68,9 @@ test('unknown type is skipped, not guessed from name', () => {
   assert.deepEqual(p.textChannels, []);
   assert.deepEqual(p.voiceChannels, []);
   assert.equal(p.skipped.length, 1);
-  assert.match(p.skipped[0].reason, /type=(undefined|unknown)/);
+  const [skipped] = p.skipped;
+  assert.ok(skipped, 'expected one skipped channel');
+  assert.match(skipped.reason, /type=(undefined|unknown)/);
 });
 
 test('AC2: default-channel guard never returns a voice id', () => {

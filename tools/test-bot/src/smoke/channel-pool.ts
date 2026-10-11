@@ -45,16 +45,19 @@ export async function setupChannelPool(
   const pool: ChannelSlot[] = [];
 
   for (let i = 0; i < slotCount; i++) {
+    const game = poolGames[i];
+    const channel = poolChannels[i];
+    if (!game || !channel) continue;
     try {
       const bindingId = await createBinding(api, {
-        channelId: poolChannels[i].id,
+        channelId: channel.id,
         channelType: 'text',
         purpose: 'notification',
-        gameId: poolGames[i].id,
+        gameId: game.id,
       });
       pool.push({
-        gameId: poolGames[i].id,
-        channelId: poolChannels[i].id,
+        gameId: game.id,
+        channelId: channel.id,
         bindingId,
       });
     } catch {

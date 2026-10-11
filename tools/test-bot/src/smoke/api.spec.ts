@@ -67,6 +67,7 @@ function stubFetch(responses: Canned[]): Call[] {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(input), auth: new Headers(init?.headers).get('Authorization') });
     const next = responses[Math.min(calls.length - 1, responses.length - 1)];
+    if (!next) throw new Error('stubFetch: no canned response to serve');
     return new Response(bodyOf(next), {
       status: next.status ?? 200,
       headers: { 'Content-Type': 'application/json' },
@@ -156,7 +157,7 @@ await test('a login client re-logs in once on a 401 and returns the re-sent body
     [`${BASE}/events/7`, `${BASE}/auth/local`, `${BASE}/events/7`],
     'expected call → re-login → re-send',
   );
-  assert.equal(calls[2].auth, 'Bearer token-2', 'the re-send must carry the fresh token');
+  assert.equal(calls[2]?.auth, 'Bearer token-2', 'the re-send must carry the fresh token');
 });
 
 await test('a failed re-login throws the original 401 with the re-login failure as cause', async () => {

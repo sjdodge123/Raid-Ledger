@@ -31,6 +31,7 @@ export function channelForTest(
     return { channelId: ctx.defaultChannelId };
   }
   const slot = ctx.channelPool[index % ctx.channelPool.length];
+  if (!slot) return { channelId: ctx.defaultChannelId };
   return { channelId: slot.channelId, gameId: slot.gameId };
 }
 
