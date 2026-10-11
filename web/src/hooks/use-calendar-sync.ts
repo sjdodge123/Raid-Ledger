@@ -1,7 +1,8 @@
 /**
  * Member Calendar Sync hooks (ROK-1594): the Profile → Calendars overview,
  * the Google OAuth start (with a consent `intent`, ROK-1596), the write
- * settings PATCH (ROK-1596), and disconnect.
+ * settings PATCH (ROK-1596), disconnect, and one event's calendar copy + its
+ * Undo (ROK-1596 S3).
  *
  * Responses parse with the contract schemas (`.strict()`), so a server that
  * ever leaked a credential key fails the parse instead of reaching the page.
@@ -9,9 +10,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     CalendarsOverviewSchema,
+    EventCalendarCopySchema,
     OAuthStartResponseSchema,
     type CalendarOAuthIntent,
     type CalendarsOverview,
+    type EventCalendarCopy,
     type UpdateCalendarConnection,
 } from '@raid-ledger/contract';
 import { getAuthToken } from './use-auth';
@@ -97,6 +100,32 @@ export function useDisconnectCalendar() {
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
             void queryClient.invalidateQueries({ queryKey: ['game-time'] });
+        },
+    });
+}
+
+const eventCopyKey = (eventId: number) => ['calendars', 'event-copy', eventId] as const;
+
+/** `GET /users/me/calendars/events/:eventId` — our copy of this event, or null (no write connection). */
+export function useEventCalendarCopy(eventId: number, enabled = true) {
+    return useQuery<EventCalendarCopy | null>({
+        queryKey: eventCopyKey(eventId),
+        queryFn: () => fetchApi(`${BASE}/events/${eventId}`, {}, EventCalendarCopySchema.nullable()),
+        enabled: enabled && !!getAuthToken(),
+        retry: false,
+    });
+}
+
+/** `POST …/events/:eventId/undo` → 204: removes that one copy (link `suppressed`), never the sign-up (Q4). */
+export function useUndoCalendarCopy(eventId: number) {
+    const queryClient = useQueryClient();
+    return useMutation<void, Error, void>({
+        mutationFn: async () => {
+            const res = await fetchWithAuth(`${BASE}/events/${eventId}/undo`, { method: 'POST' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        },
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: eventCopyKey(eventId) });
         },
     });
 }

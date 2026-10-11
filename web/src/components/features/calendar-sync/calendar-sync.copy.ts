@@ -104,3 +104,25 @@ export const SEND_EVENTS_COPY = {
     entrySub: { dedicated: 'To Google Calendar · a "Raid Ledger" calendar', primary: 'To Google Calendar · my main calendar', off: 'Off' },
     notFound: 'That calendar is no longer connected.',
 } as const;
+
+/** Provider display names for the event line + toast ("On your Google Calendar"). */
+export const PROVIDER_CALENDAR_NAME = { google: 'Google Calendar', microsoft: 'Outlook Calendar', apple: 'Apple Calendar' } as const;
+
+/** S3 — the event page's calendar line, the sign-up toast and the "Add to calendar" menu (ROK-1596 W2). */
+export const EVENT_CALENDAR_COPY = {
+    /* Canvas S3, verbatim. */
+    on: (calendar: string) => `On your ${calendar}`,
+    open: 'Open',
+    toastSignedUp: 'Signed up.',
+    toastAdded: (calendar: string) => `Added to ${calendar}`,
+    undo: 'Undo',
+    addToCalendar: 'Add to calendar',
+    /* Not on the canvas (lane copy): menu labels, pending / failed states, errors. */
+    menuGoogle: 'Google Calendar',
+    menuOutlook: 'Outlook',
+    menuIcs: 'Download .ics',
+    pending: (calendar: string) => `Adding to your ${calendar}…`,
+    failed: (calendar: string) => `Couldn't add this to your ${calendar}`,
+    undoFailed: 'Could not remove the calendar copy. Try again.',
+    icsFailed: 'Could not download the calendar file. Try again.',
+} as const;

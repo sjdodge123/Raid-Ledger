@@ -9,7 +9,7 @@ import { useCreatePug, useDeletePug, useRegeneratePugInviteCode } from '../../ho
 import { useDeleteEvent, useDeleteSeries, useCancelSeries } from '../../hooks/use-events';
 import { CHARACTER_ROLES } from '@raid-ledger/contract';
 import type { PugSlotResponseDto, RosterAssignmentResponse, RosterRole, PugRole, CharacterRole, SeriesScope } from '@raid-ledger/contract';
-import { getSignupToast } from './signup-toast.helpers';
+import { useSignupCalendarToast } from '../../components/features/calendar-sync/use-signup-calendar-toast';
 
 /**
  * Custom hook encapsulating all event detail page handler logic.
@@ -38,6 +38,7 @@ function buildSkipOpts(pendingSlot: { role: RosterRole; position: number } | nul
 function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal: boolean }) {
     const signup = useSignup(eventId);
     const cancelSignup = useCancelSignup(eventId);
+    const announce = useSignupCalendarToast(eventId);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [preSelectedRole, setPreSelectedRole] = useState<CharacterRole | undefined>(undefined);
     const [pendingSlot, setPendingSlot] = useState<{ role: RosterRole; position: number } | null>(null);
@@ -45,9 +46,9 @@ function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal:
     const resetModal = useCallback(() => { setShowConfirmModal(false); setPendingSlot(null); setPreSelectedRole(undefined); }, []);
 
     const doSignup = useCallback(async (opts?: { characterId?: string; slotRole?: string; slotPosition?: number; preferredRoles?: string[] }) => {
-        try { const result = await signup.mutateAsync(opts); const t = getSignupToast(result.assignedSlot); toast.success(t.title, { description: t.description }); }
+        try { const result = await signup.mutateAsync(opts); announce(result.assignedSlot); }
         catch (err) { toast.error('Failed to sign up', { description: err instanceof Error ? err.message : 'Please try again.' }); }
-    }, [signup]);
+    }, [signup, announce]);
 
     const handleSignup = useCallback(() => {
         if (options.shouldShowCharacterModal) { setPreSelectedRole(undefined); setPendingSlot(null); setShowConfirmModal(true); return; }
@@ -55,14 +56,14 @@ function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal:
     }, [options.shouldShowCharacterModal, doSignup]);
 
     const handleSelectionConfirm = useCallback(async (selection: { characterId: string; role?: CharacterRole | undefined; preferredRoles?: CharacterRole[] | undefined }) => {
-        try { const result = await signup.mutateAsync(buildConfirmOpts(selection, pendingSlot)); resetModal(); const t = getSignupToast(result.assignedSlot); toast.success(t.title, { description: t.description }); }
+        try { const result = await signup.mutateAsync(buildConfirmOpts(selection, pendingSlot)); resetModal(); announce(result.assignedSlot); }
         catch (err) { toast.error('Failed to sign up', { description: err instanceof Error ? err.message : 'Please try again.' }); }
-    }, [pendingSlot, signup, resetModal]);
+    }, [pendingSlot, signup, resetModal, announce]);
 
     const handleSelectionSkip = useCallback(async (skipOpts?: { preferredRoles?: CharacterRole[] }) => {
-        try { const result = await signup.mutateAsync(buildSkipOpts(pendingSlot, skipOpts)); resetModal(); const t = getSignupToast(result.assignedSlot); toast.success(t.title, { description: t.description }); }
+        try { const result = await signup.mutateAsync(buildSkipOpts(pendingSlot, skipOpts)); resetModal(); announce(result.assignedSlot); }
         catch (err) { toast.error('Failed to sign up', { description: err instanceof Error ? err.message : 'Please try again.' }); }
-    }, [pendingSlot, signup, resetModal]);
+    }, [pendingSlot, signup, resetModal, announce]);
 
     const handleCancel = useCallback(async () => {
         try { await cancelSignup.mutateAsync(); toast.success('Signup cancelled', { description: 'You have been removed from the roster.' }); }

@@ -58,6 +58,10 @@ export function applyCalendarSyncUpdate(
 export const CALENDARS_OVERVIEW_URL = `${API_BASE}/users/me/calendars`;
 export const GOOGLE_OAUTH_START_URL = `${API_BASE}/users/me/calendars/oauth/google/start`;
 export const CALENDAR_CONNECTION_URL = `${API_BASE}/users/me/calendars/:id`;
+/** S3 event copy + Undo (ROK-1596 D9) and the one-event `.ics` (F10). */
+export const EVENT_CALENDAR_COPY_URL = `${API_BASE}/users/me/calendars/events/:eventId`;
+export const EVENT_CALENDAR_UNDO_URL = `${API_BASE}/users/me/calendars/events/:eventId/undo`;
+export const EVENT_ICS_URL = `${API_BASE}/events/:id/ics`;
 export const GOOGLE_CONSENT_URL_FIXTURE = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client';
 
 /** A healthy Google connection, as `GET /users/me/calendars` lists it. */
@@ -103,6 +107,10 @@ export function userCalendarHandlers(overview: CalendarsOverview = calendarsOver
         http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json(overview)),
         http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url: GOOGLE_CONSENT_URL_FIXTURE })),
         http.delete(CALENDAR_CONNECTION_URL, () => new HttpResponse(null, { status: 202 })),
+        // Default: no write connection → no copy (null); Undo → 204; .ics → one VEVENT.
+        http.get(EVENT_CALENDAR_COPY_URL, () => HttpResponse.json(null)),
+        http.post(EVENT_CALENDAR_UNDO_URL, () => new HttpResponse(null, { status: 204 })),
+        http.get(EVENT_ICS_URL, () => new HttpResponse('BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n', { headers: { 'Content-Type': 'text/calendar' } })),
         http.patch(CALENDAR_CONNECTION_URL, async ({ request }) => {
             const body = UpdateCalendarConnectionSchema.parse(await request.json());
             const write = { ...calendarConnectionFixture.write, ...body.write };
