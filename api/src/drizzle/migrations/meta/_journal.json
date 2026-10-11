@@ -1436,13 +1436,6 @@
       "when": 1791591224115,
       "tag": "0205_characters_gender",
       "breakpoints": true
-    },
-    {
-      "idx": 206,
-      "version": "7",
-      "when": 1791703914012,
-      "tag": "0206_refresh_family_impersonations",
-      "breakpoints": true
     }
   ]
 }
