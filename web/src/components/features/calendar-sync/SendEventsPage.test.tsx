@@ -19,6 +19,7 @@ import { CalendarsPage } from './CalendarsPage';
 import { SendEventsPage } from './SendEventsPage';
 import { sendEventsPath } from './calendar-sync-row';
 import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 
 const realMatchMedia = window.matchMedia;
 
@@ -48,11 +49,11 @@ function renderAt(url: string) {
 }
 
 beforeEach(() => {
-    localStorage.setItem('raid_ledger_token', 'test-token');
+    setAccessToken('test-token');
 });
 
 afterEach(() => {
-    localStorage.removeItem('raid_ledger_token');
+    clearAccessToken();
     Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
 });
 

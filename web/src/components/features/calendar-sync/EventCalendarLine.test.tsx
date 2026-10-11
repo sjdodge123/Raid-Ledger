@@ -17,6 +17,7 @@ import { toast } from '../../../lib/toast';
 import { EventCalendarLine } from './EventCalendarLine';
 import { useSignupCalendarToast } from './use-signup-calendar-toast';
 import { EVENT_CALENDAR_COPY as C } from './calendar-sync.copy';
+import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 
 vi.mock('../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -33,11 +34,11 @@ function renderLine(isSignedUp = true) {
 }
 
 beforeEach(() => {
-    localStorage.setItem('raid_ledger_token', 'test-token');
+    setAccessToken('test-token');
     vi.mocked(toast.success).mockClear();
     vi.mocked(toast.error).mockClear();
 });
-afterEach(() => { localStorage.removeItem('raid_ledger_token'); });
+afterEach(() => { clearAccessToken(); });
 
 describe('EventCalendarLine', () => {
     it('synced → "On your Google Calendar" with an Open link to the copy', async () => {

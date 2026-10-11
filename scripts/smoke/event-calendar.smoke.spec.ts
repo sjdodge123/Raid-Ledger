@@ -15,7 +15,6 @@
  * crashed earlier run left on that user, so it owns exactly one connection.
  * The "no connection" viewer is the slot-1 invitee, which never gets one.
  */
-import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import {
     API_BASE,
@@ -26,6 +25,7 @@ import {
     getAdminToken,
     getInviteeFixture,
 } from './api-helpers';
+import { signInContextAs } from './browser-session';
 import { isPhoneLayout } from './helpers';
 import { seedFixtureVoter } from './scheduling-poll-fixtures';
 
@@ -70,12 +70,6 @@ async function createEvent(title: string): Promise<number> {
     return event.id;
 }
 
-/** The page as another user: overwrite `raid_ledger_token` on the app origin. */
-async function signInAs(page: Page, jwt: string): Promise<void> {
-    await page.goto('/');
-    await page.evaluate((t) => localStorage.setItem('raid_ledger_token', t), jwt);
-}
-
 // The kill switch is GLOBAL and the projects share one DB: only ever turned
 // ON (idempotent), never restored — see profile-calendars.smoke.spec.ts.
 test.beforeAll(async ({}, testInfo) => {
@@ -110,7 +104,7 @@ test('synced copy → "On your Google Calendar" line with an Open link to the co
     })) as { linkId?: number };
     expect(typeof link.linkId, `seed-link body: ${JSON.stringify(link)}`).toBe('number');
 
-    await signInAs(page, viewer.jwt);
+    await signInContextAs(page.context(), viewer.userId);
     await page.goto(`/events/${eventId}`);
     const line = page.getByTestId('event-calendar-line');
     await expect(line).toContainText('On your Google Calendar');
@@ -122,7 +116,7 @@ test('synced copy → "On your Google Calendar" line with an Open link to the co
 
 test('sign up in the UI → "Added to Google Calendar" toast → Undo → the line falls back to Add to calendar', async ({ page }, testInfo) => {
     const eventId = await createEvent(`smoke-cal-undo-${testInfo.project.name}-${Date.now()}`);
-    await signInAs(page, viewer.jwt);
+    await signInContextAs(page.context(), viewer.userId);
     await page.goto(`/events/${eventId}`);
     const join = page.getByRole('button', { name: /^(Join Event|Sign Up for Event)$/ }).first();
     await join.scrollIntoViewIfNeeded();
@@ -144,7 +138,7 @@ test('no connection → Add to calendar menu (keyboard model) with Google, Outlo
     const eventId = await createEvent(`smoke-cal-add-${testInfo.project.name}-${Date.now()}`);
     await apiPost(invitee.jwt, `/events/${eventId}/signup`, {});
 
-    await signInAs(page, invitee.jwt);
+    await signInContextAs(page.context(), invitee.userId);
     await page.goto(`/events/${eventId}`);
     const line = page.getByTestId('event-calendar-line');
     const trigger = line.getByRole('button', { name: 'Add to calendar' });
@@ -169,7 +163,7 @@ test('no connection → Add to calendar menu (keyboard model) with Google, Outlo
 });
 
 test('Calendars: K4 card (desktop) / K5 page (phone) saves the radio and the switch across a reload', async ({ page }, testInfo) => {
-    await signInAs(page, viewer.jwt);
+    await signInContextAs(page.context(), viewer.userId);
     const own = `[data-connection-id="${connectionId}"]`;
     let settingsUrl = CALENDARS;
     await page.goto(CALENDARS);
