@@ -20,7 +20,10 @@ import {
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { setCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
-import { CALENDAR_WRITE_QUEUE, writeOffJobId } from '../calendar-sync.constants';
+import {
+  CALENDAR_WRITE_QUEUE,
+  writeOffJobId,
+} from '../calendar-sync.constants';
 import {
   ProviderAuthError,
   ProviderRequestError,
@@ -58,7 +61,10 @@ beforeAll(async () => {
   settings = testApp.app.get(SettingsService);
   processor = testApp.app.get(CalendarWriteProcessor);
   queue = testApp.app.get<Queue>(getQueueToken(CALENDAR_WRITE_QUEUE));
-  deps = { db: testApp.db, registry: testApp.app.get(CalendarProviderRegistry) };
+  deps = {
+    db: testApp.db,
+    registry: testApp.app.get(CalendarProviderRegistry),
+  };
   await processor.worker.pause(true);
 });
 
@@ -151,12 +157,12 @@ describe('write-off job — review P2 fixes', () => {
     const { id, calendarId } = await seedWriteOff();
     await addLink(id, calendarId, 'suppressed');
     const realDelete = fake.deleteEvent.bind(fake);
-    const spy = jest.spyOn(fake, 'deleteEvent').mockImplementationOnce(
-      async (creds, ref) => {
+    const spy = jest
+      .spyOn(fake, 'deleteEvent')
+      .mockImplementationOnce(async (creds, ref) => {
         await addLink(id, 'primary', 'synced'); // lands after `live` was read
         return realDelete(creds, ref);
-      },
-    );
+      });
     try {
       await expect(runCalendarWriteOff(deps, id)).resolves.toEqual({
         result: 'done',

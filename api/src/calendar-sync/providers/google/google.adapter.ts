@@ -138,7 +138,11 @@ export class GoogleCalendarAdapter
       const id = existing.providerEventId;
       return patchGoogleEvent(token, calendarId, id, input);
     }
-    const found = await findGoogleEventByCopyId(token, calendarId, input.copyId);
+    const found = await findGoogleEventByCopyId(
+      token,
+      calendarId,
+      input.copyId,
+    );
     const adopted = found
       ? await ignoreNotFound(
           patchGoogleEvent(token, calendarId, found.providerEventId, input),

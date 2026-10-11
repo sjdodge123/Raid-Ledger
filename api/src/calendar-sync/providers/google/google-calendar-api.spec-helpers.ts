@@ -71,7 +71,7 @@ export class FakeGoogleCalendarApi {
     if (!fullUrl.startsWith(`${GOOGLE_CALENDAR_API}/calendars`)) {
       return reply(400, { error: { code: 400 } });
     }
-    const [url, query = ''] = fullUrl.split('?');
+    const [url = '', query = ''] = fullUrl.split('?');
     const path = url.slice(GOOGLE_CALENDAR_API.length + 1).split('/');
     const [, calId, events, evtId] = path.map(decodeURIComponent);
     if (!calId) return m === 'POST' ? this.insertCalendar() : bad();

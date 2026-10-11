@@ -206,7 +206,9 @@ describe('GoogleCalendarAdapter write — Google specifics', () => {
       'ya29.write-token',
     ]);
   });
+});
 
+describe('GoogleCalendarAdapter write — rlCopyId lookup + restore (review M1, m5)', () => {
   it('a create with no ref looks the rlCopyId up (events.list) before events.insert (M1)', async () => {
     const { api, a } = fakeGoogle();
     const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
@@ -235,6 +237,9 @@ describe('GoogleCalendarAdapter write — Google specifics', () => {
     expect(next.providerEventId).not.toBe(ref.providerEventId);
   });
 
+});
+
+describe('GoogleCalendarAdapter write — errors', () => {
   it('a known calendar that errors (not 404) is NOT replaced', async () => {
     const { a } = fakeGoogle();
     const req = jest.spyOn(googleHttp, 'googleJsonRequest');
