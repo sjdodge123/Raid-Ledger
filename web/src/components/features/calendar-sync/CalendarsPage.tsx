@@ -5,6 +5,7 @@
  * kill switch is off; the nav entries hide on the same flag.
  */
 import type { JSX, ReactNode } from 'react';
+import type { CalendarConnection } from '@raid-ledger/contract';
 import { Button } from '../../ui/button';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
@@ -57,10 +58,21 @@ function PrivacyNote(): JSX.Element {
     );
 }
 
+/** ROK-1596: K4 desktop card inline; on phone K2's row opens the K5 page (W1b). */
+function SendEvents({ connections }: { connections: CalendarConnection[] }): JSX.Element {
+    const desktop = useMediaQuery(DESKTOP_MQ);
+    return (
+        <>
+            {connections.map((c) => (desktop
+                ? <SendEventsSettings key={c.id} connection={c} />
+                : <SendEventsEntryRow key={c.id} connection={c} />))}
+        </>
+    );
+}
+
 export function CalendarsPage(): JSX.Element {
     const { data, isLoading, isError } = useCalendarsOverview();
     const { errorCode, dismissError } = useCalendarOAuthFeedback();
-    const desktop = useMediaQuery(DESKTOP_MQ);
     if (isLoading) return <PageFrame>{null}</PageFrame>;
     if (isError || !data) return <PageFrame><p className="text-sm text-muted">{C.loadError}</p></PageFrame>;
     if (!data.enabled) {
@@ -81,10 +93,7 @@ export function CalendarsPage(): JSX.Element {
                     <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
                 </Section>
             </div>
-            {/* ROK-1596: K4 desktop card inline; on phone K2's row opens the K5 page (W1b). */}
-            {google.map((c) => (desktop
-                ? <SendEventsSettings key={c.id} connection={c} />
-                : <SendEventsEntryRow key={c.id} connection={c} />))}
+            <SendEvents connections={google} />
             <PrivacyNote />
         </PageFrame>
     );

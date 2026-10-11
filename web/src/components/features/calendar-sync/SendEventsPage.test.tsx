@@ -63,7 +63,7 @@ describe('K5 Send my events — phone sub-page', () => {
         const entry = await screen.findByTestId('send-events-entry');
         expect(entry).toHaveAttribute('href', sendEventsPath(calendarConnectionFixture.id));
         expect(entry).toHaveTextContent(S.switchLabel);
-        expect(entry).toHaveTextContent(S.entrySub.dedicated);
+        expect(entry).toHaveTextContent(S.entrySub.off); // fixture: write disabled
         expect(screen.queryByTestId('send-events-settings')).toBeNull();
         fireEvent.click(entry);
         expect(await screen.findByTestId('send-events-page')).toBeInTheDocument();
