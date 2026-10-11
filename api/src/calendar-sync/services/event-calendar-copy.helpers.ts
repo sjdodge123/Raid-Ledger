@@ -12,7 +12,7 @@
  *   base64url(`<eventId> <calendarId>`); `primary` is not a real calendar id,
  *   so it is replaced by the account email (null when unknown).
  */
-import { and, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventCalendarCopy } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -51,7 +51,11 @@ function openUrlFor(conn: ConnectionRow, link: LinkRow): string | null {
   return googleOpenUrl(link, conn.accountLabel);
 }
 
-/** The user's write-enabled connection (Q15: at most one), else null. */
+/**
+ * The user's write-enabled connection (Q15: at most one), else null. A
+ * deterministic order in case two slipped through: an `active` one first,
+ * then the newest.
+ */
 async function findWriteConnection(
   db: Db,
   userId: number,
@@ -67,6 +71,7 @@ async function findWriteConnection(
         ne(t.status, 'disconnecting'),
       ),
     )
+    .orderBy(sql`(${t.status} = 'active') desc`, desc(t.id))
     .limit(1);
   return row ?? null;
 }

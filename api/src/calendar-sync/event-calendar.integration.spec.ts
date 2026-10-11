@@ -165,6 +165,37 @@ describe('GET /users/me/calendars/events/:eventId (D9)', () => {
     });
   });
 
+  it('two write connections → the active one answers, deterministically (lane W)', async () => {
+    const stale = await seedConnection();
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ status: 'needs_reconnect' })
+      .where(eq(schema.calendarConnections.id, stale));
+    const eventId = await signedUpEvent();
+    await testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId: stale,
+      userId,
+      eventId,
+      calendarId: 'primary',
+      providerEventId: 'stale-copy',
+      state: 'failed',
+    });
+    const fresh = await upsertCalendarConnection(testApp.db, {
+      userId,
+      provider: 'google',
+      result: fake.seedConnection({ id: `ev-fresh-${seq}` }),
+    });
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ writeEnabled: true })
+      .where(eq(schema.calendarConnections.id, fresh.id));
+    expect(bodyOrNull(await getCopy(eventId))).toEqual({
+      provider: 'google',
+      state: 'pending',
+      openUrl: null,
+    });
+  });
+
   it('is failed (no Open URL) when the link failed', async () => {
     const connectionId = await seedConnection();
     const eventId = await signedUpEvent();
@@ -190,6 +221,26 @@ describe('GET /users/me/calendars/events/:eventId (D9)', () => {
 });
 
 describe('POST /users/me/calendars/events/:eventId/undo (Q4)', () => {
+  it('a link with no remote id (placeholder) → no provider delete (review m3)', async () => {
+    const connectionId = await seedConnection();
+    const eventId = await signedUpEvent();
+    await testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId,
+      userId,
+      eventId,
+      calendarId: 'primary',
+      providerEventId: '',
+      state: 'failed',
+    });
+    const deleteEvent = jest.spyOn(fake, 'deleteEvent');
+    try {
+      expect((await undo(eventId)).status).toBe(204);
+      expect(deleteEvent).not.toHaveBeenCalled();
+    } finally {
+      deleteEvent.mockRestore();
+    }
+  });
+
   it('deletes the copy, suppresses the link, keeps the sign-up; reconcile is a noop', async () => {
     const connectionId = await seedConnection();
     const eventId = await signedUpEvent();
