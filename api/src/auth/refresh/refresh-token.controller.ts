@@ -95,8 +95,7 @@ export class RefreshTokenController {
   private async revokePresented(rawToken: string): Promise<void> {
     const row = await this.refreshService.findActiveByHash(hashToken(rawToken));
     if (!row) return;
-    // ROK-1754: end the marker first so its audit reason is `logout`.
-    await this.impersonation.end(row.familyId, 'logout');
-    await this.refreshService.revokeFamily(row.familyId);
+    // ROK-1754: revoke first; the marker ends inside with reason `logout`.
+    await this.refreshService.revokeFamily(row.familyId, 'logout');
   }
 }

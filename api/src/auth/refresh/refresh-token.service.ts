@@ -22,6 +22,7 @@ import {
   replayVerdict,
 } from './refresh-grace.helpers';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
+import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
 export interface IssuedRefreshToken {
@@ -108,14 +109,20 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
-    await this.impersonation.endForUser(userId, 'session_revoked');
+    await this.endImpersonationBestEffort(`user ${userId}`, () =>
+      this.impersonation.endForUser(userId, 'session_revoked'),
+    );
   }
 
   /**
    * Revoke every active row in a family (logout / reuse-detection). ROK-1754:
-   * also ends the family's impersonation marker (`session_revoked`).
+   * also ends the family's impersonation marker with `reason` (logout passes
+   * `logout`).
    */
-  async revokeFamily(familyId: string): Promise<void> {
+  async revokeFamily(
+    familyId: string,
+    reason: ImpersonationEndReason = 'session_revoked',
+  ): Promise<void> {
     await this.db
       .update(schema.refreshTokens)
       .set({ revokedAt: sql`NOW()` })
@@ -125,7 +132,28 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
-    await this.impersonation.end(familyId, 'session_revoked');
+    await this.endImpersonationBestEffort(`family ${familyId}`, () =>
+      this.impersonation.end(familyId, reason),
+    );
+  }
+
+  /**
+   * ROK-1754: ending a marker (delete + audit) runs AFTER the revoke and never
+   * throws, so an audit failure cannot skip the revoke, the reuse-path
+   * `blockUser`, or logout's cookie clear. A marker left behind is harmless:
+   * its family is revoked, so `/auth/refresh` can never resume it.
+   */
+  private async endImpersonationBestEffort(
+    what: string,
+    end: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await end();
+    } catch (err: unknown) {
+      this.logger.error(
+        `ROK-1754: ending impersonation for ${what} failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /** Look up an active (un-rotated, un-revoked, unexpired) row by hash. */
