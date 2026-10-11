@@ -18,7 +18,7 @@ import { CALENDARS_PATH } from '../../profile/profile-nav-data';
 import { CalendarsPage } from './CalendarsPage';
 import { SendEventsPage } from './SendEventsPage';
 import { sendEventsPath } from './calendar-sync-row';
-import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
 const realMatchMedia = window.matchMedia;
 
@@ -70,6 +70,19 @@ describe('K5 Send my events — phone sub-page', () => {
         expect(screen.queryByTestId('calendars-page')).toBeNull();
     });
 
+    it('K2 order on phone: connection → "Write · send…" section with the row → "Add a calendar"', async () => {
+        setDesktop(false);
+        renderAt(CALENDARS_PATH);
+        const entry = await screen.findByTestId('send-events-entry');
+        const page = screen.getByTestId('calendars-page');
+        const sections = Array.from(page.querySelectorAll('section > h3'), (h) => h.textContent);
+        expect(sections).toEqual([C.connectedHeading, S.writeHeading, C.addHeading]);
+        const writeSection = screen.getByRole('heading', { name: S.writeHeading }).closest('section');
+        expect(writeSection).toContainElement(entry);
+        const card = screen.getByTestId('calendar-connection-card');
+        expect(card.compareDocumentPosition(entry) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('renders the back crumb, the heading and W1 settings without the card heading', async () => {
         setDesktop(false);
         renderAt(sendEventsPath(calendarConnectionFixture.id));
@@ -102,5 +115,6 @@ describe('K5 Send my events — phone sub-page', () => {
         expect(await screen.findByTestId('send-events-settings')).toBeInTheDocument();
         expect(screen.getByRole('heading', { name: S.heading })).toBeInTheDocument();
         expect(screen.queryByTestId('send-events-entry')).toBeNull();
+        expect(screen.queryByRole('heading', { name: S.writeHeading })).toBeNull();
     });
 });

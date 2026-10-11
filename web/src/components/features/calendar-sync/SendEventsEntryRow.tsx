@@ -7,7 +7,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { CalendarConnection } from '@raid-ledger/contract';
-import { sendEventsPath } from './calendar-sync-row';
+import { CALENDAR_ROW, sendEventsPath } from './calendar-sync-row';
 import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
 function entrySub(write: CalendarConnection['write']): string {
@@ -18,7 +18,7 @@ function entrySub(write: CalendarConnection['write']): string {
 export function SendEventsEntryRow({ connection }: { connection: CalendarConnection }): JSX.Element {
     return (
         <Link to={sendEventsPath(connection.id)} data-testid="send-events-entry" data-connection-id={connection.id}
-            className="flex min-h-[44px] items-center justify-between gap-3 rounded-xl border border-edge-subtle bg-surface p-4 transition-colors hover:bg-overlay/40">
+            className={`${CALENDAR_ROW} justify-between transition-colors hover:bg-overlay/40`}>
             <span className="min-w-0">
                 <span className="block text-base text-foreground">{S.switchLabel}</span>
                 <span className="block truncate text-xs text-muted">{entrySub(connection.write)}</span>
