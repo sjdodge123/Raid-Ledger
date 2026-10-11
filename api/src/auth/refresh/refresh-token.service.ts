@@ -22,6 +22,11 @@ import {
   replayVerdict,
   rotationAgeMs,
 } from './refresh-grace.helpers';
+import {
+  DB_CLOCK,
+  findReplayCandidate,
+  markFirstChildIssued,
+} from './refresh-rotation.helpers';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
 
@@ -194,7 +199,7 @@ export class RefreshTokenService {
   private async consumeRow(tokenHash: string) {
     const [row] = await this.db
       .update(schema.refreshTokens)
-      .set({ rotatedAt: sql`NOW()` })
+      .set({ rotatedAt: DB_CLOCK })
       .where(
         and(
           eq(schema.refreshTokens.tokenHash, tokenHash),
@@ -208,12 +213,15 @@ export class RefreshTokenService {
   }
 
   /**
-   * Mint the child row for a consumed parent. `firstChild` re-stamps the
-   * parent's `rotatedAt` at issue time (ROK-1754: the race grace runs from
-   * here — see `rotationAgeMs`); a grace sibling leaves it alone.
+   * Mint the child row for a consumed parent. Only the FIRST child links and
+   * re-stamps the parent (`markFirstChildIssued` — the race grace runs from
+   * here, see `rotationAgeMs`); a grace sibling leaves the parent untouched.
    */
   private async mintChild(
-    parent: typeof schema.refreshTokens.$inferSelect,
+    parent: Pick<
+      typeof schema.refreshTokens.$inferSelect,
+      'id' | 'userId' | 'familyId' | 'authMethod' | 'userAgent'
+    >,
     firstChild = false,
   ) {
     const maxAgeMs = await this.sessionMaxAgeMs();
@@ -229,13 +237,8 @@ export class RefreshTokenService {
         expiresAt: new Date(Date.now() + maxAgeMs),
       })
       .returning({ id: schema.refreshTokens.id });
-    await this.db
-      .update(schema.refreshTokens)
-      .set({
-        replacedBy: defined(child, 'inserted child refresh token row').id,
-        ...(firstChild ? { rotatedAt: sql`NOW()` } : {}),
-      })
-      .where(eq(schema.refreshTokens.id, parent.id));
+    const childId = defined(child, 'inserted child refresh token row').id;
+    if (firstChild) await markFirstChildIssued(this.db, parent.id, childId);
     const { userId, familyId } = parent;
     return { rawToken, maxAgeMs, userId, familyId };
   }
@@ -258,12 +261,12 @@ export class RefreshTokenService {
   private async handleNoConsume(
     tokenHash: string,
   ): Promise<IssuedRefreshToken | null> {
-    const existing = await this.findActiveByHash(tokenHash);
+    const existing = await findReplayCandidate(this.db, tokenHash);
     if (!existing) return null;
     if (existing.revokedAt) return null;
-    if (!existing.rotatedAt) return null;
+    if (existing.rotatedAgoMs == null) return null;
     const rotatedAgoMs = rotationAgeMs({
-      rotatedAt: existing.rotatedAt,
+      rotatedAgoMs: existing.rotatedAgoMs,
       replacedBy: existing.replacedBy,
     });
     const verdict = await replayVerdict(rotatedAgoMs, () =>

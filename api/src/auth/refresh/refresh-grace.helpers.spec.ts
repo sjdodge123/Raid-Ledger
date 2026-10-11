@@ -18,7 +18,23 @@ import {
   replayVerdict,
   rotationAgeMs,
   IN_FLIGHT_MAX_MS,
+  GRACE_KEY_TTL_MS,
 } from './refresh-grace.helpers';
+
+/** SET NX PX that honours the TTL against `Date.now()` (the shared mock does not expire NX keys). */
+function expiringRedis() {
+  const expiries = new Map<string, number>();
+  return {
+    set: (key: string, _v: string, _px: 'PX', ms: number, _nx: 'NX') => {
+      const until = expiries.get(key);
+      if (until !== undefined && until > Date.now()) {
+        return Promise.resolve(null);
+      }
+      expiries.set(key, Date.now() + ms);
+      return Promise.resolve('OK' as string | null);
+    },
+  };
+}
 
 describe('refresh race grace (ROK-1755)', () => {
   it('window is at most 10 seconds', () => {
@@ -61,16 +77,38 @@ describe('refresh race grace (ROK-1755)', () => {
     expect(await replayVerdict(100, claim)).toBe('unavailable');
   });
 
-  it('claims with SET NX and a TTL equal to the window', async () => {
+  it('claims with SET NX and a TTL covering grace + in-flight (ROK-1754 W1)', async () => {
     const set = jest.fn().mockResolvedValue('OK');
     await claimGraceOnce({ set }, 'parent-4');
+    expect(GRACE_KEY_TTL_MS).toBe(RACE_GRACE_MS + IN_FLIGHT_MAX_MS);
     expect(set).toHaveBeenCalledWith(
       'refresh_grace:parent-4',
       '1',
       'PX',
-      RACE_GRACE_MS,
+      GRACE_KEY_TTL_MS,
       'NX',
     );
+  });
+
+  it('ROK-1754 W1: a second claim after a stall + re-stamp is still refused', async () => {
+    // Consume at T0 then a stall: a replay at T0+1 s claims; the first child
+    // lands at T0+14 s and re-stamps, so a replay at T0+20 s is in-window
+    // again. It must NOT win a second sibling.
+    const t0 = Date.parse('2026-10-11T12:07:02.074Z');
+    const clock = jest.spyOn(Date, 'now');
+    try {
+      const client = expiringRedis();
+      clock.mockReturnValue(t0 + 1_000);
+      expect(await claimGraceOnce(client, 'stalled')).toBe('claimed');
+      clock.mockReturnValue(t0 + 20_000);
+      expect(await claimGraceOnce(client, 'stalled')).toBe('used');
+      // The key outlives the latest possible in-window replay
+      // (re-stamp capped at T0+60 s, + 10 s grace).
+      clock.mockReturnValue(t0 + IN_FLIGHT_MAX_MS + RACE_GRACE_MS);
+      expect(await claimGraceOnce(client, 'stalled')).toBe('used');
+    } finally {
+      clock.mockRestore();
+    }
   });
 });
 
@@ -99,11 +137,11 @@ describe('indeterminateReplayError (ROK-1755 review B1/M1)', () => {
 });
 
 describe('rotationAgeMs (ROK-1754 — grace runs from child issue)', () => {
-  const now = Date.parse('2026-10-11T12:07:16.518Z');
-  const consumedAt = new Date('2026-10-11T12:07:02.074Z'); // 14.4 s earlier
+  // Fleet run 2c53b4959397: consumed 12:07:02.074, replayed 12:07:16.518.
+  const incidentAgeMs = 14_444;
 
   it('a consumed row with no child yet is in flight: age 0, never reuse', async () => {
-    const age = rotationAgeMs({ rotatedAt: consumedAt, replacedBy: null }, now);
+    const age = rotationAgeMs({ rotatedAgoMs: incidentAgeMs, replacedBy: null });
     expect(age).toBe(0);
     const { client } = createRedisMock();
     expect(await replayVerdict(age, () => claimGraceOnce(client, 'p'))).toBe(
@@ -111,19 +149,18 @@ describe('rotationAgeMs (ROK-1754 — grace runs from child issue)', () => {
     );
   });
 
-  it('once the child is issued the age is measured from rotatedAt', () => {
-    const age = rotationAgeMs(
-      { rotatedAt: consumedAt, replacedBy: 'child' },
-      now,
-    );
-    expect(age).toBe(14_444);
+  it('once the child is issued the age is the DB-computed age', () => {
+    const age = rotationAgeMs({
+      rotatedAgoMs: incidentAgeMs,
+      replacedBy: 'child',
+    });
+    expect(age).toBe(incidentAgeMs);
     expect(age).toBeGreaterThan(RACE_GRACE_MS);
   });
 
   it('an in-flight row stuck past IN_FLIGHT_MAX_MS ages normally', () => {
-    const stuck = new Date(now - IN_FLIGHT_MAX_MS - 1);
-    expect(rotationAgeMs({ rotatedAt: stuck, replacedBy: null }, now)).toBe(
-      IN_FLIGHT_MAX_MS + 1,
-    );
+    expect(
+      rotationAgeMs({ rotatedAgoMs: IN_FLIGHT_MAX_MS + 1, replacedBy: null }),
+    ).toBe(IN_FLIGHT_MAX_MS + 1);
   });
 });
