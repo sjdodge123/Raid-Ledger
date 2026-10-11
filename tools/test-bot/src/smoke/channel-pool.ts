@@ -47,7 +47,10 @@ export async function setupChannelPool(
   for (let i = 0; i < slotCount; i++) {
     const game = poolGames[i];
     const channel = poolChannels[i];
-    if (!game || !channel) continue;
+    if (!game || !channel) {
+      // Unreachable: i < min(poolGames.length, poolChannels.length).
+      throw new Error(`channel pool slot ${i} missing a game or channel`);
+    }
     try {
       const bindingId = await createBinding(api, {
         channelId: channel.id,

@@ -31,7 +31,10 @@ export function channelForTest(
     return { channelId: ctx.defaultChannelId };
   }
   const slot = ctx.channelPool[index % ctx.channelPool.length];
-  if (!slot) return { channelId: ctx.defaultChannelId };
+  if (!slot) {
+    // Unreachable: the index is taken modulo a non-empty pool's length.
+    throw new Error(`channel pool has no slot at ${index}`);
+  }
   return { channelId: slot.channelId, gameId: slot.gameId };
 }
 

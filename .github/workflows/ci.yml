@@ -395,8 +395,8 @@ jobs:
   # behavioral gate for tooling changes. Before ROK-1362 only mcp-rl-fleet ran
   # here; mcp-env + mcp-discord ran NOWHERE in CI (a broken env-lock.test.ts
   # once shipped CI-green). The matrix runs all three so any tools-workspace
-  # regression fails the PR. test-bot is intentionally excluded — it is not an
-  # npm workspace and has no `test` script (its gate is the Discord smoke suite).
+  # regression fails the PR. test-bot is not an npm workspace (own lockfile), so
+  # its unit specs run elsewhere and its typecheck is tools-typecheck-test-bot.
   tools-test-shard:
     runs-on: ubuntu-latest
     needs: [detect-changes]
@@ -472,8 +472,9 @@ jobs:
         working-directory: tools/test-bot
         run: npm ci
 
-      - name: Typecheck test-bot (strict flags)
-        run: npx tsc --noEmit -p tools/test-bot/tsconfig.json
+      - name: Typecheck test-bot (strict flags, its own pinned TypeScript)
+        working-directory: tools/test-bot
+        run: npx tsc --noEmit -p tsconfig.json
 
   # ─── Tools Tests (summary — required status check) ────────────────
   # Stable required-check context for branch protection. The matrix above
