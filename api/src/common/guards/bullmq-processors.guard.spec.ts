@@ -37,6 +37,8 @@ const KNOWN_THROW_SAFE: string[] = [
   'lineup-phase.processor.ts',
   // GameTasteRecomputeProcessor: process() delegates to recomputeGameVector, BullMQ retries on failure (ROK-1082)
   'game-taste-recompute.processor.ts',
+  // CalendarWriteProcessor: process() delegates to reconcile / write-off / disconnect helpers that record terminal failures themselves and rethrow only retryable ones for BullMQ backoff (ROK-1596)
+  'calendar-write.processor.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */
