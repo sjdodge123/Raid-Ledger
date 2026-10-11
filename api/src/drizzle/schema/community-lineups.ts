@@ -117,6 +117,12 @@ export const communityLineups = pgTable(
      */
     publicSlug: varchar('public_slug', { length: 16 }).notNull().unique(),
     /**
+     * ROK-1750: 256-bit base64url share token for a PRIVATE standalone poll
+     * ("Private — anyone with the link"). Redeeming it adds the visitor as an
+     * invitee. Null for public lineups; reset by the creator/admin rotates it.
+     */
+    shareToken: varchar('share_token', { length: 64 }),
+    /**
      * Whether the lineup advances into a scheduling poll after Decided
      * (ROK-1302). Default true preserves the original behavior and backfills
      * existing rows. When false, the matching algorithm never promotes a match
@@ -234,6 +240,10 @@ export const communityLineups = pgTable(
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
+    // ROK-1750: share tokens are unique when set; public lineups leave it null.
+    uniqueIndex('uq_community_lineups_share_token')
+      .on(table.shareToken)
+      .where(sql`share_token IS NOT NULL`),
     // ROK-1374: the expiry sweep scans OPEN tie holds only. Partial, because
     // the overwhelming majority of lineups never tie.
     index('idx_lineup_tie_expires')

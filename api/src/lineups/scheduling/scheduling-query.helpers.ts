@@ -64,6 +64,8 @@ export function findLineupPollMeta(db: Db, lineupId: number) {
       status: schema.communityLineups.status,
       // ROK-1545: `canVote` needs the private-lineup eligibility inputs.
       visibility: schema.communityLineups.visibility,
+      // ROK-1750: exposed to participants of a private poll only.
+      shareToken: schema.communityLineups.shareToken,
       createdBy: schema.communityLineups.createdBy,
       phaseDeadline: schema.communityLineups.phaseDeadline,
       includeSchedulingPhase: schema.communityLineups.includeSchedulingPhase,

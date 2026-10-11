@@ -323,6 +323,13 @@ export const SchedulePollPageResponseSchema = z.object({
    * viewer, so the banner can name the time; `canLockIn` gates the action.
    */
   lockInSlotId: z.number().int().nullable().default(null),
+  /** ROK-1750: the poll's lineup visibility. */
+  visibility: z.enum(['public', 'private']).optional(),
+  /**
+   * ROK-1750: private-poll share token. Non-null only for a viewer who may
+   * participate (creator / invitee / admin) on a private poll.
+   */
+  shareToken: z.string().nullable().optional(),
 });
 
 export type SchedulePollPageResponseDto = z.infer<typeof SchedulePollPageResponseSchema>;
