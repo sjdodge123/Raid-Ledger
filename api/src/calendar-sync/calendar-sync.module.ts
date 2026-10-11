@@ -1,7 +1,9 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { SettingsModule } from '../settings/settings.module';
 import { CalendarSyncEnabledGuard } from './calendar-sync-enabled.guard';
+import { CALENDAR_WRITE_QUEUE } from './calendar-sync.constants';
 import { CalendarConnectionsController } from './controllers/calendar-connections.controller';
 import { CalendarDemoSeedController } from './controllers/calendar-demo-seed.controller';
 import { CalendarOAuthController } from './controllers/calendar-oauth.controller';
@@ -31,10 +33,14 @@ const fakeProvider = {
 /**
  * Calendar Sync (epic ROK-669). ROK-1591: overview, admin settings, kill
  * switch. ROK-1592: Google OAuth connect/disconnect, provider registry and
- * the DEMO_MODE seed endpoint. Queues and crons arrive with ROK-1593+.
+ * the DEMO_MODE seed endpoint. ROK-1596: the write queue.
  */
 @Module({
-  imports: [DrizzleModule, SettingsModule],
+  imports: [
+    DrizzleModule,
+    SettingsModule,
+    BullModule.registerQueue({ name: CALENDAR_WRITE_QUEUE }),
+  ],
   controllers: [
     CalendarConnectionsController,
     CalendarOAuthController,
