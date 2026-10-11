@@ -1,6 +1,9 @@
 /**
  * ROK-1592: GoogleCalendarAdapter over the spied HTTP seam — connect, the
  * Q-F scopes path (revoke attempted, nothing returned), refresh, disconnect.
+ * ROK-1596 G2: the write capability passes the write conformance suite
+ * against an in-memory Google behind `googleJsonRequest`, and the registry
+ * routes a real Google row's writes to this adapter.
  */
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -10,9 +13,20 @@ import * as googleHttp from './google-http';
 import { GoogleCalendarAdapter } from './google.adapter';
 import { GOOGLE_REVOKE_URL, MissingScopesError } from './google-oauth.helpers';
 import {
+  NotFoundError,
   ProviderAuthError,
   ProviderNotConfiguredError,
+  ProviderRequestError,
+  TransientError,
 } from '../calendar-provider.errors';
+import type { OAuthCredentials } from '../calendar-provider.interface';
+import {
+  CalendarProviderRegistry,
+  DEMO_FAKE_SUBJECT_PREFIX,
+  type DemoModeSource,
+} from '../calendar-provider.registry';
+import { describeCalendarWriteConformance } from '../testing/calendar-provider.conformance.spec-helpers';
+import { FakeGoogleCalendarApi } from './google-calendar-api.spec-helpers';
 
 type Json = Record<string, unknown>;
 const fixture = (name: string): Json =>
@@ -133,5 +147,129 @@ describe('GoogleCalendarAdapter refresh + disconnect', () => {
     );
     await a.disconnect({ kind: 'caldav', username: 'u', appPassword: 'p' });
     expect(post).toHaveBeenCalledTimes(1);
+  });
+});
+
+const CREDS: OAuthCredentials = {
+  kind: 'oauth',
+  accessToken: 'ya29.write-token',
+  refreshToken: 'rt',
+  expiresAt: '2026-11-01T00:00:00.000Z',
+  scopes: [],
+};
+
+function fakeGoogle(): {
+  api: FakeGoogleCalendarApi;
+  a: GoogleCalendarAdapter;
+} {
+  const api = new FakeGoogleCalendarApi();
+  jest.spyOn(googleHttp, 'googleJsonRequest').mockImplementation(api.handle);
+  return { api, a: configured() };
+}
+
+describeCalendarWriteConformance(() => {
+  const { api, a } = fakeGoogle();
+  return {
+    provider: a,
+    credentials: CREDS,
+    removeCalendarRemotely: (id) => api.removeCalendar(id),
+    readCopy: (ref) => {
+      const e = api.event(ref.calendarId, ref.providerEventId);
+      return Promise.resolve(
+        e
+          ? { title: String(e.summary), busy: e.transparency !== 'transparent' }
+          : null,
+      );
+    },
+  };
+}, 'GoogleCalendarAdapter');
+
+const COPY = {
+  copyId: 'rl:0123456789ab:42:7',
+  title: 'Molten Core',
+  description: 'https://raid.example.test/events/42',
+  url: 'https://raid.example.test/events/42',
+  start: new Date('2026-11-01T19:00:00.000Z'),
+  end: new Date('2026-11-01T22:00:00.000Z'),
+  tentative: false,
+};
+
+describe('GoogleCalendarAdapter write — Google specifics', () => {
+  it('sends the stored access token as the bearer on every write', async () => {
+    const { api, a } = fakeGoogle();
+    const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
+    await a.upsertEvent(CREDS, cal, COPY, null);
+    expect(api.requests.map((r) => r.accessToken)).toEqual([
+      'ya29.write-token',
+      'ya29.write-token',
+    ]);
+  });
+
+  it('a known calendar that errors (not 404) is NOT replaced', async () => {
+    const { a } = fakeGoogle();
+    const req = jest.spyOn(googleHttp, 'googleJsonRequest');
+    req.mockResolvedValueOnce({ status: 503, json: null, retryAfter: null });
+    const err = await a
+      .ensureRaidLedgerCalendar(CREDS, 'known-cal')
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(TransientError);
+    expect(req).toHaveBeenCalledTimes(1);
+  });
+
+  it('a permanent 400 on delete propagates as ProviderRequestError', async () => {
+    const { a } = fakeGoogle();
+    jest
+      .spyOn(googleHttp, 'googleJsonRequest')
+      .mockResolvedValueOnce({ status: 400, json: null, retryAfter: null });
+    await expect(
+      a.deleteEvent(CREDS, { calendarId: 'primary', providerEventId: 'x' }),
+    ).rejects.toBeInstanceOf(ProviderRequestError);
+  });
+
+  it('patching a copy deleted remotely throws NotFound (caller recreates)', async () => {
+    const { a } = fakeGoogle();
+    const ref = { calendarId: 'primary', providerEventId: 'gone' };
+    const err = await a
+      .upsertEvent(CREDS, 'primary', COPY, ref)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(NotFoundError);
+  });
+
+  it('rejects non-OAuth credentials without calling Google', async () => {
+    const { api, a } = fakeGoogle();
+    const caldav = { kind: 'caldav', username: 'u', appPassword: 'p' } as const;
+    const err = await a
+      .ensureRaidLedgerCalendar(caldav, null)
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ProviderAuthError);
+    expect((err as ProviderAuthError).reason).toBe('credentials_kind');
+    expect(api.requests).toHaveLength(0);
+  });
+});
+
+describe('CalendarProviderRegistry write routing with the real Google adapter', () => {
+  const settings: DemoModeSource = {
+    getDemoMode: jest.fn().mockResolvedValue(false),
+  };
+
+  it('routes a real (non-demo) Google row to the Google adapter', async () => {
+    const google = configured();
+    const reg = new CalendarProviderRegistry(settings, google, null);
+    await expect(
+      reg.getWriteProviderForConnection({
+        provider: 'google',
+        accountSubject: '109876543210987654321',
+      }),
+    ).resolves.toBe(google);
+  });
+
+  it('never routes a demo-fake row to Google', async () => {
+    const reg = new CalendarProviderRegistry(settings, configured(), null);
+    await expect(
+      reg.getWriteProviderForConnection({
+        provider: 'google',
+        accountSubject: `${DEMO_FAKE_SUBJECT_PREFIX}user-7`,
+      }),
+    ).resolves.toBeNull();
   });
 });
