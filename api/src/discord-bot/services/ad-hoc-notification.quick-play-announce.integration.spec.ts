@@ -312,4 +312,60 @@ describe('AdHocNotificationService — Quick Play Announcements (real DB)', () =
 
     expect(editedIds(after)).toEqual([]);
   });
+
+  describe('cancel finalises the card (fix round 2, M1)', () => {
+    const tracked = (svc: AdHocNotificationService, eventId: number) =>
+      (svc as unknown as { messageIds: Map<number, unknown> }).messageIds.has(
+        eventId,
+      );
+
+    it('cancelling a lobby QP session ends the QP card, completes its row, drops the Map entry', async () => {
+      const lobby = await insertBinding({
+        channelId: LOBBY_VOICE,
+        channelType: 'voice',
+        bindingPurpose: 'general-lobby',
+        gameId: null,
+      });
+      await bindQuickPlay();
+      const eventId = await insertLiveEvent(lobby);
+      const s = stubs();
+      const svc = buildService(s);
+      await spawn(svc, eventId, lobby);
+
+      await svc.notifyCancelled(eventId, lobby);
+
+      expect(editedIds(s)).toEqual([`${QP_TEXT}/msg-1`]);
+      expect(s.presence.onEventEnded).toHaveBeenCalledWith(lobby);
+      expect(await rowsFor(eventId)).toEqual([
+        { channelId: QP_TEXT, messageId: 'msg-1', embedState: 'completed' },
+      ]);
+      expect(tracked(svc, eventId)).toBe(false);
+    });
+
+    it('cancelling a monitor session after a restart ends its fallback-channel card (s2)', async () => {
+      const monitor = await insertBinding({
+        channelId: MONITOR_VOICE,
+        channelType: 'voice',
+        bindingPurpose: 'game-voice-monitor',
+        gameId: gameId(),
+        config: { notificationChannelId: MONITOR_NOTIFY },
+      });
+      const eventId = await insertLiveEvent(monitor);
+      await spawn(buildService(stubs()), eventId, monitor);
+
+      const after = stubs();
+      const restarted = buildService(after);
+      await restarted.notifyCancelled(eventId, monitor);
+
+      expect(editedIds(after)).toEqual([`${MONITOR_NOTIFY}/msg-1`]);
+      expect(await rowsFor(eventId)).toEqual([
+        {
+          channelId: MONITOR_NOTIFY,
+          messageId: 'msg-1',
+          embedState: 'completed',
+        },
+      ]);
+      expect(tracked(restarted, eventId)).toBe(false);
+    });
+  });
 });

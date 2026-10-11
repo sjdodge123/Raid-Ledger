@@ -47,6 +47,13 @@ export interface AdHocMocks {
   channelBindingsService: { getBindingById: jest.Mock; getBindings: jest.Mock };
   usersService: { findByDiscordId: jest.Mock };
   gracePeriodQueue: { enqueue: jest.Mock; cancel: jest.Mock };
+  notificationService: {
+    notifySpawn: jest.Mock;
+    queueUpdate: jest.Mock;
+    notifyCompleted: jest.Mock;
+    notifyCancelled: jest.Mock;
+    flush: jest.Mock;
+  };
 }
 
 /** Create default ad-hoc mock objects. */
@@ -54,6 +61,13 @@ export function createAdHocMocks(): AdHocMocks {
   return {
     db: createDrizzleMock(),
     settingsService: { get: jest.fn() },
+    notificationService: {
+      notifySpawn: jest.fn(),
+      queueUpdate: jest.fn(),
+      notifyCompleted: jest.fn(),
+      notifyCancelled: jest.fn(),
+      flush: jest.fn(),
+    },
     participantService: {
       addParticipant: jest.fn().mockResolvedValue(undefined),
       markLeave: jest.fn().mockResolvedValue(undefined),
@@ -85,13 +99,7 @@ function buildAdHocProviders(mocks: AdHocMocks) {
     { provide: AdHocGracePeriodQueueService, useValue: mocks.gracePeriodQueue },
     {
       provide: AdHocNotificationService,
-      useValue: {
-        notifySpawn: jest.fn(),
-        queueUpdate: jest.fn(),
-        notifyCompleted: jest.fn(),
-        notifyCancelled: jest.fn(),
-        flush: jest.fn(),
-      },
+      useValue: mocks.notificationService,
     },
     {
       provide: AdHocEventsGateway,

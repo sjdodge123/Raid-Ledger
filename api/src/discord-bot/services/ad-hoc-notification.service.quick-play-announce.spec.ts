@@ -348,4 +348,96 @@ describe('AdHocNotificationService — Quick Play Announcements (ROK-1766)', () 
       );
     });
   });
+
+  describe('cancel + negative cache (fix round 2)', () => {
+    type Internals = {
+      messageIds: Map<number, unknown>;
+      untracked: Set<number>;
+    };
+    const internals = () => ctx.service as unknown as Internals;
+    const lastState = (): unknown =>
+      ctx.embedFactory.buildQuickPlayEmbed.mock.calls.at(-1)?.[2];
+
+    beforeEach(() => {
+      ctx.channelBindingsService.getBindingById.mockResolvedValue(
+        LOBBY_BINDING,
+      );
+      ctx.eventFindFirst.mockResolvedValue({ gameId: VALHEIM });
+    });
+
+    it('M1: notifyCancelled edits the tracked card to ended, completes its rows and drops the Map entry', async () => {
+      ctx.findFirst.mockResolvedValueOnce({
+        channelId: QP_TEXT,
+        messageId: 'msg-cancel',
+      });
+      ctx.mockDb.where.mockResolvedValueOnce([]);
+      mockBuildEmbedData(ctx.mockDb, 90);
+      await ctx.service.notifyCancelled(90, 'binding-lobby');
+      expect(ctx.channelPresence.onEventEnded).toHaveBeenCalledWith(
+        'binding-lobby',
+      );
+      expect(ctx.clientService.editEmbed).toHaveBeenCalledWith(
+        QP_TEXT,
+        'msg-cancel',
+        expect.any(Object),
+        undefined,
+        undefined,
+      );
+      expect(lastState()).toBe('ended');
+      expect(ctx.mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ embedState: 'completed' }),
+      );
+      expect(internals().messageIds.has(90)).toBe(false);
+    });
+
+    it('m1: a thrown lookup is not cached — the next flush retries and edits', async () => {
+      ctx.eventFindFirst.mockRejectedValueOnce(new Error('db blip'));
+      ctx.service.queueUpdate(91, 'binding-lobby');
+      await flush();
+      expect(ctx.clientService.editEmbed).not.toHaveBeenCalled();
+      ctx.findFirst.mockResolvedValueOnce({
+        channelId: QP_TEXT,
+        messageId: 'msg-retry',
+      });
+      ctx.mockDb.where.mockResolvedValueOnce([]);
+      mockBuildEmbedData(ctx.mockDb, 91);
+      ctx.service.queueUpdate(91, 'binding-lobby');
+      await flush();
+      expect(ctx.clientService.editEmbed).toHaveBeenCalledWith(
+        QP_TEXT,
+        'msg-retry',
+        expect.any(Object),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('m1: notifyCompleted bypasses a cached miss and finalises a card found now', async () => {
+      ctx.service.queueUpdate(92, 'binding-lobby');
+      await flush();
+      expect(internals().untracked.has(92)).toBe(true);
+      ctx.findFirst.mockResolvedValueOnce({
+        channelId: QP_TEXT,
+        messageId: 'msg-late',
+      });
+      ctx.mockDb.where.mockResolvedValueOnce([]);
+      mockBuildEmbedData(ctx.mockDb, 92);
+      await ctx.service.notifyCancelled(92, 'binding-lobby');
+      expect(ctx.clientService.editEmbed).toHaveBeenCalledWith(
+        QP_TEXT,
+        'msg-late',
+        expect.any(Object),
+        undefined,
+        undefined,
+      );
+    });
+
+    it('m2: an untracked event leaves no negative-cache entry once it ends', async () => {
+      ctx.service.queueUpdate(93, 'binding-lobby');
+      await flush();
+      expect(internals().untracked.has(93)).toBe(true);
+      await ctx.service.notifyCancelled(93, 'binding-lobby');
+      expect(internals().untracked.has(93)).toBe(false);
+    });
+  });
 });
