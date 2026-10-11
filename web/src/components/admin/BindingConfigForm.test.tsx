@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { BindingConfigForm } from "./BindingConfigForm";
+import { QUICK_PLAY_ANNOUNCE_HELP } from "@raid-ledger/contract";
 import type { ChannelBindingDto } from "@raid-ledger/contract";
 import {
   AUTO_CLOSE_HELP,
@@ -24,6 +25,8 @@ import {
 vi.mock("../../hooks/use-game-search", () => ({ useGameSearch: vi.fn() }));
 import { useGameSearch } from "../../hooks/use-game-search";
 import { at } from "../../test/defined";
+import { BINDING_PURPOSE_LABELS } from "@raid-ledger/contract";
+import { PURPOSE_HINT } from "./BindingConfigFormFields";
 
 function makeBinding(
   overrides: Partial<ChannelBindingDto> = {},
@@ -346,15 +349,16 @@ describe("BindingConfigForm — ROK-1416 purpose selector (channelType-filtered)
     ).not.toBeInTheDocument();
   });
 
-  it("offers only the announcements purpose for a text channel", () => {
+  it("offers both text purposes (Announcements, Quick Play Announcements) for a text channel", () => {
     renderBindingForm({
       channelType: "text",
       bindingPurpose: "game-announcements",
     });
     const select = purposeSelect();
-    expect(
-      within(select).getByRole("option", { name: /announcement/i }),
-    ).toBeInTheDocument();
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "game-announcements",
+      "quick-play-announcements",
+    ]);
     expect(
       within(select).queryByRole("option", { name: /activity monitor/i }),
     ).not.toBeInTheDocument();
@@ -366,6 +370,19 @@ describe("BindingConfigForm — ROK-1416 purpose selector (channelType-filtered)
 
 describe("BindingConfigForm — ROK-1416 classifier gating", () => {
   beforeEach(resetGameSearchMock);
+
+  it("ROK-1766: Quick Play with no game shows the help line and the violation, Save disabled", () => {
+    renderBindingForm({
+      channelType: "text",
+      bindingPurpose: "quick-play-announcements",
+      gameId: null,
+      gameName: null,
+    });
+    expect(screen.getByText(QUICK_PLAY_ANNOUNCE_HELP)).toBeInTheDocument();
+    expect(screen.getByText(/no additional configuration/i)).toBeInTheDocument();
+    expect(screen.getByText(/must have a game/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+  });
 
   it("blocks an inert voice monitor (no game): shows the violation and disables Save", () => {
     renderBindingForm({
@@ -427,6 +444,21 @@ describe("BindingConfigForm — ROK-1416 local-state conditionals (AC6)", () => 
       screen.getByRole("button", { name: /clear selection/i }),
     );
     expect(purposeSelect().value).toBe("general-lobby");
+  });
+
+  it("ROK-1766: clearing a Quick Play binding's game keeps it Quick Play (Save disabled, game error)", async () => {
+    renderBindingForm({
+      channelType: "text",
+      bindingPurpose: "quick-play-announcements",
+      gameId: 5,
+      gameName: "Valheim",
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /clear selection/i }),
+    );
+    expect(purposeSelect().value).toBe("quick-play-announcements");
+    expect(screen.getByText(/must have a game/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
   });
 
   it('focuses the game field for an inert binding (the "Fix →" repair target)', async () => {
@@ -725,3 +757,14 @@ describe("BindingConfigForm — TDB:1970 cross-row save lock", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe("ROK-1766: Purpose help names Quick Play Announcements", () => {
+  it("renders a hint built from the contract labels, Quick Play included", () => {
+    renderBindingForm({});
+    expect(screen.getByText(PURPOSE_HINT)).toBeInTheDocument();
+    expect(PURPOSE_HINT).toContain(
+      `${BINDING_PURPOSE_LABELS["quick-play-announcements"]} (one channel per game)`,
+    );
+  });
+});
+

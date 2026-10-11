@@ -6,6 +6,7 @@ import { toast } from '../../lib/toast';
 import { ChannelBindingList } from '../../components/admin/ChannelBindingList';
 import { BindingCreateForm, type BindingChannelOption } from '../../components/admin/BindingCreateForm';
 import { ChannelSelector } from '../../components/admin/channel-selector';
+import { bindingErrorMessage } from '../../components/admin/binding-error.helpers';
 import type { UpdateChannelBindingDto, CreateChannelBindingDto } from '@raid-ledger/contract';
 
 export function DiscordChannelsPage() {
@@ -31,7 +32,7 @@ export function DiscordChannelsPage() {
     return <DiscordChannelsContent />;
 }
 
-function useBindingHandlers() {
+function useBindingHandlers(channels: BindingChannelOption[]) {
     const { bindings, createBinding, updateBinding, deleteBinding } = useChannelBindings();
     // Return the mutation promise so the list collapses the row only on success
     // (a rejected PATCH keeps the edit form open with its error) — ROK-1416.
@@ -49,11 +50,15 @@ function useBindingHandlers() {
     return {
         bindings, handleUpdate, handleCreate, handleDelete,
         isUpdating: updateBinding.isPending, isDeleting: deleteBinding.isPending, isCreating: createBinding.isPending,
-        updateError: updateBinding.error?.message ?? null, createError: createBinding.error?.message ?? null,
+        // ROK-1766: a 409 BINDING_QP_GAME_TAKEN names the channel that already posts Quick Play.
+        updateError: bindingErrorMessage(updateBinding.error, channels),
+        createError: bindingErrorMessage(createBinding.error, channels),
         // TDB:259: a row editor opening/closing drops the previous row's PATCH error — but never
         // while a PATCH is in flight: reset() would detach it (isUpdating drops early, so the
         // reopened form can double-submit, and a later rejection only reaches the toast).
         resetUpdateError: () => { if (!updateBinding.isPending) updateBinding.reset(); },
+        // ROK-1766: Cancel / "+ Add binding" must not reopen on the previous 409.
+        resetCreateError: () => { if (!createBinding.isPending) createBinding.reset(); },
     };
 }
 
@@ -97,8 +102,8 @@ function LineupChannelSelector({ settings }: { settings: ReturnType<typeof useAd
 function DiscordChannelsContent() {
     const settings = useAdminSettings();
     const isBotConnected = settings.discordBotStatus.data?.connected ?? false;
-    const handlers = useBindingHandlers();
     const channels = useBindingChannelOptions(settings);
+    const handlers = useBindingHandlers(channels);
 
     return (
         <div className="space-y-6">
@@ -162,7 +167,7 @@ function ChannelBindingsSection({ handlers, channels }: {
                     onEditingChange={handlers.resetUpdateError} />
             )}
             <div className="mt-4">
-                <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} />
+                <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} onResetError={handlers.resetCreateError} />
             </div>
         </div>
     );

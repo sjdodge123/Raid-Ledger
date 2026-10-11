@@ -93,7 +93,8 @@ async function seedBinding(purpose: string): Promise<string> {
         channelId: VOICE_CHANNEL,
         channelType: 'voice',
         bindingPurpose: purpose,
-        gameId: testApp.seed.game.id,
+        // A lobby has no stored game: the seam's body supplies it (ROK-1766).
+        gameId: purpose === 'general-lobby' ? null : testApp.seed.game.id,
       })
       .returning({ id: schema.channelBindings.id }),
     'seeded channel binding',
@@ -102,7 +103,7 @@ async function seedBinding(purpose: string): Promise<string> {
 }
 
 function postJoin(
-  body: { userId: number; bindingId: string },
+  body: { userId: number; bindingId: string; gameId?: number },
   channelId = VOICE_CHANNEL,
 ) {
   return testApp.request
@@ -178,6 +179,51 @@ describe('POST /admin/test/quick-play/voice-join', () => {
     const bindingId = await seedBinding('game-voice-monitor');
     const res = await postJoin({ userId, bindingId }, OTHER_CHANNEL);
     expect(res.status).toBe(400);
+    expect(await eventsOf(bindingId)).toHaveLength(0);
+  });
+});
+
+// ROK-1766: bots are filtered out of lobby presence groups, so the smoke names
+// the group's game in the body; the seam passes it on as the resolved game.
+describe('POST /admin/test/quick-play/voice-join — general-lobby', () => {
+  it('mints a live event for the body game on a lobby binding', async () => {
+    await testApp.app.get(SettingsService).setAdHocEventsEnabled(true);
+    const userId = await seedUser(DISCORD_ID);
+    const bindingId = await seedBinding('general-lobby');
+    const gameId = testApp.seed.game.id;
+
+    const res = await postJoin({ userId, bindingId, gameId });
+    expect(res.status).toBe(200);
+    const minted = await eventsOf(bindingId);
+    expect(minted).toHaveLength(1);
+    expect(res.body).toEqual({ spawned: true, eventId: at(minted, 0).id });
+    expect(at(minted, 0)).toMatchObject({
+      isAdHoc: true,
+      adHocStatus: 'live',
+      gameId,
+    });
+  });
+
+  it('400s a lobby join without a gameId and mints nothing', async () => {
+    await testApp.app.get(SettingsService).setAdHocEventsEnabled(true);
+    const userId = await seedUser(DISCORD_ID);
+    const bindingId = await seedBinding('general-lobby');
+    const res = await postJoin({ userId, bindingId });
+    expect(res.status).toBe(400);
+    expect(await eventsOf(bindingId)).toHaveLength(0);
+  });
+
+  it('403s a lobby join while DEMO_MODE is off and mints nothing', async () => {
+    await testApp.app.get(SettingsService).setAdHocEventsEnabled(true);
+    const userId = await seedUser(DISCORD_ID);
+    const bindingId = await seedBinding('general-lobby');
+    process.env.DEMO_MODE = 'false';
+    const res = await postJoin({
+      userId,
+      bindingId,
+      gameId: testApp.seed.game.id,
+    });
+    expect(res.status).toBe(403);
     expect(await eventsOf(bindingId)).toHaveLength(0);
   });
 });

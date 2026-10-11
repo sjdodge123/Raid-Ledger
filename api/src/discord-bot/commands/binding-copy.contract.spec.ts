@@ -19,6 +19,7 @@ import {
   BINDING_PURPOSE_LABELS,
   MIN_PLAYERS_CONSEQUENCE,
   MIN_PLAYERS_HELP,
+  QUICK_PLAY_ANNOUNCE_HELP,
   classifyBindingTriple,
   deriveBindingPurpose,
 } from '@raid-ledger/contract';
@@ -86,6 +87,7 @@ describe('classifyBindingTriple — forum / lfg-board (ROK-1471)', () => {
       'game-announcements',
       'game-voice-monitor',
       'general-lobby',
+      'quick-play-announcements',
     ] as const) {
       const violation = classifyBindingTriple('forum', purpose, 7);
       expect(violation?.code).toBe('BINDING_PURPOSE_WRONG_CHANNEL_TYPE');
@@ -137,5 +139,16 @@ describe('binding copy covers the LFG board (ROK-1471)', () => {
       /one thread per forming group/,
     );
     expect(MIN_PLAYERS_HELP['lfg-board']).toMatch(/bind one only to override/);
+  });
+});
+
+describe('binding copy covers Quick Play Announcements (ROK-1766)', () => {
+  it('labels it and explains what it posts without touching the room card', () => {
+    expect(BINDING_PURPOSE_LABELS['quick-play-announcements']).toBe(
+      'Quick Play Announcements',
+    );
+    expect(MIN_PLAYERS_HELP['quick-play-announcements']).toBe('');
+    expect(QUICK_PLAY_ANNOUNCE_HELP).toMatch(/every Quick Play session/);
+    expect(QUICK_PLAY_ANNOUNCE_HELP).toMatch(/room card is unaffected/);
   });
 });

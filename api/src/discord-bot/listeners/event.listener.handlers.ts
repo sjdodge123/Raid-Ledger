@@ -75,6 +75,24 @@ export async function getReschedulingPollId(
 }
 
 /**
+ * ROK-1766: whether an event is ad-hoc (Quick Play). Its card is owned by
+ * `AdHocNotificationService`; the scheduled builders here would revert it.
+ * Bind/unbind UPDATED payloads leave `isAdHoc` unset, so the flag is read
+ * from the DB. A missing row reads as "not ad-hoc" (nothing to protect).
+ */
+export async function isAdHocEvent(
+  deps: EventListenerDeps,
+  eventId: number,
+): Promise<boolean> {
+  const [row] = await deps.db
+    .select({ isAdHoc: schema.events.isAdHoc })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId))
+    .limit(1);
+  return row?.isAdHoc === true;
+}
+
+/**
  * Resolve the embed state to render on an `event.updated` re-render (ROK-1370).
  * While a reschedule poll is open the embed must stay RESCHEDULING regardless
  * of its stored state; once the poll clears, a stuck RESCHEDULING record is

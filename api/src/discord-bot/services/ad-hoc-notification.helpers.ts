@@ -263,3 +263,23 @@ export async function buildContext(
     timezone,
   };
 }
+
+/**
+ * Every `ad_hoc_participants` row of an event as a card roster. `allInactive`
+ * (ROK-1243, the COMPLETED card) marks everyone left — the session is over.
+ */
+export async function readParticipants(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  allInactive = false,
+): Promise<AdHocParticipant[]> {
+  const rows = await db
+    .select()
+    .from(schema.adHocParticipants)
+    .where(eq(schema.adHocParticipants.eventId, eventId));
+  return rows.map((r) => ({
+    discordUserId: r.discordUserId,
+    discordUsername: r.discordUsername,
+    isActive: !allInactive && !r.leftAt,
+  }));
+}

@@ -38,6 +38,7 @@ import {
 } from './ad-hoc-event-key.helpers';
 import { announceLfgSessionEnd } from '../lfg-now/lfg-now-session-end.helpers';
 import {
+  removeActiveSession,
   handleJoinExisting,
   spawnNewEvent,
   notifyCompleted,
@@ -269,13 +270,14 @@ export class AdHocEventService implements OnModuleInit {
     isAdHoc?: boolean;
   }): Promise<void> {
     if (!payload?.eventId) return;
-    await this.removeAndCancel(payload.eventId);
+    // ROK-1766 M1: finalises the session's card(s) before tearing it down.
+    await removeActiveSession(this.getDeps(), payload.eventId, true);
   }
 
   @OnEvent(APP_EVENT_EVENTS.DELETED)
   async onEventDeleted(payload: { eventId: number }): Promise<void> {
     if (!payload?.eventId) return;
-    await this.removeAndCancel(payload.eventId);
+    await removeActiveSession(this.getDeps(), payload.eventId, false);
   }
 
   // ─── Private ──────────────────────────────────────────
@@ -343,16 +345,6 @@ export class AdHocEventService implements OnModuleInit {
     member: VoiceMemberInfo,
   ): Promise<void> {
     await autoSignupParticipant(this.db, eventId, member);
-  }
-
-  private async removeAndCancel(eventId: number): Promise<void> {
-    for (const [key, state] of this.activeEvents) {
-      if (state.eventId === eventId) {
-        await this.gracePeriodQueue.cancel(state.eventId);
-        this.activeEvents.delete(key);
-        break;
-      }
-    }
   }
 
   private removeActiveEvent(eventId: number): void {

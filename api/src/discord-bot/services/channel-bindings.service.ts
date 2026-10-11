@@ -6,8 +6,10 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import {
   assertNoBindingConflict,
+  assertQuickPlayGameFree,
   cleanupSeriesBindings,
   findExistingBinding,
+  findQuickPlayBinding,
   mappingConflicts,
 } from './channel-bindings-uniqueness.helpers';
 import {
@@ -124,6 +126,7 @@ export class ChannelBindingsService {
     // value there. This closes the second, undocumented route into the inert
     // (voice, game-voice-monitor, NULL) triple.
     assertUpsertTriple(opts);
+    await assertQuickPlayGameFree(this.db, opts); // ROK-1766 D3
     const existing = await findExistingBinding(this.db, opts);
     if (existing) {
       const [result] = await mappingConflicts(() =>
@@ -282,6 +285,15 @@ export class ChannelBindingsService {
       eq(cb.gameId, gameId),
       eq(cb.bindingPurpose, 'game-announcements'),
     );
+  }
+
+  /** ROK-1766: the game's Quick Play Announcements channel (oldest row wins). */
+  async getQuickPlayChannelForGame(
+    guildId: string,
+    gameId: number,
+  ): Promise<string | null> {
+    const row = await findQuickPlayBinding(this.db, guildId, gameId);
+    return row?.channelId ?? null;
   }
 
   /** Series-specific text binding — priority over game-specific (ROK-435). */

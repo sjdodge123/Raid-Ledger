@@ -189,7 +189,11 @@ export function bindingTitle(
  */
 export function settingsFields(binding: CommandReplyBinding): APIEmbedField[] {
   const fields: APIEmbedField[] = [];
-  if (binding.purpose !== 'game-announcements') {
+  // Text purposes (incl. ROK-1766 Quick Play) carry no voice tuning fields.
+  if (
+    binding.purpose !== 'game-announcements' &&
+    binding.purpose !== 'quick-play-announcements'
+  ) {
     fields.push(...voiceSettingsFields(binding.purpose, binding.config));
   }
   if (binding.seriesTitle) {
