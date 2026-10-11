@@ -27,7 +27,7 @@ function BackCrumb(): JSX.Element {
 function SendEventsBody({ connectionId }: { connectionId: string | undefined }): JSX.Element | null {
     const { data, isLoading } = useCalendarsOverview();
     if (isLoading) return null;
-    const connection = data?.connections.find((c) => c.id === connectionId);
+    const connection = data?.connections.find((c) => String(c.id) === connectionId);
     if (!connection) return <p className="text-sm text-muted" data-testid="send-events-not-found">{S.notFound}</p>;
     return (
         <>

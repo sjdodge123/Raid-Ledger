@@ -7,13 +7,8 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { CalendarConnection } from '@raid-ledger/contract';
-import { CALENDARS_PATH } from '../../profile/profile-nav-data';
+import { sendEventsPath } from './calendar-sync-row';
 import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
-
-/** `/profile/gaming/calendars/send/:connectionId`. */
-export function sendEventsPath(connectionId: string): string {
-    return `${CALENDARS_PATH}/send/${connectionId}`;
-}
 
 function entrySub(write: CalendarConnection['write']): string {
     if (!write.enabled) return S.entrySub.off;

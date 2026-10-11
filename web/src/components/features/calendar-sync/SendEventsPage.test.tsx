@@ -4,7 +4,7 @@
  * events" heading and W1's settings; on desktop the K4 card stays inline and
  * there is no entry row.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -17,7 +17,7 @@ import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { CALENDARS_PATH } from '../../profile/profile-nav-data';
 import { CalendarsPage } from './CalendarsPage';
 import { SendEventsPage } from './SendEventsPage';
-import { sendEventsPath } from './SendEventsEntryRow';
+import { sendEventsPath } from './calendar-sync-row';
 import { SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 
 const realMatchMedia = window.matchMedia;
@@ -47,7 +47,12 @@ function renderAt(url: string) {
     );
 }
 
+beforeEach(() => {
+    localStorage.setItem('raid_ledger_token', 'test-token');
+});
+
 afterEach(() => {
+    localStorage.removeItem('raid_ledger_token');
     Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
 });
 
@@ -87,7 +92,7 @@ describe('K5 Send my events — phone sub-page', () => {
 
     it('an unknown connection id shows the not-found line', async () => {
         setDesktop(false);
-        renderAt(sendEventsPath('no-such-id'));
+        renderAt(`${CALENDARS_PATH}/send/999999`);
         expect(await screen.findByTestId('send-events-not-found')).toHaveTextContent(S.notFound);
     });
 
