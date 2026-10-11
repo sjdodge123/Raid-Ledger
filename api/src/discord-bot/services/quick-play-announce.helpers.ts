@@ -76,24 +76,18 @@ async function spawnChannelsFor(
  * D6 restart rehydration: the spawn card an in-memory Map lost to a deploy,
  * so the card does not freeze. Only rows in a channel this service could have
  * posted to (`spawnChannelsFor`) qualify — a lobby event with no QP binding
- * has none, so its unfurl/share rows are never adopted (AC8). Failures are
- * logged and read as "untracked".
+ * has none, so its unfurl/share rows are never adopted (AC8). `null` is a
+ * DEFINITE miss; a DB / binding lookup failure THROWS so the caller does not
+ * cache a transient error as "untracked" (ROK-1766 fix round 2, m1).
  */
 export async function rehydrateSpawnMessage(
   deps: AdHocNotificationDeps,
   eventId: number,
   bindingId: string,
 ): Promise<TrackedMessage | null> {
-  try {
-    const channels = await spawnChannelsFor(deps, eventId, bindingId);
-    if (channels.length === 0) return null;
-    return await loadTrackedMessage(deps.db, eventId, channels);
-  } catch (err) {
-    logger.warn(
-      `Could not resolve spawn channels for event ${eventId}: ${err}`,
-    );
-    return null;
-  }
+  const channels = await spawnChannelsFor(deps, eventId, bindingId);
+  if (channels.length === 0) return null;
+  return loadTrackedMessage(deps.db, eventId, channels);
 }
 
 /**
@@ -102,7 +96,7 @@ export async function rehydrateSpawnMessage(
  * link unfurl (`event-link-track.helpers.ts`) or a share of the running
  * session inserts a later row whose derived state is also LIVE.
  * A COMPLETED row is never returned — a late `queueUpdate` must not flip an
- * ended card back to LIVE. Failures are logged and read as "untracked".
+ * ended card back to LIVE. A query failure throws (see `rehydrateSpawnMessage`).
  */
 export async function loadTrackedMessage(
   db: PostgresJsDatabase<typeof schema>,
@@ -110,23 +104,16 @@ export async function loadTrackedMessage(
   channels: string[],
 ): Promise<TrackedMessage | null> {
   const t = schema.discordEventMessages;
-  try {
-    const row = await db.query.discordEventMessages.findFirst({
-      columns: { channelId: true, messageId: true },
-      where: and(
-        eq(t.eventId, eventId),
-        eq(t.embedState, EMBED_STATES.LIVE),
-        inArray(t.channelId, channels),
-      ),
-      orderBy: [asc(t.createdAt)],
-    });
-    return row ?? null;
-  } catch (err) {
-    logger.warn(
-      `Could not rehydrate tracked message for event ${eventId}: ${err}`,
-    );
-    return null;
-  }
+  const row = await db.query.discordEventMessages.findFirst({
+    columns: { channelId: true, messageId: true },
+    where: and(
+      eq(t.eventId, eventId),
+      eq(t.embedState, EMBED_STATES.LIVE),
+      inArray(t.channelId, channels),
+    ),
+    orderBy: [asc(t.createdAt)],
+  });
+  return row ?? null;
 }
 
 /** Mark an event's tracked rows COMPLETED so rehydration skips them. */

@@ -89,6 +89,7 @@ function buildAdHocProviders(mocks: AdHocMocks) {
         notifySpawn: jest.fn(),
         queueUpdate: jest.fn(),
         notifyCompleted: jest.fn(),
+        notifyCancelled: jest.fn(),
         flush: jest.fn(),
       },
     },

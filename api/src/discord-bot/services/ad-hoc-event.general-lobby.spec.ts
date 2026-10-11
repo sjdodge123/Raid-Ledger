@@ -73,6 +73,7 @@ async function buildLobbyModule() {
           notifySpawn: jest.fn(),
           queueUpdate: jest.fn(),
           notifyCompleted: jest.fn(),
+          notifyCancelled: jest.fn(),
           flush: jest.fn(),
         },
       },
