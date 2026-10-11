@@ -1,5 +1,5 @@
 import { API_BASE_URL } from '../config';
-import { AUTH_METHOD_KEY, SILENT_GUARD_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY, LEGACY_MIGRATION_PENDING_KEY, SILENT_GUARD_KEY } from './auth-storage-keys';
 
 /**
  * ROK-1353 / ROK-1367: silent Discord re-auth fallback.
@@ -57,6 +57,7 @@ function isSilentGuardFresh(): boolean {
  */
 export function clearAuthMethod(): void {
   localStorage.removeItem(AUTH_METHOD_KEY);
+  localStorage.removeItem(LEGACY_MIGRATION_PENDING_KEY);
 }
 
 /**

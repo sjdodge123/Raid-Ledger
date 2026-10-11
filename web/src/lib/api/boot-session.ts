@@ -1,5 +1,5 @@
 import { refreshWithOutcome, type RefreshOutcome } from './refresh-client';
-import { legacySessionPurged } from './access-token-store';
+import { legacySessionPurged, settleLegacyMigration } from './access-token-store';
 import { getAuthMethod, setAuthMethod } from './silent-reauth';
 import { awaitMagicLinkRedeem, isMagicLinkRedeemPending } from '../magic-link-redeem';
 
@@ -46,11 +46,25 @@ async function mintFromCookie(): Promise<BootOutcome> {
   // A deep magic link lands signed in on first render (its redeem shares the flight).
   if (isMagicLinkRedeemPending()) await Promise.race([awaitMagicLinkRedeem(), timeout]);
   clearTimeout(timer);
-  // A purged legacy session that re-minted has no marker: write one, or the
-  // NEXT load boots anonymous and REST 401s never refresh (review m2). 'local'
-  // is inert for silent re-auth, which only acts on 'discord'.
-  if (outcome === 'ok' && getAuthMethod() === null && legacySessionPurged()) setAuthMethod('local');
+  if (legacySessionPurged()) resolveLegacyMigration(outcome);
   return outcome;
+}
+
+/**
+ * An upgrading user's one-time migration. `ok` → write the marker (it has
+ * none; without one the NEXT load boots anonymous and REST 401s never refresh
+ * — review m2; 'local' is inert for silent re-auth, which only acts on
+ * 'discord'). `rejected` → the session is dead, forget it. Indeterminate
+ * (429/5xx/network/timeout) → keep the pending flag so the next load retries
+ * rather than signing the user out for good (review r1).
+ */
+function resolveLegacyMigration(outcome: BootOutcome): void {
+  if (outcome === 'ok') {
+    if (getAuthMethod() === null) setAuthMethod('local');
+    settleLegacyMigration();
+  } else if (outcome === 'rejected') {
+    settleLegacyMigration();
+  }
 }
 
 /** Idempotent. Called once at module load from App.tsx, after the magic-link start. */

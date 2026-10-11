@@ -3,7 +3,7 @@
  * for a prior sign-in only; an anonymous visitor makes no request.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AUTH_METHOD_KEY, LEGACY_ACCESS_TOKEN_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY, LEGACY_ACCESS_TOKEN_KEY, LEGACY_MIGRATION_PENDING_KEY } from './auth-storage-keys';
 
 const refresh = vi.hoisted(() => vi.fn());
 vi.mock('./refresh-client', () => ({ refreshWithOutcome: refresh }));
@@ -94,5 +94,53 @@ describe('ROK-1754 B2: boot session', () => {
         } finally {
             window.history.pushState({}, '', '/');
         }
+    });
+
+    describe('review r1: the legacy migration is retry-safe', () => {
+        it('ok → marker written, pending flag settled', async () => {
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'old-bundle-jwt');
+            refresh.mockResolvedValue({ kind: 'ok', token: 't' });
+            const boot = await load();
+            await expect(boot.startBootSession()).resolves.toBe('ok');
+            expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('local');
+            expect(localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY)).toBeNull();
+        });
+
+        it('rejected → no marker, pending flag settled, the next load boots anonymous', async () => {
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'old-bundle-jwt');
+            refresh.mockResolvedValue({ kind: 'rejected' });
+            const first = await load();
+            await expect(first.startBootSession()).resolves.toBe('rejected');
+            expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+            expect(localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY)).toBeNull();
+            const next = await load();
+            await expect(next.startBootSession()).resolves.toBe('anonymous');
+            expect(refresh).toHaveBeenCalledTimes(1);
+        });
+
+        it('indeterminate (429/5xx/network) → flag kept; the NEXT load retries the migration and heals', async () => {
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'old-bundle-jwt');
+            refresh.mockResolvedValueOnce({ kind: 'indeterminate' });
+            const first = await load();
+            await expect(first.startBootSession()).resolves.toBe('indeterminate');
+            expect(localStorage.getItem(LEGACY_ACCESS_TOKEN_KEY)).toBeNull();
+            expect(localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY)).toBe('1');
+            expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+
+            refresh.mockResolvedValueOnce({ kind: 'ok', token: 't' });
+            const next = await load();
+            await expect(next.startBootSession()).resolves.toBe('ok');
+            expect(refresh).toHaveBeenCalledTimes(2);
+            expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('local');
+            expect(localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY)).toBeNull();
+        });
+
+        it('a refresh that throws counts as indeterminate and keeps the flag', async () => {
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'old-bundle-jwt');
+            refresh.mockRejectedValue(new TypeError('Failed to fetch'));
+            const boot = await load();
+            await expect(boot.startBootSession()).resolves.toBe('indeterminate');
+            expect(localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY)).toBe('1');
+        });
     });
 });

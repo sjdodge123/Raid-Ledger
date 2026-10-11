@@ -1,4 +1,8 @@
-import { LEGACY_ACCESS_TOKEN_KEY, LEGACY_ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import {
+  LEGACY_ACCESS_TOKEN_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
+  LEGACY_ORIGINAL_TOKEN_KEY,
+} from './auth-storage-keys';
 import { readClaims } from './token-expiry';
 
 /**
@@ -59,13 +63,16 @@ export function isImpersonatingToken(candidate: string | null = token): boolean 
 /**
  * Remove the tokens an older bundle stored in localStorage. Returns true when
  * one was there — a signed-in user upgrading, whom the boot refresh (B2) must
- * re-mint even without the auth-method marker. Never throws.
+ * re-mint even without the auth-method marker. The credential goes at once;
+ * only the non-credential pending flag survives until the migration's outcome
+ * is definite (review r1). Never throws.
  */
 export function purgeLegacyAuthStorage(): boolean {
   try {
     const had = localStorage.getItem(LEGACY_ACCESS_TOKEN_KEY) !== null;
     localStorage.removeItem(LEGACY_ACCESS_TOKEN_KEY);
     localStorage.removeItem(LEGACY_ORIGINAL_TOKEN_KEY);
+    if (had) localStorage.setItem(LEGACY_MIGRATION_PENDING_KEY, '1');
     return had;
   } catch {
     return false;
@@ -74,7 +81,24 @@ export function purgeLegacyAuthStorage(): boolean {
 
 const legacyPurged = purgeLegacyAuthStorage();
 
-/** Whether this page load purged a legacy stored token (see §5). */
+/**
+ * Whether an upgrading user's legacy session still awaits its re-mint: purged
+ * on this load, or purged on an earlier one whose boot was indeterminate (§5).
+ */
 export function legacySessionPurged(): boolean {
-  return legacyPurged;
+  if (legacyPurged) return true;
+  try {
+    return localStorage.getItem(LEGACY_MIGRATION_PENDING_KEY) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** The legacy migration reached a definite outcome (ok or rejected). Never throws. */
+export function settleLegacyMigration(): void {
+  try {
+    localStorage.removeItem(LEGACY_MIGRATION_PENDING_KEY);
+  } catch {
+    /* storage unavailable: nothing to settle */
+  }
 }

@@ -1,6 +1,7 @@
 import {
   AUTH_METHOD_KEY,
   LEGACY_ACCESS_TOKEN_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
   LEGACY_ORIGINAL_TOKEN_KEY,
   USER_CACHE_KEY,
 } from './auth-storage-keys';
@@ -24,7 +25,13 @@ export const USER_DEACTIVATED_CODE = 'USER_DEACTIVATED';
 export const DEACTIVATED_LOGIN_PATH = '/login?error=deactivated';
 export const DEACTIVATED_MESSAGE = 'Your account has been deactivated.';
 
-const SESSION_KEYS = [USER_CACHE_KEY, AUTH_METHOD_KEY, LEGACY_ACCESS_TOKEN_KEY, LEGACY_ORIGINAL_TOKEN_KEY];
+const SESSION_KEYS = [
+  USER_CACHE_KEY,
+  AUTH_METHOD_KEY,
+  LEGACY_ACCESS_TOKEN_KEY,
+  LEGACY_ORIGINAL_TOKEN_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
+];
 
 /** The `code` of a JSON error body, read from a clone (the body stays usable). */
 export async function readErrorCode(res: Response): Promise<string | null> {
