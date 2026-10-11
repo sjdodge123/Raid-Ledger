@@ -29,9 +29,10 @@ describe('setAuthToken / getAuthToken', () => {
         expect(getAuthToken()).toBe('new-token');
     });
 
-    it('stores the token under the expected localStorage key', () => {
+    it('ROK-1754: holds the token in memory and never in localStorage', () => {
         setAuthToken('my-token');
         expect(getAccessToken()).toBe('my-token');
+        expect(Object.values({ ...localStorage })).not.toContain('my-token');
     });
 });
 
