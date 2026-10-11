@@ -4,7 +4,7 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
-import { randomBytes } from 'node:crypto';
+import { randomInt } from 'node:crypto';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { PugSlotResponseDto, PugRole } from '@raid-ledger/contract';
@@ -14,11 +14,14 @@ type SlotRow = typeof schema.pugSlots.$inferSelect;
 const INVITE_CODE_CHARS = 'abcdefghjkmnpqrstuvwxyz2345679';
 const INVITE_CODE_LENGTH = 8;
 
+/**
+ * ROK-1757: `randomInt` rejection-samples, so every alphabet char is equally
+ * likely (the old `byte % 30` favoured the first 16 chars).
+ */
 export function generateInviteCode(): string {
-  const bytes = randomBytes(INVITE_CODE_LENGTH);
   let code = '';
-  for (const byte of bytes) {
-    code += INVITE_CODE_CHARS[byte % INVITE_CODE_CHARS.length];
+  for (let i = 0; i < INVITE_CODE_LENGTH; i++) {
+    code += INVITE_CODE_CHARS[randomInt(INVITE_CODE_CHARS.length)];
   }
   return code;
 }

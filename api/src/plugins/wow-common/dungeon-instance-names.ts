@@ -6,6 +6,7 @@
  * (see `boss-encounters.service.ts::resolveSubInstance`).
  */
 import { CLASSIC_SUB_INSTANCES } from './blizzard-instance-data';
+import { findForeverSeedInstance } from './forever-instance-data';
 
 const JOURNAL_NAMES: Record<number, string> = {
   63: 'Deadmines',
@@ -51,7 +52,15 @@ export const DUNGEON_INSTANCE_NAMES: Readonly<Record<number, string>> = {
   ...subInstanceNames(),
 };
 
-/** Resolve an instance name, falling back to `Instance <id>` for unknown ids. */
+/**
+ * Resolve an instance name: Classic journal/wing ids, then the WoW: Forever
+ * seed ids (ROK-1758 — `forever-dungeon-quest-data.json` rows sit on
+ * 90000001+), falling back to `Instance <id>` for unknown ids.
+ */
 export function instanceName(id: number): string {
-  return DUNGEON_INSTANCE_NAMES[id] ?? `Instance ${id}`;
+  return (
+    DUNGEON_INSTANCE_NAMES[id] ??
+    findForeverSeedInstance(id)?.name ??
+    `Instance ${id}`
+  );
 }

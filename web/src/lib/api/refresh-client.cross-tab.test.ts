@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
-import { ACCESS_TOKEN_KEY } from './auth-storage-keys';
+import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 
 /**
  * ROK-1755 B1: several tabs in ONE browser share the `rl_rt` cookie. Each tab
@@ -25,6 +25,22 @@ function createFakeLocks() {
             return run;
         },
     };
+}
+
+/** A lock whose holder changes shared storage just before this tab gets it. */
+function locksAfterSibling(sibling: () => void) {
+    return {
+        request<T>(_name: string, cb: () => Promise<T>): Promise<T> {
+            sibling();
+            return Promise.resolve().then(cb);
+        },
+    };
+}
+
+/** A JWT whose exp is `offsetSeconds` from now (base64url, unsigned). */
+function jwtExpiringIn(offsetSeconds: number): string {
+    const seg = (o: object) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${seg({ alg: 'HS256' })}.${seg({ sub: '1', exp: Math.floor(Date.now() / 1000) + offsetSeconds })}.sig`;
 }
 
 function setLocks(value: unknown): void {
@@ -106,5 +122,56 @@ describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
 
         expect(await tab.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'sibling-token' });
         expect(counter.calls()).toBe(1);
+    });
+
+    it('ROK-1753: USER_DEACTIVATED on refresh is terminal in every tab — one POST, session cleared', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        setLocks(createFakeLocks());
+        const counter = countRefreshes(() =>
+            HttpResponse.json({ code: 'USER_DEACTIVATED', message: 'Account deactivated' }, { status: 401 }),
+        );
+        const tabA = await openTab();
+        const tabB = await openTab();
+
+        const [a, b] = await Promise.all([tabA.refreshWithOutcome(), tabB.refreshWithOutcome()]);
+
+        expect(a).toEqual({ kind: 'rejected' });
+        expect(b).toEqual({ kind: 'rejected' });
+        // The waiting tab sees the cleared session and never replays the cookie.
+        expect(counter.calls()).toBe(1);
+        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+    });
+
+    it('a STALE token a sibling stored is not adopted — this tab still refreshes', async () => {
+        setLocks(locksAfterSibling(() => localStorage.setItem(ACCESS_TOKEN_KEY, jwtExpiringIn(-60))));
+        const counter = countRefreshes(() => HttpResponse.json({ access_token: 'own-token' }));
+        const tab = await openTab();
+
+        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'own-token' });
+        expect(counter.calls()).toBe(1);
+    });
+
+    it('a sibling that cleared the session while this tab queued → rejected, no POST', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        setLocks(locksAfterSibling(() => {
+            localStorage.removeItem(ACCESS_TOKEN_KEY);
+            localStorage.removeItem(AUTH_METHOD_KEY);
+        }));
+        const counter = countRefreshes(() => HttpResponse.json({ access_token: 'should-not-mint' }));
+        const tab = await openTab();
+
+        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'rejected' });
+        expect(counter.calls()).toBe(0);
+    });
+
+    it('impersonation that began while this tab queued is re-checked inside the lock — no POST', async () => {
+        setLocks(locksAfterSibling(() => localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token')));
+        const counter = countRefreshes(() => HttpResponse.json({ access_token: 'admin-swap' }));
+        const tab = await openTab();
+
+        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
+        expect(counter.calls()).toBe(0);
+        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('old-token');
     });
 });

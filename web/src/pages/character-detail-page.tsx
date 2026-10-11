@@ -1,7 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCharacterDetail } from '../hooks/use-character-detail';
 import { useUpdateCharacter } from '../hooks/use-character-mutations';
-import { useAuth } from '../hooks/use-auth';
+import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
@@ -151,7 +151,17 @@ function CharacterRoleBadge({ character, isOwner }: { character: { id: string; e
     );
 }
 
-function CharacterHeader({ character, isOwner, isArmoryImported }: { character: CharacterDto; isOwner: boolean; isArmoryImported: boolean }) {
+/** Admin-only header actions (ROK-1756); a plugin filler self-filters, e.g. to addon-linked characters. */
+function CharacterAdminActions({ character }: { character: CharacterDto }) {
+    const addonLinked = character.addonLinked;
+    return (
+        <div className="mt-3 flex flex-wrap items-center gap-2 empty:hidden">
+            <PluginSlot name="character-detail:admin-actions" context={{ characterId: character.id, name: character.name, addonLinked }} />
+        </div>
+    );
+}
+
+function CharacterHeader({ character, isOwner, isArmoryImported, isAdminViewer }: { character: CharacterDto; isOwner: boolean; isArmoryImported: boolean; isAdminViewer: boolean }) {
     return (
         <div className="bg-panel border border-edge rounded-lg p-6">
             <div className="flex items-start gap-4">
@@ -169,6 +179,7 @@ function CharacterHeader({ character, isOwner, isArmoryImported }: { character: 
                             <PluginSlot name="character-detail:owner-actions" context={{ characterId: character.id, gameId: character.gameId, name: character.name, region: character.region, ruleset: character.ruleset, gameVariant: character.gameVariant, class: character.class, level: character.level }} />
                         </div>
                     )}
+                    {isAdminViewer && <CharacterAdminActions character={character} />}
                 </div>
             </div>
         </div>
@@ -205,7 +216,7 @@ export function CharacterDetailPage() {
             <button onClick={() => navigate(-1)} className="text-sm text-muted hover:text-foreground transition-colors inline-flex items-center gap-1">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg> Back
             </button>
-            <CharacterHeader character={character} isOwner={isOwner} isArmoryImported={isArmoryImported} />
+            <CharacterHeader character={character} isOwner={isOwner} isArmoryImported={isArmoryImported} isAdminViewer={isAdmin(user)} />
             <CharacterEquipmentSection character={character} isArmoryImported={isArmoryImported} isOwner={isOwner} />
         </div>
     );

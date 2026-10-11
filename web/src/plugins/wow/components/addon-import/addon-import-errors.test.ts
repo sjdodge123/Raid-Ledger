@@ -27,6 +27,18 @@ describe('addonImportErrorCopy', () => {
         expect(addonImportErrorCopy(err).action).toBeUndefined();
     });
 
+    it('shows the server message for INVALID_PAYLOAD (e.g. the export-clock bound, ROK-1756)', () => {
+        const clock = "The import string's date doesn't match the server clock — check your computer's date and export again.";
+        const copy = addonImportErrorCopy(new AddonImportRequestError(422, 'INVALID_PAYLOAD', clock));
+        expect(copy.title).toBe("Can't import this string");
+        expect(copy.body).toBe(clock);
+    });
+
+    it('keeps the generic INVALID_PAYLOAD body when the server sends no message', () => {
+        const copy = addonImportErrorCopy(new AddonImportRequestError(422, 'INVALID_PAYLOAD', ''));
+        expect(copy.body).toBe('The string decoded, but its contents are not in the expected format.');
+    });
+
     it('falls back for a non-contract error and never echoes its message', () => {
         const copy = addonImportErrorCopy(new AddonImportRequestError(500, null, '!RL1!char!secret'));
         expect(copy.title).toBe('Import failed');

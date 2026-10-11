@@ -36,6 +36,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { LFG_BOARD_EVENTS } from '../discord-bot/lfg-board/lfg-board.constants';
 import { LfgInviteService } from '../lfg/lfg-invite.service';
@@ -75,7 +76,7 @@ function parseInviteDeclineBody(body: unknown): {
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestLfgController {
   constructor(
     private readonly settingsService: SettingsService,

@@ -6,6 +6,7 @@
 import type { CharacterQuestsDto } from '@raid-ledger/contract';
 import { useCharacterQuests } from '../hooks/use-character-quests';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
+import { plural } from '../lib/plural';
 import { CharacterQuestLog } from './character-quest-log';
 import { CharacterCompletedQuests } from './character-completed-quests';
 import '../slots/quest-prep-panel.css';
@@ -13,7 +14,7 @@ import '../slots/quest-prep-panel.css';
 /** "2 completed · 377 known · via addon · 1 Oct 2026 · 120 quests total" (R-5). */
 function questsSummaryLine(quests: CharacterQuestsDto): string {
     const { completedKnown, knownTotal, completedTotal } = quests.counts;
-    return `${completedKnown} completed · ${knownTotal} known · ${formatAddonSourceLine(quests.syncedAt)} · ${completedTotal} quests total`;
+    return `${completedKnown} completed · ${knownTotal} known · ${formatAddonSourceLine(quests.syncedAt)} · ${plural(completedTotal, 'quest')} total`;
 }
 
 /** The Quests card; chrome matches the Talents section. */

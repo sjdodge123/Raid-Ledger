@@ -11,6 +11,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { AiChatService } from '../discord-bot/ai-chat/ai-chat.service';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema';
@@ -26,7 +27,7 @@ import {
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class AiChatTestController {
   constructor(
     private readonly aiChatService: AiChatService,

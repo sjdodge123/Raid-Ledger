@@ -3,9 +3,13 @@ import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { loadForeverMemberProgress } from './event-forever-progress.query';
 import type { ForeverEventProgress } from './event-forever-progress.helpers';
+import { ForbiddenException } from '@nestjs/common';
+import { assertActiveSignup } from './quest-progress-signup.helpers';
 
 jest.mock('./event-forever-progress.query');
 const mockLoad = jest.mocked(loadForeverMemberProgress);
+jest.mock('./quest-progress-signup.helpers');
+const mockAssertSignup = jest.mocked(assertActiveSignup);
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import {
   createDrizzleMock,
@@ -19,6 +23,8 @@ const mockReads = { invalidateCoverage: jest.fn() };
 async function setupEach() {
   mockDb = createDrizzleMock();
   mockLoad.mockReset().mockResolvedValue(null);
+  mockAssertSignup.mockReset().mockResolvedValue(undefined);
+  mockReads.invalidateCoverage.mockReset();
 
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -122,6 +128,18 @@ describe('QuestProgressService — write', () => {
       expect(mockReads.invalidateCoverage).toHaveBeenCalledWith(10);
     });
 
+    it('ROK-1757: no active signup → Forbidden before any read or write', async () => {
+      mockAssertSignup.mockRejectedValueOnce(new ForbiddenException());
+      await expect(
+        service.updateProgress(10, 1, 2040, { pickedUp: true }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(mockAssertSignup).toHaveBeenCalledWith(mockDb, 10, 1);
+      expect(mockDb.select).not.toHaveBeenCalled();
+      expect(mockDb.insert).not.toHaveBeenCalled();
+      expect(mockDb.update).not.toHaveBeenCalled();
+      expect(mockReads.invalidateCoverage).not.toHaveBeenCalled();
+    });
+
     it('Classic insert still defaults unspecified fields to false', async () => {
       await testInsertNewProgress();
       expect(mockDb.values).toHaveBeenCalledWith(
@@ -142,6 +160,8 @@ function foreverWithCompleted(questId: number): ForeverEventProgress {
         userId: 1,
         username: 'Roknua',
         characterId: 'char-1',
+        charClass: null,
+        charRace: null,
         snapshot: {
           quests: { completed: [questId], inProgress: [] },
           capturedAt: '2026-10-01T00:00:00.000Z',

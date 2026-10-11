@@ -105,6 +105,50 @@ describe('runSpeedTest', () => {
         await expect(promise).resolves.toBe(88);
     });
 
+    /**
+     * ROK-1765: ndt7 reports worker failures through `callbacks.error`, from a
+     * Worker message event; with no `error` callback its default THROWS there,
+     * outside our promise chain. The fake models both halves: the callback runs
+     * on a later tick, and a missing one throws like the library's default.
+     */
+    function failingNdt7(measureFirst: boolean) {
+        const escaped: unknown[] = [];
+        const test = vi.fn(
+            (_config: unknown, callbacks: Record<string, (d: unknown) => void>) =>
+                new Promise<number>((resolve) => {
+                    setTimeout(() => {
+                        if (measureFirst) {
+                            callbacks.downloadMeasurement?.({ Source: 'client', Data: { MeanClientMbps: 21 } });
+                        }
+                        const onError =
+                            callbacks.error ??
+                            ((msg: unknown) => {
+                                throw new Error(String(msg));
+                            });
+                        try {
+                            onError('error');
+                        } catch (err) {
+                            escaped.push(err);
+                        }
+                        resolve(0); // the library resolves its promise anyway
+                    }, 0);
+                }),
+        );
+        return { test, escaped };
+    }
+
+    it('rejects with a generic failure when ndt7 reports an error, and nothing is thrown out of the callback', async () => {
+        const { test, escaped } = failingNdt7(false);
+        await expect(runSpeedTest(async () => ({ test }))).rejects.toThrow('Speed test failed');
+        expect(escaped).toEqual([]);
+    });
+
+    it('keeps the best figure measured before ndt7 reported an error', async () => {
+        const { test, escaped } = failingNdt7(true);
+        await expect(runSpeedTest(async () => ({ test }))).resolves.toBe(21);
+        expect(escaped).toEqual([]);
+    });
+
     it('rejects at the cap when no measurement ever arrived', async () => {
         vi.useFakeTimers();
         const test = vi.fn(() => new Promise<number>(() => undefined));

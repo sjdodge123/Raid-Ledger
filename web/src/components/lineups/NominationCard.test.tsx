@@ -242,3 +242,52 @@ describe('NominationCard — roster fit (ROK-1444)', () => {
         expect(screen.queryByTestId('nomination-fit-warning')).not.toBeInTheDocument();
     });
 });
+
+describe('NominationCard — viewer "You own" + playtime (ROK-1375)', () => {
+    it('shows "You own · 12h played" when the viewer owns it with Steam playtime', () => {
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ currentUserOwns: true, currentUserPlaytimeMinutes: 720 })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('you-own-badge')).toHaveTextContent(/^You own · 12h played$/);
+    });
+
+    it('shows minutes under an hour and plain "You own" when no playtime is synced', () => {
+        const { unmount } = renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ currentUserOwns: true, currentUserPlaytimeMinutes: 45 })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('you-own-badge')).toHaveTextContent(/^You own · 45m played$/);
+        unmount();
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ currentUserOwns: true, currentUserPlaytimeMinutes: null })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.getByTestId('you-own-badge')).toHaveTextContent(/^You own$/);
+    });
+
+    it('renders no viewer badge when the viewer does not own it, but keeps the community count', () => {
+        renderWithProviders(
+            <NominationCard
+                entry={createMockEntry({ currentUserOwns: false, currentUserPlaytimeMinutes: null, ownerCount: 3 })}
+                onRemove={vi.fn()}
+            />,
+        );
+        expect(screen.queryByTestId('you-own-badge')).toBeNull();
+        expect(screen.getByText('3 own')).toBeInTheDocument();
+    });
+
+    it('renders no viewer badge when the personalization fields are absent (anonymous / stale payload)', () => {
+        const entry = createMockEntry();
+        delete entry.currentUserOwns;
+        delete entry.currentUserPlaytimeMinutes;
+        renderWithProviders(<NominationCard entry={entry} onRemove={vi.fn()} />);
+        expect(screen.queryByTestId('you-own-badge')).toBeNull();
+    });
+});

@@ -37,6 +37,9 @@ import {
   buildImportString,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const FIXTURES = join(
@@ -345,9 +348,14 @@ describe('addon import — same GUID into two characters, concurrently (Codex P2
     const bob = await createChar(await memberToken('bobguid2'), {
       name: 'Bob Forever',
     });
+    // ROK-1756: a pin writes an audit row whose actor FK needs a real user.
+    const owners = {
+      [ana]: (await charRow(ana)).userId,
+      [bob]: (await charRow(bob)).userId,
+    };
     const ctx = (tx: AddonImportTx, characterId: string) => ({
       tx,
-      userId: 0,
+      userId: owners[characterId] ?? 0,
       characterId,
       gameId,
       region: 'us' as const,

@@ -51,7 +51,7 @@ export function EquipmentSlot({ item, slotName, gameVariant, onItemClick }: {
     const isMobile = useMediaQuery('(max-width: 768px)');
     if (!item) return <EmptySlot slotName={slotName} />;
 
-    const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-gray-300';
+    const qualityClass = QUALITY_COLORS[item.quality.toUpperCase()] ?? 'text-secondary';
     const iconBorderClass = QUALITY_BORDERS[item.quality.toUpperCase()] ?? 'border-gray-500';
 
     return (

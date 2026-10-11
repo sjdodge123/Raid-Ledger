@@ -17,9 +17,12 @@
        validation) but the browser still fires a `securitypolicyviolation`
        report for the blocked eval. Pre-populating `jitless` skips the probe
        entirely — no eval attempt, no violation, no behavior change. -->
-  <script>globalThis.__zod_globalConfig = { jitless: true };</script>
-  <script>var whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };</script>
+  <!-- ROK-1754: ONE inline script (zod config, whTooltips config, theme pre-paint, in that
+       order) so the CSP can allow it by a single sha256 hash instead of 'unsafe-inline'.
+       Once the CSP pins that hash, any edit here must update nginx/snippets/security-headers.conf. -->
   <script>
+    globalThis.__zod_globalConfig = { jitless: true };
+    var whTooltips = { colorLinks: true, iconizeLinks: false, renameLinks: false };
     // No-flash theme script — sets data-scheme (+ data-variant) before first paint
     // (ROK-280, ROK-228, ROK-291)
     // Space: mode='dark' + darkTheme='space' -> data-scheme='space'.
