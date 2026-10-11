@@ -80,7 +80,11 @@ function buildMockServices() {
         .fn()
         .mockReturnValue({ embed: fakeEmbed, row: undefined }),
     },
-    channelBindingsService: { getBindingById: jest.fn() },
+    channelBindingsService: {
+      getBindingById: jest.fn(),
+      // ROK-1766: no Quick Play Announcements binding — D9 suppression holds.
+      getQuickPlayChannelForGame: jest.fn().mockResolvedValue(null),
+    },
     channelResolver: {
       resolveVoiceChannelHonoringOverride: jest.fn().mockResolvedValue(null),
     },

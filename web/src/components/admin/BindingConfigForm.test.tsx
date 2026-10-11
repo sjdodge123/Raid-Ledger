@@ -444,6 +444,21 @@ describe("BindingConfigForm — ROK-1416 local-state conditionals (AC6)", () => 
     expect(purposeSelect().value).toBe("general-lobby");
   });
 
+  it("ROK-1766: clearing a Quick Play binding's game keeps it Quick Play (Save disabled, game error)", async () => {
+    renderBindingForm({
+      channelType: "text",
+      bindingPurpose: "quick-play-announcements",
+      gameId: 5,
+      gameName: "Valheim",
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: /clear selection/i }),
+    );
+    expect(purposeSelect().value).toBe("quick-play-announcements");
+    expect(screen.getByText(/must have a game/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /save/i })).toBeDisabled();
+  });
+
   it('focuses the game field for an inert binding (the "Fix →" repair target)', async () => {
     renderBindingForm({
       channelType: "voice",
