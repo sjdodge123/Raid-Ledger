@@ -1,0 +1,8 @@
+{
+  "kind": "calendar#calendar",
+  "etag": "\"fixture-calendar-etag\"",
+  "id": "fixture-rl-calendar@group.calendar.google.com",
+  "summary": "Raid Ledger",
+  "timeZone": "UTC",
+  "conferenceProperties": { "allowedConferenceSolutionTypes": ["hangoutsMeet"] }
+}

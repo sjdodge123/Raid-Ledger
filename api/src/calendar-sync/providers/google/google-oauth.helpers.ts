@@ -8,7 +8,7 @@
  * token, code, verifier, the client secret or `error_description`.
  */
 import * as googleHttp from './google-http';
-import type { GoogleHttpResponse } from './google-http';
+import { parseRetryAfterMs, type GoogleHttpResponse } from './google-http';
 import {
   ProviderAuthError,
   RateLimitError,
@@ -26,7 +26,6 @@ export const GOOGLE_CONNECT_SCOPES = `openid email ${GOOGLE_CALENDAR_APP_CREATED
 export const GOOGLE_REQUIRED_SCOPES = [GOOGLE_CALENDAR_APP_CREATED_SCOPE];
 export const GOOGLE_REVOKE_TIMEOUT_MS = 5_000;
 const GOOGLE_ISSUERS = ['accounts.google.com', 'https://accounts.google.com'];
-const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 /**
  * The grant lacks a required scope (the user unticked it on Google's
@@ -208,14 +207,6 @@ function parseTokenSet(json: unknown, nowMs: number): GoogleTokenSet {
 function googleErrorCode(json: unknown): string | null {
   const code = asRecord(json).error;
   return typeof code === 'string' && /^[a-z_]{1,48}$/.test(code) ? code : null;
-}
-
-function parseRetryAfterMs(raw: string | null, nowMs = Date.now()): number {
-  if (!raw) return DEFAULT_RETRY_AFTER_MS;
-  const seconds = Number(raw);
-  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
-  const at = Date.parse(raw);
-  return Number.isNaN(at) ? DEFAULT_RETRY_AFTER_MS : Math.max(0, at - nowMs);
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> {
