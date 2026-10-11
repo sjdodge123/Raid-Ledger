@@ -2,6 +2,7 @@ import {
   Injectable,
   Inject,
   UnauthorizedException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -17,6 +18,24 @@ import {
   assertKickCooldownOrClear,
 } from './auth-status.helpers';
 import { defined } from '../common/defined.helpers';
+import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
+import {
+  IMPERSONATION_TTL_MS,
+  secondsUntil,
+} from './impersonation/impersonation-session.helpers';
+
+/** The caller of `impersonate` (req.user). */
+export interface ImpersonatingCaller {
+  id: number;
+  username: string;
+  impersonatedBy?: number | null;
+}
+
+/** ROK-1754: `POST /auth/impersonate/:userId` response (no original_token). */
+export interface ImpersonationStartResult {
+  access_token: string;
+  user: { id: number; username: string; avatar: string | null; role: UserRole };
+}
 
 const SALT_ROUNDS = 12;
 
@@ -58,6 +77,7 @@ export class LocalAuthService {
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
+    private sessions: ImpersonationSessionService,
   ) {}
 
   /**
@@ -193,28 +213,42 @@ export class LocalAuthService {
   }
 
   /**
-   * Impersonate a target user (admin-only).
-   * Returns a JWT for the target user with an impersonatedBy claim,
-   * plus a token to restore the admin session.
+   * Impersonate a target user (Operator+). ROK-1754: no `original_token` —
+   * the admin credential stays the httpOnly refresh cookie. With a refresh
+   * `familyId` (browser) the start writes a server-side marker so
+   * `/auth/refresh` keeps minting the target until exit / the 1h cap; without
+   * one (API caller, no cookie jar) the token is today's non-renewable 1h.
    */
   async impersonate(
-    adminUser: { id: number; username: string; role: UserRole },
+    adminUser: ImpersonatingCaller,
     targetUserId: number,
-  ): Promise<{
-    access_token: string;
-    original_token: string;
-    user: {
-      id: number;
-      username: string;
-      avatar: string | null;
-      role: UserRole;
-    };
-  }> {
+    familyId: string | null = null,
+  ): Promise<ImpersonationStartResult> {
+    if (adminUser.impersonatedBy)
+      throw new ForbiddenException('Cannot impersonate while impersonating');
+    if (adminUser.id === targetUserId)
+      throw new ForbiddenException('Cannot impersonate yourself');
     const target = await this.findImpersonationTarget(targetUserId);
     this.logger.log(
       `IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) -> "${target.username}" (id:${target.id})`,
     );
-    return this.buildImpersonationTokens(adminUser, target);
+    const expiresIn = await this.recordStart(adminUser.id, target.id, familyId);
+    return this.buildImpersonationToken(adminUser, target, expiresIn);
+  }
+
+  /** Marker (+audit) or cookie-less audit; returns the token's expiresIn (s). */
+  private async recordStart(
+    adminId: number,
+    targetId: number,
+    familyId: string | null,
+  ): Promise<number> {
+    const now = new Date();
+    if (!familyId) {
+      await this.sessions.auditStart(adminId, targetId, null);
+      return IMPERSONATION_TTL_MS / 1000;
+    }
+    const marker = await this.sessions.start(familyId, adminId, targetId);
+    return secondsUntil(marker.expiresAt, now);
   }
 
   private async findImpersonationTarget(targetUserId: number) {
@@ -233,10 +267,11 @@ export class LocalAuthService {
     return target;
   }
 
-  private buildImpersonationTokens(
-    adminUser: { id: number; username: string; role: UserRole },
+  private buildImpersonationToken(
+    adminUser: { id: number },
     target: typeof users.$inferSelect,
-  ) {
+    expiresInSeconds: number,
+  ): ImpersonationStartResult {
     return {
       access_token: this.jwtService.sign(
         {
@@ -245,13 +280,8 @@ export class LocalAuthService {
           role: target.role,
           impersonatedBy: adminUser.id,
         },
-        { expiresIn: '1h' },
+        { expiresIn: expiresInSeconds },
       ),
-      original_token: this.jwtService.sign({
-        username: adminUser.username,
-        sub: adminUser.id,
-        role: adminUser.role,
-      }),
       user: {
         id: target.id,
         username: target.username,

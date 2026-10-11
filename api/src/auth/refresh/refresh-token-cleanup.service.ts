@@ -5,6 +5,7 @@ import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
+import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 
 /**
  * ROK-1353: prune expired and revoked refresh-token rows daily.
@@ -19,6 +20,7 @@ export class RefreshTokenCleanupService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly cronJobService: CronJobService,
+    private readonly impersonations: ImpersonationSessionService,
   ) {}
 
   @Cron('40 0 3 * * *', {
@@ -36,8 +38,13 @@ export class RefreshTokenCleanupService {
               isNotNull(schema.refreshTokens.revokedAt),
             ),
           );
-        if (result.count === 0) return false;
-        this.logger.log(`Cleaned up ${result.count} refresh token(s)`);
+        // ROK-1754: expired impersonation markers (admins who never return);
+        // sweepExpired audits one `impersonate_stop` (reason expired) each.
+        const swept = await this.impersonations.sweepExpired();
+        if (result.count === 0 && swept === 0) return false;
+        this.logger.log(
+          `Cleaned up ${result.count} refresh token(s), ${swept} impersonation(s)`,
+        );
       },
     );
   }

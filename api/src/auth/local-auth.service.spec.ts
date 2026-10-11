@@ -5,6 +5,7 @@ import * as bcrypt from 'bcrypt';
 import { LocalAuthService } from './local-auth.service';
 import * as schema from '../drizzle/schema';
 import { KICK_COOLDOWN_MS } from './auth-status.helpers';
+import type { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 
 jest.mock('bcrypt');
 
@@ -25,6 +26,10 @@ function makeDb(results: unknown[][]): Db {
 const mockJwt = {
   sign: jest.fn().mockReturnValue('token'),
 } as unknown as JwtService;
+const mockSessions = {
+  start: jest.fn(),
+  auditStart: jest.fn().mockResolvedValue(undefined),
+} as unknown as ImpersonationSessionService;
 const localCred = { passwordHash: 'hash', userId: 5 };
 
 function baseUser(overrides: Record<string, unknown>) {
@@ -50,7 +55,7 @@ beforeEach(() => {
 describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313)', () => {
   it('rejects a banned user with the suspension message', async () => {
     const db = makeDb([[localCred], [baseUser({ bannedAt: new Date() })]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(
       service.validateCredentials('a@b.com', 'pw'),
@@ -60,7 +65,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
   it('rejects a kicked user still inside the cooldown', async () => {
     const kickedAt = new Date(Date.now() - 60_000);
     const db = makeDb([[localCred], [baseUser({ kickedAt })]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.validateCredentials('a@b.com', 'pw')).rejects.toThrow(
       /log in again in \d+ minute/,
@@ -69,7 +74,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
 
   it('returns the user for a clean (non-banned, non-kicked) account', async () => {
     const db = makeDb([[localCred], [baseUser({})]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const user = await service.validateCredentials('a@b.com', 'pw');
     expect(user).toMatchObject({ id: 5, username: 'target' });
@@ -86,7 +91,7 @@ describe('LocalAuthService.validateCredentials — ban/kick enforcement (ROK-313
           .fn()
           .mockReturnValue({ where: jest.fn().mockResolvedValue(undefined) }),
       });
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const user = await service.validateCredentials('a@b.com', 'pw');
     expect(user).toMatchObject({ id: 5 });
@@ -98,7 +103,7 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
 
   it('rejects impersonating a banned account', async () => {
     const db = makeDb([[baseUser({ bannedAt: new Date() })]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.impersonate(admin, 5)).rejects.toThrow(
       'Cannot impersonate a suspended account',
@@ -107,7 +112,7 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
 
   it('allows impersonating a non-banned member', async () => {
     const db = makeDb([[baseUser({})]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     const result = await service.impersonate(admin, 5);
     expect(result).toMatchObject({ user: { id: 5 } });
@@ -115,7 +120,7 @@ describe('LocalAuthService.impersonate — banned target guard (ROK-313 §9.8)',
 
   it('still rejects impersonating an admin (UnauthorizedException)', async () => {
     const db = makeDb([[baseUser({ role: 'admin' })]]);
-    const service = new LocalAuthService(db, mockJwt);
+    const service = new LocalAuthService(db, mockJwt, mockSessions);
 
     await expect(service.impersonate(admin, 5)).rejects.toBeInstanceOf(
       UnauthorizedException,
