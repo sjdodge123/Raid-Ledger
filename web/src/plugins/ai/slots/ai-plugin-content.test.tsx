@@ -11,7 +11,8 @@ import { AiPluginContent } from './ai-plugin-content';
  * fetch, and throws a network TypeError for test-chat only while armed.
  */
 const netFail = vi.hoisted(() => ({ armed: false, hits: 0 }));
-vi.mock('../../../lib/api/native-fetch', () => ({
+vi.mock('../../../lib/api/native-fetch', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/api/native-fetch')>()),
     nativeFetch: (input: RequestInfo | URL, init?: RequestInit) => {
         const url = input instanceof Request ? input.url : String(input);
         if (netFail.armed && url.includes('/admin/ai/test-chat')) {
