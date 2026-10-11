@@ -136,6 +136,14 @@ export const OAuthStartResponseSchema = z.object({ url: z.string().url() });
 export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;
 
 /**
+ * `?intent=` on the OAuth start route (ROK-1596 D8). `primary` also asks for
+ * the sensitive `calendar.events` scope, only when the user picks their main
+ * calendar as the send target. ROK-1593 appends `'read'`.
+ */
+export const CalendarOAuthIntentSchema = z.enum(['connect', 'primary']);
+export type CalendarOAuthIntent = z.infer<typeof CalendarOAuthIntentSchema>;
+
+/**
  * `?error=<code>` on the OAuth callback's redirect to
  * `/profile/gaming/calendars` (ROK-1592 L10). A closed set, so the page maps
  * a code to copy and never echoes the query string.

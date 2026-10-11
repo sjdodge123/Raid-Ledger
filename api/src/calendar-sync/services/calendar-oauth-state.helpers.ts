@@ -1,7 +1,9 @@
 /**
  * ROK-1592 (plan L3/L4/L5/L6): the calendar OAuth round-trip state.
  *
- * The state is `signState({uid, provider, n, r}, 'calendar-oauth')`:
+ * The state is `signState({uid, provider, n, r, i}, 'calendar-oauth')`:
+ * - `i` is the consent intent (ROK-1596 D8; absent = `connect`). It is signed, so
+ *   a browser cannot upgrade `connect` to `primary`; an unknown value fails.
  * - `n` is a 16-byte random nonce. It is consumed once at the callback
  *   (`consumeTokenOnce`, L5), so a replayed callback URL fails.
  * - `r` is the ROK-1366 browser binding. The start route mints it with
@@ -15,6 +17,10 @@
  * in the state, but the verifier cannot be derived without the server key.
  */
 import { createHash, createHmac, randomBytes } from 'node:crypto';
+import {
+  CalendarOAuthIntentSchema,
+  type CalendarOAuthIntent,
+} from '@raid-ledger/contract';
 import * as singleUseToken from '../../auth/single-use-token.helpers';
 import type * as schema from '../../drizzle/schema';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -31,6 +37,8 @@ const NONCE_BYTES = 16;
 export interface MintCalendarOAuthStateInput {
   uid: number;
   provider: CalendarProviderKey;
+  /** D8 consent intent; defaults to `connect`. */
+  intent?: CalendarOAuthIntent;
   /** Sets the browser-binding cookie and returns its `r`. */
   bindToBrowser: () => string;
   nowMs?: number;
@@ -52,6 +60,7 @@ export interface VerifiedCalendarOAuthState {
   uid: number;
   provider: CalendarProviderKey;
   codeVerifier: string;
+  intent: CalendarOAuthIntent;
 }
 
 function pkceKey(): Buffer {
@@ -79,7 +88,13 @@ export function mintCalendarOAuthState(
   const n = randomBytes(NONCE_BYTES).toString('base64url');
   const r = input.bindToBrowser();
   const state = signState(
-    { uid: input.uid, provider: input.provider, n, r },
+    {
+      uid: input.uid,
+      provider: input.provider,
+      n,
+      r,
+      i: input.intent ?? 'connect',
+    },
     'calendar-oauth',
     input.nowMs === undefined ? {} : { nowMs: input.nowMs },
   );
@@ -114,6 +129,8 @@ export async function verifyCalendarOAuthState(
   if (!claims || claims.provider !== input.provider) return null;
   const { n } = claims;
   if (typeof n !== 'string' || n.length === 0) return null;
+  const intent = CalendarOAuthIntentSchema.safeParse(claims.i ?? 'connect');
+  if (!intent.success) return null;
   if (!boundToBrowser(input.assertBoundToBrowser, claims.r)) return null;
   const fresh = await singleUseToken.consumeTokenOnce(
     db,
@@ -124,5 +141,6 @@ export async function verifyCalendarOAuthState(
     uid: claims.uid,
     provider: input.provider,
     codeVerifier: deriveCodeVerifier(n),
+    intent: intent.data,
   };
 }

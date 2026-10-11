@@ -30,6 +30,7 @@ import type {
 } from '../calendar-provider.interface';
 import {
   buildGoogleAuthUrl,
+  googleScopesFor,
   exchangeGoogleCode,
   MissingScopesError,
   missingGoogleScopes,
@@ -67,7 +68,8 @@ export class GoogleCalendarAdapter
   /** `input.redirectUri` is `buildRedirectUris(settings).google`. */
   async buildAuthUrl(input: AuthUrlInput): Promise<string> {
     const { clientId } = await this.client();
-    return buildGoogleAuthUrl({ clientId, ...input });
+    const scopes = googleScopesFor(input.intent ?? 'connect');
+    return buildGoogleAuthUrl({ clientId, ...input, scopes });
   }
 
   /**

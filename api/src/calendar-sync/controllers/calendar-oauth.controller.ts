@@ -26,7 +26,9 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { AuthGuard } from '@nestjs/passport';
+import type { Queue } from 'bullmq';
 import * as Sentry from '@sentry/nestjs';
 import type { Request as ExpressRequest, Response } from 'express';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -49,6 +51,7 @@ import {
   type CalendarOAuthProvider,
 } from '../../settings/settings-calendar-sync.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
+import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
 import type { CalendarAccountProvider } from '../providers/calendar-provider.interface';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import {
@@ -60,7 +63,9 @@ import { buildRedirectUris } from '../services/calendar-sync-admin.helpers';
 import {
   mintCalendarOAuthState,
   verifyCalendarOAuthState,
+  type VerifiedCalendarOAuthState,
 } from '../services/calendar-oauth-state.helpers';
+import * as intents from '../services/calendar-oauth-intent.helpers';
 import {
   revokeUnstoredGrant,
   upsertCalendarConnection,
@@ -106,12 +111,14 @@ export class CalendarOAuthController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
     private readonly registry: CalendarProviderRegistry,
+    @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly writeQueue: Queue,
   ) {}
 
   @Get('users/me/calendars/oauth/:provider/start')
   @UseGuards(AuthGuard('jwt'), CalendarSyncEnabledGuard)
   async start(
     @Param('provider') raw: string,
+    @Query('intent') rawIntent: unknown,
     @Req() req: AuthenticatedRequest,
     @Res({ passthrough: true }) res: Response,
   ): Promise<OAuthStartResponse> {
@@ -119,9 +126,11 @@ export class CalendarOAuthController {
     if (!target || !(await target.provider.isConfigured())) {
       throw new NotFoundException();
     }
+    const intent = intents.parseOAuthIntentQuery(rawIntent);
     const { state, codeChallenge } = mintCalendarOAuthState({
       uid: req.user.id,
       provider: target.key,
+      intent,
       bindToBrowser: () => bindLinkStateToBrowser(res, target.link),
     });
     const redirectUri = await this.redirectUri(target.key);
@@ -129,6 +138,7 @@ export class CalendarOAuthController {
       state,
       codeChallenge,
       redirectUri,
+      intent,
     });
     return { url };
   }
@@ -175,32 +185,39 @@ export class CalendarOAuthController {
     if (error) return error === 'access_denied' ? 'denied' : 'exchange';
     const code = firstString(query.code);
     if (!code) return 'exchange';
-    return this.connect(target, verified.uid, code, verified.codeVerifier);
+    return this.connect(target, verified, code);
   }
 
   private async connect(
     target: OAuthTarget,
-    userId: number,
+    verified: VerifiedCalendarOAuthState,
     code: string,
-    codeVerifier: string,
-  ): Promise<'connected'> {
+  ): Promise<'connected' | 'scopes'> {
+    const { uid: userId, codeVerifier, intent } = verified;
     const redirectUri = await this.redirectUri(target.key);
     const result = await target.provider.connect({
       code,
       codeVerifier,
       redirectUri,
     });
-    try {
-      await upsertCalendarConnection(this.db, {
-        userId,
-        provider: target.key,
-        result,
-      });
-    } catch (err) {
+    const scopes = result.credentials.scopes;
+    // D8: the stored grant stays valid, so no revoke and no write.
+    if (!intents.grantCoversIntent(intent, target.key, scopes)) return 'scopes';
+    const { id } = await upsertCalendarConnection(this.db, {
+      userId,
+      provider: target.key,
+      result,
+    }).catch(async (err: unknown) => {
       // Google already issued this grant; nothing will hold it, so end it.
       await revokeUnstoredGrant(target.provider, result.credentials);
       throw err;
-    }
+    });
+    await intents.applyConsentIntent(this.db, {
+      intent,
+      connectionId: id,
+      userId,
+      queue: this.writeQueue,
+    });
     return 'connected';
   }
 
