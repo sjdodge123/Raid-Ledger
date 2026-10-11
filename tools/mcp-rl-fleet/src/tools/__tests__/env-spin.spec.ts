@@ -1,5 +1,6 @@
 // rl_env_spin — async dispatch (TDB:208) + the synchronous spinEnv core.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const spawnLocalRunner = vi.fn();
 const waitLocalTask = vi.fn();
@@ -89,13 +90,13 @@ describe('rl_env_spin execute() — async by default', () => {
 
   it('an omitted worktree_path defaults to the server cwd so RL_AGENT_ID hashes the session folder', async () => {
     await execute({ slug: 'rok-x' });
-    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    const params = must(spawnLocalRunner.mock.calls[0], 'the spawnLocalRunner call')[2] as { worktree_path?: string };
     expect(params.worktree_path).toBe(process.cwd());
   });
 
   it('an explicit worktree_path is passed through unchanged', async () => {
     await execute({ slug: 'rok-x', worktree_path: '/wt' });
-    const params = spawnLocalRunner.mock.calls[0][2] as { worktree_path?: string };
+    const params = must(spawnLocalRunner.mock.calls[0], 'the spawnLocalRunner call')[2] as { worktree_path?: string };
     expect(params.worktree_path).toBe('/wt');
   });
 

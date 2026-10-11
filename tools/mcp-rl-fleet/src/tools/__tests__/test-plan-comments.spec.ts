@@ -23,6 +23,7 @@
 
 import { EventEmitter } from 'node:events';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { must } from './must.js';
 
 import { executeStatus, executeWait } from '../test-plan.js';
 
@@ -79,7 +80,7 @@ vi.mock('node:child_process', () => ({
   ) => {
     const remote = args[args.length - 1] ?? '';
     const m = /http:\/\/rl-dashboard:8080([^'"\s]+)/.exec(remote);
-    const path = m ? m[1] : '';
+    const path = m?.[1] ?? '';
     getPaths.push(path);
     const out = fakeRaw ?? JSON.stringify(fakeDashboardGet(path));
     cb(null, { stdout: `${out}\nRL_STATUS:${fakeStatus}`, stderr: '' });
@@ -129,7 +130,8 @@ type Shaped = {
 };
 const comments = (r: unknown) => (r as Shaped).plan.steps.flatMap((s) => s.comments);
 const bodies = (r: unknown) => comments(r).map((c) => c.body as string);
-const inner = (body: string): string => {
+const inner = (maybe: string | undefined): string => {
+  const body = must(maybe, 'a comment body at that index');
   expect(body.startsWith(OPEN), `body must open with a bare wrap: ${body}`).toBe(true);
   expect(body.endsWith(CLOSE), `body must close the wrap: ${body}`).toBe(true);
   return body.slice(OPEN.length, body.length - CLOSE.length);
@@ -164,13 +166,13 @@ describe('ROK-1657 — executeStatus default read carries no comment bodies', ()
     expectNoBodies(result);
     const steps = (result as Shaped).plan.steps;
     expect(steps.map((s) => s.comment_count)).toEqual([2, 0]);
-    expect(steps[0].comments[0]).toEqual({
+    expect(steps[0]?.comments[0]).toEqual({
       tester: 'tess',
       ts: '2026-09-23T11:00:00Z',
       has_body: true,
       attachment_url: null,
     });
-    expect(steps[0].comments[1]).toMatchObject({ has_body: false });
+    expect(steps[0]?.comments[1]).toMatchObject({ has_body: false });
   });
 
   it('strips bodies even when the dashboard returns them unasked', async () => {
@@ -220,7 +222,7 @@ describe('ROK-1657 — executeStatus include_comments:true returns plain text', 
   ])('neutralises a %s so no tag can form inside the wrap', async (_label, input, expected) => {
     fakeSteps = one(input);
     const result = await executeStatus({ slug: 'aaa', plan_id: PLAN_ID, include_comments: true });
-    const [body] = bodies(result);
+    const body = must(bodies(result)[0], 'the first comment body');
     const text = inner(body);
     expect(text).toBe(expected);
     expect(text, 'no literal < or > inside the wrap').not.toMatch(/[<>]/);
@@ -412,7 +414,7 @@ describe('ROK-1657 — executeWait parity', () => {
     expect(getPaths.length).toBeGreaterThanOrEqual(2);
     for (const p of getPaths) expect(p).not.toContain('include_comments');
     expectNoBodies(result);
-    expect((result as Shaped).plan.steps[0].comment_count).toBe(1);
+    expect((result as Shaped).plan.steps[0]?.comment_count).toBe(1);
   });
 
   it('include_comments:true: settles with decoded plain text in the bare wrap', async () => {

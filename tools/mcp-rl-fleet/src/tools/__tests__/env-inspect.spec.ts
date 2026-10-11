@@ -4,6 +4,7 @@
 // SSH, then assertions cover argv shape, enum/path mapping, structured error
 // codes, and 64KB truncation envelope.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -132,7 +133,7 @@ describe('rl_env_inspect — execute()', () => {
     expect(result.content).toBe('server { listen 80; }\n');
     expect(result.bytes).toBe('server { listen 80; }\n'.length);
     expect(result.truncated).toBe(false);
-    const call = mockExecFile.mock.calls[0];
+    const call = must(mockExecFile.mock.calls[0], 'the first execFile call');
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
     // Mirrors infra-logs proxy routing: rl-agent is NOT in docker group, so
@@ -149,7 +150,7 @@ describe('rl_env_inspect — execute()', () => {
     expect(result.what).toBe('supervisor-conf');
     expect(result.path).toBe('/etc/supervisor.d/raid-ledger.ini');
     expect(result.container).toBe('rl-env-other-allinone');
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('rl-env-other-allinone');
     expect(remote).toContain('cat /etc/supervisor.d/raid-ledger.ini');
     expect(remote.startsWith('DOCKER_HOST=tcp://127.0.0.1:2375 ')).toBe(true);
@@ -158,7 +159,7 @@ describe('rl_env_inspect — execute()', () => {
   it('uses the standard SSH argv (BatchMode + ConnectTimeout)', async () => {
     execFileOk('x');
     await execute({ slug: 'env1', what: 'nginx-conf' });
-    const argv = mockExecFile.mock.calls[0][1] as string[];
+    const argv = must(mockExecFile.mock.calls[0], 'the first execFile call')[1] as string[];
     expect(argv).toContain('-o');
     expect(argv).toContain('BatchMode=yes');
     expect(argv).toContain('ConnectTimeout=5');

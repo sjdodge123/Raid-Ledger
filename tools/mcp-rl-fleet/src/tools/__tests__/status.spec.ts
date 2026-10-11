@@ -110,8 +110,8 @@ describe('rl_status — ROK-1338 PR-1 schema extensions', () => {
     );
     const result: StatusResult = await execute();
     expect(result.runners).toHaveLength(1);
-    expect(result.runners?.[0].last_sync_at).toBe('2026-05-20T14:30:00Z');
-    expect(result.runners?.[0].worktree_head).toBe('abc1234');
+    expect(result.runners?.[0]?.last_sync_at).toBe('2026-05-20T14:30:00Z');
+    expect(result.runners?.[0]?.worktree_head).toBe('abc1234');
   });
 
   it('runners[] accepts null for both new fields (slot not claimed)', async () => {
@@ -132,8 +132,8 @@ describe('rl_status — ROK-1338 PR-1 schema extensions', () => {
       }),
     );
     const result: StatusResult = await execute();
-    expect(result.runners?.[0].last_sync_at).toBeNull();
-    expect(result.runners?.[0].worktree_head).toBeNull();
+    expect(result.runners?.[0]?.last_sync_at).toBeNull();
+    expect(result.runners?.[0]?.worktree_head).toBeNull();
   });
 
   it('runners[] tolerates the new fields being absent (pre-PR-1 orchestrator)', async () => {
@@ -152,9 +152,9 @@ describe('rl_status — ROK-1338 PR-1 schema extensions', () => {
       }),
     );
     const result: StatusResult = await execute();
-    expect(result.runners?.[0].container).toBe('rl-runner-1');
-    expect(result.runners?.[0].last_sync_at).toBeUndefined();
-    expect(result.runners?.[0].worktree_head).toBeUndefined();
+    expect(result.runners?.[0]?.container).toBe('rl-runner-1');
+    expect(result.runners?.[0]?.last_sync_at).toBeUndefined();
+    expect(result.runners?.[0]?.worktree_head).toBeUndefined();
   });
 
   it('preserves all legacy runner fields (cpu/mem/net/block) alongside new ones', async () => {
@@ -211,8 +211,8 @@ describe('rl_status — ROK-1338 PR-1 schema extensions', () => {
       }),
     );
     const result: StatusResult = await execute();
-    expect(result.runners?.[0].worktree_head).toBe('fff0000');
-    expect(result.runners?.[1].worktree_head).toBeNull();
+    expect(result.runners?.[0]?.worktree_head).toBe('fff0000');
+    expect(result.runners?.[1]?.worktree_head).toBeNull();
   });
 });
 

@@ -58,8 +58,8 @@ describe('resolveWorktreeCommitSha (ROK-1510)', () => {
     execFileOk(`${HEAD}\n`);
     const sha = await resolveWorktreeCommitSha('/wt');
     expect(sha).toBe(HEAD);
-    expect(mockExecFile.mock.calls[0][0]).toBe('git');
-    expect(mockExecFile.mock.calls[0][1]).toEqual(['-C', '/wt', 'rev-parse', 'HEAD']);
+    expect(mockExecFile.mock.calls[0]?.[0]).toBe('git');
+    expect(mockExecFile.mock.calls[0]?.[1]).toEqual(['-C', '/wt', 'rev-parse', 'HEAD']);
   });
 
   it('returns empty when git fails (non-git worktree)', async () => {
@@ -75,7 +75,7 @@ describe('resolveWorktreeCommitSha (ROK-1510)', () => {
   it('defaults to process.cwd() when worktree_path is omitted', async () => {
     execFileOk(`${HEAD}\n`);
     await resolveWorktreeCommitSha();
-    expect(mockExecFile.mock.calls[0][1][1]).toBe(process.cwd());
+    expect(mockExecFile.mock.calls[0]?.[1][1]).toBe(process.cwd());
   });
 });
 
@@ -88,9 +88,9 @@ describe('resolveWorktreeSurfaceHash (ROK-1566)', () => {
     execFileOk('4d5e6f708192\n');
     const hash = await resolveWorktreeSurfaceHash('/wt');
     expect(hash).toBe('4d5e6f708192');
-    expect(mockExecFile.mock.calls[0][0]).toBe('bash');
-    expect(mockExecFile.mock.calls[0][1]).toEqual(['/wt/scripts/smoke/surface-hash.sh']);
-    expect((mockExecFile.mock.calls[0][2] as { cwd?: string }).cwd).toBe('/wt');
+    expect(mockExecFile.mock.calls[0]?.[0]).toBe('bash');
+    expect(mockExecFile.mock.calls[0]?.[1]).toEqual(['/wt/scripts/smoke/surface-hash.sh']);
+    expect((mockExecFile.mock.calls[0]?.[2] as { cwd?: string } | undefined)?.cwd).toBe('/wt');
   });
 
   it('passes `nosurface` through verbatim', async () => {
@@ -108,7 +108,7 @@ describe('resolveWorktreeSurfaceHash (ROK-1566)', () => {
   it('defaults to process.cwd() when worktree_path is omitted', async () => {
     execFileOk('4d5e6f708192\n');
     await resolveWorktreeSurfaceHash();
-    expect(mockExecFile.mock.calls[0][1][0]).toBe(
+    expect(mockExecFile.mock.calls[0]?.[1][0]).toBe(
       `${process.cwd()}/scripts/smoke/surface-hash.sh`,
     );
   });
