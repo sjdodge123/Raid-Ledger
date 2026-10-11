@@ -85,22 +85,37 @@ describe('buildRosterCharacter — Forever portrait fields (ROK-1761)', () => {
 describe.each([
   ['buildRosterAssignmentResponse', buildRosterAssignmentResponse],
   ['buildRosterAssignmentResponseDto', buildRosterAssignmentResponseDto],
-] as const)('%s — routes through buildRosterCharacter (ROK-1761)', (_n, build) => {
-  it('the assignment character equals the shared builder output', () => {
-    const res = build({ event_signups: signup, users: null, characters: forever });
-    expect(res.character).toEqual(buildRosterCharacter(forever));
-  });
+] as const)(
+  '%s — routes through buildRosterCharacter (ROK-1761)',
+  (_n, build) => {
+    it('the assignment character equals the shared builder output', () => {
+      const res = build({
+        event_signups: signup,
+        users: null,
+        characters: forever,
+      });
+      expect(res.character).toEqual(buildRosterCharacter(forever));
+    });
 
-  it('no character stays null', () => {
-    const res = build({ event_signups: signup, users: null, characters: null });
-    expect(res.character).toBeNull();
-  });
-});
+    it('no character stays null', () => {
+      const res = build({
+        event_signups: signup,
+        users: null,
+        characters: null,
+      });
+      expect(res.character).toBeNull();
+    });
+  },
+);
 
 describe('buildCharacterDto — the character’s own game (ROK-1761)', () => {
   it('carries gameId, gameVariant and ruleset from the character row', () => {
     expect(buildCharacterDto(forever)).toEqual(
-      expect.objectContaining({ gameId: 7, gameVariant: null, ruleset: 'normal' }),
+      expect.objectContaining({
+        gameId: 7,
+        gameVariant: null,
+        ruleset: 'normal',
+      }),
     );
     expect(buildCharacterDto(nonWow)).toEqual(
       expect.objectContaining({ gameId: 42, gameVariant: null, ruleset: null }),
