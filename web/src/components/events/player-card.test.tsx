@@ -1,10 +1,17 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
+import { renderWithProviders } from '../../test/render-helpers';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { usePluginStore } from '../../stores/plugin-store';
+
+vi.mock('../../hooks/use-game-registry', () => ({
+    useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
+}));
 import type { ViewerRosterAssignment } from '../../lib/api/viewer-event-schemas';
 
 /** Create a minimal RosterAssignmentResponse for testing. */
@@ -294,5 +301,40 @@ describe('PlayerCard — public roster payload without discordId (ROK-1629)', ()
             path: '/users/0',
             state: { guest: true, username: 'DiscordGuy', discordId: '', avatarHash: SERVER_AVATAR },
         });
+    });
+});
+
+/** ROK-1761: a WoW: Forever character with no render shows the portrait tile in the roster row. */
+describe('PlayerCard — Forever fallback portrait (ROK-1761)', () => {
+    // The tile reaches core through the WoW plugin's PortraitFallback seam, so the plugin must be registered + active.
+    beforeEach(activateWowPlugin);
+    afterEach(() => usePluginStore.setState({ activeSlugs: new Set() }));
+    const foreverChar = { id: '00000000-0000-4000-8000-0000000000aa', name: 'Fernwhisper', className: 'Druid', role: 'healer', avatarUrl: null, race: 'Night Elf', ruleset: 'normal', gameVariant: null };
+
+    it.each([['compact', 'w-8'], ['default', 'w-10']] as const)('a Forever roster row (%s) shows the tile with the race initials, not the user avatar', (size, box) => {
+        const { container } = renderCard({ player: createMockPlayer({ character: foreverChar }), size });
+        const tile = screen.getByTestId('forever-portrait');
+        expect(tile, 'tile labelled with the character name').toHaveAttribute('aria-label', 'Fernwhisper');
+        expect(tile, `${size} card keeps its avatar box`).toHaveClass(box);
+        expect(screen.getByTestId('forever-portrait-race').textContent).toBe('NE');
+        expect(container.querySelectorAll('[data-testid="forever-portrait"]').length, 'exactly one avatar slot').toBe(1);
+    });
+
+    it('a non-Forever roster row is unchanged — no tile', () => {
+        renderCard({ player: createMockPlayer({ character: { ...foreverChar, ruleset: null, gameVariant: 'classic_era' } }) });
+        expect(screen.queryByTestId('forever-portrait'), 'classic character keeps the user avatar').toBeNull();
+    });
+
+    it('a Forever character WITH a render keeps its render', () => {
+        const avatarUrl = 'https://render.example/fern.png';
+        const { container } = renderCard({ player: createMockPlayer({ character: { ...foreverChar, avatarUrl } }) });
+        expect(screen.queryByTestId('forever-portrait')).toBeNull();
+        expect(container.querySelector(`img[src="${avatarUrl}"]`), 'character render shown').not.toBeNull();
+    });
+
+    it("a LedgerLink Forever character (variant + ruleset null) resolves the tile from its own gameId", () => {
+        const ledgerLink = { ...foreverChar, ruleset: null, gameVariant: null, gameId: 7 };
+        renderWithProviders(<PlayerCard player={createMockPlayer({ character: ledgerLink })} />);
+        expect(screen.queryByTestId('forever-portrait'), 'roster row draws the tile from the character game id').not.toBeNull();
     });
 });

@@ -1,7 +1,5 @@
 import type {
   SignupResponseDto,
-  SignupCharacterDto,
-  CharacterProfessionsDto,
   ConfirmationStatus,
   SignupStatus,
   RosterRole,
@@ -9,32 +7,15 @@ import type {
   AttendanceStatus,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
+import {
+  buildCharacterDto,
+  buildRosterCharacter,
+} from './signups-roster.helpers';
 
 type SignupRow = typeof schema.eventSignups.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
 type CharacterRow = typeof schema.characters.$inferSelect;
 type AssignmentRow = typeof schema.rosterAssignments.$inferSelect;
-
-export function buildCharacterDto(character: CharacterRow): SignupCharacterDto {
-  const roleOverride = character.roleOverride as
-    'tank' | 'healer' | 'dps' | null;
-  const role = character.role as 'tank' | 'healer' | 'dps' | null;
-  return {
-    id: character.id,
-    name: character.name,
-    class: character.class,
-    spec: character.spec,
-    role: roleOverride ?? role,
-    isMain: character.isMain,
-    itemLevel: character.itemLevel,
-    level: character.level,
-    avatarUrl: character.avatarUrl,
-    race: character.race,
-    faction: character.faction as 'alliance' | 'horde' | null,
-    professions:
-      (character.professions as CharacterProfessionsDto | null) ?? null,
-  };
-}
 
 export function buildSignupResponse(
   signup: SignupRow,
@@ -112,17 +93,6 @@ function buildRosterIdentity(row: RosterRow) {
       ? (row.event_signups.discordAvatarHash ?? null)
       : (row.users?.avatar ?? null),
     customAvatarUrl: row.users?.customAvatarUrl ?? null,
-  };
-}
-
-function buildRosterCharacter(characters: CharacterRow | null) {
-  if (!characters) return null;
-  return {
-    id: characters.id,
-    name: characters.name,
-    className: characters.class,
-    role: characters.roleOverride ?? characters.role,
-    avatarUrl: characters.avatarUrl,
   };
 }
 

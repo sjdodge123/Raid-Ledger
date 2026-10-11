@@ -9,7 +9,7 @@
  * directly (not via the `plugins` index) so a test that mocks the index does
  * not stub the hooks out.
  */
-import { useCallback, type ComponentType } from 'react';
+import { useCallback, type ComponentType, type ReactNode } from 'react';
 import type { CreateCharacterDto, UpdateCharacterDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getCharacterIdentityRegistration, getCharacterIdentityRegistrations } from './plugin-registry';
@@ -55,6 +55,26 @@ export function readCharacterPrefill(state: unknown): CharacterPrefill | null {
     return p as CharacterPrefill;
 }
 
+export type CharacterPortraitSize = 'sm' | 'md' | 'lg';
+
+/** Any character-ish shape (CharacterDto fits): what a plugin needs to pick a character's portrait. */
+export interface CharacterPortraitSubject {
+    name: string;
+    avatarUrl?: string | null | undefined;
+    race?: string | null | undefined;
+    class?: string | null | undefined;
+    gameVariant?: string | null | undefined;
+    ruleset?: string | null | undefined;
+    gameId?: number | null | undefined;
+}
+
+export interface CharacterPortraitFallbackProps {
+    character: CharacterPortraitSubject;
+    size: CharacterPortraitSize;
+    /** The surface's existing avatar — what renders when no plugin claims the character. */
+    children: ReactNode;
+}
+
 export interface CharacterIdentityProvider<V = unknown> {
     readonly gameSlugs: readonly string[];
     /** False for a legacy row the plugin does not treat as having an identity. */
@@ -71,6 +91,12 @@ export interface CharacterIdentityProvider<V = unknown> {
     readonly Fields: ComponentType<IdentityFieldsProps<V>>;
     /** The label shown where a realm would be (e.g. "PvP (US)"); null when it does not apply. */
     formatLocation(c: CharacterLocationSource): string | null;
+    /**
+     * Optional avatar slot (ROK-1761): renders the plugin's own portrait for a
+     * character it claims, else `children` unchanged. Core reaches it through
+     * `CharacterPortraitFallback` (`plugins/character-portrait.tsx`).
+     */
+    readonly PortraitFallback?: ComponentType<CharacterPortraitFallbackProps> | undefined;
 }
 
 /** The active provider for a game, or null (no provider, plugin inactive, or a legacy row it skips). */

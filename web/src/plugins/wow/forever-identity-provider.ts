@@ -5,6 +5,7 @@
  */
 import type { CharacterIdentityProvider } from '../character-identity';
 import { ForeverIdentityFields } from './components/forever-identity-fields';
+import { ForeverPortraitFallback } from './components/forever-portrait';
 import {
     WOW_FOREVER_GAME_SLUG, emptyForeverIdentity, foreverCreateFields, foreverIdentityFromCharacter,
     foreverUpdateFields, formatForeverRuleset, sameForeverIdentity, validateForeverIdentity,
@@ -27,5 +28,6 @@ export const foreverIdentityProvider: CharacterIdentityProvider<ForeverIdentity>
     updateFields: foreverUpdateFields,
     hidesRealm: true,
     Fields: ForeverIdentityFields,
+    PortraitFallback: ForeverPortraitFallback,
     formatLocation: (c) => formatForeverRuleset(c.ruleset, c.region),
 };

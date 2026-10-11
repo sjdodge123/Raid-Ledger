@@ -39,6 +39,7 @@ export function buildRosterIdentity(row: {
   };
 }
 
+/** The single roster-assignment character builder (ROK-1761 dedupe). */
 export function buildRosterCharacter(characters: CharacterRow) {
   if (!characters) return null;
   return {
@@ -47,6 +48,11 @@ export function buildRosterCharacter(characters: CharacterRow) {
     className: characters.class,
     role: characters.roleOverride ?? characters.role,
     avatarUrl: characters.avatarUrl,
+    // ROK-1761: the web draws the Forever fallback portrait from these.
+    race: characters.race,
+    ruleset: characters.ruleset,
+    gameVariant: characters.gameVariant,
+    gameId: characters.gameId,
   };
 }
 
@@ -70,7 +76,7 @@ export function formatRoleLabel(r: string): string {
   return r.charAt(0).toUpperCase() + r.slice(1);
 }
 
-/** Build character DTO for signup response. */
+/** Build character DTO for signup response — the single copy (ROK-1761 dedupe). */
 export function buildCharacterDto(
   character: typeof schema.characters.$inferSelect,
 ): SignupCharacterDto {
@@ -91,6 +97,10 @@ export function buildCharacterDto(
     faction: character.faction as 'alliance' | 'horde' | null,
     professions:
       (character.professions as CharacterProfessionsDto | null) ?? null,
+    // ROK-1761: the web draws the Forever portrait from the character's own game.
+    gameId: character.gameId,
+    gameVariant: character.gameVariant,
+    ruleset: character.ruleset,
   };
 }
 

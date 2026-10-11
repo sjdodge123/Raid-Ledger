@@ -16,6 +16,7 @@ import type { AvatarUser } from '../../lib/avatar';
 import { formatRole } from '../../lib/role-colors';
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { RoleIcon } from '../shared/RoleIcon';
+import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 export interface PlayerCardProps {
     /** Player data from roster assignments — `discordId` is absent for anonymous viewers (ROK-1629) */
@@ -146,6 +147,19 @@ function PlayerCardBody({ player, raised }: { player: ViewerRosterAssignment; ra
     );
 }
 
+/** The player's avatar; a plugin may swap in its own portrait for a character with no render (ROK-1761). */
+function PlayerAvatar({ player, avatarUser, gameId, isCompact }: { player: ViewerRosterAssignment; avatarUser: AvatarUser; gameId: string | undefined; isCompact: boolean }) {
+    const avatar = <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />;
+    const c = player.character;
+    if (!c) return avatar;
+    return (
+        <CharacterPortraitFallback size={isCompact ? 'sm' : 'md'}
+            character={{ name: c.name, avatarUrl: c.avatarUrl, race: c.race, class: c.className, gameVariant: c.gameVariant, ruleset: c.ruleset, gameId: c.gameId }}>
+            {avatar}
+        </CharacterPortraitFallback>
+    );
+}
+
 export function PlayerCard({ player, size = 'default', onRemove, matchAccent, raiseControls = false }: PlayerCardProps) {
     const { avatarUser, gameId } = buildAvatarUser(player);
     const isCompact = size === 'compact';
@@ -156,7 +170,7 @@ export function PlayerCard({ player, size = 'default', onRemove, matchAccent, ra
                 ${isCompact ? 'p-2' : 'p-2.5'}
                 transition-all`}
             style={borderStyle}>
-            <AvatarWithFallback user={avatarUser} gameId={gameId} username={player.username} sizeClassName={isCompact ? 'h-8 w-8' : 'h-10 w-10'} />
+            <PlayerAvatar player={player} avatarUser={avatarUser} gameId={gameId} isCompact={isCompact} />
             <PlayerCardBody player={player} raised={raiseControls} />
             {onRemove && <RemoveButton username={player.username} onRemove={onRemove} raised={raiseControls} />}
         </div>

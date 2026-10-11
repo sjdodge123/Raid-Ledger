@@ -166,3 +166,6 @@ web/.bundle-report/
 # ROK-1527: flag file that switches the opt-in integration heap probe on
 api/.rl-heap-probe
 !scripts/contrast-audit-aggregate.spec.mjs
+
+# Playwright MCP browser screenshots (written into the cwd of whichever session drives it)
+.playwright-mcp/
