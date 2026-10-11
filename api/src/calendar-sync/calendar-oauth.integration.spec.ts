@@ -37,6 +37,7 @@ import {
 } from './providers/google/google-oauth.helpers';
 import { buildRedirectUris } from './services/calendar-sync-admin.helpers';
 import * as connectHelpers from './services/calendar-connect.helpers';
+import { TransientError } from './providers/calendar-provider.errors';
 import * as intentHelpers from './services/calendar-oauth-intent.helpers';
 import { mintCalendarOAuthState } from './services/calendar-oauth-state.helpers';
 import {
@@ -497,7 +498,7 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
     stubGoogle(WITH_EVENTS);
     jest
       .spyOn(intentHelpers, 'applyConsentIntent')
-      .mockRejectedValue(new Error('redis down'));
+      .mockRejectedValue(new TransientError('consent_apply'));
     jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     const s = await startPrimary();
     expect(
