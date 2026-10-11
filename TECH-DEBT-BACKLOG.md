@@ -2553,3 +2553,6 @@ same day (#1278, #1279, #1280).
 ### 2026-10-11 — feat/rok-1754-token-in-memory (surfaced during ROK-1754 lane D2, Playwright harness migration)
 
 - **med** `scripts/smoke/lineup-abort.smoke.spec.ts:357` — the "member" step writes storage keys the app never reads, so it has always run as the admin, not the member it names. Pre-existing on main: the keys were bogus before ROK-1754 moved sessions to the `rl_rt` cookie. The step's member-permission assertion is therefore unproven. Suggested: create the member context through `scripts/smoke/browser-session.ts` (ROK-1754 D1 endpoint) and re-check the expected member-side behaviour.
+
+### 2026-10-11 — feat/rok-1754-token-in-memory (surfaced during the ROK-1754 web review, finding m5)
+- **med** `scripts/smoke/lineup-abort.smoke.spec.ts:355-358`: the "member" step writes the member JWT to `localStorage` keys `jwt` / `access_token`, which the app never reads. The page belongs to the admin context, so the step runs as admin, and it leaves a JWT in web storage against the harness's no-JWT invariant. Pre-existing on main: the keys were never read there either. Suggested: `await signInContextWithJwt(page.context(), access_token)`, then `page.goto`.
