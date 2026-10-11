@@ -239,6 +239,12 @@ async function planNormalization(
   const plan: NormalizationPlan = { keepIds: [], retargetIds: [], dropIds: [] };
   const bySlot = new Map<string, BindingRow[]>();
   for (const b of affected) {
+    // ROK-1766: a Quick Play Announcements row is meaningless without its game
+    // and has no legal null-game shape — drop it rather than retarget it.
+    if (b.bindingPurpose === 'quick-play-announcements') {
+      plan.dropIds.push(b.id);
+      continue;
+    }
     if (b.recurrenceGroupId != null) {
       // Series rows: no index collision possible; only monitors need repair.
       if (b.bindingPurpose === 'game-voice-monitor')

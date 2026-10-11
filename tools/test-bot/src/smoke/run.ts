@@ -50,6 +50,7 @@ import { discordDeactivationTests } from "./tests/discord-deactivation.test.js";
 import { recruitmentReminderTests } from "./tests/recruitment-reminder.test.js";
 import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
+import { quickPlayAnnouncementsTests } from "./tests/quick-play-announcements.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
@@ -195,6 +196,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...recruitmentReminderTests,
     ...weeklyDigestTests,
     ...seriesDualBindingTests,
+    ...quickPlayAnnouncementsTests,
     ...ephemeralVoiceTests,
     ...lfmEmbedTests,
     ...lfmPlayingTests,

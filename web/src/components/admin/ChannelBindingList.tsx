@@ -9,12 +9,16 @@ const BEHAVIOR_LABELS: Record<string, string> = {
   'game-announcements': 'Event Announcements',
   'game-voice-monitor': 'Quick Play Events (Activity Monitoring) & Game Event Announcements',
   'general-lobby': 'General Lobby',
+  'quick-play-announcements': 'Quick Play Announcements',
+  'lfg-board': 'LFG Board',
 };
 
 const BEHAVIOR_BADGES: Record<string, { label: string; className: string }> = {
   'game-announcements': { label: 'Announcements', className: 'bg-cyan-500/15 text-cyan-400' },
   'game-voice-monitor': { label: 'Activity Monitor', className: 'bg-purple-500/15 text-purple-400' },
   'general-lobby': { label: 'General Lobby', className: 'bg-amber-500/15 text-amber-400' },
+  'quick-play-announcements': { label: 'Quick Play', className: 'bg-teal-500/15 text-teal-400' },
+  'lfg-board': { label: 'LFG Board', className: 'bg-indigo-500/15 text-indigo-400' },
 };
 
 interface ChannelBindingListProps {

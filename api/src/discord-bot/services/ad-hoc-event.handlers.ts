@@ -11,6 +11,7 @@ import type { VoiceAttendanceService } from './voice-attendance.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import type { ChannelBindingsService } from './channel-bindings.service';
+import { bindingIdForEvent } from './ad-hoc-event-key.helpers';
 import {
   resolveGameName,
   createAdHocEventRow,
@@ -296,4 +297,29 @@ async function emitRosterToClients(
   const participants = await deps.participantService.getRoster(eventId);
   const activeCount = await deps.participantService.getActiveCount(eventId);
   deps.gateway.emitRosterUpdate(eventId, participants, activeCount);
+}
+
+/**
+ * Tear down a cancelled or deleted session: cancel its grace job and drop its
+ * active state. A no-op for an event that is not active here (a scheduled
+ * event, or a session already finalised).
+ *
+ * ROK-1766 M1: on CANCEL (`finaliseCard`) the session's card(s) are ended
+ * first — the scheduled CANCELLED builder skips ad-hoc events, so nothing
+ * else would. A DELETE skips it: the event row (and its tracked rows) is gone.
+ */
+export async function removeActiveSession(
+  deps: AdHocHandlerDeps,
+  eventId: number,
+  finaliseCard: boolean,
+): Promise<void> {
+  const bindingId = bindingIdForEvent(deps.activeEvents, eventId);
+  if (bindingId === undefined) return;
+  if (finaliseCard) {
+    await deps.notificationService.notifyCancelled(eventId, bindingId);
+  }
+  await deps.gracePeriodQueue.cancel(eventId);
+  for (const [key, state] of deps.activeEvents) {
+    if (state.eventId === eventId) deps.activeEvents.delete(key);
+  }
 }

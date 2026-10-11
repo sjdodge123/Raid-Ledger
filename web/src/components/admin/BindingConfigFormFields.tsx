@@ -3,6 +3,7 @@ import type { IgdbGameDto } from "@raid-ledger/contract";
 import type { BindingPurpose, ChannelType } from "@raid-ledger/contract";
 import {
   AUTO_CLOSE_HELP,
+  BINDING_PURPOSE_LABELS as LABEL,
   MIN_PLAYERS_CONSEQUENCE,
   MIN_PLAYERS_HELP,
   autoCloseLabel,
@@ -16,9 +17,11 @@ import { Input } from "../ui/input";
 import { Select } from "../ui/select";
 import { PURPOSE_OPTIONS } from "./binding-form.helpers";
 
-const PURPOSE_HINT =
-  "Voice + a game = Activity Monitor · Voice, no game = General Lobby · " +
-  "Text = Announcements. The form won't let you save an invalid combination.";
+/** Built from the contract labels so a renamed or added purpose cannot drift (ROK-1766). */
+export const PURPOSE_HINT =
+  `Voice + a game = ${LABEL["game-voice-monitor"]} · Voice, no game = ${LABEL["general-lobby"]} · ` +
+  `Text = ${LABEL["game-announcements"]}, or ${LABEL["quick-play-announcements"]} (one channel per game). ` +
+  "The form won't let you save an invalid combination.";
 
 /** A whole-number field from 1 to `max`, on the shared Field + Input. */
 function NumberField(props: {

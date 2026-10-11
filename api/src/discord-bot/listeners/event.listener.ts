@@ -29,6 +29,7 @@ import {
   deleteEmbedRecord,
   updateEmbedStateForRecords,
   getReschedulingPollId,
+  isAdHocEvent,
   applyEmbedUpdates,
   type EventListenerDeps,
 } from './event.listener.handlers';
@@ -111,6 +112,7 @@ export class DiscordEventListener {
       (await getReschedulingPollId(this.deps, payload.eventId)) !== null;
     if (!isRescheduling) this.fireScheduledEventUpdate(payload);
     if (!this.clientService.isConnected()) return;
+    if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) {
       await this.handleMissingEmbedOnUpdate(payload);
@@ -126,6 +128,7 @@ export class DiscordEventListener {
     // must not linger for the rest of the (cancelled) event window (Codex review).
     await this.ephemeralVoice?.destroyById(payload.eventId, { force: true });
     if (!this.clientService.isConnected()) return;
+    if (await this.isAdHoc(payload)) return;
     const records = await findEventMessages(this.deps, payload.eventId);
     if (records.length === 0) return;
     const context = await this.buildContext();
@@ -181,6 +184,16 @@ export class DiscordEventListener {
         );
       }
     }
+  }
+
+  /**
+   * ROK-1447/1766: ad-hoc (Quick Play) cards belong to AdHocNotificationService
+   * — the scheduled builders would revert the QP card to a signup embed with
+   * buttons and persist it (same guard as `embed-sync.processor.ts`). Payloads
+   * from bind/unbind leave `isAdHoc` unset, so fall back to the DB.
+   */
+  private async isAdHoc(payload: EventPayload): Promise<boolean> {
+    return payload.isAdHoc ?? (await isAdHocEvent(this.deps, payload.eventId));
   }
 
   /** Update the embed state for an event and re-render the embed. */

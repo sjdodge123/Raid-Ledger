@@ -62,3 +62,18 @@ export function findEventKeyForMember(
   }
   return null;
 }
+
+/**
+ * The binding a live ad-hoc event belongs to, or undefined when the event is
+ * not active here (a scheduled event, or an already-finalised session).
+ * Every key starts with the binding id (see `buildEventKey`).
+ */
+export function bindingIdForEvent(
+  activeEvents: ActiveEventMap,
+  eventId: number,
+): string | undefined {
+  for (const [key, state] of activeEvents) {
+    if (state.eventId === eventId) return key.split(':')[0];
+  }
+  return undefined;
+}
