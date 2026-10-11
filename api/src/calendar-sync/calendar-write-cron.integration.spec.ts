@@ -190,9 +190,9 @@ it('§5 7a (F14): an event row deleted by raw SQL, link left → copy deleted + 
   expect(await linkRows()).toEqual([]);
 });
 
-it('a link whose event was cancelled without an emit is queued', async () => {
+it('a link whose event was cancelled without an emit is queued, even beyond the window', async () => {
   const m = await member();
-  const eventId = await eventInDays(1);
+  const eventId = await eventInDays(40);
   await rawSignUp(eventId, m.userId);
   const deps = processor.reconcileDeps();
   await reconcileCalendarCopy(deps, keyOf(m, eventId));
@@ -203,9 +203,16 @@ it('a link whose event was cancelled without an emit is queued', async () => {
   expect(await cron.run()).toEqual([keyOf(m, eventId)]);
 });
 
-it('ended events and events beyond the 28-day window are not queued', async () => {
+it('ended events (even cancelled, with a copy) and events beyond 28 days are not queued', async () => {
   const m = await member();
-  const past = await createPastEvent(testApp, m.userId);
+  const past = await createPastEvent(testApp, m.userId, {
+    cancelledAt: new Date(),
+  });
+  await testApp.db.insert(schema.calendarEventLinks).values({
+    ...keyOf(m, past),
+    calendarId: 'rl-cal',
+    providerEventId: 'frozen-copy',
+  });
   const far = await eventInDays(40);
   const inside = await eventInDays(27);
   for (const id of [past, far, inside]) await rawSignUp(id, m.userId);

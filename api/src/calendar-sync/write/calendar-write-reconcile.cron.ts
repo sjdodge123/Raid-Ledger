@@ -32,13 +32,13 @@ const { calendarConnections: conn, calendarEventLinks: links } = schema;
 const { eventSignups: signups, events: ev } = schema;
 const ends = sql`upper(${ev.duration})`;
 
-/** Event ends in (now, now + 28d] — ended events are frozen (F5). */
+/** Ended events are frozen (F5): never keyed. */
+const notEnded = (now: Date) => sql`${ends} > ${now.toISOString()}::timestamp`;
+
+/** Event ends in (now, now + 28d]. */
 function endsInWindow(now: Date) {
   const until = new Date(now.getTime() + RECONCILE_WINDOW_MS);
-  return and(
-    sql`${ends} > ${now.toISOString()}::timestamp`,
-    sql`${ends} <= ${until.toISOString()}::timestamp`,
-  );
+  return and(notEnded(now), sql`${ends} <= ${until.toISOString()}::timestamp`);
 }
 
 /** (a) active sign-ups × write connections, minus suppressed copies. */
@@ -64,7 +64,7 @@ function findSignupKeys(db: Db, now: Date): Promise<ReconcileKey[]> {
     );
 }
 
-/** (b) non-suppressed copies whose event is missing, cancelled or live. */
+/** (b) non-suppressed copies: event missing, cancelled (any date) or live. */
 function findLinkKeys(db: Db, now: Date): Promise<ReconcileKey[]> {
   return db
     .select({
@@ -77,7 +77,11 @@ function findLinkKeys(db: Db, now: Date): Promise<ReconcileKey[]> {
     .where(
       and(
         ne(links.state, 'suppressed'),
-        or(isNull(ev.id), isNotNull(ev.cancelledAt), endsInWindow(now)),
+        or(
+          isNull(ev.id),
+          and(isNotNull(ev.cancelledAt), notEnded(now)),
+          endsInWindow(now),
+        ),
       ),
     );
 }
