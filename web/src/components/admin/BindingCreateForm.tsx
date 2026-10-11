@@ -5,7 +5,7 @@ import type {
     CreateChannelBindingDto,
     IgdbGameDto,
 } from '@raid-ledger/contract';
-import { classifyBindingTriple } from '@raid-ledger/contract';
+import { classifyBindingTriple, QUICK_PLAY_ANNOUNCE_HELP } from '@raid-ledger/contract';
 import { GameSearchInput } from '../events/game-search-input';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
@@ -110,6 +110,7 @@ function CreateBindingFields({ channels, onCreate, isCreating, createError, onCl
             <h4 className="text-sm font-medium text-foreground">New binding</h4>
             <ChannelSelect channels={channels} value={f.channelId} onChange={f.handleChannelChange} />
             <PurposeSelect channelType={f.channelType} value={f.purpose} onChange={f.setPurpose} />
+            {f.purpose === 'quick-play-announcements' && <p className="text-xs text-muted">{QUICK_PLAY_ANNOUNCE_HELP}</p>}
             {f.purpose !== 'general-lobby' && (
                 <GameSearchInput id="new-binding-game" value={f.game} onChange={f.setGame}
                     error={f.violation?.field === 'gameId' ? f.violation.message : undefined} />

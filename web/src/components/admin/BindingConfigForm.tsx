@@ -2,6 +2,7 @@ import type {
   ChannelBindingDto,
   UpdateChannelBindingDto,
 } from "@raid-ledger/contract";
+import { QUICK_PLAY_ANNOUNCE_HELP } from "@raid-ledger/contract";
 import {
   FormActions,
   GameField,
@@ -48,7 +49,11 @@ function PurposeConfigSections({ f }: { f: BindingForm }) {
           onGracePeriodChange={f.setGracePeriod}
         />
       )}
-      {f.purpose === "game-announcements" && (
+      {f.purpose === "quick-play-announcements" && (
+        <p className="text-xs text-muted">{QUICK_PLAY_ANNOUNCE_HELP}</p>
+      )}
+      {(f.purpose === "game-announcements" ||
+        f.purpose === "quick-play-announcements") && (
         <p className="text-sm text-muted">
           No additional configuration needed for announcement channels.
         </p>
@@ -78,6 +83,9 @@ export function BindingConfigForm({
   const showGameField = f.purpose !== "general-lobby";
   const purposeId = `binding-purpose-${binding.id}`;
   const gameFieldId = `binding-game-${binding.id}`;
+  // ROK-1766: a Quick Play Announcements binding needs a game; Save waits for one.
+  const qpNoGame = f.violation?.code === "BINDING_QP_REQUIRES_GAME";
+  const showGameError = f.gameRequired || qpNoGame;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,7 +123,7 @@ export function BindingConfigForm({
           value={f.game}
           onChange={f.handleGameChange}
           autoFocus={f.gameRequired}
-          violationMessage={f.gameRequired ? f.violation?.message : undefined}
+          violationMessage={showGameError ? f.violation?.message : undefined}
         />
       )}
       <PurposeConfigSections f={f} />
@@ -125,7 +133,7 @@ export function BindingConfigForm({
         </p>
       )}
       <FormActions
-        saveDisabled={f.gameRequired || saveLocked}
+        saveDisabled={showGameError || saveLocked}
         isSaving={isSaving}
         onCancel={onCancel}
       />
