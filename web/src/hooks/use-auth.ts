@@ -84,7 +84,7 @@ function clearAllAuthStorage(): void {
  */
 async function serverLogout(): Promise<void> {
     try {
-        await fetch(`${API_BASE_URL}/auth/logout`, {
+        await nativeFetch(`${API_BASE_URL}/auth/logout`, {
             method: 'POST',
             credentials: 'include',
         });
@@ -239,7 +239,7 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
 /** POST the cookie-authenticated exit; true only when the server confirmed it. */
 async function postExitImpersonation(): Promise<boolean> {
     try {
-        const res = await fetch(`${API_BASE_URL}/auth/impersonate/exit`, { method: 'POST', credentials: 'include' });
+        const res = await nativeFetch(`${API_BASE_URL}/auth/impersonate/exit`, { method: 'POST', credentials: 'include' });
         return res.ok;
     } catch {
         return false;
