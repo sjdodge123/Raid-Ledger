@@ -127,7 +127,7 @@ describe('nativeFetch guard (ROK-1754 §3.6)', () => {
             'ok-native-xhr.ts': `const x = new NativeXHR(); const h = { ${auth}: t };`,
             'ok-string.ts': `throw new Error('Failed to ${F}'); const h = { ${auth}: t };`,
         };
-        expect(findBypasses(Object.keys(fixtures), (rel) => fixtures[rel])).toEqual([
+        expect(findBypasses(Object.keys(fixtures), (rel) => fixtures[rel] ?? '')).toEqual([
             'bad.ts',
             'bad-window.ts',
             'bad-globalthis.ts',
