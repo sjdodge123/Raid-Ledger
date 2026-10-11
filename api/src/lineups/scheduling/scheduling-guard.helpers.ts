@@ -83,6 +83,35 @@ export async function assertCallerMayViewPoll(
 }
 
 /**
+ * ROK-1750 review m3: the poll page's private view guard for the per-match
+ * side reads (availability heatmap, other polls). The lineup is resolved from
+ * the MATCH, never the URL's `:lineupId`, so a public lineup id can't be paired
+ * with a private poll's match id. An unknown match passes (empty result).
+ *
+ * @throws NotFoundException when the caller may not view the poll.
+ */
+export async function assertCallerMayViewMatchPoll(
+  db: Db,
+  matchId: number,
+  caller: { id: number; role?: string | null },
+): Promise<void> {
+  const [lineup] = await db
+    .select({
+      id: schema.communityLineups.id,
+      createdBy: schema.communityLineups.createdBy,
+      visibility: schema.communityLineups.visibility,
+    })
+    .from(schema.communityLineupMatches)
+    .innerJoin(
+      schema.communityLineups,
+      eq(schema.communityLineupMatches.lineupId, schema.communityLineups.id),
+    )
+    .where(eq(schema.communityLineupMatches.id, matchId))
+    .limit(1);
+  if (lineup) await assertCallerMayViewPoll(db, lineup, caller);
+}
+
+/**
  * Refuse a write to a poll the READ path already calls terminal (ROK-1545
  * review F8).
  *

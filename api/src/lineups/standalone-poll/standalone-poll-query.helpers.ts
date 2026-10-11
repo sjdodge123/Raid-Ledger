@@ -60,6 +60,10 @@ export async function insertDecidedLineup(
   userId: number,
   linkedEventId: number | undefined,
   phaseDeadline: Date | null,
+  share: { visibility: 'public' | 'private'; shareToken: string | null } = {
+    visibility: 'public',
+    shareToken: null,
+  },
 ): Promise<{ id: number }> {
   // ROK-1067: standalone polls are not user-shareable, but `public_slug` is
   // NOT NULL — generate a slug and disable share so the URL never resolves.
@@ -83,6 +87,9 @@ export async function insertDecidedLineup(
         phaseDurationOverride: { standalone: true },
         publicSlug: slug,
         publicShareEnabled: false,
+        // ROK-1750: private polls carry a share-link token; public ones null.
+        visibility: share.visibility,
+        shareToken: share.shareToken,
       })
       .returning({ id: schema.communityLineups.id });
     return defined(row, 'inserted standalone lineup row');
@@ -261,9 +268,13 @@ export async function completeStandalonePoll(
  * The three conditions mirror `pollStatusFromMatch`, so the banner, the poll
  * page and the Discord card agree on what "open" means.
  */
-export async function findActiveStandalonePolls(db: Db): Promise<
+export async function findActiveStandalonePolls(
+  db: Db,
+  caller: { id: number; isAdmin: boolean },
+): Promise<
   {
     matchId: number;
+    visibility: 'public' | 'private';
     lineupId: number;
     gameName: string;
     gameCoverUrl: string | null;
@@ -273,6 +284,7 @@ export async function findActiveStandalonePolls(db: Db): Promise<
 > {
   const rows = await db.execute<{
     matchId: number;
+    visibility: 'public' | 'private';
     lineupId: number;
     gameName: string;
     gameCoverUrl: string | null;
@@ -280,6 +292,7 @@ export async function findActiveStandalonePolls(db: Db): Promise<
     slotCount: number;
   }>(sql`
     SELECT m.id AS "matchId", m.lineup_id AS "lineupId",
+           l.visibility AS "visibility",
            g.name AS "gameName", g.cover_url AS "gameCoverUrl",
            COALESCE(mem.cnt, 0)::int AS "memberCount",
            COALESCE(sl.cnt, 0)::int AS "slotCount"
@@ -292,6 +305,15 @@ export async function findActiveStandalonePolls(db: Db): Promise<
       AND l.phase_duration_override->>'standalone' = 'true'
       AND (l.status IS NULL OR l.status <> 'archived')
       AND (l.phase_deadline IS NULL OR l.phase_deadline > NOW())
+      AND (
+        l.visibility = 'public'
+        OR ${caller.isAdmin}::boolean
+        OR l.created_by = ${caller.id}
+        OR EXISTS (
+          SELECT 1 FROM community_lineup_invitees i
+          WHERE i.lineup_id = l.id AND i.user_id = ${caller.id}
+        )
+      )
       AND (
         NOT EXISTS (
           SELECT 1 FROM community_lineup_schedule_slots s

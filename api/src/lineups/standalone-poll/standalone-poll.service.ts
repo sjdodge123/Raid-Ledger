@@ -12,7 +12,10 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { SchedulingPollResponseDto } from '@raid-ledger/contract';
+import type {
+  SchedulingPollResponseDto,
+  StandalonePollVisibility,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LineupPhaseQueueService } from '../queue/lineup-phase.queue';
@@ -49,6 +52,12 @@ import {
   heartPollGameForVoters,
 } from './standalone-poll-voter.helpers';
 import { SettingsService } from '../../settings/settings.service';
+import {
+  assertVisibilityAllowed,
+  buildShareSettings,
+} from './standalone-poll-share.helpers';
+import { fireCreateFanout } from './standalone-poll-create-fanout.helpers';
+import { insertInvitees } from './standalone-poll-share-query.helpers';
 import { EmbedSyncQueueService } from '../../discord-bot/queues/embed-sync.queue';
 
 /** No-op rejection swallower for fire-and-forget DMs. */
@@ -68,7 +77,16 @@ export interface CreatePollInput {
    * (not on the public Zod schema) so regular polls never set it → no-op.
    */
   broadcastExcludeUserIds?: number[];
+  /** ROK-1750: `private` = picked members + link holders only. */
+  visibility?: StandalonePollVisibility;
 }
+
+type ShareSettings = ReturnType<typeof buildShareSettings>;
+export type PollGame = {
+  id: number;
+  name: string;
+  coverUrl: string | null;
+};
 
 /**
  * Fallback poll length when the caller omits `durationHours` (2 weeks).
@@ -98,9 +116,9 @@ export class StandalonePollService {
     private readonly embedSyncQueue: EmbedSyncQueueService,
   ) {}
 
-  /** List all active standalone scheduling polls. */
-  async listActive() {
-    return findActiveStandalonePolls(this.db);
+  /** List the active standalone polls the caller may see (ROK-1750). */
+  async listActive(caller: { id: number; isAdmin: boolean }) {
+    return findActiveStandalonePolls(this.db, caller);
   }
 
   /** Mark a standalone poll as completed (match -> scheduled, lineup -> archived).
@@ -205,6 +223,8 @@ export class StandalonePollService {
     userId: number,
     isAdmin = false,
   ): Promise<SchedulingPollResponseDto> {
+    assertVisibilityAllowed(input.visibility, input.linkedEventId);
+    const share = buildShareSettings(input.visibility);
     const game = await this.validateGame(input.gameId);
     if (input.linkedEventId) {
       // ROK-1370 (P1): opening a poll linked to an event is destructive — only
@@ -222,6 +242,7 @@ export class StandalonePollService {
       userId,
       input.linkedEventId,
       phaseDeadline,
+      share,
     );
     const match = await insertSchedulingMatch(
       this.db,
@@ -233,7 +254,17 @@ export class StandalonePollService {
     if (input.linkedEventId) {
       await this.linkEventToPoll(input.linkedEventId, match.id);
     }
-    await this.addMembers(match.id, userId, input.memberUserIds);
+    const pickedIds = await this.addMembers(
+      match.id,
+      userId,
+      input.memberUserIds,
+    );
+    if (share.visibility === 'private') {
+      // ROK-1750 (D4): picked members are invitees too, so the private
+      // lineup's view / vote guards admit them.
+      const invitees = pickedIds.filter((id) => id !== userId);
+      await insertInvitees(this.db, lineup.id, invitees, userId);
+    }
     // Always set: computeDeadline falls back to DEFAULT_POLL_DURATION_HOURS.
     // ROK-1512: best-effort — the poll row committed; `reconcileArchiveJobs`
     // heals a missing archive job at boot and Sentry has the failure.
@@ -244,21 +275,19 @@ export class StandalonePollService {
       phaseDeadline.getTime() - Date.now(),
       'StandalonePollService.create',
     );
-    this.fireNotifications(
+    fireCreateFanout(
+      {
+        notifications: this.notifications,
+        pollEmbed: this.schedulingPollEmbed,
+      },
       game,
-      lineup.id,
-      match.id,
-      userId,
-      input.linkedEventId,
-      input.broadcastExcludeUserIds,
-    );
-    this.schedulingPollEmbed.firePostInitialEmbed(
-      { id: match.id, gameId: input.gameId },
-      lineup.id,
-      input.gameId,
+      { lineupId: lineup.id, matchId: match.id, creatorId: userId },
+      input,
+      pickedIds,
+      share.visibility,
     );
     const memberCount = await countMatchMembers(this.db, match.id);
-    return this.buildResponse(match.id, lineup.id, game, memberCount);
+    return this.buildResponse(match.id, lineup.id, game, memberCount, share);
   }
 
   /**
@@ -293,17 +322,18 @@ export class StandalonePollService {
     return new Date(Date.now() + hours * 60 * 60 * 1000);
   }
 
-  /** Add creator + provided members to the match. */
+  /** Add creator + provided members to the match; returns the valid picks. */
   private async addMembers(
     matchId: number,
     creatorId: number,
     memberUserIds?: number[],
-  ): Promise<void> {
+  ): Promise<number[]> {
     const validIds = memberUserIds?.length
       ? await filterValidUserIds(this.db, memberUserIds)
       : [];
     const allIds = [creatorId, ...validIds];
     await insertMatchMembers(this.db, matchId, allIds);
+    return validIds;
   }
 
   /** Atomically set reschedulingPollId on the linked event. */
@@ -324,33 +354,13 @@ export class StandalonePollService {
       .catch(noop);
   }
 
-  /** Fire-and-forget: notify game-interested users. */
-  private fireNotifications(
-    game: { id: number; name: string; coverUrl: string | null },
-    lineupId: number,
-    matchId: number,
-    creatorId: number,
-    linkedEventId?: number,
-    broadcastExcludeUserIds?: number[],
-  ): void {
-    void this.notifications.notifyInterestedUsers(
-      game.id,
-      game.name,
-      lineupId,
-      matchId,
-      creatorId,
-      game.coverUrl,
-      linkedEventId,
-      broadcastExcludeUserIds,
-    );
-  }
-
   /** Build the API response DTO. */
   private buildResponse(
     matchId: number,
     lineupId: number,
-    game: { id: number; name: string; coverUrl: string | null },
+    game: PollGame,
     memberCount: number,
+    share: ShareSettings,
   ): SchedulingPollResponseDto {
     return {
       id: matchId,
@@ -361,6 +371,8 @@ export class StandalonePollService {
       memberCount,
       status: 'scheduling',
       createdAt: new Date().toISOString(),
+      visibility: share.visibility,
+      shareToken: share.shareToken,
     };
   }
 }

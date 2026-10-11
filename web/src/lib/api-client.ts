@@ -235,6 +235,9 @@ export {
     createSchedulingPoll,
     getActiveStandalonePolls,
     completeStandalonePoll,
+    getPollSharePreview,
+    joinPollShare,
+    resetPollShareToken,
 } from './api/standalone-poll-api';
 
 // Tiebreaker (ROK-938)

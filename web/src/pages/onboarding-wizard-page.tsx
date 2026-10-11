@@ -18,6 +18,7 @@ import type { GameRegistryDto } from '@raid-ledger/contract';
 import type { StepDef } from './onboarding-wizard/onboarding-types';
 import { OnboardingBreadcrumbs } from './onboarding-wizard/OnboardingBreadcrumbs';
 import { useConditionalStepFlags } from './onboarding-wizard/use-conditional-step-flags';
+import { consumePendingPollShare } from '../lib/poll-share-redirect';
 
 /** Resolves hearted games against the game registry to find qualifying games */
 function useQualifyingGames(userId: number | undefined): GameRegistryDto[] {
@@ -114,7 +115,8 @@ function getPostOnboardingRedirect(): string {
         sessionStorage.removeItem('invite_code');
         return `/i/${pendingInvite}?claim=1`;
     }
-    return '/calendar';
+    // ROK-1750 (D5): resume a private poll's share link after onboarding.
+    return consumePendingPollShare() ?? '/calendar';
 }
 
 /**

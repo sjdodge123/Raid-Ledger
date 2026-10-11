@@ -23,6 +23,9 @@ const QUERY_SECRET =
   /([?&#]|^)((?:code|state|[a-z_]*token|code_verifier|client_secret|password)=)[^&#\s"']*/gi;
 const JSON_SECRET =
   /("(?:[a-z_]*token|code_verifier|client_secret|password|secret)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
+// ROK-1750: a private poll's share token rides the PATH, not the query.
+const PATH_SECRET =
+  /(\/(?:scheduling-polls\/share|p\/poll)\/)[A-Za-z0-9_-]{16,}/g;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
@@ -40,6 +43,7 @@ export interface ScrubbableEvent {
 export function scrubString(value: string): string {
   return value
     .replace(QUERY_SECRET, `$1$2${REDACTED}`)
+    .replace(PATH_SECRET, `$1${REDACTED}`)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }
 

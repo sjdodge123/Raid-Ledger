@@ -310,7 +310,7 @@ export class SchedulingController {
   ): Promise<AggregateGameTimeResponse> {
     return this.schedulingService.getMatchAvailability(
       matchId,
-      req.user!.id,
+      { id: req.user!.id, role: req.user!.role ?? null },
       parseWeekStartQuery(weekStart),
       parseTzOffset(tzOffset),
     );
@@ -324,10 +324,9 @@ export class SchedulingController {
     @Param('matchId', ParseIntPipe) matchId: number,
     @Req() req: AuthRequest,
   ): Promise<OtherPollsResponseDto> {
-    return this.schedulingService.getOtherPolls(
-      lineupId,
-      matchId,
-      req.user!.id,
-    );
+    return this.schedulingService.getOtherPolls(lineupId, matchId, {
+      id: req.user!.id,
+      role: req.user!.role ?? null,
+    });
   }
 }
