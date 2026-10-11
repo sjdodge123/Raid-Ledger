@@ -3,8 +3,7 @@ import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
 import { ensureFreshToken, refreshWithOutcome } from './refresh-client';
-import { LEGACY_ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
-import { getAccessToken } from './access-token-store';
+import { getAccessToken, isImpersonatingToken, setAccessToken } from './access-token-store';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -48,22 +47,6 @@ describe('ensureFreshToken (ROK-1353 single-flight, ROK-1409 pre-flight caller)'
         await ensureFreshToken();
 
         expect(refreshCalls).toBe(2);
-    });
-
-    it('returns null and never hits the network while impersonating', async () => {
-        let refreshCalls = 0;
-        server.use(
-            http.post(`${API_BASE}/auth/refresh`, () => {
-                refreshCalls += 1;
-                return HttpResponse.json({ access_token: 'should-not-happen' });
-            }),
-        );
-        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
-
-        const result = await ensureFreshToken();
-
-        expect(result).toBeNull();
-        expect(refreshCalls).toBe(0);
     });
 
     it('returns null when the refresh endpoint rejects', async () => {
@@ -149,22 +132,32 @@ describe('refreshWithOutcome (ROK-1366 #1384 tri-state refresh)', () => {
     });
 });
 
-describe('refreshWithOutcome while impersonating (ROK-1366 #1384)', () => {
+/** An unsigned JWT carrying the given claims (base64url). */
+function jwtWith(claims: object): string {
+    const seg = (o: object) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${seg({ alg: 'HS256' })}.${seg(claims)}.sig`;
+}
+
+describe('refresh while impersonating (ROK-1754 D1: renewed server-side)', () => {
     beforeEach(() => {
         localStorage.clear();
     });
 
-    it('reports indeterminate and never hits the network while impersonating', async () => {
+    it('POSTs /auth/refresh and keeps the impersonation claim the server re-mints', async () => {
+        const renewed = jwtWith({ sub: 7, impersonatedBy: 1, exp: 4102444800 });
+        setAccessToken(jwtWith({ sub: 7, impersonatedBy: 1, exp: 1 }));
         let refreshCalls = 0;
         server.use(
             http.post(`${API_BASE}/auth/refresh`, () => {
                 refreshCalls += 1;
-                return HttpResponse.json({ access_token: 'should-not-happen' });
+                return HttpResponse.json({ access_token: renewed });
             }),
         );
-        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
 
-        expect(await refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
-        expect(refreshCalls).toBe(0);
+        expect(await refreshWithOutcome()).toEqual({ kind: 'ok', token: renewed });
+        expect(await ensureFreshToken()).toBe(renewed);
+        expect(refreshCalls).toBe(2);
+        expect(getAccessToken()).toBe(renewed);
+        expect(isImpersonatingToken()).toBe(true);
     });
 });
