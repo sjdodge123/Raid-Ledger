@@ -25,6 +25,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { AdminGuard } from '../../auth/admin.guard';
+import { DemoModeGuard } from '../../admin/demo-mode.guard';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { parseDemoBody } from '../../admin/demo-test.utils';
 import { SettingsService } from '../../settings/settings.service';
@@ -43,7 +44,7 @@ const DEMO_ONLY = 'Only available in DEMO_MODE';
 
 @Controller('admin/test/calendar')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class CalendarDemoSeedController {
   constructor(
     @Inject(DrizzleAsyncProvider)

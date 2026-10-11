@@ -34,6 +34,9 @@ import {
   buildRaidPayload,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const FOREVER_SLUG = 'world-of-warcraft-forever';
 const FIXTURES = join(

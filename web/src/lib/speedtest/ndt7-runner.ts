@@ -93,13 +93,23 @@ function resolveApi(mod: unknown): Ndt7Api {
     return candidate;
 }
 
-/** The callbacks handed to ndt7: keep the latest client figure, drop the rest. */
-function collectLatest(onMbps: (mbps: number) => void): Ndt7Callbacks {
+/**
+ * The callbacks handed to ndt7: keep the latest client figure, drop the rest.
+ * `error` is required in practice: without it ndt7 falls back to a default
+ * that THROWS from the worker's message handler — outside our promise chain,
+ * so it lands in Sentry as an uncaught `Error: error` (ROK-1765). The
+ * library's message (it can name the server) never escapes (AC20).
+ */
+function collectLatest(
+    onMbps: (mbps: number) => void,
+    onError: () => void,
+): Ndt7Callbacks {
     return {
         downloadMeasurement: (data: unknown) => {
             const mbps = readClientMbps(data);
             if (mbps !== null) onMbps(mbps);
         },
+        error: () => onError(),
     };
 }
 
@@ -153,11 +163,14 @@ export function runSpeedTest(
             reject(err instanceof Error ? err : new Error('Speed test failed'));
         };
         const timer = setTimeout(() => settle(), SPEED_TEST_TIMEOUT_MS);
-        const callbacks = collectLatest((mbps) => {
-            best = mbps;
-            // Live figure for the gauge — still only the number (AC20).
-            onSample?.(mbps);
-        });
+        const callbacks = collectLatest(
+            (mbps) => {
+                best = mbps;
+                // Live figure for the gauge — still only the number (AC20).
+                onSample?.(mbps);
+            },
+            () => settle(new Error('Speed test failed')),
+        );
         Promise.all([load(), buildConfig()])
             .then(([mod, config]) =>
                 runDownloadOnly(resolveApi(mod), config, callbacks),

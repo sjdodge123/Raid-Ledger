@@ -27,6 +27,9 @@ import {
   buildForeverTalentsPayload,
   buildQuests,
 } from './testing/addon-fixture.forever';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const code = (fn: () => unknown): string => {
   try {

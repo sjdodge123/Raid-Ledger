@@ -16,6 +16,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from '../admin/demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { defined } from '../common/defined.helpers';
 import * as schema from '../drizzle/schema';
@@ -48,7 +49,7 @@ const DEFAULT_SEED_GAME_COUNT = 3;
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestDiscoveryCategoriesController {
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,

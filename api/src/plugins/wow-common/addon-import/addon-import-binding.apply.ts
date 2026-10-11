@@ -3,6 +3,7 @@ import { characters } from '../../../drizzle/schema';
 import type { AddonBindingResult } from './addon-import.binding';
 import { AddonImportError } from './addon-import.errors';
 import type { AddonApplyContext } from './addon-import-apply.types';
+import { logGuidAudit } from './addon-import.guid-audit';
 
 /**
  * ROK-1724 §4.3 — write the binding's character-row changes (GUID pin,
@@ -73,9 +74,29 @@ export async function applyBinding(
   const set = bindingUpdates(binding);
   if (Object.keys(set).length === 0) return false;
   if (set.addonGuid) await assertGuidFree(ctx, set.addonGuid);
-  await ctx.tx
+  const [row] = await ctx.tx
     .update(characters)
     .set({ ...set, updatedAt: new Date() })
-    .where(eq(characters.id, ctx.characterId));
+    .where(eq(characters.id, ctx.characterId))
+    .returning({ name: characters.name });
+  if (set.addonGuid && row) await auditPin(ctx, set.addonGuid, row.name);
   return true;
+}
+
+/** ROK-1756 — the GUID is free (checked above), so this pin is its claim. */
+function auditPin(
+  ctx: AddonApplyContext,
+  guid: string,
+  name: string,
+): Promise<void> {
+  return logGuidAudit(ctx.tx, {
+    action: 'addon_guid_claimed',
+    actorId: ctx.userId,
+    ownerId: ctx.userId,
+    characterId: ctx.characterId,
+    guid,
+    name,
+    gameId: ctx.gameId,
+    region: ctx.region,
+  });
 }

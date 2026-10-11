@@ -17,6 +17,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import type { AuthenticatedRequest } from '../auth/types';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -51,7 +52,7 @@ import { resetOnboardingForTest as resetOnboardingHelper } from './demo-test-rok
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestCoreController {
   constructor(
     private readonly demoTestService: DemoTestService,

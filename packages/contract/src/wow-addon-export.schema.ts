@@ -278,6 +278,14 @@ export const AddonSnapshotGearItemSchema = z.object({
     enchantId: id.optional(),
     /** Schema 2: link fields 2-5, non-empty ids only; omitted when none. */
     gemIds: z.array(id).max(4).optional(),
+    /**
+     * ROK-1760: display name from the link's `|h[…]|h` (control chars
+     * stripped, ≤128). A fallback until Wowhead resolves the item; additive,
+     * so rows stored before it still parse.
+     */
+    name: z.string().min(1).max(128).optional(),
+    /** ROK-1760: item quality 0-7 from the link's `|cnIQ<n>:` colour. */
+    quality: z.number().int().min(0).max(7).optional(),
 }).strict();
 export type AddonSnapshotGearItem = z.infer<typeof AddonSnapshotGearItemSchema>;
 

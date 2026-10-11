@@ -6,6 +6,7 @@ import { isTokenStale } from './token-expiry';
 import { Sentry } from '../../sentry';
 import type { ZodType } from 'zod';
 import { withHttpStatus } from './api-error';
+import { endDeactivatedSession, isDeactivatedResponse } from './deactivated-session';
 
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();
@@ -86,6 +87,13 @@ export async function fetchWithAuth(
         await ensureFreshToken();
     }
     const response = await sendRequest(endpoint, options);
+    // ROK-1753: a deactivated account is terminal — no refresh, no retry.
+    // While the redirect to /login lands, never settle: a caller's onError
+    // toast would otherwise flash over the deactivated notice.
+    if (await isDeactivatedResponse(response)) {
+        if (endDeactivatedSession()) return new Promise<Response>(() => {});
+        return response;
+    }
     if (response.status === 401 && getAuthMethod()) {
         const refreshed = await ensureFreshToken();
         if (refreshed) return sendRequest(endpoint, options);

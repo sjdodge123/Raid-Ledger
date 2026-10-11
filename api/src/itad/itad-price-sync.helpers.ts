@@ -3,12 +3,15 @@
  * enqueue helpers for the ITAD price-sync queue (ROK-1047).
  *
  * Enqueue helpers:
- * BullMQ rejects duplicate jobIds while waiting/active, so per-game
- * dedupe is intrinsic — enqueueing the same gameId twice during the
- * same fetch window is a no-op. Same trick as
+ * BullMQ ignores a duplicate jobId in ANY state, so per-game dedupe is
+ * intrinsic while a job is pending — enqueueing the same gameId twice during
+ * the same fetch window is a no-op. ROK-1762: that also held for RETAINED
+ * finished jobs (100 completed / 50 failed), silently skipping a later
+ * refresh, so a finished job is cleared first. Same as
  * `igdb-enqueue.helpers.ts:enqueueReenrichJob`.
  */
 import type { Queue } from 'bullmq';
+import { clearFinishedJob } from '../queue/clear-finished-job.helpers';
 import type { ItadPriceSyncJobData } from './itad-price-sync.constants';
 
 export function buildPriceSyncJobId(gameId: number): string {
@@ -17,12 +20,14 @@ export function buildPriceSyncJobId(gameId: number): string {
 
 /** Fire-and-forget enqueue for a single game. Logs but never throws. */
 export async function enqueuePriceSync(
-  queue: Queue,
+  queue: Pick<Queue, 'add' | 'getJob' | 'remove'>,
   gameId: number,
 ): Promise<void> {
   const data: ItadPriceSyncJobData = { gameId };
+  const jobId = buildPriceSyncJobId(gameId);
+  await clearFinishedJob(queue, jobId);
   await queue.add('sync', data, {
-    jobId: buildPriceSyncJobId(gameId),
+    jobId,
     removeOnComplete: 100,
     removeOnFail: 50,
   });

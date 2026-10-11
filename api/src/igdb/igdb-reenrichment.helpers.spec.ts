@@ -195,6 +195,29 @@ describe('reEnrichGamesWithIgdb', () => {
     });
   });
 
+  describe('ROK-1757: name fallback escapes backslashes before quotes', () => {
+    it('cannot break out of the search string with a stored name containing \\"', async () => {
+      const mockDb = createReenrichMockDb([
+        {
+          id: 30,
+          name: 'Evil\\"; limit 500',
+          steamAppId: 111,
+          igdbEnrichmentRetryCount: 0,
+        },
+      ]);
+      const mockQueryIgdb = jest
+        .fn<Promise<IgdbApiGame[]>, [string]>()
+        .mockResolvedValue([]);
+
+      await reEnrichGamesWithIgdb(mockDb as never, mockQueryIgdb);
+
+      const searchQuery = mockQueryIgdb.mock.calls
+        .map(([q]) => q)
+        .find((q) => q.startsWith('search '));
+      expect(searchQuery).toContain('search "Evil\\\\\\"; limit 500";');
+    });
+  });
+
   describe('AC: IGDB API error increments retry count and sets status to failed', () => {
     it('sets failed status and increments retry on queryIgdb error', async () => {
       const candidates = [

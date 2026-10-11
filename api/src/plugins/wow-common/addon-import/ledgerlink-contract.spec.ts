@@ -23,6 +23,9 @@ import {
   TALENT_ROW_STEP,
   clusterOrigins,
 } from '../forever-talents.adapter';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const V1 = join(
   __dirname,

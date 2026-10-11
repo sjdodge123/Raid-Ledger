@@ -1,6 +1,7 @@
 import type { PluginInfoDto } from '@raid-ledger/contract';
 import { getPluginBadge } from '../../plugins/plugin-registry';
 import { PluginBadge } from '../ui/plugin-badge';
+import { safeHttpUrl } from '../../lib/safe-http-url';
 
 interface PluginCardProps {
     plugin: PluginInfoDto;
@@ -60,11 +61,12 @@ function PluginHeaderRow({ plugin }: { plugin: PluginInfoDto }) {
 }
 
 function PluginAuthor({ author }: { author: PluginInfoDto['author'] }) {
+    const href = safeHttpUrl(author.url);
     return (
         <p className="text-sm text-muted mb-2">
             by{' '}
-            {author.url ? (
-                <a href={author.url} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">{author.name}</a>
+            {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground transition-colors">{author.name}</a>
             ) : author.name}
         </p>
     );
