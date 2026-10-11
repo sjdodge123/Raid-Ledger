@@ -1,5 +1,5 @@
 import { Logger } from '@nestjs/common';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { EMBED_STATES } from '../discord-bot.constants';
@@ -45,8 +45,12 @@ export async function resolveQuickPlayAnnounceChannel(
 }
 
 /**
- * D6 restart rehydration: the newest still-LIVE `discord_event_messages` row
+ * D6 restart rehydration: the OLDEST still-LIVE `discord_event_messages` row
  * for an event, so an in-memory Map lost to a deploy does not freeze the card.
+ * Oldest, not newest: the spawn card is inserted at spawn, while a link unfurl
+ * (`event-link-track.helpers.ts`) or a share of the running session inserts a
+ * later row whose derived state is also LIVE — the newest row would hijack
+ * that message into the Quick Play card and freeze the real one.
  * A COMPLETED row is never returned — a late `queueUpdate` must not flip an
  * ended card back to LIVE. Failures are logged and read as "untracked".
  */
@@ -59,7 +63,7 @@ export async function loadTrackedMessage(
     const row = await db.query.discordEventMessages.findFirst({
       columns: { channelId: true, messageId: true },
       where: and(eq(t.eventId, eventId), eq(t.embedState, EMBED_STATES.LIVE)),
-      orderBy: [desc(t.createdAt)],
+      orderBy: [asc(t.createdAt)],
     });
     return row ?? null;
   } catch (err) {
