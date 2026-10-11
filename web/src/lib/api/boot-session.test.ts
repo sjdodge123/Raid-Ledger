@@ -67,4 +67,32 @@ describe('ROK-1754 B2: boot session', () => {
         await expect(outcome).resolves.toBe('indeterminate');
         expect(boot.isBootSettled()).toBe(true);
     });
+
+    it('review m2: a purged legacy session that re-mints writes the marker, so the next load still boots', async () => {
+        localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'old-bundle-jwt');
+        refresh.mockResolvedValue({ kind: 'ok', token: 't' });
+        const boot = await load();
+        await expect(boot.startBootSession()).resolves.toBe('ok');
+        expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('local');
+    });
+
+    it('review m2: an existing marker is never overwritten', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        refresh.mockResolvedValue({ kind: 'ok', token: 't' });
+        const boot = await load();
+        await boot.startBootSession();
+        expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('discord');
+    });
+
+    it('review m3: /auth/success exchanges its own code — no boot refresh races it', async () => {
+        localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+        window.history.pushState({}, '', '/auth/success');
+        try {
+            const boot = await load();
+            await expect(boot.startBootSession()).resolves.toBe('anonymous');
+            expect(refresh).not.toHaveBeenCalled();
+        } finally {
+            window.history.pushState({}, '', '/');
+        }
+    });
 });

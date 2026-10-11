@@ -53,10 +53,12 @@ async function expectAdminMenu(page: Page): Promise<void> {
 test.describe('Access token in memory (ROK-1754)', () => {
     test('a signed-in page keeps no JWT in web storage, before and after reload', async ({ page }) => {
         await page.goto('/calendar');
+        await expectAdminMenu(page); // positive anchor first: the startup gate also has no sign-in button (review m4)
         await expect(page.getByRole('button', { name: /sign in|continue with/i })).toHaveCount(0, { timeout: 15_000 });
         expect(await storageJwtEntries(page), 'no JWT in web storage after load').toEqual([]);
 
         await page.reload();
+        await expectAdminMenu(page); // positive anchor first: the startup gate also has no sign-in button (review m4)
         await expect(page.getByRole('button', { name: /sign in|continue with/i })).toHaveCount(0, { timeout: 15_000 });
         expect(await storageJwtEntries(page), 'no JWT in web storage after reload').toEqual([]);
     });
@@ -88,6 +90,7 @@ test.describe('Access token in memory (ROK-1754)', () => {
 
         // The marker ended server-side: a reload boots as the admin again.
         await page.reload();
+        await expectAdminMenu(page); // positive anchor first: the startup gate also has no sign-in button (review m4)
         await expect(page.getByRole('button', { name: /sign in|continue with/i })).toHaveCount(0, { timeout: 15_000 });
         await expect(banner(page), 'a reload after exit does not resume impersonation').toHaveCount(0);
     });

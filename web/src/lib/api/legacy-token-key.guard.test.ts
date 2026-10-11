@@ -13,9 +13,12 @@ import { join, relative, resolve } from 'path';
 import { stripComments } from '../../test/form-primitives-count';
 
 const SRC = resolve(__dirname, '../..');
-const KEY = /\braid_ledger_token\b/;
+const KEY = /\braid_ledger_(original_)?token\b/;
 const TEST_FILE = /\.(test|spec)\.tsx?$/;
-const ALLOWED = [`lib/api/auth-storage-keys.ts: export const LEGACY_ACCESS_TOKEN_KEY = 'raid_ledger_token';`];
+const ALLOWED = [
+    `lib/api/auth-storage-keys.ts: export const LEGACY_ACCESS_TOKEN_KEY = 'raid_ledger_token';`,
+    `lib/api/auth-storage-keys.ts: export const LEGACY_ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';`,
+]
 
 /** Trimmed code lines (comments stripped) that mention the legacy key. */
 export function legacyKeyLines(src: string): string[] {
