@@ -16,7 +16,7 @@
 import type { JSX, ReactNode } from 'react';
 import { CoopPill } from '../lineups/CoopPill';
 import { PriceTag, ScalarPriceBadge } from './PriceBadge';
-import type { GameBadgeData } from './game-badges.helpers';
+import { formatPlaytime, type GameBadgeData } from './game-badges.helpers';
 
 export { PriceBadge, PriceTag, ScalarPriceBadge } from './PriceBadge';
 export { CoopPill } from '../lineups/CoopPill';
@@ -96,14 +96,20 @@ export function OwnerBadge({ count, activate }: {
 /**
  * Cyan/teal personalized pill. Renders only when the viewer owns the game —
  * and always IN ADDITION to `OwnerBadge`, never in place of it (spec §7.3).
+ *
+ * ROK-1375: an optional `playtimeMinutes` appends the viewer's Steam playtime
+ * ("You own · 12h played"). Surfaces that do not pass it are unchanged.
  */
-export function YouOwnBadge(): JSX.Element {
+export function YouOwnBadge({ playtimeMinutes }: {
+    playtimeMinutes?: number | null | undefined;
+} = {}): JSX.Element {
+    const played = formatPlaytime(playtimeMinutes);
     return (
         <span
             data-testid="you-own-badge"
             className={`${BADGE_CLS} bg-cyan-500 text-foreground`}
         >
-            You own
+            {played ? `You own · ${played} played` : 'You own'}
         </span>
     );
 }
@@ -251,7 +257,9 @@ function OwnershipPills({ game, full, owners }: {
 }): JSX.Element {
     return (
         <>
-            {game.currentUserOwns && <YouOwnBadge />}
+            {game.currentUserOwns && (
+                <YouOwnBadge playtimeMinutes={game.currentUserPlaytimeMinutes} />
+            )}
             {game.ownerCount != null && (
                 <OwnerBadge count={game.ownerCount} activate={owners} />
             )}

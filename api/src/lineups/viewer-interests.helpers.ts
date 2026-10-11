@@ -26,8 +26,19 @@ export const NO_VIEWER_FLAGS: ViewerGameFlags = {
   currentUserWishlisted: false,
 };
 
-/** Per-game viewer flags, keyed by `games.id`. */
-export type ViewerInterestMap = Map<number, ViewerGameFlags>;
+/**
+ * A map value: the two flags plus the viewer's Steam lifetime playtime
+ * (ROK-1375). Playtime is kept OFF `ViewerGameFlags` so the other DTOs that
+ * spread `viewerFlagsFor(...)` do not start shipping a field they never
+ * declared.
+ */
+export interface ViewerGameEntry extends ViewerGameFlags {
+  /** `playtime_forever` minutes from the steam_library row, else null. */
+  playtimeMinutes: number | null;
+}
+
+/** Per-game viewer entries, keyed by `games.id`. */
+export type ViewerInterestMap = Map<number, ViewerGameEntry>;
 
 /**
  * Load the viewer's steam-library / steam-wishlist flags for `gameIds`.
@@ -48,6 +59,8 @@ export async function loadViewerInterests(
     .select({
       gameId: schema.gameInterests.gameId,
       source: schema.gameInterests.source,
+      // ROK-1375: same row, same query — no extra round trip for playtime.
+      playtimeForever: schema.gameInterests.playtimeForever,
     })
     .from(schema.gameInterests)
     .where(
@@ -62,8 +75,14 @@ export async function loadViewerInterests(
     );
 
   for (const row of rows) {
-    const flags = map.get(row.gameId) ?? { ...NO_VIEWER_FLAGS };
-    if (row.source === 'steam_library') flags.currentUserOwns = true;
+    const flags = map.get(row.gameId) ?? {
+      ...NO_VIEWER_FLAGS,
+      playtimeMinutes: null,
+    };
+    if (row.source === 'steam_library') {
+      flags.currentUserOwns = true;
+      flags.playtimeMinutes = row.playtimeForever ?? null;
+    }
     if (row.source === 'steam_wishlist') flags.currentUserWishlisted = true;
     map.set(row.gameId, flags);
   }
@@ -78,5 +97,41 @@ export function viewerFlagsFor(
   map: ViewerInterestMap,
   gameId: number,
 ): ViewerGameFlags {
-  return map.get(gameId) ?? { ...NO_VIEWER_FLAGS };
+  const entry = map.get(gameId);
+  if (!entry) return { ...NO_VIEWER_FLAGS };
+  return {
+    currentUserOwns: entry.currentUserOwns,
+    currentUserWishlisted: entry.currentUserWishlisted,
+  };
+}
+
+/**
+ * ROK-1375: the viewer's lifetime Steam playtime (minutes) for a game they
+ * own via `steam_library`; `null` when they do not own it or Steam reported
+ * no playtime.
+ */
+export function viewerPlaytimeFor(
+  map: ViewerInterestMap,
+  gameId: number,
+): number | null {
+  return map.get(gameId)?.playtimeMinutes ?? null;
+}
+
+/**
+ * ROK-1375: the lineup-entry personalization block — both flags (explicit
+ * false) plus `currentUserPlaytimeMinutes`, which is OMITTED rather than
+ * null when there is no viewer so an anonymous payload never implies
+ * "signed in, owns nothing".
+ */
+export function viewerEntryFieldsFor(
+  map: ViewerInterestMap,
+  gameId: number,
+  hasViewer: boolean,
+): ViewerGameFlags & { currentUserPlaytimeMinutes?: number | null } {
+  const flags = viewerFlagsFor(map, gameId);
+  if (!hasViewer) return flags;
+  return {
+    ...flags,
+    currentUserPlaytimeMinutes: viewerPlaytimeFor(map, gameId),
+  };
 }
