@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { PluginSlot } from '../plugins';
 import { useCharacterLocationLabel } from '../plugins/character-identity';
-import { ForeverPortraitFallback } from '../plugins/wow/components/forever-portrait';
+import { CharacterPortraitFallback } from '../plugins/character-portrait';
 
 const ROLE_COLORS: Record<string, string> = {
     tank: 'bg-blue-600',
@@ -165,7 +165,7 @@ function CharacterHeader({ character, isOwner, isArmoryImported, isAdminViewer }
     return (
         <div className="bg-panel border border-edge rounded-lg p-6">
             <div className="flex items-start gap-4">
-                <ForeverPortraitFallback character={character} size="lg"><CharacterAvatar avatarUrl={character.avatarUrl} name={character.name} /></ForeverPortraitFallback>
+                <CharacterPortraitFallback character={character} size="lg"><CharacterAvatar avatarUrl={character.avatarUrl} name={character.name} /></CharacterPortraitFallback>
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                         <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>

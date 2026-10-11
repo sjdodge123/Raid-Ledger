@@ -1,41 +1,33 @@
 /**
  * ROK-1761: the one place a character avatar falls back to the WoW: Forever
  * portrait tile — the class icon on a neutral token disc with a race-initial
- * badge. Every character-avatar surface wraps its existing avatar in
- * `ForeverPortraitFallback`; non-Forever characters, and any character with a
- * render, get the wrapped avatar unchanged.
+ * badge. Core never imports it: the WoW identity provider registers
+ * `ForeverPortraitFallback` as its `PortraitFallback`, and every core
+ * character-avatar surface wraps its avatar in the game-agnostic
+ * `CharacterPortraitFallback` seam (`plugins/character-portrait.tsx`).
+ * Non-Forever characters, and any character with a render, get the wrapped
+ * avatar unchanged.
  *
  * A LedgerLink Forever character can carry `gameVariant: null` AND
  * `ruleset: null` (ROK-1751), so — like `CharacterVariantBadge` — the variant
  * falls back to the cached game registry slug, mounted only when a
  * QueryClient is in context.
  */
-import { useContext, useState, type ReactNode } from 'react';
+import { useContext, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { resolveWowVariant } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
 import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
 import type { WowVariant } from '../lib/wow-era';
+import type { CharacterPortraitFallbackProps, CharacterPortraitSize, CharacterPortraitSubject } from '../../character-identity';
 
-export type ForeverPortraitSize = 'sm' | 'md' | 'lg';
+export type ForeverPortraitSize = CharacterPortraitSize;
 
 /** Any character-ish shape: CharacterDto fits. */
-export interface ForeverPortraitCharacter {
-    name: string;
-    avatarUrl?: string | null | undefined;
-    race?: string | null | undefined;
-    class?: string | null | undefined;
-    gameVariant?: string | null | undefined;
-    ruleset?: string | null | undefined;
-    gameId?: number | null | undefined;
-}
+export type ForeverPortraitCharacter = CharacterPortraitSubject;
 
-interface FallbackProps {
-    character: ForeverPortraitCharacter;
-    size: ForeverPortraitSize;
-    /** The surface's existing avatar — rendered for every non-Forever character. */
-    children: ReactNode;
-}
+/** `children` is the surface's existing avatar — rendered for every non-Forever character. */
+type FallbackProps = CharacterPortraitFallbackProps;
 
 /** Race badge type floors at 10px (`0.625rem`) on the smallest tile so the letters stay legible. */
 const SIZES: Record<ForeverPortraitSize, { box: string; icon: string; badge: string }> = {

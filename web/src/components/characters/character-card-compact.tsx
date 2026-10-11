@@ -3,7 +3,7 @@ import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contrac
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
 import { PluginSlot } from '../../plugins';
-import { ForeverPortraitFallback } from '../../plugins/wow/components/forever-portrait';
+import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -35,7 +35,7 @@ interface CharacterCardCompactProps {
     professions?: CharacterProfessionsDto | null | undefined;
     /** Visual size variant: 'default' for standard, 'sm' for compact/onboarding. */
     size?: 'default' | 'sm';
-    /** ROK-1761: the character's own game / variant / ruleset for a flat-props card (event attendees), so it can resolve the Forever portrait. Portrait only. */
+    /** ROK-1761: the character's own game / variant / ruleset for a flat-props card (event attendees), so a plugin's portrait fallback can claim it. Portrait only. */
     portraitGameId?: number | null | undefined;
     portraitGameVariant?: string | null | undefined;
     portraitRuleset?: string | null | undefined;
@@ -128,9 +128,9 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
     return (
         <Link to={`/characters/${c.charId}`}
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
-            <ForeverPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.portraitGameVariant, ruleset: c.portraitRuleset, gameId: c.portraitGameId }}>
+            <CharacterPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.portraitGameVariant, ruleset: c.portraitRuleset, gameId: c.portraitGameId }}>
                 <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
-            </ForeverPortraitFallback>
+            </CharacterPortraitFallback>
             <div className="min-w-0 overflow-hidden">
                 <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} gameVariant={c.gameVariant} ruleset={c.ruleset} gameId={c.gameId} textSize={isSm ? 'text-sm' : ''} />
                 <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} professions={c.professions} textSize={isSm ? 'text-xs' : 'text-sm'} />

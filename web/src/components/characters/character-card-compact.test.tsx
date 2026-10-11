@@ -7,7 +7,7 @@
  *   • `character.professions` wins over flat prop
  *   • null/missing → no badge DOM
  */
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import type {
     CharacterDto,
@@ -147,6 +147,8 @@ describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', (
 
 /** ROK-1761: event attendees pass flat props (no variant/ruleset) plus the event's game id. */
 describe('CharacterCardCompact — Forever portrait from portraitGameId (event attendees)', () => {
+    // The tile reaches core through the WoW plugin's PortraitFallback seam (the file-level afterEach deactivates it).
+    beforeEach(activateWowPlugin);
     const flat = { id: 'c1', name: 'Fernwhisper', avatarUrl: null, race: 'Night Elf', className: 'Druid' };
 
     it('a Forever event (registry slug) shows the tile instead of the placeholder', () => {

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import type { CharacterDto } from '@raid-ledger/contract';
 import { useDeleteCharacter } from '../../hooks/use-character-mutations';
 import { PluginSlot } from '../../plugins';
-import { ForeverPortraitFallback } from '../../plugins/wow/components/forever-portrait';
+import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 interface CharacterCardProps {
     character: CharacterDto;
@@ -83,14 +83,14 @@ function CharacterMetaRow({ character }: { character: CharacterDto }) {
 function CharacterInfoLink({ character }: { character: CharacterDto }) {
     return (
         <Link to={`/characters/${character.id}`} className="flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity">
-            <ForeverPortraitFallback character={character} size="md">
+            <CharacterPortraitFallback character={character} size="md">
                 {character.avatarUrl ? (
                     <img src={character.avatarUrl} alt={character.name} className="w-10 h-10 rounded-full bg-overlay"
                         onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                 ) : (
                     <div className="w-10 h-10 rounded-full bg-overlay flex items-center justify-center text-muted">👤</div>
                 )}
-            </ForeverPortraitFallback>
+            </CharacterPortraitFallback>
             <div className="min-w-0 overflow-hidden">
                 <CharacterNameBadges character={character} />
                 <CharacterMetaRow character={character} />

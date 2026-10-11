@@ -2,12 +2,14 @@
  * ROK-1761 review fix: the Attendees card draws the Forever portrait from the
  * CHARACTER's own game / variant / ruleset — never the event's game.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import type { EventRosterDto } from '@raid-ledger/contract';
 import { EventDetailRoster } from './EventDetailRoster';
 import { createMockEvent } from '../../test/factories';
 import { renderWithProviders } from '../../test/render-helpers';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { usePluginStore } from '../../stores/plugin-store';
 
 const FOREVER_GAME_ID = 7;
 const CLASSIC_GAME_ID = 3;
@@ -44,6 +46,9 @@ function renderWith(char: ReturnType<typeof character>, eventGameId: number) {
 }
 
 describe('EventDetailRoster — Forever portrait follows the character, not the event (ROK-1761)', () => {
+    // The tile reaches core through the WoW plugin's PortraitFallback seam, so the plugin must be registered + active.
+    beforeEach(activateWowPlugin);
+    afterEach(() => usePluginStore.setState({ activeSlugs: new Set() }));
     it('a Classic character with no avatar on a Forever event gets NO Forever tile', () => {
         renderWith(character({ gameId: CLASSIC_GAME_ID, gameVariant: 'classic_era', ruleset: null }), FOREVER_GAME_ID);
         expect(screen.queryByTestId('forever-portrait'), 'Classic character must not borrow the Forever event game').toBeNull();

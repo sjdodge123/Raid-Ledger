@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { PlayerCard } from './player-card';
@@ -6,6 +6,8 @@ import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
 import { renderWithProviders } from '../../test/render-helpers';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { usePluginStore } from '../../stores/plugin-store';
 
 vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
@@ -304,6 +306,9 @@ describe('PlayerCard — public roster payload without discordId (ROK-1629)', ()
 
 /** ROK-1761: a WoW: Forever character with no render shows the portrait tile in the roster row. */
 describe('PlayerCard — Forever fallback portrait (ROK-1761)', () => {
+    // The tile reaches core through the WoW plugin's PortraitFallback seam, so the plugin must be registered + active.
+    beforeEach(activateWowPlugin);
+    afterEach(() => usePluginStore.setState({ activeSlugs: new Set() }));
     const foreverChar = { id: '00000000-0000-4000-8000-0000000000aa', name: 'Fernwhisper', className: 'Druid', role: 'healer', avatarUrl: null, race: 'Night Elf', ruleset: 'normal', gameVariant: null };
 
     it.each([['compact', 'w-8'], ['default', 'w-10']] as const)('a Forever roster row (%s) shows the tile with the race initials, not the user avatar', (size, box) => {
