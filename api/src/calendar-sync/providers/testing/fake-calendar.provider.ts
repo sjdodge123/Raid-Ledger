@@ -3,11 +3,15 @@ import type {
   CalendarAccountProvider,
   CalendarCredentials,
   CalendarProviderKey,
+  CalendarWriteCapability,
   ConnectResult,
+  CopyEventInput,
+  CopyRef,
   OAuthCodeInput,
   OAuthCredentials,
 } from '../calendar-provider.interface';
 import { ProviderAuthError } from '../calendar-provider.errors';
+import { FakeCalendarStore } from './fake-calendar-store';
 
 /**
  * ROK-1592: an in-memory, deterministic calendar provider. Every later
@@ -15,8 +19,8 @@ import { ProviderAuthError } from '../calendar-provider.errors';
  * `demo-fake:` connections to it (plan L15) — so it is shipped code, not a
  * spec helper, and holds no secrets: every token is a counter-derived string.
  *
- * Account capability only. The read/write bodies land with ROK-1593 /
- * ROK-1596, together with their conformance blocks.
+ * Account + write (ROK-1596; remote state in `fake-calendar-store`). The
+ * read body lands with ROK-1593.
  */
 
 /** `account_subject` prefix of a fake connection (L15; real subs are numeric). */
@@ -30,6 +34,11 @@ export const FAKE_DEFAULT_SCOPES: readonly string[] = [
 ];
 
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+/** Name of the dedicated calendar `ensureRaidLedgerCalendar` creates. */
+export const FAKE_RAID_LEDGER_CALENDAR_NAME = 'Raid Ledger';
+/** Title prefix of a tentative copy, added adapter-side (interface §D4). */
+export const TENTATIVE_TITLE_PREFIX = '(Tentative) ';
 
 /** What a registered authorization code resolves to. */
 export interface FakeAccount {
@@ -50,10 +59,14 @@ export function isFakeSubject(subject: string): boolean {
   return subject.startsWith(FAKE_SUBJECT_PREFIX);
 }
 
-export class FakeCalendarProvider implements CalendarAccountProvider {
+export class FakeCalendarProvider
+  implements CalendarAccountProvider, CalendarWriteCapability
+{
   readonly key: CalendarProviderKey;
   /** Refresh tokens passed to `disconnect`, in call order. */
   readonly revoked: string[] = [];
+  /** The fake user's calendars and copies (write capability). */
+  readonly store = new FakeCalendarStore();
   private readonly codes = new Map<string, FakeAccount>();
   private readonly now: () => number;
   private configured: boolean;
@@ -129,6 +142,65 @@ export class FakeCalendarProvider implements CalendarAccountProvider {
     if (credentials.kind === 'oauth')
       this.revoked.push(credentials.refreshToken);
     return Promise.resolve();
+  }
+
+  ensureRaidLedgerCalendar(
+    _credentials: CalendarCredentials,
+    knownId: string | null,
+  ): Promise<string> {
+    return this.run(() => {
+      if (knownId && this.store.hasCalendar(knownId)) return knownId;
+      return this.store.createCalendar(FAKE_RAID_LEDGER_CALENDAR_NAME);
+    });
+  }
+
+  upsertEvent(
+    _credentials: CalendarCredentials,
+    calendarId: string,
+    input: CopyEventInput,
+    existing: CopyRef | null,
+  ): Promise<CopyRef> {
+    return this.run(() => {
+      const prefix = input.tentative ? TENTATIVE_TITLE_PREFIX : '';
+      const copy = this.store.upsertCopy(
+        calendarId,
+        {
+          copyId: input.copyId,
+          title: `${prefix}${input.title}`,
+          description: input.description,
+          url: input.url,
+          busy: !input.tentative,
+          start: input.start,
+          end: input.end,
+        },
+        existing?.providerEventId ?? null,
+      );
+      return { calendarId, providerEventId: copy.id, etag: copy.etag };
+    });
+  }
+
+  deleteEvent(_credentials: CalendarCredentials, ref: CopyRef): Promise<void> {
+    return this.run(() => {
+      this.store.deleteCopy(ref.providerEventId);
+    });
+  }
+
+  /** A calendar that is already gone counts as deleted. */
+  deleteRaidLedgerCalendar(
+    _credentials: CalendarCredentials,
+    calendarId: string,
+  ): Promise<void> {
+    return this.run(() => this.store.removeCalendar(calendarId));
+  }
+
+  /** Every write op: consume a scripted failure, then act. */
+  private run<T>(op: () => T): Promise<T> {
+    try {
+      this.store.takeFailure();
+      return Promise.resolve(op());
+    } catch (err) {
+      return Promise.reject(err as Error);
+    }
   }
 
   private nextSerial(): number {

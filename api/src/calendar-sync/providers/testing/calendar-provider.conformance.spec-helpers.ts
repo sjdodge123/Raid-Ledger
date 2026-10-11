@@ -5,6 +5,8 @@ import type {
 } from '../calendar-provider.interface';
 import { ProviderAuthError } from '../calendar-provider.errors';
 
+export * from './calendar-write.conformance.spec-helpers';
+
 /**
  * ROK-1592 (spec §5 "Required tests"): the shared suite every calendar
  * adapter runs. Call it from the adapter's spec with a factory; the factory
@@ -12,8 +14,9 @@ import { ProviderAuthError } from '../calendar-provider.errors';
  * fixtures for a real adapter: a code exchange for `validCode`, a 400
  * `invalid_grant` for `invalidCode`, a refresh grant, and a 200 revoke).
  *
- * Account cases run now. Read and write blocks are skipped until their
- * stories add the capability bodies and the fixtures to drive them.
+ * Account cases run here; write cases in `describeCalendarWriteConformance`
+ * (ROK-1596, `calendar-write.conformance.spec-helpers`, re-exported below).
+ * The read block is skipped until ROK-1593.
  */
 export interface AccountConformanceHarness {
   provider: CalendarAccountProvider;
@@ -133,15 +136,6 @@ function describeDeferredCapabilities(): void {
     it.todo(
       '401 → ProviderAuthError, 429 → RateLimitError, 5xx → TransientError',
     );
-  });
-  // TODO(ROK-1596): un-skip with the write bodies + write fixtures.
-  describe.skip('write capability — TODO(ROK-1596)', () => {
-    it.todo(
-      'ensureRaidLedgerCalendar returns the known id when it still exists',
-    );
-    it.todo('upsertEvent with an existing ref keeps the providerEventId');
-    it.todo('a tentative copy is "(Tentative) <title>" and Free');
-    it.todo('deleteEvent treats 404/410 as success');
   });
 }
 
