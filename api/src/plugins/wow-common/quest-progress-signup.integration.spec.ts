@@ -89,12 +89,12 @@ describe('Quest progress PUT — signup + deactivation gate (ROK-1757)', () => {
     expect(await progressRows(eventId, member.id)).toEqual([]);
   });
 
-  it('403 USER_DEACTIVATED for a signed-up but deactivated member', async () => {
+  it('401 USER_DEACTIVATED for a signed-up but deactivated member (JwtStrategy rejects first since ROK-1753)', async () => {
     const eventId = await createEvent();
     const member = await createMember('qp-gone', true);
     await signUp(eventId, member.id);
     const res = await put(eventId, tokenFor(member));
-    expect(res.status).toBe(403);
+    expect(res.status).toBe(401);
     expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
     expect(await progressRows(eventId, member.id)).toEqual([]);
   });
