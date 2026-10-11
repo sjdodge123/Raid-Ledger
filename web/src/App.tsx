@@ -14,7 +14,6 @@ import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';
 import { ThemeParticles } from './components/ui/ThemeParticles';
-import { CHUNK_RELOAD_KEY } from './lazy-routes';
 import { takeCapturedMagicLinkToken } from './lib/magic-link-capture';
 import { startMagicLinkRedeem, isMagicLinkRedeemPending } from './lib/magic-link-redeem';
 import { AppRoutes } from './app-routes';
@@ -34,9 +33,6 @@ const _cachedUser = getCachedUser();
 if (_cachedUser && getAuthToken() && !_magicLinkToken) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
-
-// Re-export for backward compat (used by tests)
-export { CHUNK_RELOAD_KEY };
 
 import './plugins/wow/register';
 import './plugins/discord/register';
@@ -59,10 +55,6 @@ function ScrollToTop() {
 
 function useAppBootstrap() {
   const startPolling = useConnectivityStore((s) => s.startPolling);
-
-  useEffect(() => {
-    sessionStorage.removeItem(CHUNK_RELOAD_KEY);
-  }, []);
 
   useEffect(() => {
     const cleanup = startPolling();
