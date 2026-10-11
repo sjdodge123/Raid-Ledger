@@ -57,6 +57,8 @@ function useBindingHandlers(channels: BindingChannelOption[]) {
         // while a PATCH is in flight: reset() would detach it (isUpdating drops early, so the
         // reopened form can double-submit, and a later rejection only reaches the toast).
         resetUpdateError: () => { if (!updateBinding.isPending) updateBinding.reset(); },
+        // ROK-1766: Cancel / "+ Add binding" must not reopen on the previous 409.
+        resetCreateError: () => { if (!createBinding.isPending) createBinding.reset(); },
     };
 }
 
@@ -165,7 +167,7 @@ function ChannelBindingsSection({ handlers, channels }: {
                     onEditingChange={handlers.resetUpdateError} />
             )}
             <div className="mt-4">
-                <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} />
+                <BindingCreateForm channels={channels} onCreate={handlers.handleCreate} isCreating={handlers.isCreating} createError={handlers.createError} onResetError={handlers.resetCreateError} />
             </div>
         </div>
     );

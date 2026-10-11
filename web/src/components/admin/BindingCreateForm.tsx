@@ -23,6 +23,8 @@ interface BindingCreateFormProps {
     onCreate: (dto: CreateChannelBindingDto) => void | Promise<unknown>;
     isCreating: boolean;
     createError?: string | null;
+    /** ROK-1766: drop a stale create error (e.g. a 409) when the form opens or closes. */
+    onResetError?: () => void;
 }
 
 function ChannelSelect({ channels, value, onChange }: {
@@ -89,7 +91,7 @@ function useCreateBindingForm(channels: BindingChannelOption[]) {
 }
 
 /** The open form: channel, purpose, game (unless General Lobby), error and actions. */
-function CreateBindingFields({ channels, onCreate, isCreating, createError, onClose }: BindingCreateFormProps & {
+function CreateBindingFields({ channels, onCreate, isCreating, createError, onClose }: Omit<BindingCreateFormProps, 'onResetError'> & {
     onClose: () => void;
 }) {
     const f = useCreateBindingForm(channels);
@@ -128,9 +130,11 @@ function CreateBindingFields({ channels, onCreate, isCreating, createError, onCl
  * cannot mint the inert (voice monitor, no game) triple.
  */
 export function BindingCreateForm(props: BindingCreateFormProps) {
+    const { onResetError, ...fieldProps } = props;
     const [open, setOpen] = useState(false);
+    const toggle = (next: boolean) => { onResetError?.(); setOpen(next); };
     if (!open) {
-        return <Button variant="secondary" onClick={() => setOpen(true)}>+ Add binding</Button>;
+        return <Button variant="secondary" onClick={() => toggle(true)}>+ Add binding</Button>;
     }
-    return <CreateBindingFields {...props} onClose={() => setOpen(false)} />;
+    return <CreateBindingFields {...fieldProps} onClose={() => toggle(false)} />;
 }

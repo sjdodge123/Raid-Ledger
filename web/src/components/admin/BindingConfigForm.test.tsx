@@ -25,6 +25,8 @@ import {
 vi.mock("../../hooks/use-game-search", () => ({ useGameSearch: vi.fn() }));
 import { useGameSearch } from "../../hooks/use-game-search";
 import { at } from "../../test/defined";
+import { BINDING_PURPOSE_LABELS } from "@raid-ledger/contract";
+import { PURPOSE_HINT } from "./BindingConfigFormFields";
 
 function makeBinding(
   overrides: Partial<ChannelBindingDto> = {},
@@ -755,3 +757,14 @@ describe("BindingConfigForm — TDB:1970 cross-row save lock", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+describe("ROK-1766: Purpose help names Quick Play Announcements", () => {
+  it("renders a hint built from the contract labels, Quick Play included", () => {
+    renderBindingForm({});
+    expect(screen.getByText(PURPOSE_HINT)).toBeInTheDocument();
+    expect(PURPOSE_HINT).toContain(
+      `${BINDING_PURPOSE_LABELS["quick-play-announcements"]} (one channel per game)`,
+    );
+  });
+});
+

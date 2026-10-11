@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QUICK_PLAY_ANNOUNCE_HELP } from "@raid-ledger/contract";
@@ -153,5 +154,24 @@ describe("BindingCreateForm — pending and error", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Channel already bound");
     expect(alert).toHaveClass("text-danger");
+  });
+});
+
+/** Models the page: the mutation's error lives above the form until reset. */
+function ErrorHarness() {
+  const [error, setError] = useState<string | null>("Channel already posts Quick Play");
+  return (
+    <BindingCreateForm channels={CHANNELS} onCreate={onCreate} isCreating={false}
+      createError={error} onResetError={() => setError(null)} />
+  );
+}
+
+describe("ROK-1766: a stale create error does not survive Cancel", () => {
+  it("Cancel then + Add binding reopens the form without the previous error", () => {
+    render(<ErrorHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
