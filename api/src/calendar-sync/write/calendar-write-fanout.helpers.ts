@@ -32,6 +32,23 @@ export async function findUserWriteConnectionIds(
   return rows.map((r) => r.id);
 }
 
+/**
+ * The web user behind a signup, for emits that carry only `signupId`
+ * (bench promotion of a Discord-only player, `tentative_reslotted`,
+ * `tentative_displacement_check`). null → Discord-only, or the row is gone.
+ */
+export async function findSignupUserId(
+  db: Db,
+  signupId: number,
+): Promise<number | null> {
+  const [row] = await db
+    .select({ userId: schema.eventSignups.userId })
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.id, signupId))
+    .limit(1);
+  return row?.userId ?? null;
+}
+
 /** Every existing copy (link row) of the event, any state. */
 export async function findEventLinkKeys(
   db: Db,

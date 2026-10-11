@@ -5,14 +5,22 @@
  * logged + sent to Sentry, and the nightly reconcile heals the missed write.
  *
  * - SIGNUP_EVENTS.* with `userId` → that user's write connections.
- * - with `signupId` but no `userId` → a Discord-only signup: skipped.
+ * - with `signupId` but no `userId` → the signup's user is looked up
+ *   (internal roster emits such as `tentative_reslotted` omit it); a
+ *   Discord-only signup (no user) is skipped.
  * - neither (`roster_updated`), APP_EVENT_EVENTS.UPDATED / CANCELLED →
  *   event-wide fan-out (signups with a write connection ∪ existing links).
  * - DELETED (`emitAsync`, before the row delete) → every link of the event;
  *   the job then finds the event gone and deletes the copy.
  * - RESCHEDULING → no-op (UPDATED follows at lock-in); not subscribed.
- * Benched players need nothing here: bench is a roster assignment, the
- * status stays `signed_up`, so the copy is Busy (plan F11 default).
+ * Bench (F11, ruled 2026-10-11): a benched copy is Free + "(Bench) ".
+ * Bench is a roster assignment, not a status, so the reconcile job reads it
+ * (`loadSignupBenched`); every bench move already emits SIGNUP_EVENTS.UPDATED
+ * — manual roster saves (`roster_updated`, event-wide), bench promotion and
+ * priority rejoin (`userId`), `tentative_reslotted` (`signupId`). Known gap:
+ * a tentative player displaced to the bench by a newcomer's signup gets no
+ * emit of its own; its copy is already Free, and only the "(Tentative)" →
+ * "(Bench)" title waits for the nightly reconcile.
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -34,6 +42,7 @@ import { enqueueCalendarWriteJob } from './calendar-write.enqueue.helpers';
 import {
   findEventFanoutKeys,
   findEventLinkKeys,
+  findSignupUserId,
   findUserWriteConnectionIds,
 } from './calendar-write-fanout.helpers';
 import type { ReconcileKey } from './calendar-write-reconcile.helpers';
@@ -87,15 +96,21 @@ export class CalendarWriteListener {
 
   private onSignup(payload: SignupEventPayload): Promise<void> {
     const { eventId, userId, signupId } = payload;
-    if (userId != null) {
-      return this.run(eventId, async () =>
-        (await findUserWriteConnectionIds(this.db, userId)).map(
-          (connectionId) => ({ connectionId, eventId, userId }),
-        ),
-      );
+    if (userId == null && signupId == null) {
+      return this.onEventUpdated({ eventId });
     }
-    if (signupId != null) return Promise.resolve(); // Discord-only signup
-    return this.onEventUpdated({ eventId });
+    return this.run(eventId, async () => {
+      const uid =
+        userId ??
+        (signupId != null ? await findSignupUserId(this.db, signupId) : null);
+      if (uid == null) return []; // Discord-only signup
+      const ids = await findUserWriteConnectionIds(this.db, uid);
+      return ids.map((connectionId) => ({
+        connectionId,
+        eventId,
+        userId: uid,
+      }));
+    });
   }
 
   /** Kill switch first (no DB reads while off), then one job per key. */
