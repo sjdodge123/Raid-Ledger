@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
@@ -18,6 +19,7 @@ import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 import { CalendarWriteListener } from './write/calendar-write.listener';
 import { CalendarWriteProcessor } from './write/calendar-write.processor';
+import { CalendarWriteReconcileCron } from './write/calendar-write-reconcile.cron';
 
 /**
  * L15: the Fake is always constructed (an inert in-memory object) but is
@@ -44,6 +46,7 @@ const fakeProvider = {
     DrizzleModule,
     SettingsModule,
     EventsModule,
+    CronJobModule,
     BullModule.registerQueue({ name: CALENDAR_WRITE_QUEUE }),
   ],
   controllers: [
@@ -60,6 +63,7 @@ const fakeProvider = {
     fakeProvider,
     CalendarWriteProcessor,
     CalendarWriteListener,
+    CalendarWriteReconcileCron,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })
