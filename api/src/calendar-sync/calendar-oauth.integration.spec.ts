@@ -21,6 +21,7 @@ import {
 import {
   CALENDAR_WRITE_QUEUE,
   reconcileJobId,
+  writeOffJobId,
 } from './calendar-sync.constants';
 import { nonEmpty } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
@@ -522,5 +523,42 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
       'active',
       'dedicated',
     ]);
+  });
+
+  it('a reconnect resumes a write-off an auth error interrupted (pipe review m3)', async () => {
+    const id = await connectedWithWrite();
+    const eventId = await createFutureEvent(
+      testApp,
+      await loginAsAdmin(testApp.request, testApp.seed),
+    );
+    // What an auth-failed write-off leaves: write off, calendar + a live link.
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({
+        writeEnabled: false,
+        dedicatedCalendarId: 'rl-dedicated',
+        status: 'needs_reconnect',
+      })
+      .where(eq(schema.calendarConnections.id, id));
+    await testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId: id,
+      userId: user.userId,
+      eventId,
+      calendarId: 'rl-dedicated',
+      providerEventId: 'copy-1',
+    });
+    const jobId = writeOffJobId(id);
+    await writeQueue().remove(jobId); // ids repeat across truncations
+    try {
+      stubGoogle(OK);
+      const s = await start();
+      expect(
+        await land({ code: 'auth-code-4', state: s.state }, s.cookie),
+      ).toEqual({ connected: 'google', error: null });
+      const job = await writeQueue().getJob(jobId);
+      expect(job?.data).toEqual({ kind: 'write-off', connectionId: id });
+    } finally {
+      await writeQueue().remove(jobId);
+    }
   });
 });

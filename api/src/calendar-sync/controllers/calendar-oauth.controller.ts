@@ -66,6 +66,7 @@ import {
   type VerifiedCalendarOAuthState,
 } from '../services/calendar-oauth-state.helpers';
 import * as intents from '../services/calendar-oauth-intent.helpers';
+import { enqueuePendingWriteOff } from '../write/calendar-write-off.helpers';
 import {
   revokeUnstoredGrant,
   upsertCalendarConnection,
@@ -233,6 +234,11 @@ export class CalendarOAuthController {
         grantedScopes,
         queue: this.writeQueue,
       })
+      .then(async (outcome) => {
+        // Pipe review m3: a write-off an auth error interrupted resumes now.
+        await enqueuePendingWriteOff(this.db, this.enqueueDeps(), connectionId);
+        return outcome;
+      })
       .catch((err: unknown) => {
         Sentry.captureException(err);
         this.logger.error(`calendar consent apply failed (${errorClass(err)})`);
@@ -266,6 +272,13 @@ export class CalendarOAuthController {
     const link = LINK_KEYS[key];
     const provider = this.registry.getAccountProvider(key);
     return link && provider ? { key, link, provider } : null;
+  }
+
+  private enqueueDeps() {
+    return {
+      queue: this.writeQueue,
+      isSyncEnabled: () => Promise.resolve(true),
+    };
   }
 
   private async redirectUri(key: CalendarOAuthProvider): Promise<string> {
