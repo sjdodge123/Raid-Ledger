@@ -9,6 +9,12 @@
  * - target `primary` on a grant without `calendar.events` → 409
  *   `needs_consent` (the web then starts OAuth with `intent=primary`, D8).
  *
+ * The one-write check and the update run in ONE transaction holding
+ * `pg_advisory_xact_lock(CALENDAR_WRITE_LOCK_CLASS, userId)`, so two
+ * concurrent PATCHes cannot both turn write on (review m2, no migration).
+ * The scope check runs whenever the result sends to primary, even when the
+ * target is already primary (review m1: a reconnect may have lost the scope).
+ *
  * Then the row is updated and the queue does the remote work: enable → one
  * `reconcile` per active upcoming sign-up; disable → one `write-off`; a target
  * flip while sending → one `reconcile` per linked event ∪ active sign-up (the
@@ -20,7 +26,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   UpdateCalendarConnectionSchema,
@@ -36,6 +42,7 @@ import { decryptCalendarCredentials } from './calendar-credentials.helpers';
 import { affectedEventIds } from './calendar-oauth-intent.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
 
 export interface CalendarWriteSettingsDeps extends CalendarWriteEnqueueDeps {
@@ -47,6 +54,9 @@ export interface CalendarWriteSettingsInput {
   connectionId: number;
   body: unknown;
 }
+
+/** `pg_advisory_xact_lock(class, userId)` namespace: one-write rule. */
+export const CALENDAR_WRITE_LOCK_CLASS = 1596;
 
 interface NextWrite {
   enabled: boolean;
@@ -65,18 +75,24 @@ export async function updateCalendarWriteSettings(
     enabled: write.enabled ?? row.writeEnabled,
     target: write.target ?? (row.writeTarget as CalendarWriteTarget),
   };
-  if (next.enabled) await assertNoOtherWriteConnection(deps.db, row);
-  if (next.target === 'primary' && row.writeTarget !== 'primary') {
+  const flipsToPrimary = row.writeTarget !== 'primary';
+  if (next.target === 'primary' && (next.enabled || flipsToPrimary)) {
     assertEventsScope(row);
   }
-  await deps.db
-    .update(schema.calendarConnections)
-    .set({
-      writeEnabled: next.enabled,
-      writeTarget: next.target,
-      updatedAt: new Date(),
-    })
-    .where(eq(schema.calendarConnections.id, row.id));
+  await deps.db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${CALENDAR_WRITE_LOCK_CLASS}::int4, ${row.userId}::int4)`,
+    );
+    if (next.enabled) await assertNoOtherWriteConnection(tx, row);
+    await tx
+      .update(schema.calendarConnections)
+      .set({
+        writeEnabled: next.enabled,
+        writeTarget: next.target,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.calendarConnections.id, row.id));
+  });
   await enqueueFollowUp(deps, row, next);
 }
 
@@ -107,7 +123,7 @@ async function loadOwnConnection(
 
 /** Q15 / F6: write on at most one of a user's connections. */
 async function assertNoOtherWriteConnection(
-  db: Db,
+  db: Db | Tx,
   row: ConnectionRow,
 ): Promise<void> {
   const t = schema.calendarConnections;

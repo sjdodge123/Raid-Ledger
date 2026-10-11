@@ -192,7 +192,7 @@ export class CalendarOAuthController {
     target: OAuthTarget,
     verified: VerifiedCalendarOAuthState,
     code: string,
-  ): Promise<'connected' | 'scopes'> {
+  ): Promise<'connected' | 'scopes' | 'unavailable'> {
     const { uid: userId, codeVerifier, intent } = verified;
     const redirectUri = await this.redirectUri(target.key);
     const result = await target.provider.connect({
@@ -212,12 +212,26 @@ export class CalendarOAuthController {
       await revokeUnstoredGrant(target.provider, result.credentials);
       throw err;
     });
-    await intents.applyConsentIntent(this.db, {
-      intent,
-      connectionId: id,
-      userId,
-      queue: this.writeQueue,
-    });
+    // Review m4: the grant IS saved — a failure here is not an `exchange`.
+    // The contract has no dedicated code; `unavailable` + Sentry it is.
+    const applied = await intents
+      .applyConsentIntent(this.db, {
+        intent,
+        connectionId: id,
+        userId,
+        provider: target.key,
+        grantedScopes: scopes,
+        queue: this.writeQueue,
+      })
+      .catch((err: unknown) => {
+        Sentry.captureException(err);
+        this.logger.error(`calendar consent apply failed (${errorClass(err)})`);
+        return 'failed' as const;
+      });
+    if (applied === 'failed') return 'unavailable';
+    if (applied === 'other_account') {
+      this.logger.warn('primary consent landed on a non-writing account');
+    }
     return 'connected';
   }
 

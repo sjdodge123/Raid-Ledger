@@ -24,9 +24,11 @@ import {
   ParseIntPipe,
   Post,
   Request,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import type { Response } from 'express';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { EventCalendarCopy } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
@@ -70,7 +72,32 @@ function toIcsEvent(
     description: url,
     url,
     ...(event.cancelledAt ? { status: 'CANCELLED' as const } : {}),
+    ...revision(event),
   };
+}
+
+/** SEQUENCE = whole seconds since creation: grows with every edit. */
+function revision(event: { createdAt?: string; updatedAt?: string }) {
+  if (!event.createdAt || !event.updatedAt) return {};
+  const lastModified = new Date(event.updatedAt);
+  const created = new Date(event.createdAt).getTime();
+  const sequence = Math.max(
+    0,
+    Math.floor((lastModified.getTime() - created) / 1000),
+  );
+  return { sequence, lastModified };
+}
+
+/** `Content-Disposition` file name: an ASCII slug of the title. */
+export function icsFileName(id: number, title: string): string {
+  const slug = title
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+    .replace(/-+$/, '');
+  return `${slug || `event-${id}`}.ics`;
 }
 
 @Controller()
@@ -120,12 +147,17 @@ export class EventCalendarController {
   async getIcs(
     @Param('id', ParseIntPipe) id: number,
     @Request() req: { user?: NonNullable<EventViewer> },
+    @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
     const event = await findEventForViewer(
       this.db,
       this.eventsService,
       id,
       req.user,
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${icsFileName(id, event.title)}"`,
     );
     const clientUrl = await this.settings.getClientUrl();
     return serializeIcsCalendar({

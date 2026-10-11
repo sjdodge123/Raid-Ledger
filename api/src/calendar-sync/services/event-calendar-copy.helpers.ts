@@ -195,10 +195,11 @@ async function deleteCopyBestEffort(
   conn: ConnectionRow,
   link: LinkRow,
 ): Promise<void> {
+  const { calendarId, providerEventId } = link;
+  if (!providerEventId) return; // a placeholder: no remote copy (review m3)
   try {
     const provider = await deps.registry.getWriteProviderForConnection(conn);
     if (!provider) return;
-    const { calendarId, providerEventId } = link;
     await withFreshCredentials(deps.db, conn, provider, (creds) =>
       provider.deleteEvent(creds, { calendarId, providerEventId }),
     );

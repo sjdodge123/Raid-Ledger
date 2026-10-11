@@ -21,6 +21,10 @@ export interface IcsEvent {
   description?: string;
   url?: string;
   status?: 'CONFIRMED' | 'TENTATIVE' | 'CANCELLED';
+  /** Revision number; must grow with each significant change (§3.8.7.4). */
+  sequence?: number;
+  /** When the source object last changed (§3.8.7.3). */
+  lastModified?: Date;
 }
 
 export interface IcsCalendar {
@@ -88,6 +92,10 @@ function eventLines(event: IcsEvent): string[] {
   // URL is a URI value (§3.8.4.6) — not TEXT, so not escaped.
   if (event.url !== undefined) lines.push(`URL:${event.url}`);
   if (event.status !== undefined) lines.push(`STATUS:${event.status}`);
+  if (event.sequence !== undefined) lines.push(`SEQUENCE:${event.sequence}`);
+  if (event.lastModified !== undefined) {
+    lines.push(`LAST-MODIFIED:${formatIcsUtc(event.lastModified)}`);
+  }
   lines.push('END:VEVENT');
   return lines;
 }

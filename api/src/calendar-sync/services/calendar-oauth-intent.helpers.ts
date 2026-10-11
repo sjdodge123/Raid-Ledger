@@ -8,9 +8,17 @@
  * stays valid (mirrors ROK-1593 D17). A grant that has it switches the
  * connection to `write_target='primary'` and queues a reconcile per affected
  * event so existing copies move.
+ *
+ * Review m4: a `primary` grant for a DIFFERENT account than the one sending
+ * (the user picked another Google account) never flips that row while
+ * another of the user's connections has write on — it is stored as a plain
+ * connect, so there is never a second primary-target row beside the writer.
+ * Review m1: a `connect` grant without the events scope on a row whose
+ * target is `primary` (reconnect after a Google-side revoke) falls back to
+ * `dedicated`, so the row does not loop on `needs_reconnect`.
  */
 import { BadRequestException } from '@nestjs/common';
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CalendarOAuthIntentSchema,
@@ -50,27 +58,83 @@ export interface ApplyConsentIntentInput {
   intent: CalendarOAuthIntent;
   connectionId: number;
   userId: number;
+  provider: CalendarProviderKey;
+  /** The scopes on the grant just stored. */
+  grantedScopes: readonly string[];
   /** The write queue. The callback has already checked the kill switch. */
   queue: CalendarWriteQueue;
 }
 
-/** After a stored `primary` grant: flip the target and queue reconciles. */
+export type ConsentIntentOutcome =
+  'none' | 'primary' | 'other_account' | 'fell_back';
+
+/**
+ * After a stored grant: `primary` flips the target (m4 guard); `connect`
+ * without the events scope demotes a `primary` target (m1). A changed target
+ * on a sending row queues a reconcile per affected event.
+ */
 export async function applyConsentIntent(
   db: Db,
   input: ApplyConsentIntentInput,
+): Promise<ConsentIntentOutcome> {
+  const conn = schema.calendarConnections;
+  const { connectionId, userId } = input;
+  let target: CalendarWriteTargetValue;
+  let outcome: ConsentIntentOutcome;
+  if (input.intent === 'primary') {
+    if (await otherWriterExists(db, userId, connectionId)) {
+      return 'other_account';
+    }
+    [target, outcome] = ['primary', 'primary'];
+  } else {
+    if (grantCoversIntent('primary', input.provider, input.grantedScopes)) {
+      return 'none';
+    }
+    [target, outcome] = ['dedicated', 'fell_back'];
+  }
+  const [row] = await db
+    .update(conn)
+    .set({ writeTarget: target, updatedAt: new Date() })
+    .where(and(eq(conn.id, connectionId), ne(conn.writeTarget, target)))
+    .returning({ writeEnabled: conn.writeEnabled });
+  if (!row) return outcome === 'fell_back' ? 'none' : outcome;
+  if (row.writeEnabled) await queueReconciles(db, input);
+  return outcome;
+}
+
+type CalendarWriteTargetValue = 'primary' | 'dedicated';
+
+/** Another of the user's live connections has write on. */
+async function otherWriterExists(
+  db: Db,
+  userId: number,
+  connectionId: number,
+): Promise<boolean> {
+  const conn = schema.calendarConnections;
+  const [other] = await db
+    .select({ id: conn.id })
+    .from(conn)
+    .where(
+      and(
+        eq(conn.userId, userId),
+        ne(conn.id, connectionId),
+        eq(conn.writeEnabled, true),
+        ne(conn.status, 'disconnecting'),
+      ),
+    )
+    .limit(1);
+  return !!other;
+}
+
+async function queueReconciles(
+  db: Db,
+  input: ApplyConsentIntentInput,
 ): Promise<void> {
-  if (input.intent !== 'primary') return;
   const { connectionId, userId } = input;
   const deps = {
     queue: input.queue,
     isSyncEnabled: () => Promise.resolve(true),
   };
-  const [row] = await db
-    .update(schema.calendarConnections)
-    .set({ writeTarget: 'primary', updatedAt: new Date() })
-    .where(eq(schema.calendarConnections.id, connectionId))
-    .returning({ writeEnabled: schema.calendarConnections.writeEnabled });
-  if (!row?.writeEnabled) return;
   for (const eventId of await affectedEventIds(db, connectionId, userId)) {
     const job = { kind: 'reconcile' as const, connectionId, eventId, userId };
     await enqueueCalendarWriteJob(deps, job);

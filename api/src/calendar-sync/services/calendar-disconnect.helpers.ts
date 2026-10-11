@@ -10,9 +10,13 @@
  * 3. deletes the row (event links cascade),
  * 4. revokes best-effort with the stored credentials.
  *
- * A `ProviderAuthError` (or unreadable credentials) in 1–2 skips the remote
- * cleanup — nothing more is possible — and the row is still deleted. Any
- * other remote error rethrows (BullMQ retry) with the row kept.
+ * Only a retryable error (`TransientError` / `RateLimitError`) while BullMQ
+ * attempts remain rethrows, with the row kept. Anything else — auth loss,
+ * unreadable credentials, a permanent refusal, an unknown error, or a
+ * retryable one on the FINAL attempt — skips the remote cleanup and the row is
+ * still deleted (review M1: a row must never stay `disconnecting` holding a
+ * refresh token). `CalendarDisconnectSweepCron` re-queues stale rows whose job
+ * was lost (Redis down at DELETE, a crash).
  *
  * The revoke is SKIPPED while another row still has the same `(provider,
  * account_subject)`: two RL users may connect one Google account, and a
@@ -31,6 +35,8 @@ import {
   CalendarProviderError,
   NotFoundError,
   ProviderAuthError,
+  RateLimitError,
+  TransientError,
 } from '../providers/calendar-provider.errors';
 import type { CalendarCredentials } from '../providers/calendar-provider.interface';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
@@ -60,7 +66,12 @@ export type CalendarRevokeOutcome =
   'revoked' | 'skipped_sibling' | 'skipped_no_provider' | 'failed';
 
 export type RemoteCleanupOutcome =
-  'cleaned' | 'skipped_auth' | 'skipped_no_provider';
+  'cleaned' | 'skipped_auth' | 'skipped_error' | 'skipped_no_provider';
+
+export interface CalendarDisconnectOptions {
+  /** No BullMQ retry follows: never rethrow, always delete the row. */
+  finalAttempt?: boolean;
+}
 
 /** `found: false` = the row is gone, or no longer `disconnecting`. */
 export type CalendarDisconnectResult =
@@ -150,26 +161,31 @@ async function deleteRemote(
   }
 }
 
+const isRetryable = (err: unknown) =>
+  err instanceof TransientError || err instanceof RateLimitError;
+
+const isAuthLost = (err: unknown) =>
+  err instanceof ProviderAuthError ||
+  err instanceof CalendarCredentialsUnreadableError;
+
 async function cleanRemote(
   deps: CalendarDisconnectDeps,
   row: ConnectionRow,
+  opts: CalendarDisconnectOptions,
 ): Promise<RemoteCleanupOutcome> {
-  const provider = await deps.registry.getWriteProviderForConnection(row);
-  if (!provider) return 'skipped_no_provider';
   try {
+    const provider = await deps.registry.getWriteProviderForConnection(row);
+    if (!provider) return 'skipped_no_provider';
     await withFreshCredentials(deps.db, row, provider, (creds) =>
       deleteRemote(deps.db, row, provider, creds),
     );
     return 'cleaned';
   } catch (err) {
-    const authLost =
-      err instanceof ProviderAuthError ||
-      err instanceof CalendarCredentialsUnreadableError;
-    if (!authLost) throw err;
+    if (isRetryable(err) && !opts.finalAttempt) throw err;
     logger.warn(
       `calendar cleanup skipped for connection ${row.id} (${errorCode(err)})`,
     );
-    return 'skipped_auth';
+    return isAuthLost(err) ? 'skipped_auth' : 'skipped_error';
   }
 }
 
@@ -196,10 +212,11 @@ async function revokeBestEffort(
 export async function runCalendarDisconnect(
   deps: CalendarDisconnectDeps,
   connectionId: number,
+  opts: CalendarDisconnectOptions = {},
 ): Promise<CalendarDisconnectResult> {
   const row = await loadRow(deps.db, connectionId);
   if (!row || row.status !== 'disconnecting') return { found: false };
-  const remote = await cleanRemote(deps, row);
+  const remote = await cleanRemote(deps, row, opts);
   await deps.db
     .delete(calendarConnections)
     .where(eq(calendarConnections.id, row.id));
