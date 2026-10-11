@@ -44,6 +44,11 @@ export class FakeCalendarStore {
     this.failures.push(err);
   }
 
+  /** Drop every queued failure (spec teardown). */
+  clearFailures(): void {
+    this.failures.length = 0;
+  }
+
   /** Throws the next queued failure, if any. Every write op calls it first. */
   takeFailure(): void {
     const err = this.failures.shift();

@@ -27,6 +27,7 @@ import {
 } from '../calendar-provider.registry';
 import { describeCalendarWriteConformance } from '../testing/calendar-provider.conformance.spec-helpers';
 import { FakeGoogleCalendarApi } from './google-calendar-api.spec-helpers';
+import { GOOGLE_CALENDAR_API } from './google-write.helpers';
 
 type Json = Record<string, unknown>;
 const fixture = (name: string): Json =>
@@ -202,7 +203,36 @@ describe('GoogleCalendarAdapter write — Google specifics', () => {
     expect(api.requests.map((r) => r.accessToken)).toEqual([
       'ya29.write-token',
       'ya29.write-token',
+      'ya29.write-token',
     ]);
+  });
+
+  it('a create with no ref looks the rlCopyId up (events.list) before events.insert (M1)', async () => {
+    const { api, a } = fakeGoogle();
+    const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
+    api.requests.length = 0;
+    await a.upsertEvent(CREDS, cal, COPY, null);
+    const calls = api.requests.map((r) => `${r.method} ${r.url.split('?')[0]}`);
+    const events = `${GOOGLE_CALENDAR_API}/calendars/${encodeURIComponent(cal)}/events`;
+    expect(calls).toEqual([`GET ${events}`, `POST ${events}`]);
+  });
+
+  it('a copy the user deleted (cancelled) comes back confirmed on patch (m5)', async () => {
+    const { api, a } = fakeGoogle();
+    const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
+    const ref = await a.upsertEvent(CREDS, cal, COPY, null);
+    api.cancelEvent(cal, ref.providerEventId);
+    await a.upsertEvent(CREDS, cal, COPY, ref);
+    expect(api.event(cal, ref.providerEventId)?.status).toBe('confirmed');
+  });
+
+  it('a cancelled copy is not adopted by a ref-less create — a new copy is inserted', async () => {
+    const { api, a } = fakeGoogle();
+    const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
+    const ref = await a.upsertEvent(CREDS, cal, COPY, null);
+    api.cancelEvent(cal, ref.providerEventId);
+    const next = await a.upsertEvent(CREDS, cal, COPY, null);
+    expect(next.providerEventId).not.toBe(ref.providerEventId);
   });
 
   it('a known calendar that errors (not 404) is NOT replaced', async () => {

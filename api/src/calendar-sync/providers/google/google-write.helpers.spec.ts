@@ -12,6 +12,7 @@ import {
   buildGoogleEventBody,
   deleteGoogleCalendar,
   deleteGoogleEvent,
+  findGoogleEventByCopyId,
   getGoogleCalendar,
   insertGoogleCalendar,
   insertGoogleEvent,
@@ -202,8 +203,36 @@ describe('event request shapes', () => {
       'PATCH',
       `${CAL_URL}/events/fixtureevt0001`,
       TOKEN,
-      buildGoogleEventBody(input(true)),
+      { ...buildGoogleEventBody(input(true)), status: 'confirmed' },
     );
+  });
+
+  it('events.list looks a copy up by privateExtendedProperty=rlCopyId=<id> (M1)', async () => {
+    const list = fixture('events-list-copy');
+    reply(200, list);
+    const ref = await findGoogleEventByCopyId(TOKEN, CAL, COPY_ID);
+    expect(ref).toEqual({
+      calendarId: CAL,
+      providerEventId: 'fixtureevt0001',
+      etag: (list.items as Json[])[0].etag,
+    });
+    const [method, url, token, body] = req.mock.calls[0] as unknown[];
+    expect([method, token, body]).toEqual(['GET', TOKEN, undefined]);
+    const parsed = new URL(url as string);
+    expect(`${parsed.origin}${parsed.pathname}`).toBe(`${CAL_URL}/events`);
+    expect(parsed.searchParams.get('privateExtendedProperty')).toBe(
+      `rlCopyId=${COPY_ID}`,
+    );
+    expect(parsed.searchParams.has('showDeleted')).toBe(false);
+  });
+
+  it('events.list with no items → null; a reply without items → TransientError', async () => {
+    reply(200, { ...fixture('events-list-copy'), items: [] });
+    await expect(findGoogleEventByCopyId(TOKEN, CAL, COPY_ID)).resolves.toBeNull();
+    reply(200, { kind: 'calendar#events' });
+    await expect(
+      findGoogleEventByCopyId(TOKEN, CAL, COPY_ID),
+    ).rejects.toBeInstanceOf(TransientError);
   });
 
   it('events.delete DELETEs the encoded event id', async () => {
