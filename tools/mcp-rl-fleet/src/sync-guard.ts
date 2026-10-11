@@ -53,11 +53,11 @@ export interface EnsureSyncedHeadParams {
   /** Slot the agent currently holds (used to name the Mutagen session `rl-slot-N`). */
   slot: number;
   /** Absolute worktree path (Mutagen alpha source). Defaults to process.cwd(). */
-  worktree_path?: string;
+  worktree_path?: string | undefined;
   /** Per-probe flush timeout (ms). Default 30000. */
-  flush_timeout_ms?: number;
+  flush_timeout_ms?: number | undefined;
   /** Timeout (ms) for the `rl resync` recovery child process. Default 150000. */
-  resync_timeout_ms?: number;
+  resync_timeout_ms?: number | undefined;
 }
 
 export interface SyncGuardResult {
@@ -102,11 +102,11 @@ interface ProbeOutcome {
    */
   sessionOk: boolean;
   /** Why the session was judged unhealthy (for the fail-loud message). */
-  sessionDetail?: string;
+  sessionDetail?: string | undefined;
   /** A probe is trustworthy only when content matched AND flush succeeded AND the session is healthy. */
   good: boolean;
   read: string;
-  flushErr?: string;
+  flushErr?: string | undefined;
 }
 
 /**
@@ -134,12 +134,12 @@ async function inspectSession(
   if (!new RegExp(`name:\\s*rl-slot-${slot}\\b`, 'i').test(out))
     return { healthy: false, detail: `session rl-slot-${slot} not found in mutagen sync list` };
   if (/^[ \t]*conflicts:/im.test(out)) return { healthy: false, detail: 'session reports conflicts' };
-  const errMatch = out.match(/last error:[ \t]*(.*)/i);
-  if (errMatch && errMatch[1].trim() && !/^<?none>?$/i.test(errMatch[1].trim()))
-    return { healthy: false, detail: `session reports last error: ${errMatch[1].trim().slice(0, 120)}` };
-  const statusMatch = out.match(/status:[ \t]*(.*)/i);
-  if (statusMatch && /halt|error|problem/i.test(statusMatch[1]))
-    return { healthy: false, detail: `unhealthy status: ${statusMatch[1].trim().slice(0, 120)}` };
+  const lastErr = out.match(/last error:[ \t]*(.*)/i)?.[1]?.trim();
+  if (lastErr && !/^<?none>?$/i.test(lastErr))
+    return { healthy: false, detail: `session reports last error: ${lastErr.slice(0, 120)}` };
+  const status = out.match(/status:[ \t]*(.*)/i)?.[1];
+  if (status !== undefined && /halt|error|problem/i.test(status))
+    return { healthy: false, detail: `unhealthy status: ${status.trim().slice(0, 120)}` };
   return { healthy: true };
 }
 

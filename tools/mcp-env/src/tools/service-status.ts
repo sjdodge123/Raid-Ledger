@@ -135,19 +135,27 @@ function buildServiceSummary(services: ServiceStatus[], lock: LockSummary): stri
   return `${services.length} services: ${running} running, ${other} stopped/unknown — ${lockClause}`;
 }
 
+/** Raw lock-status shape as read from env-lock.sh, or its parse-failure marker. */
+type RawLockState =
+  | {
+      holder?: { branch: string; purpose: string } | null;
+      queue?: unknown[];
+      free?: boolean;
+    }
+  | { error: string; raw: string };
+
+/** True when env-lock.sh failed or returned non-JSON (the `{ error, raw }` marker). */
+function isLockError(state: RawLockState): state is { error: string; raw: string } {
+  return 'error' in state && typeof state.error === 'string';
+}
+
 /** Pull the lock state and reduce it to the inline summary shape. */
 async function fetchLockSummary(): Promise<LockSummary> {
-  const lockState = (await executeLockStatus()) as
-    | {
-        holder?: { branch: string; purpose: string } | null;
-        queue?: unknown[];
-        free?: boolean;
-      }
-    | { error: string; raw: string };
+  const lockState = (await executeLockStatus()) as RawLockState;
 
   // env-lock.sh failed or returned non-JSON — surface that loudly instead of
   // silently reporting "free" (which would lie to every agent that calls us).
-  if ('error' in lockState && typeof lockState.error === 'string') {
+  if (isLockError(lockState)) {
     return {
       free: false,
       holder_branch: null,

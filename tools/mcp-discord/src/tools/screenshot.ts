@@ -18,8 +18,8 @@ export const TOOL_SCHEMA = {
 };
 
 export async function execute(params: {
-  selector?: string;
-  fullPage?: boolean;
+  selector?: string | undefined;
+  fullPage?: boolean | undefined;
 }): Promise<{ base64: string }> {
   const page = await getPage();
 

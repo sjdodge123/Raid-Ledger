@@ -201,6 +201,10 @@ The local dev env (Docker DB, API `:3000`, Vite `:5173`) is a single shared reso
 - **Design small from the start** — do not write large files and refactor after. Plan focused modules; extract helpers/sub-services/child components proactively.
 - Test files (`*.spec.ts`, `*.test.tsx`) get a relaxed **750-line** limit. Migration files are exempt from both.
 
+## TypeScript strict flags (STRICT — non-negotiable)
+
+`noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are on in every workspace: contract, web (app + specs), api (app + specs), `scripts/smoke` and `tools/*`. CI typechecks each one (`tools/*` via `tools-test-shard` + `tools-typecheck-test-bot`). Never turn either flag off, add an override, or route around an error with `!`, an `as` dodge, `any` or `@ts-expect-error`/`@ts-ignore`. Fix it with a narrowing guard, an early return, `??` with a meaningful default, or a conditional spread for optional keys. In specs an indexed read may use `?.` only inside `expect(...)`; anywhere else a missing element must fail loudly (a `must(x, 'label')` helper). History: ROK-1161 phases 1–8 + tools.
+
 ## Infrastructure Changes (STRICT — Dockerfiles, entrypoints, nginx)
 
 **Two deployment topologies exist — understand BOTH before changing either:**

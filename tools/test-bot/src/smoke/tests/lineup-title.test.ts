@@ -18,6 +18,7 @@ import { pollForEmbed } from '../../helpers/polling.js';
 import { assertEmbedColor } from '../assert.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 import type { SimpleEmbed, SimpleMessage } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
 import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
@@ -153,7 +154,7 @@ const lineupTitleInEmbed: SmokeTest = {
         ctx.config.timeoutMs,
       );
 
-      const embed = msg.embeds[0];
+      const embed = must(msg.embeds[0], 'the lineup embed');
       const haystack = [
         embed.title ?? '',
         embed.description ?? '',

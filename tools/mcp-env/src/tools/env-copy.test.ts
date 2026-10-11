@@ -135,8 +135,8 @@ describe('env-copy: DEMO_MODE propagation (ROK-1267)', () => {
       const result = await execute({ file: 'api/.env' });
 
       if (!('copied' in result)) throw new Error('expected copied[]');
-      expect(result.copied[0].status).toBe('skipped_exists');
-      expect(result.copied[0].demoModeOverlay).toBe('applied');
+      expect(result.copied[0]?.status).toBe('skipped_exists');
+      expect(result.copied[0]?.demoModeOverlay).toBe('applied');
       expect(readFileSync(resolve(projectDir, 'api/.env'), 'utf-8')).toContain('DEMO_MODE=true');
     });
 
@@ -146,8 +146,8 @@ describe('env-copy: DEMO_MODE propagation (ROK-1267)', () => {
       const result = await execute({ file: '.env' });
 
       if (!('copied' in result)) throw new Error('expected copied[]');
-      expect(result.copied[0].path).toBe('.env');
-      expect(result.copied[0].demoModeOverlay).toBeUndefined();
+      expect(result.copied[0]?.path).toBe('.env');
+      expect(result.copied[0]?.demoModeOverlay).toBeUndefined();
     });
   });
 });

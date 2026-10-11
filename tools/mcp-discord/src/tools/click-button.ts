@@ -21,7 +21,7 @@ export const TOOL_SCHEMA = {
 
 export async function execute(params: {
   buttonLabel: string;
-  messageIndex?: number;
+  messageIndex?: number | undefined;
 }): Promise<{ success: boolean; error?: string }> {
   const page = await getPage();
 

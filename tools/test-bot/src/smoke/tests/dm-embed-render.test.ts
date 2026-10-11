@@ -166,7 +166,7 @@ function assertButtonRows(res: RenderedDmEmbed, c: RenderCase) {
   if (!last.includes(ADJUST_LABEL)) {
     fail(`${c.type}: expected the last row to be the primary row with "${ADJUST_LABEL}", got ${JSON.stringify(rows)}`);
   }
-  if (c.extraRowLabel && !(rows.length > 1 && rows[0].includes(c.extraRowLabel))) {
+  if (c.extraRowLabel && !(rows.length > 1 && rows[0]?.includes(c.extraRowLabel))) {
     fail(`${c.type}: expected a first row with "${c.extraRowLabel}" before the primary row, got ${JSON.stringify(rows)}`);
   }
 }

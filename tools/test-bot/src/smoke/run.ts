@@ -71,8 +71,8 @@ function buildResult(
     category: test.category,
     status,
     durationMs: Date.now() - start,
-    error: opts?.error,
-    retried: opts?.retried,
+    ...(opts?.error !== undefined && { error: opts.error }),
+    ...(opts?.retried !== undefined && { retried: opts.retried }),
   };
 }
 
@@ -143,11 +143,12 @@ async function runWithConcurrency<T, R>(
   limit: number,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
+  const entries = [...items.entries()];
   let next = 0;
   async function worker() {
-    while (next < items.length) {
-      const idx = next++;
-      results[idx] = await fn(items[idx]);
+    for (let entry = entries[next++]; entry; entry = entries[next++]) {
+      const [idx, item] = entry;
+      results[idx] = await fn(item);
     }
   }
   const workers = Array.from({ length: Math.min(limit, items.length) }, () =>

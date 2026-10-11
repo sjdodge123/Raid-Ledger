@@ -242,7 +242,8 @@ export function evaluateSentinel(
   // exercises and the hook allows the push outright, so the gate is satisfied
   // with no file to write.
   if (surface === 'nosurface') return verifiedAnnotation(null, tier, surface);
-  const names = [`${SENTINEL_PREFIX}${surface}`];
+  const name = `${SENTINEL_PREFIX}${surface}`;
+  const names = [name];
   const body = JSON.stringify({
     sha,
     surface,
@@ -256,7 +257,7 @@ export function evaluateSentinel(
     // gate was satisfied when it was not.
     return notVerified(surface);
   }
-  return verifiedAnnotation(join(dir, names[0]), tier, surface);
+  return verifiedAnnotation(join(dir, name), tier, surface);
 }
 
 /** The "gate satisfied" annotation; `written` is null when no file was needed. */

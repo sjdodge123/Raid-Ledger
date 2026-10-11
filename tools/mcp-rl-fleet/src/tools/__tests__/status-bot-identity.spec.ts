@@ -10,6 +10,7 @@
 // Optional + nullable throughout so an orchestrator that predates ROK-1469
 // (no bot_identity key at all) still parses.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -75,7 +76,7 @@ describe('rl_status — ROK-1469 per-slot bot identity', () => {
     );
     const res: StatusResult = await execute();
     expect(res.ok).toBe(true);
-    expect(res.envs?.[0].bot_identity).toEqual(identity);
+    expect(res.envs?.[0]?.bot_identity).toEqual(identity);
   });
 
   it('accepts bot_identity:null for an env whose slot is unresolvable', async () => {
@@ -86,14 +87,14 @@ describe('rl_status — ROK-1469 per-slot bot identity', () => {
       }),
     );
     const res = await execute();
-    expect(res.envs?.[0].bot_identity).toBeNull();
+    expect(res.envs?.[0]?.bot_identity).toBeNull();
   });
 
   it('accepts an env row with no bot_identity key (pre-ROK-1469 orchestrator)', async () => {
     execFileOk(JSON.stringify({ ...BASE, envs: [ENV_ROW] }));
     const res = await execute();
-    expect(res.envs?.[0].slug).toBe('demo');
-    expect(res.envs?.[0].bot_identity).toBeUndefined();
+    expect(res.envs?.[0]?.slug).toBe('demo');
+    expect(res.envs?.[0]?.bot_identity).toBeUndefined();
   });
 
   it('reports an unconfigured slot as configured:false with null ids', async () => {
@@ -109,7 +110,7 @@ describe('rl_status — ROK-1469 per-slot bot identity', () => {
       }),
     );
     const res = await execute();
-    expect(res.envs?.[0].bot_identity).toMatchObject({
+    expect(res.envs?.[0]?.bot_identity).toMatchObject({
       configured: false,
       client_id: null,
     });
@@ -128,7 +129,7 @@ describe('rl_status — ROK-1469 per-slot bot identity', () => {
       }),
     );
     const res = await execute();
-    const keys = Object.keys(res.envs?.[0].bot_identity ?? {});
+    const keys = Object.keys(must(res.envs?.[0], 'the first env').bot_identity ?? {});
     expect(keys.sort()).toEqual(['app_name', 'client_id', 'configured', 'slot']);
     expect(JSON.stringify(res)).not.toMatch(/token|client_secret/i);
   });

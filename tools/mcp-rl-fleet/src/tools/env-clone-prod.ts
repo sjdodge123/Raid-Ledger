@@ -26,14 +26,14 @@ export const TOOL_DESCRIPTION =
 export interface EnvCloneProdParams {
   slug: string;
   /** Skip the prod→local refresh step. Use after a recent clone-prod-to-local. */
-  skip_local_refresh?: boolean;
+  skip_local_refresh?: boolean | undefined;
   /** Soft timeout. Defaults to 1200 (20 min) — prod backup + download + restore can be slow. */
-  timeout_seconds?: number;
+  timeout_seconds?: number | undefined;
   /** ROK-1362: wait:true blocks (≤120s) on the laptop task then returns the
    *  terminal status OR a still_running snapshot. Default false (returns task_id). */
-  wait?: boolean;
+  wait?: boolean | undefined;
   /** Wait budget when wait:true. Capped at 120s. */
-  wait_timeout_seconds?: number;
+  wait_timeout_seconds?: number | undefined;
 }
 
 export interface EnvCloneProdResult {
@@ -43,8 +43,8 @@ export interface EnvCloneProdResult {
   stderr: string;
   exit_code: number;
   /** Whether the allinone was restarted after the clone to refresh SettingsService cache. */
-  restarted_for_settings?: boolean;
-  restart_error?: string;
+  restarted_for_settings?: boolean | undefined;
+  restart_error?: string | undefined;
 }
 
 export interface EnvCloneProdDispatch {

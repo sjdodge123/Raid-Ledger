@@ -26,9 +26,13 @@ function parseLfgBoardTags(source: string): string[] {
     source,
   );
   assert.ok(block, `LFG_BOARD_TAGS literal not found in ${API_CONSTANTS.pathname}`);
-  return [...block[1].matchAll(/'([^']*)'|"([^"]*)"/g)].map(
-    (m) => m[1] ?? m[2],
-  );
+  const [, body] = block;
+  assert.ok(body !== undefined, 'LFG_BOARD_TAGS literal has no body capture');
+  return [...body.matchAll(/'([^']*)'|"([^"]*)"/g)].map((m) => {
+    const tag = m[1] ?? m[2];
+    assert.ok(tag !== undefined, `LFG_BOARD_TAGS entry ${m[0]} has no string capture`);
+    return tag;
+  });
 }
 
 const apiTags = parseLfgBoardTags(readFileSync(API_CONSTANTS, 'utf8'));

@@ -15,6 +15,7 @@
 // sql > 10000 char rejection, NULL vs empty-string vs literal-"\N", SSH failure.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -269,7 +270,7 @@ describe('rl_db_query — SSH invocation shape (JSON-mode, round-3 corrected)', 
       sql: 'SELECT count(*) FROM users',
       read_only: true,
     });
-    const call = mockExecFile.mock.calls[0];
+    const call = must(mockExecFile.mock.calls[0], 'the first execFile call');
     expect(call[0]).toBe('ssh');
     const remote = String(call[1].at(-1));
     // Round-2 #1 — PGOPTIONS proven dead. SET LOCAL inside the txn is the
@@ -310,7 +311,7 @@ describe('rl_db_query — SSH invocation shape (JSON-mode, round-3 corrected)', 
       sql: 'SELECT id FROM users;',
       read_only: true,
     });
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     // Should wrap `SELECT id FROM users` (no trailing semicolon) so the
     // subquery is syntactically valid.
     expect(remote).toContain('(SELECT id FROM users) AS rl_inner');
@@ -331,7 +332,7 @@ describe('rl_db_query — SSH invocation shape (JSON-mode, round-3 corrected)', 
     expect(result.rows).toEqual([{ id: 7, name: "O'Brien" }]);
     // Inspect the shell-quoted argv: every literal single quote in the
     // user SQL becomes '\'' inside the outer single-quoted argument.
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain("'\\''O'\\''");
   });
 });

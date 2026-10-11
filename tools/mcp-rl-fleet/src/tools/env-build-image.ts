@@ -32,41 +32,41 @@ export const TOOL_DESCRIPTION =
 
 export interface BuildImageParams {
   tag: string;
-  no_push?: boolean;
-  worktree_path?: string;
-  timeout_seconds?: number;
+  no_push?: boolean | undefined;
+  worktree_path?: string | undefined;
+  timeout_seconds?: number | undefined;
   /** ROK-1331: default false (async). When true, chains to rl_task_wait. */
-  wait?: boolean;
+  wait?: boolean | undefined;
   /** Wait budget when wait:true. Default 1800. */
-  wait_timeout_seconds?: number;
+  wait_timeout_seconds?: number | undefined;
   /** ROK-1470 admission weight. Defaults to `heavy` — a monolith build is the heaviest fleet job. */
-  weight?: TaskWeight;
+  weight?: TaskWeight | undefined;
 }
 
 export interface BuildImageResult {
   ok: boolean;
-  tag?: string;
-  image?: string;
-  slot?: number;
-  duration_s?: number;
-  pushed?: boolean;
+  tag?: string | undefined;
+  image?: string | undefined;
+  slot?: number | undefined;
+  duration_s?: number | undefined;
+  pushed?: boolean | undefined;
   /** Async dispatch fields (wait:false). */
-  task_id?: string;
-  log_url?: string;
-  log_path?: string;
-  started_at?: string;
-  mcp_runtime_status?: string;
+  task_id?: string | undefined;
+  log_url?: string | undefined;
+  log_path?: string | undefined;
+  started_at?: string | undefined;
+  mcp_runtime_status?: string | undefined;
   /** Laptop HEAD the build intends to use (sync guard). null for non-git worktrees. */
-  expected_head?: string | null;
+  expected_head?: string | null | undefined;
   /** HEAD confirmed present in the runner's /workspace (sync guard). Equals expected_head on a healthy build. */
-  synced_head?: string | null;
+  synced_head?: string | null | undefined;
   /** ROK-1470 admission weight the build was dispatched with. */
-  weight?: TaskWeight;
+  weight?: TaskWeight | undefined;
   /** ROK-1510: laptop worktree HEAD passed as --build-arg COMMIT_SHA; '' when git failed (runner falls back to its synced HEAD). */
-  commit_sha?: string;
-  error?: string;
-  stderr?: string;
-  message?: string;
+  commit_sha?: string | undefined;
+  error?: string | undefined;
+  stderr?: string | undefined;
+  message?: string | undefined;
 }
 
 const FLEET_DOMAIN = process.env.RL_FLEET_DOMAIN ?? 'fleet.gamernight.net';

@@ -4,6 +4,7 @@
 // task-list) and parse stdout JSON; for `rl_task_wait` they also spawn
 // `inotifywait` over SSH then re-call status. We stub at the execFile boundary.
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { must } from './must.js';
 
 const mockExecFile = vi.fn();
 vi.mock('node:child_process', () => ({
@@ -166,7 +167,7 @@ describe('rl_task_status — executeStatus()', () => {
     // orchestrator/bin/task-status' CLI). A previous regression used the
     // wrong flag name (--log-tail-lines) and the VM rejected every call;
     // this assertion now guards both the literal flag string AND the value.
-    const firstCall = mockExecFile.mock.calls[0];
+    const firstCall = must(mockExecFile.mock.calls[0], 'the first execFile call');
     const remote = String(firstCall[1].at(-1));
     expect(remote).toContain('--log-tail-bytes 500');
     expect(remote).not.toContain('--log-tail-lines');
@@ -175,7 +176,7 @@ describe('rl_task_status — executeStatus()', () => {
   it('defaults log_tail_bytes to 51200 (50 KiB) when caller omits it', async () => {
     execFileOk(FIXTURE_SUCCEEDED);
     await executeStatus({ task_id: 'abc123def' });
-    const remote = String(mockExecFile.mock.calls[0][1].at(-1));
+    const remote = String(must(mockExecFile.mock.calls[0], 'the first execFile call')[1].at(-1));
     expect(remote).toContain('--log-tail-bytes 51200');
   });
 
@@ -306,7 +307,7 @@ describe('rl_task_cancel — executeCancel()', () => {
   it('passes task_id + reason as positional argv to the orchestrator binary (no --reason flag)', async () => {
     execFileOk({ ok: true, task_id: 'abc123def', mcp_runtime_status: 'cancelled' });
     await executeCancel({ task_id: 'abc123def', reason: 'dogfood done' });
-    const firstCall = mockExecFile.mock.calls[0];
+    const firstCall = must(mockExecFile.mock.calls[0], 'the first execFile call');
     const argv = JSON.stringify(firstCall.slice(0, 2));
     expect(argv).toContain('/srv/rl-infra/orchestrator/bin/task-cancel');
     expect(argv).toContain('abc123def');
@@ -476,7 +477,7 @@ describe('rl_task_list — executeList()', () => {
     expect(result.ok).toBe(true);
     expect(Array.isArray(result.tasks)).toBe(true);
     // Verify the SSH argv carried the filters.
-    const firstCall = mockExecFile.mock.calls[0];
+    const firstCall = must(mockExecFile.mock.calls[0], 'the first execFile call');
     const argv = JSON.stringify(firstCall.slice(0, 2));
     expect(argv).toMatch(/--slot.*1|--slot\D+1/);
     expect(argv).toMatch(/--status.*running/);

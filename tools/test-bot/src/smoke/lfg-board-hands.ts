@@ -255,7 +255,7 @@ async function assertExactlyOneThread(run: Run, label: string): Promise<void> {
   const mine = (await readForumThreads(forumId(run))).filter((t) =>
     isGroupThread(run, t),
   );
-  if (mine.length !== 1 || mine[0].id !== run.threadId) {
+  if (mine.length !== 1 || mine[0]?.id !== run.threadId) {
     throw new Error(
       `${label}: expected exactly 1 forum thread for "${run.game.name}" ` +
         `(${run.threadId ?? '?'}, opened at the FIRST hand) in board ` +

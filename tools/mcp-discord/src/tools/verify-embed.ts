@@ -23,7 +23,7 @@ interface EmbedData {
 }
 
 export async function execute(params: {
-  messageIndex?: number;
+  messageIndex?: number | undefined;
 }): Promise<{ embed: EmbedData | null; screenshot: string }> {
   const page = await getPage();
   const index = params.messageIndex ?? 0;

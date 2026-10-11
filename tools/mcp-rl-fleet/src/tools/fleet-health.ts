@@ -23,7 +23,7 @@ export interface FleetHealthParams {
 
 export interface FleetHealthResult {
   ok: boolean;
-  generated_at?: string;
+  generated_at?: string | undefined;
   stale_heartbeat_slots?: Array<{
     slot: number;
     agent_id: string | null;
@@ -83,9 +83,9 @@ export interface FleetHealthResult {
     held_slots_with_failed_validate_ci: number;
     config_warnings?: number;
   };
-  error?: string;
-  status?: number;
-  message?: string;
+  error?: string | undefined;
+  status?: number | undefined;
+  message?: string | undefined;
 }
 
 export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthResult> {
@@ -117,7 +117,8 @@ export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthRe
     };
   }
   const match = stdout.match(/\nRL_STATUS:(\d+)\s*$/);
-  const status = match ? parseInt(match[1], 10) : 0;
+  const statusDigits = match?.[1];
+  const status = statusDigits !== undefined ? parseInt(statusDigits, 10) : 0;
   const rawBody = match ? stdout.slice(0, match.index ?? 0) : stdout;
   if (status !== 200) {
     return {

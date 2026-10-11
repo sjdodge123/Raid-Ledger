@@ -76,9 +76,9 @@ export interface Run {
   second?: FixtureUser;
   third?: FixtureUser;
   /** The one thread this group is allowed to own. */
-  threadId?: string;
+  threadId?: string | undefined;
   /** The starter message every later hand must EDIT rather than replace. */
-  starterMessageId?: string;
+  starterMessageId?: string | undefined;
   /** T28's mirror probe message, while it is still posted — removed in cleanup. */
   probeMessageId?: string;
   /** Threads this run closed and retired (T30) — deleted in cleanup. */

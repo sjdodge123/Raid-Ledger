@@ -13,7 +13,12 @@ export type ToolContentItem =
   | { type: 'text'; text: string }
   | { type: 'image'; data: string; mimeType: string };
 
+/**
+ * The index signature mirrors the SDK's CallToolResult (it allows extra keys
+ * such as `_meta`), so a ToolResponse is assignable to a tool callback result.
+ */
 export interface ToolResponse {
+  [key: string]: unknown;
   content: ToolContentItem[];
   isError?: boolean;
 }
@@ -53,9 +58,9 @@ function discordNotRunningResponse(): ToolResponse {
  * SAME standardized error response instead of crashing the server. All other
  * errors propagate so the MCP framework can surface them.
  */
-export async function withCdpErrorHandling<T extends ToolResponse>(
-  handler: () => Promise<T>,
-): Promise<T | ToolResponse> {
+export async function withCdpErrorHandling(
+  handler: () => Promise<ToolResponse>,
+): Promise<ToolResponse> {
   try {
     return await handler();
   } catch (err) {

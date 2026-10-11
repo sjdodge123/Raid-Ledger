@@ -31,20 +31,20 @@ export interface ChainCtx {
 
 export interface DeployChainResult {
   ok: boolean;
-  url?: string;
-  internal_url?: string;
-  slot_url?: string | null;
-  admin_email?: string;
+  url?: string | undefined;
+  internal_url?: string | undefined;
+  slot_url?: string | null | undefined;
+  admin_email?: string | undefined;
   /** A3-B P4: internal chain field only. It is written to the 0600 laptop task
    *  JSON and withheld again at every MCP read boundary (local-task.ts). */
-  admin_password?: string | null;
-  slot?: number | null;
+  admin_password?: string | null | undefined;
+  slot?: number | null | undefined;
   /** ROK-1537 AC4: passed through from env-spin — who lands as admin. */
-  operator_admin?: OperatorAdminMode;
-  expected_head?: string | null;
-  synced_head?: string | null;
-  error?: string;
-  failed_step?: string;
+  operator_admin?: OperatorAdminMode | undefined;
+  expected_head?: string | null | undefined;
+  synced_head?: string | null | undefined;
+  error?: string | undefined;
+  failed_step?: string | undefined;
   message: string;
 }
 
@@ -74,7 +74,13 @@ async function pollVmTask(
 async function stepBuild(
   params: EnvDeployParams,
   ctx: ChainCtx,
-): Promise<{ ok: boolean; expected_head?: string | null; synced_head?: string | null; error?: string; message?: string }> {
+): Promise<{
+  ok: boolean;
+  expected_head?: string | null | undefined;
+  synced_head?: string | null | undefined;
+  error?: string | undefined;
+  message?: string | undefined;
+}> {
   const t = now();
   ctx.setCurrent('building image from /workspace');
   const bi = await buildImage.execute({

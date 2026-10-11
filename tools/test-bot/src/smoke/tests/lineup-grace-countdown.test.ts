@@ -34,6 +34,7 @@
 import { pollForCondition } from '../../helpers/polling.js';
 import { awaitProcessing } from '../fixtures.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 import type { ApiClient } from '../api.js';
 import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
@@ -132,8 +133,8 @@ const graceCountdown: SmokeTest = {
           `Smoke needs ≥2 seeded games; /admin/settings/games returned ${games.length}`,
         );
       }
-      const gameA = games[0].id;
-      const gameB = games[1].id;
+      const gameA = must(games[0], 'seeded game A').id;
+      const gameB = must(games[1], 'seeded game B').id;
 
       // Admin and the two invitees each nominate a game. We use the
       // admin/test/nominate-game shortcut so we don't need separate

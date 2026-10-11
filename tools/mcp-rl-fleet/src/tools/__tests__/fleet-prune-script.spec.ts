@@ -14,6 +14,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { must } from './must.js';
 import { buildRemoteCommand, buildRemoteScript } from '../fleet-prune.js';
 
 const parseCheck = (script: string): void => {
@@ -40,7 +41,7 @@ describe('rl_fleet_prune remote script', () => {
     const cmd = buildRemoteCommand(true);
     const m = /echo ([A-Za-z0-9+/=]+) \| base64 -d/.exec(cmd);
     expect(m).not.toBeNull();
-    const decoded = Buffer.from(m![1], 'base64').toString('utf8');
+    const decoded = Buffer.from(must(m?.[1], 'the base64 payload'), 'base64').toString('utf8');
     expect(decoded).toBe(buildRemoteScript(true));
     expect(decoded).toContain("docker system df --format '{{json .}}'");
   });

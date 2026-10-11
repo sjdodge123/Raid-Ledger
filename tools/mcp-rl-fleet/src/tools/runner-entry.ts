@@ -28,7 +28,19 @@ import type { EnvSpinParams } from './env-spin.js';
 import type { EnvDeployParams } from './env-deploy.js';
 import type { EnvCloneProdParams } from './env-clone-prod.js';
 
-const [taskId, tool, paramsJson] = process.argv.slice(2);
+/** A missing CLI argument is a spawn bug — exit loudly rather than run on `undefined`. */
+function requireArg(value: string | undefined, label: string): string {
+  if (value === undefined) {
+    process.stderr.write(`runner-entry: missing ${label} argument\n`);
+    process.exit(2);
+  }
+  return value;
+}
+
+const [rawTaskId, rawTool, rawParamsJson] = process.argv.slice(2);
+const taskId = requireArg(rawTaskId, 'taskId');
+const tool = requireArg(rawTool, 'tool');
+const paramsJson = requireArg(rawParamsJson, 'paramsJson');
 
 function loadTask(): LocalTaskJson {
   const existing = readRawLocalTask(taskId);
@@ -66,7 +78,10 @@ const ctx: ChainCtx = {
   },
 };
 
-function finalize(ok: boolean, opts: { failed_step?: string | null; error?: string; message: string }): void {
+function finalize(
+  ok: boolean,
+  opts: { failed_step?: string | null | undefined; error?: string | undefined; message: string },
+): void {
   current = {
     ...current,
     mcp_runtime_status: ok ? 'succeeded' : 'failed',
