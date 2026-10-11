@@ -22,6 +22,7 @@ import { CalendarsPage } from './CalendarsPage';
 import {
     CALENDARS_COPY as C, OAUTH_ERROR_COPY, OAUTH_ERROR_FALLBACK, type CalendarOAuthErrorCode,
 } from './calendar-sync.copy';
+import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
@@ -61,13 +62,13 @@ function useOverview(overview: CalendarsOverview) {
 }
 
 beforeEach(() => {
-    localStorage.setItem('raid_ledger_token', 'test-token');
+    setAccessToken('test-token');
     setDesktop(true);
     vi.mocked(toast.success).mockClear();
 });
 
 afterEach(() => {
-    localStorage.removeItem('raid_ledger_token');
+    clearAccessToken();
     Object.defineProperty(window, 'matchMedia', { configurable: true, writable: true, value: realMatchMedia });
 });
 

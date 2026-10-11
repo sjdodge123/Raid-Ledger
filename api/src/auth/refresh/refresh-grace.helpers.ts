@@ -42,6 +42,44 @@ export interface GraceRedis {
   ): Promise<string | null>;
 }
 
+/**
+ * ROK-1754: a consumed row whose child is not issued yet is a rotation still
+ * IN FLIGHT for at most this long (a request timeout, not a session).
+ */
+export const IN_FLIGHT_MAX_MS = 60_000;
+
+/**
+ * ROK-1754 review W1: the once-key must outlive the WHOLE window it guards.
+ * A replay can be in grace from consume until consume + IN_FLIGHT_MAX_MS, or
+ * until child issue + RACE_GRACE_MS (issue's re-stamp is capped at
+ * consume + IN_FLIGHT_MAX_MS), so the latest in-window replay lands at most
+ * RACE_GRACE_MS + IN_FLIGHT_MAX_MS after any claim. A shorter key let a
+ * replay during a stall and a second one after the re-stamp BOTH mint a
+ * sibling — two forked live chains (breaks ROK-1755's one-sibling rule).
+ * GRACE_KEY_MARGIN_MS covers a claim that reaches Redis late (re-review nit).
+ */
+export const GRACE_KEY_MARGIN_MS = 5_000;
+export const GRACE_KEY_TTL_MS =
+  RACE_GRACE_MS + IN_FLIGHT_MAX_MS + GRACE_KEY_MARGIN_MS;
+
+/**
+ * ROK-1754: the age the race grace measures — from when the rotation's new
+ * cookie could first have reached the browser, not from the consume. The
+ * first child re-stamps `rotatedAt` at issue; a row with no first child yet
+ * (`replacedBy` null — a grace sibling never sets it) is still in flight, so
+ * a replay of it is a race loser (age 0), never theft. Fleet run
+ * 2c53b4959397: a 14 s API stall between consume and child turned a reload
+ * into "reuse" → blockUser(admin). `rotatedAgoMs` is computed in SQL on the
+ * DB clock that stamped `rotatedAt` (review S2), never app `Date.now()`.
+ */
+export function rotationAgeMs(row: {
+  rotatedAgoMs: number;
+  replacedBy: string | null;
+}): number {
+  if (!row.replacedBy && row.rotatedAgoMs <= IN_FLIGHT_MAX_MS) return 0;
+  return row.rotatedAgoMs;
+}
+
 /** Atomically take the parent's single grace sibling. */
 export async function claimGraceOnce(
   redis: GraceRedis,
@@ -52,7 +90,7 @@ export async function claimGraceOnce(
       `${GRACE_KEY_PREFIX}${parentId}`,
       '1',
       'PX',
-      RACE_GRACE_MS,
+      GRACE_KEY_TTL_MS,
       'NX',
     );
     return ok === 'OK' ? 'claimed' : 'used';

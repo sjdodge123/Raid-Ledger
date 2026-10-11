@@ -6,6 +6,7 @@ import { useAuth, getAuthToken } from '../../hooks/use-auth';
 import { useUserHeartedGames } from '../../hooks/use-user-profile';
 import { API_BASE_URL } from '../../lib/config';
 import { UnifiedGameCard } from '../games/unified-game-card';
+import { nativeFetch } from '../../lib/api/native-fetch';
 
 /**
  * My Watched Games section for the profile settings page (ROK-311).
@@ -135,7 +136,7 @@ async function removeUnheartedGames(removedIds: number[]) {
     };
     await Promise.all(
         removedIds.map(async (gameId) => {
-            const res = await fetch(
+            const res = await nativeFetch(
                 `${API_BASE_URL}/games/${gameId}/want-to-play`,
                 { method: 'DELETE', headers },
             );

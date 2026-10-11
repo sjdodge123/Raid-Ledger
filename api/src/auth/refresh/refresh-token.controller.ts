@@ -10,7 +10,6 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request, Response } from 'express';
-import { eq } from 'drizzle-orm';
 import { Inject } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -24,6 +23,8 @@ import {
 } from './refresh-cookie.helpers';
 import { hashToken } from './refresh-token.helpers';
 import { SameOriginCookiePostGuard } from './same-origin-cookie-post.guard';
+import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
+import { mintRefreshAccessToken } from './refresh-access-token.helpers';
 
 /**
  * ROK-1353: POST /auth/refresh (rotate) + POST /auth/logout (revoke).
@@ -38,9 +39,13 @@ export class RefreshTokenController {
     private readonly jwtService: JwtService,
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
+    private readonly impersonation: ImpersonationSessionService,
   ) {}
 
-  /** Rotate the refresh cookie → fresh 1h access JWT + new cookie. */
+  /**
+   * Rotate the refresh cookie → fresh access JWT + new cookie. ROK-1754: the
+   * JWT impersonates while the family's marker is live (§3.4.4).
+   */
   @RateLimit('refresh')
   @Post('refresh')
   @UseGuards(SameOriginCookiePostGuard)
@@ -54,7 +59,10 @@ export class RefreshTokenController {
     const rotated = await this.refreshService.rotate(rawToken);
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
     setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
-    const access_token = await this.signAccessToken(rotated.userId);
+    const access_token = await mintRefreshAccessToken(
+      { db: this.db, jwt: this.jwtService, impersonation: this.impersonation },
+      rotated,
+    );
     return { access_token };
   }
 
@@ -87,25 +95,7 @@ export class RefreshTokenController {
   private async revokePresented(rawToken: string): Promise<void> {
     const row = await this.refreshService.findActiveByHash(hashToken(rawToken));
     if (!row) return;
-    await this.refreshService.revokeFamily(row.familyId);
-  }
-
-  /** Mint a fresh 1h access JWT for the user behind a rotated token. */
-  private async signAccessToken(userId: number): Promise<string> {
-    const [user] = await this.db
-      .select({
-        id: schema.users.id,
-        username: schema.users.username,
-        role: schema.users.role,
-      })
-      .from(schema.users)
-      .where(eq(schema.users.id, userId))
-      .limit(1);
-    if (!user) throw new UnauthorizedException('User not found');
-    return this.jwtService.sign({
-      username: user.username,
-      sub: user.id,
-      role: user.role,
-    });
+    // ROK-1754: revoke first; the marker ends inside with reason `logout`.
+    await this.refreshService.revokeFamily(row.familyId, 'logout');
   }
 }

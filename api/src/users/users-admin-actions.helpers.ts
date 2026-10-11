@@ -8,7 +8,7 @@
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { alias } from 'drizzle-orm/pg-core';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import type {
@@ -18,9 +18,28 @@ import type {
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-/** Moderation action kinds recorded in `admin_actions.action`. */
+/** Moderation kinds — the only ones the history API (AdminActionSchema) emits. */
+export const MODERATION_ACTION_KINDS = [
+  'kick',
+  'unkick',
+  'ban',
+  'unban',
+  'role_change',
+] as const;
+
+/** Kinds recorded in `admin_actions.action` (ROK-1754: + impersonation). */
 export type AdminActionKind =
-  'kick' | 'unkick' | 'ban' | 'unban' | 'role_change';
+  | (typeof MODERATION_ACTION_KINDS)[number]
+  | 'impersonate_start'
+  | 'impersonate_stop';
+
+/** Rows for one target, moderation kinds only (ROK-1754). */
+function moderationRowsFor(targetId: number) {
+  return and(
+    eq(schema.adminActions.targetId, targetId),
+    inArray(schema.adminActions.action, [...MODERATION_ACTION_KINDS]),
+  );
+}
 
 export interface InsertAdminActionInput {
   action: AdminActionKind;
@@ -96,7 +115,7 @@ function queryAdminActionRows(
     .from(schema.adminActions)
     .leftJoin(actor, eq(schema.adminActions.actorId, actor.id))
     .leftJoin(target, eq(schema.adminActions.targetId, target.id))
-    .where(eq(schema.adminActions.targetId, targetId))
+    .where(moderationRowsFor(targetId))
     .orderBy(desc(schema.adminActions.createdAt))
     .limit(limit)
     .offset(offset);
@@ -113,7 +132,7 @@ export async function getAdminActionsForUser(
   const [countRow] = await db
     .select({ count: sql<number>`count(*)` })
     .from(schema.adminActions)
-    .where(eq(schema.adminActions.targetId, targetId));
+    .where(moderationRowsFor(targetId));
   const rows = await queryAdminActionRows(db, targetId, limit, offset);
   const total = Number(defined(countRow, 'admin action count row').count);
   return {

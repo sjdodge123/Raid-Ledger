@@ -36,12 +36,12 @@ import { useLocation } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfmGroupSummary } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgGroupsProvider } from '../../hooks/lfg-groups-provider';
 import { UnifiedGameCard } from '../games/unified-game-card';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgChip, type LfgChipProps } from './lfg-chip';
 import { nowLine } from './lfg-chip-copy';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 /** The one game the real-card cases use. */
 const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic', coverUrl: null };
@@ -52,7 +52,7 @@ const CARD_GAME = { id: 5, name: 'Deep Rock Galactic', slug: 'deep-rock-galactic
  * appears once `GET /lfg` has resolved, so the helper awaits it.
  */
 async function renderCard() {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     server.use(
         lfgGroupsHandler([
             buildLfmGroupSummary({
@@ -343,7 +343,7 @@ describe('LfgChip — the now line (ROK-1479 A6)', () => {
     });
 
     it('reaches the chip from the real card via CardLfgChip', async () => {
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+        setAccessToken('test-token');
         server.use(
             lfgGroupsHandler([
                 buildLfmGroupSummary({

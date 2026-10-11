@@ -247,6 +247,23 @@ describe('useLineupRealtime — socket connection target (ROK-1533)', () => {
         expect(opts.tryAllTransports).toBe(true);
     });
 
+    it('ROK-1754: socket auth is a callback that reads the in-memory token at each handshake', async () => {
+        const { wrapper } = createTestHarness();
+        const mod = await import('./use-lineup-realtime');
+        const store = await import('../lib/api/access-token-store');
+        renderHook(() => mod.useLineupRealtime(42), { wrapper });
+
+        const [, opts] = mockIo.mock.calls[0] as [string, Record<string, unknown>];
+        expect(typeof opts.auth).toBe('function');
+        const auth = opts.auth as (cb: (data: object) => void) => void;
+        const seen: object[] = [];
+        store.setAccessToken('first');
+        auth((d) => seen.push(d));
+        store.setAccessToken('rotated');
+        auth((d) => seen.push(d));
+        expect(seen).toEqual([{ token: 'first' }, { token: 'rotated' }]);
+    });
+
     it('still connects to the origin form in local dev', async () => {
         vi.stubEnv('VITE_API_URL', 'http://localhost:3000');
         vi.resetModules();

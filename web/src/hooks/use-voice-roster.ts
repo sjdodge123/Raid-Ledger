@@ -4,6 +4,9 @@ import { useQueryClient } from '@tanstack/react-query';
 import { io, type Socket } from 'socket.io-client';
 import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
 import { resolveSocketTarget } from '../lib/socket-target';
+import { getAccessToken } from '../lib/api/access-token-store';
+import { socketAuth } from '../lib/api/socket-auth';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -23,8 +26,8 @@ async function fetchInitialRoster(
   eventId: number,
 ): Promise<{ participants: AdHocParticipantDto[]; activeCount: number } | null> {
   try {
-    const token = localStorage.getItem('raid_ledger_token');
-    const res = await fetch(`${API_BASE}/events/${eventId}/ad-hoc-roster`, {
+    const token = getAccessToken();
+    const res = await nativeFetch(`${API_BASE}/events/${eventId}/ad-hoc-roster`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) return null;
@@ -60,11 +63,10 @@ function createVoiceSocket(
   setState: React.Dispatch<React.SetStateAction<VoiceRosterState>>,
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
-  const token = localStorage.getItem('raid_ledger_token');
   const { url, path } = resolveSocketTarget('/ad-hoc');
   const socket = io(url, {
     path,
-    ...(token ? { auth: { token } } : {}),
+    auth: socketAuth,
     transports: ['websocket', 'polling'],
     // ROK-1533: socket.io-client 4.8 made `tryAllTransports` default to FALSE,
     // so a failed FIRST transport is fatal instead of falling through to the

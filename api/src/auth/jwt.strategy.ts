@@ -41,13 +41,38 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (await this.tokenBlocklist.isBlocked(payload.sub, payload.iat)) {
       throw new UnauthorizedException('Token has been revoked');
     }
-    let user = getCachedAuthUser(payload.sub);
-    if (!user) {
-      user = await this.loadAuthUser(payload.sub);
-      setCachedAuthUser(payload.sub, user);
-    }
+    const user = await this.authUser(payload.sub);
     assertAuthUserActive(user, payload);
+    await this.assertImpersonatorActive(payload);
     return buildAuthResult(payload, user);
+  }
+
+  /**
+   * ROK-1754 §3.4.5 (L13): an impersonation token is renewable, and its `sub`
+   * is the TARGET, so the checks above never see the admin. Revoke it on the
+   * next request once the impersonator is blocklisted (role change), banned,
+   * kicked, deactivated, or no longer an operator/admin.
+   */
+  private async assertImpersonatorActive(payload: JwtPayload): Promise<void> {
+    const adminId = payload.impersonatedBy;
+    if (!adminId) return;
+    if (await this.tokenBlocklist.isBlocked(adminId, payload.iat)) {
+      throw new UnauthorizedException('Token has been revoked');
+    }
+    const admin = await this.authUser(adminId);
+    assertAuthUserActive(admin, {});
+    if (admin.role !== 'operator' && admin.role !== 'admin') {
+      throw new UnauthorizedException('Impersonation has ended');
+    }
+  }
+
+  private async authUser(userId: number) {
+    let user = getCachedAuthUser(userId);
+    if (!user) {
+      user = await this.loadAuthUser(userId);
+      setCachedAuthUser(userId, user);
+    }
+    return user;
   }
 
   private async loadAuthUser(userId: number) {

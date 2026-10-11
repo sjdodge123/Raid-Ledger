@@ -9,6 +9,7 @@ import { expect } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { API_BASE, apiGet, apiPost, getInviteeFixture, pollForCondition } from './api-helpers';
 import { getFirstGameId } from './scheduling-poll-fixtures';
+import { signInContextWithJwt } from './browser-session';
 
 export interface PrivatePoll {
     lineupId: number;
@@ -69,17 +70,16 @@ export async function openAnonContext(browser: Browser): Promise<{ context: Brow
 
 /**
  * A second context signed in as the non-admin smoke member fixture
- * (`/admin/test/seed-fixture-user`, onboarded, role member) by putting its JWT
- * in `localStorage.raid_ledger_token` — the scheduling-poll-live-updates
- * pattern. No password is ever typed. Device options inherit the project's.
+ * (`/admin/test/seed-fixture-user`, onboarded, role member) through a real
+ * refresh-cookie session (`/admin/test/browser-session`, ROK-1754) — the access
+ * token lives in memory only, so a localStorage JWT is purged at boot and
+ * signs nobody in. No password is ever typed. Device options inherit the project's.
  */
 export async function openMemberContext(
     browser: Browser,
 ): Promise<{ context: BrowserContext; page: Page; jwt: string; userId: number }> {
     const invitee = await getInviteeFixture();
     const context = await browser.newContext({ storageState: STORAGE_STATE_PATH });
-    await context.addInitScript((t) => {
-        localStorage.setItem('raid_ledger_token', t);
-    }, invitee.jwt);
+    await signInContextWithJwt(context, invitee.jwt);
     return { context, page: await context.newPage(), jwt: invitee.jwt, userId: invitee.userId };
 }

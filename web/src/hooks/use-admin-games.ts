@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import { useInfiniteList } from './use-infinite-list';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 interface AdminGame {
     id: number;
@@ -33,7 +34,7 @@ function getHeaders(): Record<string, string> {
 }
 
 async function gameAction(gameId: number, action: string, fallbackMsg: string): Promise<{ success: boolean; message: string }> {
-    const response = await fetch(`${API_BASE_URL}/admin/settings/games/${gameId}/${action}`, {
+    const response = await nativeFetch(`${API_BASE_URL}/admin/settings/games/${gameId}/${action}`, {
         method: 'POST',
         headers: getHeaders(),
     });
@@ -53,7 +54,7 @@ function useAdminGamesList(search: string, limit: number, showHidden?: 'only' | 
             if (showHidden) params.set('showHidden', showHidden);
             params.set('page', String(page));
             params.set('limit', String(limit));
-            const response = await fetch(`${API_BASE_URL}/admin/settings/games?${params}`, { headers: getHeaders() });
+            const response = await nativeFetch(`${API_BASE_URL}/admin/settings/games?${params}`, { headers: getHeaders() });
             if (!response.ok) throw new Error('Failed to fetch games');
             return response.json();
         },

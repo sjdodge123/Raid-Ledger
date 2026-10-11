@@ -2,6 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { ConnectStep } from './connect-step';
 
+// fetch-api captures `window.fetch` at module init (ROK-1754 §3.6), so the
+// stub must be in place before it is imported. Unconfigured, it delegates to
+// the MSW-patched fetch the other tests already hit.
+const fetchMock = vi.hoisted(() => {
+    const original = globalThis.fetch;
+    const fn = vi.fn((...args: unknown[]) => (original as (...a: unknown[]) => unknown)(...args));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+});
+
 vi.mock('../../lib/config', () => ({
     API_BASE_URL: 'http://localhost:3000',
 }));
@@ -69,8 +79,9 @@ beforeEach(() => {
 
 describe('ConnectStep Discord link start (ROK-1630 AC16)', () => {
     it('clicking POSTs /auth/discord/link/start (not a bare GET) and re-enables the button after a 401', async () => {
-        const fetchFn = vi.fn().mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
-        vi.stubGlobal('fetch', fetchFn);
+        // mockReset also drops the earlier tests' clicks, so only this click counts.
+        fetchMock.mockReset();
+        const fetchFn = fetchMock.mockResolvedValue({ ok: false, status: 401, json: async () => ({}) });
         try {
             render(<ConnectStep />);
             fireEvent.click(screen.getByRole('button', { name: /connect discord/i }));
@@ -80,7 +91,7 @@ describe('ConnectStep Discord link start (ROK-1630 AC16)', () => {
             ));
             await waitFor(() => expect(screen.getByRole('button', { name: /connect discord/i })).not.toBeDisabled());
         } finally {
-            vi.unstubAllGlobals();
+            fetchMock.mockReset();
         }
     });
 });

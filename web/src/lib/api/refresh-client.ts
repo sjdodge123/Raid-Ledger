@@ -1,13 +1,13 @@
 import { API_BASE_URL } from '../config';
 import { RefreshResponseSchema } from '@raid-ledger/contract';
-import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
-import { isTokenStale } from './token-expiry';
+import { setAccessToken } from './access-token-store';
 import { getAuthMethod } from './silent-reauth';
 import {
   endDeactivatedSession,
   isDeactivatedResponse,
   readErrorCode,
 } from './deactivated-session';
+import { nativeFetch } from './native-fetch';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -16,13 +16,18 @@ import {
  * all await the SAME in-flight POST (`inFlight`). The raw refresh token lives
  * only in the httpOnly `rl_rt` cookie; this module never sees it.
  *
- * ROK-1755 B1: tabs in one browser share that cookie, but `inFlight` is per
- * tab. So the POST runs under the `rl-refresh` Web Lock: the first tab
- * rotates, and a tab that waited re-reads localStorage and adopts the token
- * the winner stored instead of replaying the now-rotated cookie. The server's
- * 10s race grace answers a replay inside the window (an old bundle, or a
- * browser without `navigator.locks`) with a non-revoking 409 `refresh_raced`,
- * which is indeterminate here — never a reason to clear auth storage.
+ * ROK-1755 B1 / ROK-1754: tabs in one browser share that cookie, but each
+ * tab holds its own in-memory token. The POST runs under the `rl-refresh` Web
+ * Lock, which serialises tabs: by the time a waiting tab holds it, the
+ * winner's response has already put the rotated cookie in the shared jar, so
+ * the waiter rotates normally — no token is ever shared through storage. The
+ * server's 10s race grace answers a replay inside the window (an old bundle,
+ * or a browser without `navigator.locks`) with a non-revoking 409
+ * `refresh_raced`: retried once, else indeterminate — never a reason to clear.
+ *
+ * ROK-1754 (D1): impersonation is renewed SERVER-side — the refresh mints the
+ * impersonation token while the family's marker is live — so refresh is no
+ * longer gated off while impersonating.
  *
  * ROK-1753: a 401 `USER_DEACTIVATED` is terminal — the session is ended in
  * shared storage, and a tab that queued on the lock sees it cleared and
@@ -46,11 +51,19 @@ const INDETERMINATE: RefreshOutcome = { kind: 'indeterminate' };
 const REJECTED: RefreshOutcome = { kind: 'rejected' };
 const LOCK_NAME = 'rl-refresh';
 
+
 let inFlight: Promise<RefreshOutcome> | null = null;
 
-/** Persist the freshly-minted access token where fetch-api reads it. */
-function storeAccessToken(token: string): void {
-  localStorage.setItem(ACCESS_TOKEN_KEY, token);
+/**
+ * Identity generation (review m1). Impersonation start/exit and a cross-tab
+ * identity change bump it; a refresh whose POST began under an older
+ * generation must not install its token over the new identity.
+ */
+let generation = 0;
+
+/** The held identity changed: in-flight refreshes may no longer install a token. */
+export function bumpRefreshGeneration(): void {
+  generation += 1;
 }
 
 /** 401/403 → rejected; a deactivated account also ends the session (ROK-1753). */
@@ -60,8 +73,9 @@ async function rejectedOutcome(res: Response): Promise<RefreshOutcome> {
 }
 
 async function postRefresh(): Promise<PostOutcome> {
+  const startedAt = generation;
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+    const res = await nativeFetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
       credentials: 'include',
     });
@@ -72,32 +86,20 @@ async function postRefresh(): Promise<PostOutcome> {
     if (!res.ok) return INDETERMINATE;
     const parsed = RefreshResponseSchema.safeParse(await res.json());
     if (!parsed.success) return INDETERMINATE;
-    storeAccessToken(parsed.data.access_token);
+    if (generation !== startedAt) return INDETERMINATE;
+    setAccessToken(parsed.data.access_token);
     return { kind: 'ok', token: parsed.data.access_token };
   } catch {
     return INDETERMINATE;
   }
 }
 
-/** A usable token another tab stored since this refresh started, if any. */
-function siblingToken(startToken: string | null): RefreshOutcome | null {
-  const current = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!current || current === startToken || isTokenStale(current)) return null;
-  return { kind: 'ok', token: current };
-}
-
-/** Lost a race: adopt the winner's token, else retry ONCE (rotated cookie). */
-async function settleRace(startToken: string | null): Promise<RefreshOutcome> {
-  const adopted = siblingToken(startToken);
-  if (adopted) return adopted;
-  const retry = await postRefresh();
-  if (retry.kind !== 'raced') return retry;
-  return siblingToken(startToken) ?? INDETERMINATE;
-}
-
-async function refreshAndSettle(startToken: string | null): Promise<RefreshOutcome> {
+/** Lost a race (409): retry ONCE with the rotated cookie, else indeterminate. */
+async function refreshAndSettle(): Promise<RefreshOutcome> {
   const outcome = await postRefresh();
-  return outcome.kind === 'raced' ? settleRace(startToken) : outcome;
+  if (outcome.kind !== 'raced') return outcome;
+  const retry = await postRefresh();
+  return retry.kind === 'raced' ? INDETERMINATE : retry;
 }
 
 function isLockManager(value: unknown): value is LockManager {
@@ -111,30 +113,18 @@ function lockManager(): LockManager | null {
   return isLockManager(candidate) ? candidate : null;
 }
 
-/** What this tab saw when its refresh started (before any lock wait). */
-interface RefreshStart {
-  token: string | null;
-  method: string | null;
-}
-
 /**
- * Runs once this tab holds the lock. Shared storage may have changed while it
- * queued, so the gates are re-checked here (ROK-1755 nits, ROK-1753):
- * impersonation that began meanwhile must not POST (the cookie is the admin's),
- * and a session a sibling ended (logout / deactivation) must not be revived.
+ * Runs once this tab holds the lock. A sibling may have ended the session
+ * (logout / deactivation clears the shared auth-method marker) while this tab
+ * queued — that session must not be revived (ROK-1753).
  */
-function refreshUnderLock(start: RefreshStart): Promise<RefreshOutcome> {
-  if (isImpersonating()) return Promise.resolve(INDETERMINATE);
-  if (start.method !== null && getAuthMethod() === null) return Promise.resolve(REJECTED);
-  const adopted = siblingToken(start.token);
-  return adopted ? Promise.resolve(adopted) : refreshAndSettle(start.token);
+function refreshUnderLock(startMethod: string | null): Promise<RefreshOutcome> {
+  if (startMethod !== null && getAuthMethod() === null) return Promise.resolve(REJECTED);
+  return refreshAndSettle();
 }
 
 async function doRefresh(): Promise<RefreshOutcome> {
-  const start: RefreshStart = {
-    token: localStorage.getItem(ACCESS_TOKEN_KEY),
-    method: getAuthMethod(),
-  };
+  const start = getAuthMethod();
   const locks = lockManager();
   if (!locks) return refreshUnderLock(start);
   try {
@@ -143,11 +133,6 @@ async function doRefresh(): Promise<RefreshOutcome> {
     // The lock itself failed (e.g. an opaque origin) — refresh unlocked.
     return refreshUnderLock(start);
   }
-}
-
-/** Security gate (Codex P1, ROK-1353) — see ensureFreshToken. */
-function isImpersonating(): boolean {
-  return localStorage.getItem(ORIGINAL_TOKEN_KEY) !== null;
 }
 
 function sharedRefresh(): Promise<RefreshOutcome> {
@@ -161,13 +146,9 @@ function sharedRefresh(): Promise<RefreshOutcome> {
 
 /**
  * Like `ensureFreshToken`, but reports WHY a refresh produced no token, and
- * shares the same single-flight request. While impersonating it never touches
- * the network (the refresh cookie is the admin's, and refreshing would swap
- * the bearer back to the admin) and reports 'indeterminate': the admin's
- * session was not probed, so nothing is proven about it (#1384).
+ * shares the same single-flight request.
  */
 export function refreshWithOutcome(): Promise<RefreshOutcome> {
-  if (isImpersonating()) return Promise.resolve(INDETERMINATE);
   return sharedRefresh();
 }
 
@@ -177,10 +158,15 @@ export function refreshWithOutcome(): Promise<RefreshOutcome> {
  * Single-flight: parallel calls share one network request.
  */
 export function ensureFreshToken(): Promise<string | null> {
-  // Security gate (Codex P1, ROK-1353): during impersonation the bearer is
-  // the IMPERSONATED user's token but the refresh cookie belongs to the
-  // admin. Refreshing here would silently switch the request identity back
-  // to the admin — refuse and let the 401 surface instead.
-  if (isImpersonating()) return Promise.resolve(null);
   return sharedRefresh().then((o) => (o.kind === 'ok' ? o.token : null));
+}
+
+/**
+ * A refresh that STARTS after this call (review m1): bump the generation, wait
+ * out any in-flight POST (sent under the old identity), then refresh anew.
+ */
+export async function freshRefresh(): Promise<RefreshOutcome> {
+  bumpRefreshGeneration();
+  if (inFlight) await inFlight;
+  return sharedRefresh();
 }

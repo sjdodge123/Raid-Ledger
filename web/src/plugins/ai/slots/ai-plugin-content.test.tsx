@@ -4,6 +4,25 @@ import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { AiPluginContent } from './ai-plugin-content';
 
+/**
+ * ROK-1754 review r2: `adminFetch` calls the module-captured `nativeFetch`, so a
+ * spy on the global fetch installed after import never fires. Route the module
+ * through a call-time delegate instead: it forwards to the (MSW-patched) global
+ * fetch, and throws a network TypeError for test-chat only while armed.
+ */
+const netFail = vi.hoisted(() => ({ armed: false, hits: 0 }));
+vi.mock('../../../lib/api/native-fetch', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../lib/api/native-fetch')>()),
+    nativeFetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        if (netFail.armed && url.includes('/admin/ai/test-chat')) {
+            netFail.hits += 1;
+            return Promise.reject(new TypeError('Failed to fetch'));
+        }
+        return globalThis.fetch(input, init);
+    },
+}));
+
 vi.mock('../../../hooks/use-auth', () => ({
     getAuthToken: vi.fn(() => 'test-token'),
     useAuth: () => ({ user: { id: 1, username: 'admin', role: 'admin' } }),
@@ -225,13 +244,10 @@ describe('ROK-1000: TestChatSection error message', () => {
         const { default: userEvent } = await import('@testing-library/user-event');
 
         // HttpResponse.error() doesn't reliably simulate network errors in MSW v2 Node.
-        // Intercept fetch to throw TypeError only for the test-chat endpoint.
-        const realFetch = globalThis.fetch;
-        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (...args) => {
-            const url = String(args[0]);
-            if (url.includes('/admin/ai/test-chat')) throw new TypeError('Failed to fetch');
-            return realFetch(...args);
-        });
+        // The hoisted nativeFetch delegate throws TypeError for test-chat only.
+        netFail.armed = true;
+        netFail.hits = 0;
+        onTestFinished(() => { netFail.armed = false; });
 
         renderWithProviders(<AiPluginContent />);
 
@@ -243,8 +259,8 @@ describe('ROK-1000: TestChatSection error message', () => {
         // which the component catches and displays
         const errorResult = await screen.findByText(/failed to test llm/i, {}, { timeout: 5000 });
         expect(errorResult).toBeInTheDocument();
-
-        fetchSpy.mockRestore();
+        // The network failure really happened on the code path under test.
+        expect(netFail.hits).toBe(1);
     });
 });
 

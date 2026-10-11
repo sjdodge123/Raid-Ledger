@@ -2,17 +2,20 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
-import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY, LEGACY_ACCESS_TOKEN_KEY } from './auth-storage-keys';
 
 /**
- * ROK-1755 B1: several tabs in ONE browser share the `rl_rt` cookie. Each tab
- * has its own module instance (its own in-tab `inFlight`), so cross-tab
- * coordination must come from `navigator.locks` + the shared localStorage.
+ * ROK-1755 B1 → ROK-1754: several tabs in ONE browser share the `rl_rt`
+ * cookie but each holds its own in-memory token (its own module instance).
+ * Coordination is the `rl-refresh` Web Lock + the shared cookie jar only —
+ * no token is ever adopted from storage.
  */
 
 const API_BASE = 'http://localhost:3000';
 
 type RefreshModule = typeof import('./refresh-client');
+type StoreModule = typeof import('./access-token-store');
+interface Tab { refresh: RefreshModule; store: StoreModule }
 
 /** A FIFO exclusive lock per name — the subset of LockManager the client uses. */
 function createFakeLocks() {
@@ -37,20 +40,23 @@ function locksAfterSibling(sibling: () => void) {
     };
 }
 
-/** A JWT whose exp is `offsetSeconds` from now (base64url, unsigned). */
-function jwtExpiringIn(offsetSeconds: number): string {
+/** An unsigned JWT carrying the given claims (base64url). */
+function jwtWith(claims: object): string {
     const seg = (o: object) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    return `${seg({ alg: 'HS256' })}.${seg({ sub: '1', exp: Math.floor(Date.now() / 1000) + offsetSeconds })}.sig`;
+    return `${seg({ alg: 'HS256' })}.${seg(claims)}.sig`;
 }
 
 function setLocks(value: unknown): void {
     Object.defineProperty(navigator, 'locks', { value, configurable: true, writable: true });
 }
 
-/** A fresh module instance stands in for a separate browser tab. */
-async function openTab(): Promise<RefreshModule> {
+/** A fresh module graph stands in for a separate browser tab. */
+async function openTab(): Promise<Tab> {
     vi.resetModules();
-    return import('./refresh-client');
+    const refresh = await import('./refresh-client');
+    const store = await import('./access-token-store');
+    store.setAccessToken('old-token');
+    return { refresh, store };
 }
 
 function countRefreshes(answer: (n: number) => Response): { calls: () => number } {
@@ -59,28 +65,54 @@ function countRefreshes(answer: (n: number) => Response): { calls: () => number 
     return { calls: () => n };
 }
 
-describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
+/**
+ * Models the server's cookie rotation: a POST that overlaps an in-progress
+ * one presents the cookie that one is rotating → 409 `refresh_raced`.
+ */
+function rotatingServer(): { calls: () => number; raced: () => number } {
+    let n = 0;
+    let raced = 0;
+    let busy = false;
+    server.use(http.post(`${API_BASE}/auth/refresh`, async () => {
+        n += 1;
+        if (busy) {
+            raced += 1;
+            return HttpResponse.json({ code: 'refresh_raced' }, { status: 409 });
+        }
+        busy = true;
+        await new Promise((r) => setTimeout(r, 5));
+        busy = false;
+        return HttpResponse.json({ access_token: `tok-${n}` });
+    }));
+    return { calls: () => n, raced: () => raced };
+}
+
+describe('refresh-client cross-tab coordination (ROK-1755 B1, ROK-1754)', () => {
     beforeEach(() => {
         localStorage.clear();
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'old-token');
     });
 
     afterEach(() => {
         setLocks(undefined);
     });
 
-    it('two tabs refreshing at once make ONE POST; the second reuses the first tab token', async () => {
+    it('two tabs refreshing at once: the waiter POSTs with the rotated cookie — exactly 2 POSTs, 0 × 409', async () => {
         setLocks(createFakeLocks());
-        const counter = countRefreshes((n) => HttpResponse.json({ access_token: `tok-${n}` }));
+        const srv = rotatingServer();
         const tabA = await openTab();
         const tabB = await openTab();
 
-        const [a, b] = await Promise.all([tabA.ensureFreshToken(), tabB.ensureFreshToken()]);
+        const [a, b] = await Promise.all([
+            tabA.refresh.ensureFreshToken(),
+            tabB.refresh.ensureFreshToken(),
+        ]);
 
-        expect(counter.calls()).toBe(1);
-        expect(a).toBe('tok-1');
-        expect(b).toBe('tok-1');
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('tok-1');
+        expect(srv.calls()).toBe(2);
+        expect(srv.raced()).toBe(0);
+        expect(new Set([a, b])).toEqual(new Set(['tok-1', 'tok-2']));
+        expect(tabA.store.getAccessToken()).toBe(a);
+        expect(tabB.store.getAccessToken()).toBe(b);
+        expect(localStorage.getItem(LEGACY_ACCESS_TOKEN_KEY)).toBeNull();
     });
 
     it('without navigator.locks still single-flights inside one tab', async () => {
@@ -89,39 +121,41 @@ describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
         const tab = await openTab();
 
         const results = await Promise.all([
-            tab.ensureFreshToken(),
-            tab.ensureFreshToken(),
-            tab.refreshWithOutcome(),
+            tab.refresh.ensureFreshToken(),
+            tab.refresh.ensureFreshToken(),
+            tab.refresh.refreshWithOutcome(),
         ]);
 
         expect(counter.calls()).toBe(1);
         expect(results).toEqual(['solo', 'solo', { kind: 'ok', token: 'solo' }]);
     });
 
-    it('a 409 refresh_raced is indeterminate and leaves auth storage alone', async () => {
+    it('a 409 refresh_raced is indeterminate and leaves the held token alone', async () => {
         setLocks(createFakeLocks());
         const counter = countRefreshes(() =>
             HttpResponse.json({ code: 'refresh_raced' }, { status: 409 }),
         );
         const tab = await openTab();
 
-        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('old-token');
+        expect(await tab.refresh.refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
+        expect(tab.store.getAccessToken()).toBe('old-token');
         // Exactly one retry after the race, never a loop.
         expect(counter.calls()).toBe(2);
     });
 
-    it('a 409 refresh_raced adopts a token another tab stored meanwhile', async () => {
+    it('a 409 refresh_raced retries ONCE with the rotated cookie and never adopts a stored token', async () => {
         setLocks(createFakeLocks());
-        const counter = countRefreshes(() => {
-            // Another tab (old bundle, no lock) won the race and stored its token.
-            localStorage.setItem(ACCESS_TOKEN_KEY, 'sibling-token');
+        const counter = countRefreshes((n) => {
+            if (n > 1) return HttpResponse.json({ access_token: 'own-token' });
+            // An old-bundle tab won the race and wrote its token to storage.
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, 'sibling-token');
             return HttpResponse.json({ code: 'refresh_raced' }, { status: 409 });
         });
         const tab = await openTab();
 
-        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'sibling-token' });
-        expect(counter.calls()).toBe(1);
+        expect(await tab.refresh.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'own-token' });
+        expect(counter.calls()).toBe(2);
+        expect(tab.store.getAccessToken()).toBe('own-token');
     });
 
     it('ROK-1753: USER_DEACTIVATED on refresh is terminal in every tab — one POST, session cleared', async () => {
@@ -133,45 +167,50 @@ describe('refresh-client cross-tab coordination (ROK-1755 B1)', () => {
         const tabA = await openTab();
         const tabB = await openTab();
 
-        const [a, b] = await Promise.all([tabA.refreshWithOutcome(), tabB.refreshWithOutcome()]);
+        const [a, b] = await Promise.all([
+            tabA.refresh.refreshWithOutcome(),
+            tabB.refresh.refreshWithOutcome(),
+        ]);
 
         expect(a).toEqual({ kind: 'rejected' });
         expect(b).toEqual({ kind: 'rejected' });
-        // The waiting tab sees the cleared session and never replays the cookie.
+        // The waiting tab sees the cleared marker and never replays the cookie.
         expect(counter.calls()).toBe(1);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(tabA.store.getAccessToken()).toBeNull();
         expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
     });
 
-    it('a STALE token a sibling stored is not adopted — this tab still refreshes', async () => {
-        setLocks(locksAfterSibling(() => localStorage.setItem(ACCESS_TOKEN_KEY, jwtExpiringIn(-60))));
+    it('a token a sibling wrote to storage while this tab queued is never read — this tab POSTs its own', async () => {
+        setLocks(locksAfterSibling(() =>
+            localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, jwtWith({ sub: 1, exp: 4102444800 }))));
         const counter = countRefreshes(() => HttpResponse.json({ access_token: 'own-token' }));
         const tab = await openTab();
 
-        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'own-token' });
+        expect(await tab.refresh.refreshWithOutcome()).toEqual({ kind: 'ok', token: 'own-token' });
         expect(counter.calls()).toBe(1);
     });
 
     it('a sibling that cleared the session while this tab queued → rejected, no POST', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
         setLocks(locksAfterSibling(() => {
-            localStorage.removeItem(ACCESS_TOKEN_KEY);
             localStorage.removeItem(AUTH_METHOD_KEY);
         }));
         const counter = countRefreshes(() => HttpResponse.json({ access_token: 'should-not-mint' }));
         const tab = await openTab();
 
-        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'rejected' });
+        expect(await tab.refresh.refreshWithOutcome()).toEqual({ kind: 'rejected' });
         expect(counter.calls()).toBe(0);
     });
 
-    it('impersonation that began while this tab queued is re-checked inside the lock — no POST', async () => {
-        setLocks(locksAfterSibling(() => localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token')));
-        const counter = countRefreshes(() => HttpResponse.json({ access_token: 'admin-swap' }));
+    it('impersonation is renewed by the queued refresh (server marker, D1) — one POST, claim preserved', async () => {
+        const renewed = jwtWith({ sub: 7, impersonatedBy: 1, exp: 4102444800 });
+        setLocks(locksAfterSibling(() => undefined));
+        const counter = countRefreshes(() => HttpResponse.json({ access_token: renewed }));
         const tab = await openTab();
+        tab.store.setAccessToken(jwtWith({ sub: 7, impersonatedBy: 1, exp: 1 }));
 
-        expect(await tab.refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
-        expect(counter.calls()).toBe(0);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('old-token');
+        expect(await tab.refresh.refreshWithOutcome()).toEqual({ kind: 'ok', token: renewed });
+        expect(counter.calls()).toBe(1);
+        expect(tab.store.isImpersonatingToken()).toBe(true);
     });
 });

@@ -9,6 +9,7 @@ import {
     defaultEntry,
     type WantToPlayContextValue,
 } from './want-to-play-context';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 const getHeaders = () => ({
     'Content-Type': 'application/json',
@@ -48,7 +49,7 @@ function optimisticBatchUpdate(
 }
 
 async function toggleInterestFn({ gameId, wantToPlay }: { gameId: number; wantToPlay: boolean }): Promise<GameInterestResponseDto> {
-    const response = await fetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, { method: wantToPlay ? 'POST' : 'DELETE', headers: getHeaders() });
+    const response = await nativeFetch(`${API_BASE_URL}/games/${gameId}/want-to-play`, { method: wantToPlay ? 'POST' : 'DELETE', headers: getHeaders() });
     if (!response.ok) throw new Error('Failed to update interest');
     return response.json();
 }
@@ -109,7 +110,7 @@ function useBatchInterest(sortedIds: number[], queryKey: unknown[]) {
         queryKey,
         queryFn: async () => {
             if (sortedIds.length === 0) return { data: {} };
-            const response = await fetch(`${API_BASE_URL}/games/interest/batch?ids=${sortedIds.join(',')}`, { headers: getHeaders() });
+            const response = await nativeFetch(`${API_BASE_URL}/games/interest/batch?ids=${sortedIds.join(',')}`, { headers: getHeaders() });
             if (!response.ok) throw new Error('Failed to fetch batch interest');
             return response.json();
         },

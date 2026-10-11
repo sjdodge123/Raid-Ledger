@@ -6,8 +6,8 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { fetchCurrentUser, getAuthToken, setAuthToken, useAuth } from './use-auth';
 import { startMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { getAccessToken } from '../lib/api/access-token-store';
 
-const TOKEN_KEY = 'raid_ledger_token';
 
 describe('setAuthToken / getAuthToken', () => {
     beforeEach(() => {
@@ -29,9 +29,10 @@ describe('setAuthToken / getAuthToken', () => {
         expect(getAuthToken()).toBe('new-token');
     });
 
-    it('stores the token under the expected localStorage key', () => {
+    it('ROK-1754: holds the token in memory and never in localStorage', () => {
         setAuthToken('my-token');
-        expect(localStorage.getItem(TOKEN_KEY)).toBe('my-token');
+        expect(getAccessToken()).toBe('my-token');
+        expect(Object.values({ ...localStorage })).not.toContain('my-token');
     });
 });
 
@@ -69,16 +70,12 @@ describe('useAuth login — events cache invalidation (ROK-691)', () => {
         // on logged-out, so a single mockResolvedValueOnce would be consumed
         // by that probe instead of login's /auth/me call.
         const mockUser = { id: 1, username: 'TestUser', discordId: '123', displayName: null, avatar: null, customAvatarUrl: null, onboardingCompletedAt: null };
-        vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
-            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-            if (url.includes('/auth/refresh')) {
-                return Promise.resolve(new Response('Unauthorized', { status: 401 }));
-            }
-            if (url.includes('/auth/me')) {
-                return Promise.resolve(new Response(JSON.stringify(mockUser), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-            }
-            return Promise.resolve(new Response('Not Found', { status: 404 }));
-        });
+        // ROK-1754 §3.6: /auth/me goes through nativeFetch (captured at load), so
+        // a later `fetch` spy never sees it — route through MSW instead.
+        server.use(
+            http.post('http://localhost:3000/auth/refresh', () => new HttpResponse(null, { status: 401 })),
+            http.get('http://localhost:3000/auth/me', () => HttpResponse.json(mockUser)),
+        );
 
         const { result } = renderHook(() => useAuth(), { wrapper: createWrapper() });
 

@@ -18,8 +18,8 @@ import {
 } from '../../test/lfg-factories';
 import { lfgGroupPageHandlers, LFG_TEST_SLUG } from '../../test/mocks/lfg-handlers';
 import { at } from '../../test/defined';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgGroupPage } from './lfg-group-page';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 const mocks = vi.hoisted(() => ({
     findATime: vi.fn(),
@@ -66,7 +66,7 @@ function renderPage() {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     server.use(...lfgGroupPageHandlers);
     mocks.findATime.mockReset();
     mocks.withdraw.mockReset();

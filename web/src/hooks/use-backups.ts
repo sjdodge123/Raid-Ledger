@@ -2,13 +2,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { BackupFileDto, BackupListResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 function backupHeaders(): Record<string, string> {
     return { 'Content-Type': 'application/json', Authorization: `Bearer ${getAuthToken() || ''}` };
 }
 
 async function backupFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: backupHeaders() });
+    const response = await nativeFetch(`${API_BASE_URL}${path}`, { method, headers: backupHeaders() });
     if (!response.ok) throw new Error(errorMsg);
     return response.json();
 }

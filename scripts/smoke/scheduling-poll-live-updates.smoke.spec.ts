@@ -13,9 +13,10 @@
  * Each test owns a fresh PUBLIC standalone poll (desktop + mobile workers run
  * this file concurrently, so nothing is shared). Context A is the admin
  * (`page`, global storageState); context B is a second browser context signed
- * in as the member fixture via `localStorage.raid_ledger_token`.
+ * in as the member fixture via its own `rl_rt` session (./browser-session.ts).
  */
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import type { Browser, BrowserContext, Locator, Page, TestInfo } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isTablet } from './helpers';
@@ -178,9 +179,7 @@ async function openMemberContext(
         ...(deviceScaleFactor === undefined ? {} : { deviceScaleFactor }),
     });
     const invitee = await getInviteeFixture();
-    await context.addInitScript((t) => {
-        localStorage.setItem('raid_ledger_token', t);
-    }, invitee.jwt);
+    await signInContextWithJwt(context, invitee.jwt);
     return { context, page: await context.newPage() };
 }
 

@@ -68,7 +68,7 @@ export const BASELINE_KB = {
 const LAZY_NAMED = [
   { name: 'CategoricalChart', kb: 75.37, why: 'recharts core, shared by every chart' },
   { name: 'SocialGraphCanvas', kb: 56.55, why: 'react-force-graph-2d (insights)' },
-  { name: 'use-auth', kb: 42.11, why: 'shared app core, modulepreloaded' },
+  { name: 'use-auth', kb: 43.0, why: 'shared app core, modulepreloaded; +0.9 KB ROK-1754 in-memory token store, boot gate, cross-tab auth, nativeFetch' },
   { name: 'lineup-detail-page', kb: 27.51, why: 'route' },
   { name: 'BarChart', kb: 26.64, why: 'recharts bar chart' },
   { name: 'games-page', kb: 19.7, why: 'route' },

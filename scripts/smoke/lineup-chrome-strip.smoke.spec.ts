@@ -32,6 +32,7 @@
  * rule; playwright.config.ts handles project fan-out.
  */
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import type { Page } from '@playwright/test';
 import {
     API_BASE,
@@ -141,14 +142,12 @@ async function setupLineupInPhase(
 
 /**
  * Swap the browser session to the non-admin invitee fixture user by
- * overwriting `localStorage.raid_ledger_token` (matches use-auth.ts
+ * giving the context the invitee's `rl_rt` cookie (ROK-1754; was
  * TOKEN_KEY), mirroring lineup-confirmation-pills-invitee.smoke.spec.ts.
  */
 async function loginInvitee(page: Page, token: string): Promise<void> {
+    await signInContextWithJwt(page.context(), token);
     await page.goto('/');
-    await page.evaluate((t) => {
-        localStorage.setItem('raid_ledger_token', t);
-    }, token);
 }
 
 /**

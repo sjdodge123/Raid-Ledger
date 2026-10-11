@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { useConnectivityStore } from '../../stores/connectivity-store';
+import { BOOT_BYPASS_PATHS, isBootSettled, subscribeBootSession } from '../../lib/api/boot-session';
 
 const SLOW_THRESHOLD_MS = 30_000;
 const FADE_DURATION_MS = 300;
-
-/** Routes that must bypass the startup gate (time-sensitive auth flows). */
-const BYPASS_PATHS = ['/auth/success'];
 
 function FadingOverlay({ onTransitionEnd }: { onTransitionEnd: () => void }) {
     return (
@@ -41,27 +39,31 @@ function WaitingScreen({ isSlow, onRetry }: { isSlow: boolean; onRetry: () => vo
 
 export function StartupGate({ children }: { children: ReactNode }) {
     const hasBeenOnline = useConnectivityStore((s) => s.hasBeenOnline);
+    // ROK-1754 §3.2: also wait for the boot refresh (any outcome) so the
+    // in-memory token exists before the first render of any query hook.
+    const bootSettled = useSyncExternalStore(subscribeBootSession, isBootSettled, isBootSettled);
+    const ready = hasBeenOnline && bootSettled;
     const check = useConnectivityStore((s) => s.check);
     const [isSlow, setIsSlow] = useState(false);
     const [gateVisible, setGateVisible] = useState(true);
 
     useEffect(() => {
-        if (hasBeenOnline) return;
+        if (ready) return;
         const timer = setTimeout(() => setIsSlow(true), SLOW_THRESHOLD_MS);
         return () => clearTimeout(timer);
-    }, [hasBeenOnline]);
+    }, [ready]);
 
     useEffect(() => {
-        if (!hasBeenOnline) return;
+        if (!ready) return;
         const timer = setTimeout(() => setGateVisible(false), FADE_DURATION_MS);
         return () => clearTimeout(timer);
-    }, [hasBeenOnline]);
+    }, [ready]);
 
     const handleTransitionEnd = useCallback(() => setGateVisible(false), []);
-    const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
+    const isBypassRoute = BOOT_BYPASS_PATHS.includes(window.location.pathname);
 
     const gateActive = gateVisible && !isBypassRoute;
-    if (gateActive && !hasBeenOnline) {
+    if (gateActive && !ready) {
         return <WaitingScreen isSlow={isSlow} onRetry={() => void check()} />;
     }
 

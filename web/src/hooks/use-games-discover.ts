@@ -3,6 +3,7 @@ import type { GameDiscoverResponseDto, GameDetailDto, GameStreamsResponseDto, Ac
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken, useViewerCacheScope } from './use-auth';
 import { getGameActivity, getGameNowPlaying, getGamePricing } from '../lib/api-client';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 const getHeaders = () => {
     const headers: Record<string, string> = {
@@ -24,7 +25,7 @@ export function useGamesDiscover() {
     return useQuery<GameDiscoverResponseDto>({
         queryKey: ['games', 'discover', viewer],
         queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/games/discover`, {
+            const response = await nativeFetch(`${API_BASE_URL}/games/discover`, {
                 headers: getHeaders(),
             });
             if (!response.ok) throw new Error('Failed to load game discovery');
@@ -43,7 +44,7 @@ export function useGameDetail(id: number | undefined) {
     return useQuery<GameDetailDto>({
         queryKey: ['games', 'detail', id, viewer],
         queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/games/${id}`, {
+            const response = await nativeFetch(`${API_BASE_URL}/games/${id}`, {
                 headers: getHeaders(),
             });
             if (!response.ok) throw new Error('Failed to load game details');
@@ -61,7 +62,7 @@ export function useGameStreams(id: number | undefined) {
     return useQuery<GameStreamsResponseDto>({
         queryKey: ['games', 'streams', id],
         queryFn: async () => {
-            const response = await fetch(`${API_BASE_URL}/games/${id}/streams`, {
+            const response = await nativeFetch(`${API_BASE_URL}/games/${id}/streams`, {
                 headers: getHeaders(),
             });
             if (!response.ok) throw new Error('Failed to load streams');

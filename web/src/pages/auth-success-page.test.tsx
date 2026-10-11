@@ -14,7 +14,8 @@ import { waitFor } from '@testing-library/react';
 import { renderWithProviders } from '../test/render-helpers';
 import { AuthSuccessPage } from './auth-success-page';
 import { toast } from '../lib/toast';
-import { ACCESS_TOKEN_KEY, SILENT_GUARD_KEY } from '../lib/api/auth-storage-keys';
+import { SILENT_GUARD_KEY } from '../lib/api/auth-storage-keys';
+import { setAccessToken, getAccessToken } from '../lib/api/access-token-store';
 
 vi.mock('../hooks/use-auth', () => ({ useAuth: () => ({ login: vi.fn() }) }));
 vi.mock('../lib/toast', () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
@@ -43,7 +44,7 @@ describe('AuthSuccessPage — ROK-1367 silent-guard cooldown', () => {
     });
 
     it('arms a fresh timestamp guard on the ?silent_failed=1 branch', async () => {
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'stale');
+        setAccessToken('stale');
         const before = Date.now();
 
         renderWithProviders(<AuthSuccessPage />, {
@@ -57,6 +58,6 @@ describe('AuthSuccessPage — ROK-1367 silent-guard cooldown', () => {
             Number(sessionStorage.getItem(SILENT_GUARD_KEY)),
         ).toBeGreaterThanOrEqual(before);
         // The stale access token is dropped on the silent-failure path.
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
     });
 });

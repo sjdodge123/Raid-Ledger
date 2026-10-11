@@ -11,6 +11,7 @@ import type { UserRole } from '@raid-ledger/contract';
 import { RoleBadge } from '../ui/role-badge';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { SearchInput } from '../ui/search-input';
+import { nativeFetch } from '../../lib/api/native-fetch';
 
 interface ImpersonateUser {
     id: number;
@@ -26,7 +27,7 @@ function useImpersonateUsers(user: ReturnType<typeof useAuth>['user'], isImperso
         queryFn: async () => {
             const token = getAuthToken();
             if (!token) return [];
-            const res = await fetch(`${API_BASE_URL}/auth/users`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const res = await nativeFetch(`${API_BASE_URL}/auth/users`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (!res.ok) return [];
             return res.json();
         },

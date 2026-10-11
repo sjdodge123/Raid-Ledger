@@ -26,12 +26,12 @@ import {
     buildLfgGroupSummary,
     buildLfgHeartedGame,
 } from '../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import type { GameDetailDto } from '@raid-ledger/contract';
 import { UnifiedGameCard } from '../components/games/unified-game-card';
 import { GamesPage } from './games-page';
 import * as useGamesDiscoverModule from '../hooks/use-games-discover';
 import * as useGameSearchModule from '../hooks/use-game-search';
+import { setAccessToken } from '../lib/api/access-token-store';
 
 vi.mock('../hooks/use-games-discover');
 vi.mock('../hooks/use-game-search');
@@ -125,7 +125,7 @@ function renderPage(route = '/games') {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     sessionStorage.clear();
     vi.spyOn(useGamesDiscoverModule, 'useGamesDiscover').mockReturnValue({
         data: buildDiscoverData(),

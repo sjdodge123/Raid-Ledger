@@ -14,6 +14,13 @@
  *      /admin/settings/demo/install call so every Playwright run
  *      starts from a clean baseline (no stale ORBITALIS polls etc).
  *   6. Save storageState for Playwright tests
+ *
+ * ROK-1754: the storageState holds NO token. The app keeps its access token in
+ * memory and mints it from the httpOnly `rl_rt` cookie at boot, and a cookie
+ * saved here would be replayed by every context (first boot rotates it, the
+ * next replay is reuse → family revoke + admin blocklist). Each context gets
+ * its own refresh family from `smoke/base.ts` (`smoke/browser-session.ts`).
+ * The admin JWT goes to the token FILE only, for API helpers.
  */
 import { chromium, type FullConfig } from '@playwright/test';
 import fs from 'fs';
@@ -24,6 +31,7 @@ import { resolveApiUrl, resolveWebUrl } from './smoke/target';
 import { browserSetupHint } from './smoke/browser-preflight';
 import { fetchWithRetry } from './smoke/fetch-retry';
 import { gotoWithRetry } from './smoke/goto-retry';
+import { pickTokenFromState, type StorageStateShape } from './smoke/storage-state';
 
 // ROK-1234 follow-up: `bootstrap-admin.ts --reset-password` rotates the admin
 // password and writes it back to the project root `.env`. Load that file here
@@ -180,7 +188,8 @@ export default async function globalSetup(_config: FullConfig) {
     // and best-effort: a failure logs and continues so setup never crashes.
     await archiveStaleSmokeLineups(API_BASE, access_token);
 
-    // 3. Launch browser, set JWT in localStorage, save storageState
+    // 3. Launch browser, load the app once (proves the web target answers and
+    // binds the origin), save a token-free storageState.
     const browser = await launchBrowser();
     const context = await browser.newContext();
     const page = await context.newPage();
@@ -191,12 +200,7 @@ export default async function globalSetup(_config: FullConfig) {
     // whole run before a single spec starts.
     await gotoWithRetry(page.goto.bind(page), BASE_URL, { waitUntil: 'domcontentloaded' });
 
-    // Set the JWT token in localStorage (matching use-auth.ts TOKEN_KEY)
-    await page.evaluate((token) => {
-        localStorage.setItem('raid_ledger_token', token);
-    }, access_token);
-
-    // Save the authenticated state
+    // Save the (token-free) state the config's use.storageState points at.
     await context.storageState({ path: STORAGE_STATE_PATH });
 
     await browser.close();
@@ -213,11 +217,18 @@ export default async function globalSetup(_config: FullConfig) {
         );
     }
 
+    // ROK-1754: a JWT in the saved state would mean the app wrote one to
+    // localStorage on a plain page load — the regression this story removes.
+    const saved = JSON.parse(fs.readFileSync(STORAGE_STATE_PATH, 'utf-8')) as StorageStateShape;
+    if (pickTokenFromState(saved, BASE_URL) !== null) {
+        throw new Error('[global-setup] the saved storageState carries a raid_ledger_token (ROK-1754 regression)');
+    }
+
     // Only now publish the token file, so admin-token.json and admin.json are
     // always from the same login — never one without the other.
     fs.writeFileSync(
         TOKEN_FILE_PATH,
         JSON.stringify({ access_token, issued_at: new Date().toISOString() }),
     );
-    console.log(`[global-setup] done — storageState + token written to ${AUTH_DIR}`);
+    console.log(`[global-setup] done — token-free storageState + token file written to ${AUTH_DIR}`);
 }

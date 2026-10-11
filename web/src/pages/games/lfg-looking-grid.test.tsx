@@ -11,9 +11,9 @@ import { screen, waitFor } from '@testing-library/react';
 import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfgGroupSummary } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgLookingGrid } from './lfg-looking-grid';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 const EMPTY_COPY = /nobody is looking right now/i;
 
@@ -42,7 +42,7 @@ describe('LfgLookingGrid — non-success states', () => {
     });
 
     it('shows the empty copy once GET /lfg resolves to an empty list', async () => {
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+        setAccessToken('test-token');
         server.use(lfgGroupsHandler([]));
 
         renderGrid();
@@ -51,7 +51,7 @@ describe('LfgLookingGrid — non-success states', () => {
     });
 
     it('renders a tile per group once the list resolves', async () => {
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+        setAccessToken('test-token');
         server.use(
             lfgGroupsHandler([
                 buildLfgGroupSummary({ gameId: 1, gameName: 'Looking One' }),

@@ -16,9 +16,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfgGroupSummary } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { useTileGameIds } from './use-tile-game-ids';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 /** A Discover id that ALSO has a live intent: it must not be batched twice. */
 const OVERLAP_ID = 1;
@@ -38,7 +38,7 @@ function wrapper(initialEntries: string[]) {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     server.use(
         lfgGroupsHandler([
             buildLfgGroupSummary({ gameId: LFG_ONLY_ID }),

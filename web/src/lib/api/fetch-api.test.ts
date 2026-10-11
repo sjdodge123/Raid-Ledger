@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
-import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY } from './auth-storage-keys';
 import { errorBodyOf, httpStatusOf, isConflictError } from './api-error';
+import { setAccessToken, getAccessToken } from './access-token-store';
 
 const captureExceptionMock = vi.fn();
 
@@ -42,6 +43,7 @@ function tokenExpiringIn(offsetSeconds: number): string {
 
 const FRESH_TOKEN = tokenExpiringIn(3600);
 const EXPIRED_TOKEN = tokenExpiringIn(-60);
+const RENEWED_IMPERSONATION = 'renewed-impersonation-token';
 
 const FixtureSchema = z.object({
     id: z.number(),
@@ -172,7 +174,7 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
         expect(result).toEqual({ ok: true });
         expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(2);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+        expect(getAccessToken()).toBe('fresh-token');
     });
 
     it('returns the raw 401 (no retry) when refresh itself fails', async () => {
@@ -257,16 +259,16 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
         expect(dataCalls).toBe(1);
     });
 
-    it('does NOT refresh while impersonating (guard returns null), proceeds with the stored token', async () => {
+    it('ROK-1754 D1: pre-flight refreshes while impersonating too (the server renews the impersonation)', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
         authState.token = EXPIRED_TOKEN;
         let dataCalls = 0;
         let refreshCalls = 0;
         server.use(
             http.post(`${API_BASE}/auth/refresh`, () => {
                 refreshCalls += 1;
-                return HttpResponse.json({ access_token: 'should-not-happen' });
+                authState.token = RENEWED_IMPERSONATION;
+                return HttpResponse.json({ access_token: RENEWED_IMPERSONATION });
             }),
             http.get(`${API_BASE}/thing`, ({ request }) => {
                 dataCalls += 1;
@@ -278,11 +280,9 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
 
         const result = await fetchApi<{ header: string }>('/thing');
 
-        // ensureFreshToken self-guards impersonation → no network refresh; the
-        // request still went out on the (expired) impersonated bearer.
-        expect(refreshCalls).toBe(0);
+        expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(1);
-        expect(result.header).toBe(`Bearer ${EXPIRED_TOKEN}`);
+        expect(result.header).toBe(`Bearer ${RENEWED_IMPERSONATION}`);
     });
 
     it('does NOT pre-flight for an anonymous visitor (no auth method) even with a stale token', async () => {
@@ -311,7 +311,7 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
 
     it('a 401 USER_DEACTIVATED does NOT refresh or retry, and ends the shared session', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(ACCESS_TOKEN_KEY, FRESH_TOKEN);
+        setAccessToken(FRESH_TOKEN);
         authState.token = FRESH_TOKEN;
         let dataCalls = 0;
         let refreshCalls = 0;
@@ -335,10 +335,40 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
 
         expect(refreshCalls).toBe(0);
         expect(dataCalls).toBe(1);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
         // Never settles while the /login redirect lands, so no caller onError
         // toast flashes over the deactivated notice.
         expect(settled).not.toHaveBeenCalled();
     });
 });
 
+
+describe('fetchWithAuth — ROK-1754 §3.6 native fetch captured at module init', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        authState.token = FRESH_TOKEN;
+    });
+
+    it('a window.fetch patched AFTER import never sees the request or its Authorization header', async () => {
+        let seenAuth: string | null = null;
+        server.use(
+            http.get(`${API_BASE}/hardened`, ({ request }) => {
+                seenAuth = request.headers.get('Authorization');
+                return HttpResponse.json({ ok: true });
+            }),
+        );
+        // Stands in for a third-party script (Wowhead tooltips.js) that wraps
+        // fetch after our entry has loaded.
+        const patched = vi.fn(async () => new Response('{}', { status: 200 }));
+        vi.stubGlobal('fetch', patched);
+        try {
+            const response = await fetchWithAuth('/hardened');
+
+            expect(patched, 'a post-import window.fetch patch received fetchWithAuth\'s request').not.toHaveBeenCalled();
+            expect(response.status).toBe(200);
+            expect(seenAuth).toBe(`Bearer ${FRESH_TOKEN}`);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});

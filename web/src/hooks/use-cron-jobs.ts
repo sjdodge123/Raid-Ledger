@@ -3,6 +3,7 @@ import type { CronJobDto, CronJobExecutionDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import { toast } from '../lib/toast';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 /**
  * Hook for cron job management API operations (ROK-310).
@@ -15,7 +16,7 @@ function cronHeaders(): Record<string, string> {
 async function cronFetch<T>(path: string, method: string, errorMsg: string, body?: string): Promise<T> {
     const opts: RequestInit = { method, headers: cronHeaders() };
     if (body) opts.body = body;
-    const response = await fetch(`${API_BASE_URL}${path}`, opts);
+    const response = await nativeFetch(`${API_BASE_URL}${path}`, opts);
     if (!response.ok) throw new Error(errorMsg);
     return response.json();
 }
@@ -85,7 +86,7 @@ export function useCronJobExecutions(jobId: number | null) {
     return useQuery<CronJobExecutionDto[]>({
         queryKey: ['admin', 'cron-jobs', jobId, 'executions'],
         queryFn: async () => {
-            const response = await fetch(
+            const response = await nativeFetch(
                 `${API_BASE_URL}/admin/cron-jobs/${jobId}/executions?limit=50`,
                 { headers: getHeaders() },
             );

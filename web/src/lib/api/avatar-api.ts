@@ -3,6 +3,7 @@ import { getAuthToken } from '../../hooks/use-auth';
 import { fetchApi } from './fetch-api';
 import { ensureFreshToken } from './refresh-client';
 import { getAuthMethod } from './silent-reauth';
+import { NativeXHR, nativeXhr } from './native-fetch';
 
 /** Carries the HTTP status so the caller can branch on 401 for a refresh. */
 class AvatarUploadError extends Error {
@@ -16,7 +17,8 @@ class AvatarUploadError extends Error {
 
 /**
  * Upload a custom avatar image with optional progress tracking.
- * Uses XMLHttpRequest for upload progress when onProgress is provided.
+ * Uses XMLHttpRequest for upload progress when onProgress is provided —
+ * through the constructor/methods `native-fetch.ts` captured (ROK-1754 r3).
  */
 export async function uploadAvatar(
     file: File,
@@ -71,12 +73,12 @@ function sendAvatarXhr(
     onProgress: (percent: number) => void,
 ): Promise<{ customAvatarUrl: string }> {
     return new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${API_BASE_URL}/users/me/avatar`);
+        const xhr = new NativeXHR();
+        nativeXhr.open(xhr, 'POST', `${API_BASE_URL}/users/me/avatar`);
 
         const token = getAuthToken();
         if (token) {
-            xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+            nativeXhr.setRequestHeader(xhr, 'Authorization', `Bearer ${token}`);
         }
 
         xhr.upload.addEventListener('progress', (e) => {
@@ -97,7 +99,7 @@ function sendAvatarXhr(
         });
 
         xhr.addEventListener('error', () => reject(new Error('Upload failed')));
-        xhr.send(formData);
+        nativeXhr.send(xhr, formData);
     });
 }
 
