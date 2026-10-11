@@ -48,6 +48,7 @@ describe('EventCalendarLine', () => {
         const open = within(line).getByRole('link', { name: C.open });
         expect(open).toHaveAttribute('href', OPEN_URL);
         expect(open).toHaveAttribute('target', '_blank');
+        expect(open).toHaveClass('min-h-11', 'min-w-11'); // design-system §2 tap target: 44px
     });
 
     it('synced without an openUrl shows the line but no Open link', async () => {

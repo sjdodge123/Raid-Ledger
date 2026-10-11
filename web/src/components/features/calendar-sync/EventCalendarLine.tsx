@@ -24,7 +24,7 @@ function CopyStatus({ copy }: { copy: EventCalendarCopy }) {
             <span className="text-success">{C.on(calendar)}</span>
             {copy.openUrl && (
                 <a href={copy.openUrl} target="_blank" rel="noopener noreferrer"
-                    className="ml-auto font-medium text-foreground underline underline-offset-2 hover:text-success">
+                    className="ml-auto inline-flex min-h-11 min-w-11 items-center justify-center font-medium text-foreground underline underline-offset-2 hover:text-success">
                     {C.open}
                 </a>
             )}
