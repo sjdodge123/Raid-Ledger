@@ -37,8 +37,7 @@ function buildSkipOpts(pendingSlot: { role: RosterRole; position: number } | nul
 
 function useSignupHandlers(eventId: number, options: { shouldShowCharacterModal: boolean }) {
     const signup = useSignup(eventId);
-    const cancelSignup = useCancelSignup(eventId);
-    const announce = useSignupCalendarToast(eventId);
+    const cancelSignup = useCancelSignup(eventId), announce = useSignupCalendarToast(eventId);
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [preSelectedRole, setPreSelectedRole] = useState<CharacterRole | undefined>(undefined);
     const [pendingSlot, setPendingSlot] = useState<{ role: RosterRole; position: number } | null>(null);
