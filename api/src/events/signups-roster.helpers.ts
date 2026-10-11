@@ -39,6 +39,7 @@ export function buildRosterIdentity(row: {
   };
 }
 
+/** The single roster-assignment character builder (ROK-1761 dedupe). */
 export function buildRosterCharacter(characters: CharacterRow) {
   if (!characters) return null;
   return {
@@ -74,7 +75,7 @@ export function formatRoleLabel(r: string): string {
   return r.charAt(0).toUpperCase() + r.slice(1);
 }
 
-/** Build character DTO for signup response. */
+/** Build character DTO for signup response — the single copy (ROK-1761 dedupe). */
 export function buildCharacterDto(
   character: typeof schema.characters.$inferSelect,
 ): SignupCharacterDto {

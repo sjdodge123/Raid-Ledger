@@ -1,11 +1,17 @@
 /**
- * ROK-1761: roster assignment characters carry race / ruleset / gameVariant so
- * the web can draw the WoW: Forever fallback portrait. Both roster builders
- * (assignments read + roster query) must fill them from the characters row.
+ * ROK-1761: roster assignment characters carry race / ruleset / gameVariant,
+ * and signup characters carry gameId / gameVariant / ruleset, so the web can
+ * draw the WoW: Forever fallback portrait from the CHARACTER's own game. One
+ * copy of each builder lives in signups-roster.helpers; both roster-assignment
+ * builders must route through it.
  */
 import type * as schema from '../drizzle/schema';
 import { buildRosterAssignmentResponse } from './signup-response.helpers';
-import { buildRosterAssignmentResponseDto } from './signups-roster.helpers';
+import {
+  buildCharacterDto,
+  buildRosterAssignmentResponseDto,
+  buildRosterCharacter,
+} from './signups-roster.helpers';
 
 type CharacterRow = typeof schema.characters.$inferSelect;
 type SignupRow = typeof schema.eventSignups.$inferSelect;
@@ -31,6 +37,13 @@ const forever = {
   race: 'Night Elf',
   ruleset: 'normal',
   gameVariant: null,
+  gameId: 7,
+  isMain: true,
+  spec: null,
+  itemLevel: null,
+  level: 25,
+  faction: 'alliance',
+  professions: null,
 } as CharacterRow;
 
 const nonWow = {
@@ -41,53 +54,55 @@ const nonWow = {
   race: null,
   ruleset: null,
   gameVariant: null,
+  gameId: 42,
 } as CharacterRow;
 
-const builders = [
+describe('buildRosterCharacter — Forever portrait fields (ROK-1761)', () => {
+  it('a Forever character carries race, ruleset and gameVariant', () => {
+    expect(buildRosterCharacter(forever)).toEqual(
+      expect.objectContaining({
+        name: 'Fernwhisper',
+        className: 'Druid',
+        race: 'Night Elf',
+        ruleset: 'normal',
+        gameVariant: null,
+      }),
+    );
+  });
+
+  it('a non-WoW character carries nulls', () => {
+    expect(buildRosterCharacter(nonWow)).toEqual(
+      expect.objectContaining({ race: null, ruleset: null, gameVariant: null }),
+    );
+  });
+
+  it('no character stays null', () => {
+    expect(buildRosterCharacter(null)).toBeNull();
+  });
+});
+
+describe.each([
   ['buildRosterAssignmentResponse', buildRosterAssignmentResponse],
   ['buildRosterAssignmentResponseDto', buildRosterAssignmentResponseDto],
-] as const;
+] as const)('%s — routes through buildRosterCharacter (ROK-1761)', (_n, build) => {
+  it('the assignment character equals the shared builder output', () => {
+    const res = build({ event_signups: signup, users: null, characters: forever });
+    expect(res.character).toEqual(buildRosterCharacter(forever));
+  });
 
-describe.each(builders)(
-  '%s — Forever portrait fields (ROK-1761)',
-  (_name, build) => {
-    it('a Forever character carries race, ruleset and gameVariant', () => {
-      const res = build({
-        event_signups: signup,
-        users: null,
-        characters: forever,
-      });
-      expect(res.character).toEqual(
-        expect.objectContaining({
-          name: 'Fernwhisper',
-          className: 'Druid',
-          race: 'Night Elf',
-          ruleset: 'normal',
-          gameVariant: null,
-        }),
-      );
-    });
+  it('no character stays null', () => {
+    const res = build({ event_signups: signup, users: null, characters: null });
+    expect(res.character).toBeNull();
+  });
+});
 
-    it('a non-WoW character carries nulls', () => {
-      const res = build({
-        event_signups: signup,
-        users: null,
-        characters: nonWow,
-      });
-      expect(res.character).toEqual(
-        expect.objectContaining({
-          race: null,
-          ruleset: null,
-          gameVariant: null,
-        }),
-      );
-    });
-
-    it('no character stays null', () => {
-      expect(
-        build({ event_signups: signup, users: null, characters: null })
-          .character,
-      ).toBeNull();
-    });
-  },
-);
+describe('buildCharacterDto — the character’s own game (ROK-1761)', () => {
+  it('carries gameId, gameVariant and ruleset from the character row', () => {
+    expect(buildCharacterDto(forever)).toEqual(
+      expect.objectContaining({ gameId: 7, gameVariant: null, ruleset: 'normal' }),
+    );
+    expect(buildCharacterDto(nonWow)).toEqual(
+      expect.objectContaining({ gameId: 42, gameVariant: null, ruleset: null }),
+    );
+  });
+});
