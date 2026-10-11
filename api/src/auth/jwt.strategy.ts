@@ -11,6 +11,7 @@ import {
   suspendedMessage,
   kickCooldownMessage,
   isKickExpired,
+  deactivatedException,
 } from './auth-status.helpers';
 
 interface JwtPayload {
@@ -36,24 +37,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    // ROK-1366 D2: a magic link is redeemed once, never used as a bearer —
-    // covers links signed with JWT_SECRET before the purpose-secret switch.
-    if (payload.magicLink) {
-      throw new UnauthorizedException(
-        'Magic-link tokens are not session tokens',
-      );
-    }
+    assertSessionPayload(payload);
     if (await this.tokenBlocklist.isBlocked(payload.sub, payload.iat)) {
       throw new UnauthorizedException('Token has been revoked');
     }
-    const cached = getCachedAuthUser(payload.sub);
-    if (cached) {
-      assertAuthUserActive(cached);
-      return buildAuthResult(payload, cached);
+    let user = getCachedAuthUser(payload.sub);
+    if (!user) {
+      user = await this.loadAuthUser(payload.sub);
+      setCachedAuthUser(payload.sub, user);
     }
-    const user = await this.loadAuthUser(payload.sub);
-    setCachedAuthUser(payload.sub, user);
-    assertAuthUserActive(user);
+    assertAuthUserActive(user, payload);
     return buildAuthResult(payload, user);
   }
 
@@ -76,21 +69,55 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 }
 
 /**
- * Per-request lockout for banned/kicked users (§9.2). Throws 401 — NOT 403 —
- * so the SPA runs its refresh→logout→/login cycle where the suspension reason
- * renders. Read-only: no cache write / no kick auto-clear here (the clear
- * happens at the next login via `assertKickCooldownOrClear`).
+ * Shape gate before any lookup. ROK-1366 D2: a magic link is redeemed once,
+ * never used as a bearer — covers links signed with JWT_SECRET before the
+ * purpose-secret switch. ROK-1764: passport-jwt accepts ANY token signed with
+ * JWT_SECRET (e.g. the deferred-signup intent token, which has no `sub`), so
+ * a `sub` that is not a positive integer is a 401 — never a users query.
  */
-function assertAuthUserActive(user: {
-  bannedAt: Date | null;
-  banReason: string | null;
-  kickedAt: Date | null;
-}): void {
+/** `users.id` is a serial (int4); a larger sub would 500 the lookup. */
+const INT4_MAX = 2_147_483_647;
+
+function assertSessionPayload(payload: JwtPayload): void {
+  if (payload.magicLink) {
+    throw new UnauthorizedException('Magic-link tokens are not session tokens');
+  }
+  const sub: unknown = payload.sub;
+  const isUserId =
+    typeof sub === 'number' &&
+    Number.isInteger(sub) &&
+    sub > 0 &&
+    sub <= INT4_MAX;
+  if (!isUserId) {
+    throw new UnauthorizedException('Invalid session token');
+  }
+}
+
+/**
+ * Per-request lockout for banned/kicked/deactivated users (§9.2, ROK-1753).
+ * Throws 401 — NOT 403 — so the SPA runs its refresh→logout→/login cycle
+ * where the reason renders. Read-only: no cache write / no kick auto-clear
+ * here (the clear happens at the next login via `assertKickCooldownOrClear`).
+ * An admin impersonating a deactivated user is let through, matching
+ * NotDeactivatedGuard's impersonation bypass; ban/kick still apply.
+ */
+function assertAuthUserActive(
+  user: {
+    bannedAt: Date | null;
+    banReason: string | null;
+    kickedAt: Date | null;
+    deactivatedAt: Date | null;
+  },
+  payload: Pick<JwtPayload, 'impersonatedBy'>,
+): void {
   if (user.bannedAt) {
     throw new UnauthorizedException(suspendedMessage(user.banReason));
   }
   if (user.kickedAt && !isKickExpired(user.kickedAt)) {
     throw new UnauthorizedException(kickCooldownMessage(user.kickedAt));
+  }
+  if (user.deactivatedAt && !payload.impersonatedBy) {
+    throw deactivatedException();
   }
 }
 

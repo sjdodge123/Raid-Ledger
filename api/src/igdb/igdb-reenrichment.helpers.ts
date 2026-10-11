@@ -12,6 +12,7 @@ import type * as schema from '../drizzle/schema';
 import { games } from '../drizzle/schema';
 import type { IgdbApiGame } from './igdb.constants';
 import { IGDB_CONFIG } from './igdb.constants';
+import { escapeApicalypseString } from './igdb-api.helpers';
 import {
   buildExternalGamesQuery,
   parseIgdbEnrichment,
@@ -153,7 +154,7 @@ async function searchByName(
   queryIgdb: QueryIgdb,
   name: string,
 ): Promise<IgdbApiGame | null> {
-  const sanitized = name.replace(/"/g, '\\"');
+  const sanitized = escapeApicalypseString(name);
   const query = `search "${sanitized}"; fields ${IGDB_CONFIG.EXPANDED_FIELDS}; limit 5;`;
   const results = await queryIgdb(query);
   if (results.length === 0) return null;

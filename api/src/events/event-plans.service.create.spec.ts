@@ -87,9 +87,15 @@ function makeDiscordMock() {
 }
 
 function makeQueueMock() {
-  const mockJob = { remove: jest.fn().mockResolvedValue(undefined) };
+  // ROK-1762: `getState` because `schedulePollClose` probes the id first;
+  // a pending poll-close is left alone, so `queue.remove` is never reached.
+  const mockJob = {
+    remove: jest.fn().mockResolvedValue(undefined),
+    getState: jest.fn().mockResolvedValue('delayed'),
+  };
   return {
     add: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn().mockResolvedValue(1),
     getJob: jest.fn().mockResolvedValue(mockJob),
     _mockJob: mockJob,
   };

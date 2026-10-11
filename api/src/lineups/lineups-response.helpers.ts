@@ -39,7 +39,7 @@ import { effectiveNominationCap } from './lineups-nomination-cap.helpers';
 import { loadStillWaitingOnVoters } from './lineups-quorum-waiting.helpers';
 import {
   loadViewerInterests,
-  viewerFlagsFor,
+  viewerEntryFieldsFor,
   type ViewerInterestMap,
 } from './viewer-interests.helpers';
 
@@ -69,6 +69,8 @@ interface EnrichmentMaps {
   unlinkedSteamMembers: UnlinkedSteamMember[];
   /** ROK-1314: viewer's per-game own/wishlist flags (empty when anonymous). */
   viewerInterests: ViewerInterestMap;
+  /** ROK-1375: false when anonymous — the playtime field is then omitted. */
+  hasViewer: boolean;
 }
 
 /** Map a single entry row to the response shape with enrichment. */
@@ -113,9 +115,13 @@ function mapEntry(
     // ROK-1314: historical low, so the nomination card resolves `best-price`
     // with the same rule Common Ground uses.
     itadLowestPrice: pricing?.itadLowestPrice ?? null,
-    // ROK-1314: additive viewer personalization — explicit false, never
-    // undefined, and never another viewer's flags.
-    ...viewerFlagsFor(enrichment.viewerInterests, e.gameId),
+    // ROK-1314 flags + ROK-1375 playtime from ONE batched viewer query.
+    // Flags are explicit false; playtime is omitted when anonymous.
+    ...viewerEntryFieldsFor(
+      enrichment.viewerInterests,
+      e.gameId,
+      enrichment.hasViewer,
+    ),
     playerCount: e.playerCount ?? null,
     // ROK-1401: raw value — positive / 0 / null, never blended with IGDB.
     cooptimusOnlineMax: e.cooptimusOnlineMax ?? null,
@@ -288,6 +294,7 @@ async function fetchEnrichment(
     unlinkedSteamCount: uc,
     unlinkedSteamMembers: um,
     viewerInterests,
+    hasViewer: viewerId != null,
   };
 }
 

@@ -48,6 +48,7 @@ describe('QuestPrereqChain', () => {
         expect(mark).toHaveClass('text-success');
         expect(mark).toHaveTextContent('✓');
         expect(mark.querySelector('.sr-only')).toHaveTextContent('done');
+        expect(mark.querySelector('[aria-hidden="true"]'), 'the glyph is decorative (ROK-1758)').toHaveTextContent('✓');
     });
 
     it('marks a needed step with text-warning and sr-only "needed"', () => {
@@ -56,6 +57,7 @@ describe('QuestPrereqChain', () => {
         expect(mark).toHaveClass('text-warning');
         expect(mark).not.toHaveClass('text-success');
         expect(mark.querySelector('.sr-only')).toHaveTextContent('needed');
+        expect(mark.querySelector('[aria-hidden="true"]'), 'the glyph is decorative (ROK-1758)').toHaveTextContent('○');
     });
 
     it('keeps the current-quest class on the current step', () => {

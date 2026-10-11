@@ -8,6 +8,7 @@ import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/sile
 import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 import { consumePendingPollShare } from '../lib/poll-share-redirect';
+import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
 
 /**
  * Handles OAuth callback - exchanges one-time auth code for JWT token.
@@ -125,8 +126,7 @@ function resolveExistingUserRedirect(searchParams: URLSearchParams, navigate: Re
     if (storedIntent) {
         sessionStorage.removeItem('join_intent');
         try {
-            const d = JSON.parse(storedIntent) as { intent: string; eventId: string; token: string };
-            navigate(`/join?intent=${d.intent}&eventId=${d.eventId}&token=${encodeURIComponent(d.token)}`, { replace: true });
+            navigate(joinIntentPath(JSON.parse(storedIntent) as StoredJoinIntent), { replace: true });
             return true;
         } catch { /* fall through */ }
     }

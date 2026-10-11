@@ -25,6 +25,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { MagicLinkService } from '../auth/magic-link.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -46,7 +47,7 @@ import {
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestSignInLinkController {
   constructor(
     @Inject(DrizzleAsyncProvider)

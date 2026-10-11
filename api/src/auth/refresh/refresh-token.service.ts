@@ -7,12 +7,20 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { getSessionLengthDays } from '../../settings/settings-session.helpers';
 import { TokenBlocklistService } from '../token-blocklist.service';
+import { deactivatedException } from '../auth-status.helpers';
 import {
   type AuthMethod,
   generateRawToken,
   hashToken,
 } from './refresh-token.helpers';
 import { defined } from '../../common/defined.helpers';
+import { REDIS_CLIENT } from '../../redis/redis.module';
+import type Redis from 'ioredis';
+import {
+  claimGraceOnce,
+  indeterminateReplayError,
+  replayVerdict,
+} from './refresh-grace.helpers';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
 export interface IssuedRefreshToken {
@@ -22,17 +30,13 @@ export interface IssuedRefreshToken {
 }
 
 /**
- * Concurrent-refresh race grace: a parent rotated within this window mints a
- * sibling instead of tripping theft detection (multi-tab session restore).
- */
-const RACE_GRACE_MS = 60_000;
-
-/**
  * ROK-1353: refresh-token rotation service.
  *
  * issue() mints a new family; rotate() atomically consumes the presented row
- * and mints its child; reuse of a consumed row (outside the ±60s grace) is
- * treated as theft → the whole family is revoked + the user is blocklisted.
+ * and mints its child; reuse of a consumed row (outside the 10 s race grace)
+ * is treated as theft → the whole family is revoked + the user is
+ * blocklisted. ROK-1755: inside the grace a parent mints at most one
+ * sibling; later in-window replays get a non-revoking 409 `refresh_raced`.
  * revokeAllForUser/revokeFamily back logout + deactivation.
  */
 @Injectable()
@@ -44,6 +48,7 @@ export class RefreshTokenService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
     private readonly blocklist: TokenBlocklistService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
   /** Mint a brand-new refresh family for a fresh login. */
@@ -69,10 +74,17 @@ export class RefreshTokenService {
    * Rotate the presented token. Atomic consume via conditional UPDATE; on a
    * 0-row result, disambiguate race-loser (accept) vs reuse (revoke family)
    * vs unknown/expired (401 — caller throws). Returns the new token on
-   * success, or null when the caller should reject with 401.
+   * success, or null when the caller should reject with 401. Throws 409/503
+   * (no revoke) for an in-window race beyond the one sibling / a Redis error.
+   * ROK-1753: a deactivated (not banned) holder gets a 401 `USER_DEACTIVATED`
+   * BEFORE the consume, so nothing rotates or revokes and reactivation
+   * resumes the token. A banned holder keeps the original ban behaviour.
    */
   async rotate(rawToken: string): Promise<IssuedRefreshToken | null> {
     const presentedHash = hashToken(rawToken);
+    if (await this.holderIsDeactivated(presentedHash)) {
+      throw deactivatedException();
+    }
     const consumed = await this.consumeRow(presentedHash);
     if (consumed) return this.mintChild(consumed);
     return this.handleNoConsume(presentedHash);
@@ -115,6 +127,27 @@ export class RefreshTokenService {
   }
 
   // ── internals ──────────────────────────────────────────────────────────
+
+  /**
+   * ROK-1753: does the presented token belong to a deactivated, NOT banned
+   * user? A ban also stamps `deactivatedAt`, so a banned holder falls through
+   * to the pre-ROK-1753 rotate path (same ban-first precedence as
+   * JwtStrategy). Runs for any hash, so a deactivated user's replayed
+   * consumed token skips reuse detection — harmless: deactivation already
+   * revoked every family, and detection resumes after reactivation.
+   */
+  private async holderIsDeactivated(tokenHash: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({
+        deactivatedAt: schema.users.deactivatedAt,
+        bannedAt: schema.users.bannedAt,
+      })
+      .from(schema.refreshTokens)
+      .innerJoin(schema.users, eq(schema.users.id, schema.refreshTokens.userId))
+      .where(eq(schema.refreshTokens.tokenHash, tokenHash))
+      .limit(1);
+    return row?.deactivatedAt != null && row.bannedAt == null;
+  }
 
   /** Atomically consume the row if it is live; returns it or undefined. */
   private async consumeRow(tokenHash: string) {
@@ -168,9 +201,10 @@ export class RefreshTokenService {
    * single-flight only coordinates within a single JS context — a browser
    * session-restore can fire several refreshes with the same parent before
    * any Set-Cookie lands. A parent rotated within the last RACE_GRACE_MS is
-   * therefore a race LOSER, not a thief: mint it a sibling child on the same
-   * family (family revoke still kills every leaf). Replays older than the
-   * grace are treated as theft.
+   * therefore a race LOSER, not a thief: mint it ONE sibling child on the
+   * same family. ROK-1755: further in-window replays throw a non-revoking
+   * 409 `refresh_raced` (a Redis failure → 503); replays older than the grace
+   * are treated as theft.
    */
   private async handleNoConsume(
     tokenHash: string,
@@ -180,7 +214,12 @@ export class RefreshTokenService {
     if (existing.revokedAt) return null;
     if (!existing.rotatedAt) return null;
     const rotatedAgoMs = Date.now() - existing.rotatedAt.getTime();
-    if (rotatedAgoMs <= RACE_GRACE_MS) {
+    const verdict = await replayVerdict(rotatedAgoMs, () =>
+      claimGraceOnce(this.redis, existing.id),
+    );
+    const indeterminate = indeterminateReplayError(verdict);
+    if (indeterminate) throw indeterminate;
+    if (verdict === 'sibling') {
       this.logger.debug(
         `ROK-1353: concurrent-refresh race loser for user ${existing.userId} (rotated ${rotatedAgoMs}ms ago) — minting sibling`,
       );

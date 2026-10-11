@@ -10,6 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DemoTestService } from './demo-test.service';
 import { DemoTestLineupService } from './demo-test-lineup.service';
 import { LineupSteamNudgeService } from '../lineups/lineup-steam-nudge.service';
@@ -35,7 +36,7 @@ import type { PlayerCountSeedResult } from './demo-test-player-count.helpers';
  */
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestGamesController {
   constructor(
     private readonly demoTestService: DemoTestService,

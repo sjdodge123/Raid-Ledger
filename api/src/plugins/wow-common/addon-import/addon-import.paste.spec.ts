@@ -15,6 +15,9 @@ import {
   buildRaidPayload,
   buildWho,
 } from './testing/addon-fixture.builder';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 /** ROK-1737 — one paste carrying char + guild + raid ("Export all"). */
 

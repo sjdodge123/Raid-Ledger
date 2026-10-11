@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useRefreshCharacterFromArmory } from '../hooks/use-wow-mutations';
+import { safeHttpUrl } from '../../../lib/safe-http-url';
 
 interface ProfileCharacterActionsProps {
     characterId: string;
@@ -88,10 +89,11 @@ export function ProfileCharacterActions({
     characterId, lastSyncedAt, region, gameVariant, profileUrl,
 }: ProfileCharacterActionsProps) {
     const cooldownRemaining = useRefreshCooldown(lastSyncedAt);
+    const armoryUrl = safeHttpUrl(profileUrl);
     return (
         <>
             {!!lastSyncedAt && <RefreshButton characterId={characterId} region={region} gameVariant={gameVariant} cooldownRemaining={cooldownRemaining} />}
-            {profileUrl && <ArmoryLink profileUrl={profileUrl} />}
+            {armoryUrl && <ArmoryLink profileUrl={armoryUrl} />}
         </>
     );
 }

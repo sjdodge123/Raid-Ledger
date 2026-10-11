@@ -24,6 +24,7 @@ import { defined } from '../common/testing/narrow';
 import * as schema from '../drizzle/schema';
 import { REFRESH_COOKIE_NAME } from '../auth/refresh/refresh-cookie.helpers';
 import { CSP_REPORT_ROUTE } from '../csp-report/csp-report.constants';
+import { CROSS_SITE_REJECTED_MESSAGE } from '../auth/refresh/same-origin-cookie-post.guard';
 
 const APP_HOST = 'raid.gamernight.net';
 const SAME_ORIGIN = `https://${APP_HOST}`;
@@ -138,14 +139,18 @@ async function expectRejectedWithoutRotation(
 // ── report mode (rollback) ─────────────────────────────────────
 
 describe('CORS_ORIGIN=auto, CORS_AUTO_MODE=report (ROK-1732 AC2)', () => {
-  it('allows a sibling-origin refresh as before and logs one would-reject line', async () => {
+  it('lets a sibling-origin refresh past the CORS gate and logs one would-reject line', async () => {
     setAutoMode('report');
     const warn = jest.spyOn(Logger.prototype, 'warn');
     const rawToken = await loginAndGetRefreshCookie();
 
     const res = await refresh(rawToken, { origin: SIBLING_ORIGIN });
 
-    expect(res.status).toBe(200);
+    // The CORS gate passed it (Origin reflected); since ROK-1755 the route's
+    // own origin guard then refuses it — 403, not the CORS body, no token.
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ message: CROSS_SITE_REJECTED_MESSAGE });
+    expect(res.body).not.toHaveProperty('access_token');
     expect(res.headers['access-control-allow-origin']).toBe(SIBLING_ORIGIN);
     expect(res.headers['access-control-allow-credentials']).toBe('true');
     const lines = corsAutoWarnings(warn);

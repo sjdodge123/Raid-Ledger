@@ -4,35 +4,21 @@
  */
 import { lazy } from 'react';
 import type { ComponentType } from 'react';
+import { claimChunkReload, isChunkLoadError } from './lib/chunk-error';
 
-export const CHUNK_RELOAD_KEY = 'chunk-reload-attempted';
-
-function isChunkLoadError(error: unknown): boolean {
-    if (!(error instanceof Error)) return false;
-    const msg = error.message.toLowerCase();
-    return (
-        msg.includes('dynamically imported module') ||
-        msg.includes('failed to fetch') ||
-        msg.includes('loading chunk') ||
-        msg.includes('loading css chunk')
-    );
-}
+export { CHUNK_RELOAD_KEY } from './lib/chunk-error';
 
 /**
  * Wraps React.lazy() to auto-reload the page on stale chunk import failures.
- * On first failure: sets a sessionStorage flag and reloads.
- * On second failure: throws so the ErrorBoundary can show a fallback.
+ * First failure: stamps sessionStorage and reloads. A failure within
+ * `CHUNK_RELOAD_WINDOW_MS` of that reload throws to the ErrorBoundary.
  */
-function lazyWithRetry<
+export function lazyWithRetry<
     T extends ComponentType<Record<string, never>>,
 >(importFn: () => Promise<{ default: T }>) {
     return lazy(() =>
         importFn().catch((error: unknown) => {
-            if (
-                isChunkLoadError(error) &&
-                !sessionStorage.getItem(CHUNK_RELOAD_KEY)
-            ) {
-                sessionStorage.setItem(CHUNK_RELOAD_KEY, '1');
+            if (isChunkLoadError(error) && claimChunkReload()) {
                 window.location.reload();
                 return new Promise<{ default: T }>(() => {});
             }

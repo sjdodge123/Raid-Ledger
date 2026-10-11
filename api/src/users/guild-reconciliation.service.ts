@@ -62,7 +62,25 @@ const activeSnowflakeUser = () =>
     not(like(schema.users.discordId, 'unlinked:%')),
   );
 
-type ActiveUser = { id: number; discordId: string; avatar: string | null };
+type ActiveUser = {
+  id: number;
+  discordId: string;
+  avatar: string | null;
+  guildMemberSeenAt: Date | null;
+};
+
+/**
+ * ROK-1759: a gap is a candidate missing from the member snapshot whose stamp
+ * predates the fetch. A user the GuildMemberAdd listener stamped while the
+ * fetch was in flight joined AFTER the snapshot — not a leaver.
+ */
+const isGap = (
+  u: ActiveUser,
+  members: GuildMemberAvatars,
+  fetchStartedAt: Date,
+): boolean =>
+  !members.has(u.discordId) &&
+  !(u.guildMemberSeenAt && u.guildMemberSeenAt >= fetchStartedAt);
 
 @Injectable()
 export class GuildReconciliationService {
@@ -90,6 +108,7 @@ export class GuildReconciliationService {
    * failure). Public so the integration test can call it directly.
    */
   async runReconciliation(): Promise<void | false> {
+    const fetchStartedAt = new Date();
     const members = await this.fetchCurrentGuildMembers();
     if (!members) {
       this.logger.warn(
@@ -100,8 +119,8 @@ export class GuildReconciliationService {
     await this.stampSeenMembers([...members.keys()]);
     const candidates = await this.loadActiveDbUsers();
     const skipped = await this.countNeverSeen();
-    const gaps = candidates.filter((u) => !members.has(u.discordId));
-    await this.deactivateGap(gaps);
+    const gaps = candidates.filter((u) => isGap(u, members, fetchStartedAt));
+    await this.deactivateGap(gaps, fetchStartedAt);
     this.logger.log(
       `[ROK-1282] Reconciliation deactivated ${gaps.length} user(s) ` +
         `(checked ${candidates.length} active DB user(s) against ${members.size} guild member(s); ` +
@@ -170,6 +189,7 @@ export class GuildReconciliationService {
         id: schema.users.id,
         discordId: schema.users.discordId,
         avatar: schema.users.avatar,
+        guildMemberSeenAt: schema.users.guildMemberSeenAt,
       })
       .from(schema.users)
       .where(
@@ -180,13 +200,21 @@ export class GuildReconciliationService {
     return rows as ActiveUser[];
   }
 
-  /** Deactivate each gap via the shared notification path (idempotent). */
-  private async deactivateGap(gaps: { id: number }[]): Promise<void> {
+  /**
+   * Deactivate each gap via the shared notification path (idempotent). ROK-1759:
+   * `seenBefore` makes the UPDATE itself spare a user stamped after the fetch
+   * started — closes the window between the candidate load and this write.
+   */
+  private async deactivateGap(
+    gaps: { id: number }[],
+    fetchStartedAt: Date,
+  ): Promise<void> {
     for (const u of gaps) {
       try {
         await this.discordNotificationService.deactivateUser(
           u.id,
           'reconciliation-sweep',
+          { seenBefore: fetchStartedAt },
         );
       } catch (err: unknown) {
         this.logger.warn(
