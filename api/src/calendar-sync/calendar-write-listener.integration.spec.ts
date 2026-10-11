@@ -19,7 +19,6 @@ import {
 import {
   createFutureEvent,
   createMemberAndLogin,
-  signupWithPrefs,
 } from '../events/signups.integration.spec-helpers';
 import {
   APP_EVENT_EVENTS,
@@ -119,6 +118,7 @@ async function signUp(eventId: number, userId: number | null) {
     .values({
       eventId,
       userId,
+      discordUserId: userId === null ? `discord-only-${eventId}` : null,
       status: 'signed_up',
       confirmationStatus: 'pending',
     })
@@ -297,7 +297,13 @@ describe('event lifecycle emits', () => {
 it('end to end: a real sign-up queues the triple; reconciling it writes one copy', async () => {
   const m = await member();
   const eventId = await newEvent();
-  await signupWithPrefs(testApp, m.token, eventId, []);
+  const res = await testApp.request
+    .post(`/events/${eventId}/signup`)
+    .set('Authorization', `Bearer ${m.token}`)
+    .send({});
+  expect({ status: res.status, body: res.body as unknown }).toMatchObject({
+    status: 201,
+  });
   await waitFor(() => expectQueued(m, eventId));
   const job = await jobFor(m, eventId);
   if (!job) throw new Error('reconcile job vanished after waitFor');
