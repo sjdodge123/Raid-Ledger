@@ -21,12 +21,15 @@ import {
   indeterminateReplayError,
   replayVerdict,
 } from './refresh-grace.helpers';
+import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
 export interface IssuedRefreshToken {
   rawToken: string;
   maxAgeMs: number;
   userId: number;
+  /** ROK-1754: the refresh family — keys the impersonation marker. */
+  familyId: string;
 }
 
 /**
@@ -49,6 +52,7 @@ export class RefreshTokenService {
     private readonly settings: SettingsService,
     private readonly blocklist: TokenBlocklistService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly impersonation: ImpersonationSessionService,
   ) {}
 
   /** Mint a brand-new refresh family for a fresh login. */
@@ -67,7 +71,7 @@ export class RefreshTokenService {
       userAgent: opts.userAgent ?? null,
       expiresAt: new Date(Date.now() + maxAgeMs),
     });
-    return { rawToken, maxAgeMs, userId };
+    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**
@@ -90,7 +94,10 @@ export class RefreshTokenService {
     return this.handleNoConsume(presentedHash);
   }
 
-  /** Revoke every active refresh row for a user (deactivation). */
+  /**
+   * Revoke every active refresh row for a user (deactivation, ban). ROK-1754:
+   * also ends every impersonation this user is running.
+   */
   async revokeAllForUser(userId: number): Promise<void> {
     await this.db
       .update(schema.refreshTokens)
@@ -101,9 +108,13 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
+    await this.impersonation.endForUser(userId, 'session_revoked');
   }
 
-  /** Revoke every active row in a family (logout / reuse-detection). */
+  /**
+   * Revoke every active row in a family (logout / reuse-detection). ROK-1754:
+   * also ends the family's impersonation marker (`session_revoked`).
+   */
   async revokeFamily(familyId: string): Promise<void> {
     await this.db
       .update(schema.refreshTokens)
@@ -114,6 +125,7 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
+    await this.impersonation.end(familyId, 'session_revoked');
   }
 
   /** Look up an active (un-rotated, un-revoked, unexpired) row by hash. */
@@ -188,7 +200,12 @@ export class RefreshTokenService {
         replacedBy: defined(child, 'inserted child refresh token row').id,
       })
       .where(eq(schema.refreshTokens.id, parent.id));
-    return { rawToken, maxAgeMs, userId: parent.userId };
+    return {
+      rawToken,
+      maxAgeMs,
+      userId: parent.userId,
+      familyId: parent.familyId,
+    };
   }
 
   /**
