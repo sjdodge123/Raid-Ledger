@@ -17,6 +17,7 @@ import { Field } from '../../components/ui/field';
 import { Input } from '../../components/ui/input';
 import { Modal } from '../../components/ui/modal';
 import { useDirtyCloseGuard } from '../../hooks/use-dirty-close-guard';
+import { clearAccessToken } from '../../lib/api/access-token-store';
 
 const KEYWORD_DISCARD = 'Closing now clears the confirmation keyword you typed.';
 const PASSWORD_DISCARD = "The new admin password won't be shown again. Copy it before you leave for the login page.";
@@ -133,8 +134,7 @@ function ConfirmTextInput({ value, onChange, keyword, disabled }: {
 
 /** Every close path of the one-time password view leads to login — after a confirm. */
 function goToLogin(): void {
-    localStorage.removeItem('raid_ledger_token');
-    localStorage.removeItem('raid_ledger_original_token');
+    clearAccessToken();
     window.location.href = '/login';
 }
 

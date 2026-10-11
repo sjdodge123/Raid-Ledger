@@ -5,17 +5,17 @@ import { LineupRealtimeEventNames } from '@raid-ledger/contract';
 import { DETAIL_KEY, LINEUPS_PREFIX } from './use-lineups';
 import { TIEBREAKER_KEY } from './use-tiebreaker';
 import { resolveSocketTarget } from '../lib/socket-target';
+import { socketAuth } from '../lib/api/socket-auth';
 
 /**
  * Open a `/lineups` namespace socket and join the `lineup:<id>` room.
  * Shared by the lineup and scheduling-poll realtime hooks (ROK-1551).
  */
 export function createLineupSocket(lineupId: number): Socket {
-  const token = localStorage.getItem('raid_ledger_token');
   const { url, path } = resolveSocketTarget('/lineups');
   const socket = io(url, {
     path,
-    ...(token ? { auth: { token } } : {}),
+    auth: socketAuth,
     transports: ['websocket', 'polling'],
     // ROK-1533: socket.io-client 4.8 made `tryAllTransports` default to FALSE,
     // so a failed FIRST transport is fatal instead of falling through to the

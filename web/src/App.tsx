@@ -8,7 +8,10 @@ import { Toaster } from 'sonner';
 import { useThemeStore } from './stores/theme-store';
 import { useConnectivityStore } from './stores/connectivity-store';
 import { queryClient } from './lib/query-client';
-import { getAuthToken, getCachedUser, fetchCurrentUser } from './hooks/use-auth';
+import { getCachedUser, fetchCurrentUser } from './hooks/use-auth';
+import { getAuthMethod } from './lib/api/silent-reauth';
+import { startBootSession, awaitBootSession } from './lib/api/boot-session';
+import { installCrossTabAuth } from './lib/api/cross-tab-auth';
 import { Layout } from './components/layout';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
@@ -26,11 +29,15 @@ import { AppRoutes } from './app-routes';
 // no stored session or /auth/me rejects it with 401/403 (OQ6).
 const _magicLinkToken = takeCapturedMagicLinkToken();
 if (_magicLinkToken) void startMagicLinkRedeem(_magicLinkToken);
+// ROK-1754 §3.2/§3.3: re-mint the in-memory token from the refresh cookie
+// (StartupGate waits for it), and follow logout/identity changes in other tabs.
+void startBootSession();
+installCrossTabAuth(queryClient);
 
-// Seed auth cache from localStorage for instant return visits — but not while
+// Seed auth cache from the cached user for instant return visits (a prior sign-in) — but not while
 // a magic link may be swapping in a different user.
 const _cachedUser = getCachedUser();
-if (_cachedUser && getAuthToken() && !_magicLinkToken) {
+if (_cachedUser && getAuthMethod() && !_magicLinkToken) {
   queryClient.setQueryData(['auth', 'me'], _cachedUser);
 }
 
@@ -62,12 +69,10 @@ function useAppBootstrap() {
   }, [startPolling]);
 
   useEffect(() => {
-    if (getAuthToken() || isMagicLinkRedeemPending()) {
-      void queryClient.prefetchQuery({
-        queryKey: ['auth', 'me'],
-        queryFn: fetchCurrentUser,
-        staleTime: 0,
-      });
+    if (getAuthMethod() || isMagicLinkRedeemPending()) {
+      void awaitBootSession().then(() =>
+        queryClient.prefetchQuery({ queryKey: ['auth', 'me'], queryFn: fetchCurrentUser, staleTime: 0 }),
+      );
     }
   }, []);
 }

@@ -11,6 +11,7 @@ import { readClaims } from '../lib/api/token-expiry';
 import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
 import type { UserRole } from '@raid-ledger/contract';
 
 export interface User {
@@ -173,12 +174,11 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
 }
 
 /**
- * ROK-1754 hook point — B2 (`cross-tab-auth.ts`) has not landed yet.
- * TODO(ROK-1754 B2): bump `raid_ledger_identity_epoch` here (B2's helper) so
- * every other tab clears its in-memory token and re-mints from the cookie.
+ * ROK-1754 §3.3: bump the identity epoch so every other tab clears its
+ * in-memory token and re-mints from the shared cookie as the new identity.
  */
 function signalIdentityChange(): void {
-    // no-op until B2's cross-tab helper exists
+    bumpIdentityEpoch();
 }
 
 /**
