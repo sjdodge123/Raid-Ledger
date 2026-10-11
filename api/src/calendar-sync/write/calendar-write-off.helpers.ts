@@ -79,6 +79,32 @@ export async function runCalendarWriteOff(
   }
 }
 
+/** Each non-suppressed link's copy, then its row (resumable per link). */
+async function deleteLiveCopies(
+  db: Db,
+  connectionId: number,
+  provider: WriteProvider,
+  creds: CalendarCredentials,
+): Promise<number> {
+  const links = schema.calendarEventLinks;
+  const live = await db
+    .select()
+    .from(links)
+    .where(
+      and(eq(links.connectionId, connectionId), ne(links.state, 'suppressed')),
+    );
+  let deleted = 0;
+  for (const { id, calendarId, providerEventId } of live) {
+    // A `failed` placeholder ('' ids) has no copy behind it: row only.
+    if (providerEventId) {
+      await provider.deleteEvent(creds, { calendarId, providerEventId });
+      deleted += 1;
+    }
+    await db.delete(links).where(eq(links.id, id));
+  }
+  return deleted;
+}
+
 async function writeOff(
   db: Db,
   conn: ConnectionRow,
@@ -87,15 +113,7 @@ async function writeOff(
 ): Promise<WriteOffOutcome> {
   const links = schema.calendarEventLinks;
   const ofConn = eq(links.connectionId, conn.id);
-  const live = await db
-    .select()
-    .from(links)
-    .where(and(ofConn, ne(links.state, 'suppressed')));
-  for (const link of live) {
-    const { calendarId, providerEventId } = link;
-    await provider.deleteEvent(creds, { calendarId, providerEventId });
-    await db.delete(links).where(eq(links.id, link.id));
-  }
+  const deletedCopies = await deleteLiveCopies(db, conn.id, provider, creds);
   if (conn.dedicatedCalendarId) {
     await deleteCalendar(provider, creds, conn.dedicatedCalendarId);
     await db
@@ -106,7 +124,7 @@ async function writeOff(
   // Only the suppressed rows: a link written after `live` was read (a
   // concurrent reconcile) keeps its row, so its copy is not orphaned (m2).
   await db.delete(links).where(and(ofConn, eq(links.state, 'suppressed')));
-  return { result: 'done', deletedCopies: live.length };
+  return { result: 'done', deletedCopies };
 }
 
 /**

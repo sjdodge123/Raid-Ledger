@@ -51,9 +51,22 @@ export function isFinalAttempt(job: {
 }
 
 /**
- * B1: set the dedicated calendar id only if it is still `expected`. Returns
- * the id the connection holds afterwards — `next` when this call won, the
- * concurrent winner's id when it lost.
+ * The connection can no longer take a dedicated calendar: it was deleted
+ * (disconnect / account delete) or sending was switched off (the write-off
+ * owns the cleanup) while this reconcile ran. Not retryable — the job ends.
+ */
+export class DedicatedTargetGoneError extends NotFoundError {
+  constructor(reason: 'connection_gone' | 'write_disabled') {
+    super(reason);
+  }
+}
+
+/**
+ * B1: set the dedicated calendar id only if it is still `expected` AND
+ * sending is still on (same statement, so a write-off that cleared the id
+ * cannot be undone). Returns the id the connection holds afterwards — `next`
+ * when this call won, the concurrent winner's id when it lost. Throws
+ * `DedicatedTargetGoneError` when the row is gone or sending is off.
  */
 export async function claimDedicatedCalendar(
   db: Db,
@@ -69,16 +82,18 @@ export async function claimDedicatedCalendar(
   const won = await db
     .update(t)
     .set({ dedicatedCalendarId: next, updatedAt: new Date() })
-    .where(and(eq(t.id, connectionId), unchanged))
+    .where(and(eq(t.id, connectionId), eq(t.writeEnabled, true), unchanged))
     .returning({ id: t.id });
   if (won.length > 0) return next;
   const [row] = await db
-    .select({ id: t.dedicatedCalendarId })
+    .select({ id: t.dedicatedCalendarId, writeEnabled: t.writeEnabled })
     .from(t)
     .where(eq(t.id, connectionId))
     .limit(1);
-  // Cleared meanwhile (write-off) — nothing to agree with, so claim it.
-  if (!row?.id) return claimDedicatedCalendar(db, connectionId, null, next);
+  if (!row) throw new DedicatedTargetGoneError('connection_gone');
+  if (!row.writeEnabled) throw new DedicatedTargetGoneError('write_disabled');
+  // Cleared meanwhile (write-off, then re-enabled) — nothing to agree with.
+  if (!row.id) return claimDedicatedCalendar(db, connectionId, null, next);
   return row.id;
 }
 

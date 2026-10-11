@@ -39,6 +39,7 @@ import {
 } from './calendar-write-desired.helpers';
 import {
   claimDedicatedCalendar,
+  DedicatedTargetGoneError,
   errorCode,
   handleFailure,
   saveLink,
@@ -136,7 +137,18 @@ async function resolveTarget(
   const id = await ctx.provider.ensureRaidLedgerCalendar(ctx.creds, knownId);
   const current = ctx.conn.dedicatedCalendarId;
   if (id === current) return id;
-  const winner = await claimDedicatedCalendar(ctx.db, ctx.conn.id, current, id);
+  const winner = await claimDedicatedCalendar(
+    ctx.db,
+    ctx.conn.id,
+    current,
+    id,
+  ).catch(async (err: unknown) => {
+    if (err instanceof DedicatedTargetGoneError)
+      await bestEffort('calendar', () =>
+        ctx.provider.deleteRaidLedgerCalendar(ctx.creds, id),
+      );
+    throw err;
+  });
   if (winner !== id)
     await bestEffort('calendar', () =>
       ctx.provider.deleteRaidLedgerCalendar(ctx.creds, id),
@@ -274,6 +286,9 @@ export async function reconcileCalendarCopy(
       apply({ ...ctx, creds }, desired, event, deps.getClientUrl),
     );
   } catch (err) {
+    // Connection deleted / sending off mid-run: nothing to record, no retry.
+    if (err instanceof DedicatedTargetGoneError)
+      return { result: 'noop', reason: err.reason };
     return handleFailure(deps.db, key, err, opts.finalAttempt ?? false);
   }
 }
