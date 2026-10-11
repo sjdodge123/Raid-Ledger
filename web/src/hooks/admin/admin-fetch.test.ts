@@ -5,7 +5,6 @@ import { server } from '../../test/mocks/server';
 import { adminFetch } from './admin-fetch';
 import {
     AUTH_METHOD_KEY,
-    LEGACY_ORIGINAL_TOKEN_KEY,
 } from '../../lib/api/auth-storage-keys';
 import { getAccessToken } from '../../lib/api/access-token-store';
 
@@ -33,6 +32,7 @@ function tokenExpiringIn(offsetSeconds: number): string {
 
 const FRESH_TOKEN = tokenExpiringIn(3600);
 const EXPIRED_TOKEN = tokenExpiringIn(-60);
+const RENEWED_IMPERSONATION = 'renewed-impersonation-token';
 
 describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
     beforeEach(() => {
@@ -109,15 +109,15 @@ describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
         expect(dataCalls).toBe(2);
     });
 
-    it('does NOT pre-flight while impersonating; proceeds on the stored token', async () => {
+    it('ROK-1754 D1: pre-flights while impersonating too (the server renews the impersonation)', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'local');
-        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
         authState.token = EXPIRED_TOKEN;
         let refreshCalls = 0;
         server.use(
             http.post(`${API_BASE}/auth/refresh`, () => {
                 refreshCalls += 1;
-                return HttpResponse.json({ access_token: 'nope' });
+                authState.token = RENEWED_IMPERSONATION;
+                return HttpResponse.json({ access_token: RENEWED_IMPERSONATION });
             }),
             http.get(`${API_BASE}/admin/thing`, ({ request }) =>
                 HttpResponse.json({ header: request.headers.get('authorization') }),
@@ -126,7 +126,7 @@ describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
 
         const result = await adminFetch<{ header: string }>('/admin/thing');
 
-        expect(refreshCalls).toBe(0);
-        expect(result.header).toBe(`Bearer ${EXPIRED_TOKEN}`);
+        expect(refreshCalls).toBe(1);
+        expect(result.header).toBe(`Bearer ${RENEWED_IMPERSONATION}`);
     });
 });

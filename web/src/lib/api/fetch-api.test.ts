@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
-import { AUTH_METHOD_KEY, LEGACY_ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY } from './auth-storage-keys';
 import { httpStatusOf, isConflictError } from './api-error';
 import { setAccessToken, getAccessToken } from './access-token-store';
 
@@ -43,6 +43,7 @@ function tokenExpiringIn(offsetSeconds: number): string {
 
 const FRESH_TOKEN = tokenExpiringIn(3600);
 const EXPIRED_TOKEN = tokenExpiringIn(-60);
+const RENEWED_IMPERSONATION = 'renewed-impersonation-token';
 
 const FixtureSchema = z.object({
     id: z.number(),
@@ -247,16 +248,16 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
         expect(dataCalls).toBe(1);
     });
 
-    it('does NOT refresh while impersonating (guard returns null), proceeds with the stored token', async () => {
+    it('ROK-1754 D1: pre-flight refreshes while impersonating too (the server renews the impersonation)', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
         authState.token = EXPIRED_TOKEN;
         let dataCalls = 0;
         let refreshCalls = 0;
         server.use(
             http.post(`${API_BASE}/auth/refresh`, () => {
                 refreshCalls += 1;
-                return HttpResponse.json({ access_token: 'should-not-happen' });
+                authState.token = RENEWED_IMPERSONATION;
+                return HttpResponse.json({ access_token: RENEWED_IMPERSONATION });
             }),
             http.get(`${API_BASE}/thing`, ({ request }) => {
                 dataCalls += 1;
@@ -268,11 +269,9 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
 
         const result = await fetchApi<{ header: string }>('/thing');
 
-        // ensureFreshToken self-guards impersonation → no network refresh; the
-        // request still went out on the (expired) impersonated bearer.
-        expect(refreshCalls).toBe(0);
+        expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(1);
-        expect(result.header).toBe(`Bearer ${EXPIRED_TOKEN}`);
+        expect(result.header).toBe(`Bearer ${RENEWED_IMPERSONATION}`);
     });
 
     it('does NOT pre-flight for an anonymous visitor (no auth method) even with a stale token', async () => {
