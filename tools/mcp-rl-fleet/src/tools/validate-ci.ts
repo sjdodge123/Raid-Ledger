@@ -118,17 +118,17 @@ export function resolveArgs(params: ValidateCiParams): string[] {
 
 export interface ValidateCiAsyncResult {
   ok: boolean;
-  task_id?: string;
-  log_url?: string;
-  log_path?: string;
-  started_at?: string;
-  mcp_runtime_status?: string;
-  slot?: number;
+  task_id?: string | undefined;
+  log_url?: string | undefined;
+  log_path?: string | undefined;
+  started_at?: string | undefined;
+  mcp_runtime_status?: string | undefined;
+  slot?: number | undefined;
   /** ROK-1470 admission weight the run was dispatched with. */
-  weight?: TaskWeight;
-  error?: string;
-  stderr?: string;
-  message?: string;
+  weight?: TaskWeight | undefined;
+  error?: string | undefined;
+  stderr?: string | undefined;
+  message?: string | undefined;
 }
 
 const FLEET_DOMAIN = process.env.RL_FLEET_DOMAIN ?? 'fleet.gamernight.net';

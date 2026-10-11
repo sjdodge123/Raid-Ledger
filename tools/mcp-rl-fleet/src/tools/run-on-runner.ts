@@ -58,16 +58,16 @@ export interface RunOnRunnerRoutedResult {
   ok: boolean;
   /** Discriminant: the caller got a task_id, NOT stdout/exit_code. */
   routed: 'task';
-  task_id?: string;
-  log_url?: string;
-  log_path?: string;
-  started_at?: string;
-  slot?: number;
+  task_id?: string | undefined;
+  log_url?: string | undefined;
+  log_path?: string | undefined;
+  started_at?: string | undefined;
+  slot?: number | undefined;
   message: string;
-  error?: string;
-  stderr?: string;
+  error?: string | undefined;
+  stderr?: string | undefined;
   /** ROK-1470 admission weight the task was dispatched with. */
-  weight?: TaskWeight;
+  weight?: TaskWeight | undefined;
 }
 
 /** ROK-1362: timeout_seconds > 120 → dispatch the command as a VM task. */

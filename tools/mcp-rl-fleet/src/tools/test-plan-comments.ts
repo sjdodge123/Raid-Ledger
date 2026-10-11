@@ -117,10 +117,10 @@ const STRICT_B64_RE =
 
 /** Decode one dashboard-wrapped base64 body to UTF-8; null when it cannot be. */
 export function decodeWrappedBody(raw: string): string | null {
-  const m = INNER_B64_RE.exec(raw.trim());
-  if (!m || !STRICT_B64_RE.test(m[1])) return null;
+  const b64 = INNER_B64_RE.exec(raw.trim())?.[1];
+  if (b64 === undefined || !STRICT_B64_RE.test(b64)) return null;
   try {
-    const bytes = Buffer.from(m[1], 'base64');
+    const bytes = Buffer.from(b64, 'base64');
     return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
   } catch {
     return null;
@@ -209,8 +209,10 @@ const tsMs = (c: unknown): number => {
 
 /** Output indices newest-first: ts descending, later position first on a tie. */
 function newestFirst(all: unknown[]): number[] {
-  const ms = all.map(tsMs);
-  return all.map((_, i) => i).sort((a, b) => ms[b] - ms[a] || b - a);
+  return all
+    .map((entry, i) => ({ i, t: tsMs(entry) }))
+    .sort((a, b) => b.t - a.t || b.i - a.i)
+    .map(({ i }) => i);
 }
 
 /** A stripped-shape comment: the dashboard says a body exists but sent none. */

@@ -173,7 +173,7 @@ export function credentialsHint(taskId: string): string {
  * omitted worktree_path must default to THIS server's cwd — the session folder
  * the synchronous spin used to run in — or RL_AGENT_ID hashes to the wrong agent.
  */
-export function withDefaultWorktree<T extends { worktree_path?: string }>(params: T): T {
+export function withDefaultWorktree<T extends { worktree_path?: string | undefined }>(params: T): T {
   return { ...params, worktree_path: params.worktree_path ?? process.cwd() };
 }
 

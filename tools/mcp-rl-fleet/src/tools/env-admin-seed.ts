@@ -47,8 +47,8 @@ export async function seedEnvAdminPassword(
 ): Promise<string | null> {
   try {
     const stdout = await runSeed(sshUser, sshHost, buildSeedRemote(slug));
-    const m = stdout.match(/RL_SEEDED_PW=(.+)$/m);
-    return m ? m[1].trim() : null;
+    const pw = stdout.match(/RL_SEEDED_PW=(.+)$/m)?.[1];
+    return pw !== undefined ? pw.trim() : null;
   } catch {
     return null;
   }
@@ -78,6 +78,6 @@ export async function seedFixedEnvAdminPassword(
     const noFixed = typeof out === 'string' && out.includes('RL_NO_FIXED_PW');
     return { ok: false, reason: noFixed ? 'no_fixed_password' : 'seed_failed' };
   }
-  const m = stdout.match(/RL_SEEDED_PW=(.+)$/m);
-  return m ? { ok: true, password: m[1].trim() } : { ok: false, reason: 'seed_failed' };
+  const pw = stdout.match(/RL_SEEDED_PW=(.+)$/m)?.[1];
+  return pw !== undefined ? { ok: true, password: pw.trim() } : { ok: false, reason: 'seed_failed' };
 }

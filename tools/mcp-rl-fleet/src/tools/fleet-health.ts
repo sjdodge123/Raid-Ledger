@@ -117,7 +117,8 @@ export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthRe
     };
   }
   const match = stdout.match(/\nRL_STATUS:(\d+)\s*$/);
-  const status = match ? parseInt(match[1], 10) : 0;
+  const statusDigits = match?.[1];
+  const status = statusDigits !== undefined ? parseInt(statusDigits, 10) : 0;
   const rawBody = match ? stdout.slice(0, match.index ?? 0) : stdout;
   if (status !== 200) {
     return {
