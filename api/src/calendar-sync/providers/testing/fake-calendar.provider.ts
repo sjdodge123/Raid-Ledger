@@ -11,6 +11,7 @@ import type {
   OAuthCredentials,
 } from '../calendar-provider.interface';
 import { ProviderAuthError } from '../calendar-provider.errors';
+import { copyIsBusy, copySummary } from '../copy-presentation.helpers';
 import { FakeCalendarStore } from './fake-calendar-store';
 
 /**
@@ -37,8 +38,11 @@ const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 /** Name of the dedicated calendar `ensureRaidLedgerCalendar` creates. */
 export const FAKE_RAID_LEDGER_CALENDAR_NAME = 'Raid Ledger';
-/** Title prefix of a tentative copy, added adapter-side (interface §D4). */
-export const TENTATIVE_TITLE_PREFIX = '(Tentative) ';
+/** Copy presentation is shared with the real adapters (F11). */
+export {
+  BENCH_TITLE_PREFIX,
+  TENTATIVE_TITLE_PREFIX,
+} from '../copy-presentation.helpers';
 
 /** What a registered authorization code resolves to. */
 export interface FakeAccount {
@@ -161,15 +165,14 @@ export class FakeCalendarProvider
     existing: CopyRef | null,
   ): Promise<CopyRef> {
     return this.run(() => {
-      const prefix = input.tentative ? TENTATIVE_TITLE_PREFIX : '';
       const copy = this.store.upsertCopy(
         calendarId,
         {
           copyId: input.copyId,
-          title: `${prefix}${input.title}`,
+          title: copySummary(input),
           description: input.description,
           url: input.url,
-          busy: !input.tentative,
+          busy: copyIsBusy(input),
           start: input.start,
           end: input.end,
         },

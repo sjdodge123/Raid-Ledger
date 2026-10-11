@@ -107,6 +107,7 @@ async function seedCopy(
     userId,
     event,
     tentative: false,
+    benched: false,
   });
   const ref = await fake.upsertEvent(creds, calendarId, copy, null);
   return {

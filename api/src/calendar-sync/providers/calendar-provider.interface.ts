@@ -151,6 +151,11 @@ export interface CopyEventInput {
   end: Date;
   /** true → "(Tentative) " title + Free; false → Busy. */
   tentative: boolean;
+  /**
+   * F11: true → "(Bench) " title + Free; wins over `tentative`. Absent =
+   * not benched. Adapters render it via `copy-presentation.helpers`.
+   */
+  benched?: boolean;
 }
 
 export interface CopyRef {

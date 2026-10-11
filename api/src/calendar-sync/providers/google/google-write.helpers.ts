@@ -23,12 +23,15 @@ import {
   TransientError,
 } from '../calendar-provider.errors';
 import type { CopyEventInput, CopyRef } from '../calendar-provider.interface';
+import { copyIsBusy, copySummary } from '../copy-presentation.helpers';
 
 export const GOOGLE_CALENDAR_API = 'https://www.googleapis.com/calendar/v3';
 /** Name of the dedicated calendar created under `calendar.app.created`. */
 export const RAID_LEDGER_CALENDAR_SUMMARY = 'Raid Ledger';
-/** Title prefix on tentative copies (spec §4.2; interface `tentative`). */
-export const TENTATIVE_TITLE_PREFIX = '(Tentative) ';
+export {
+  BENCH_TITLE_PREFIX,
+  TENTATIVE_TITLE_PREFIX,
+} from '../copy-presentation.helpers';
 /** `source.title` on every copy — the link back to the event page. */
 export const COPY_SOURCE_TITLE = 'Raid Ledger';
 
@@ -49,14 +52,15 @@ export interface GoogleCalendarInfo {
   summary: string | null;
 }
 
-/** Confirmed → Busy + plain title; tentative → Free + "(Tentative) ". */
+/**
+ * Confirmed → Busy + plain title; tentative → Free + "(Tentative) ";
+ * benched → Free + "(Bench) " (F11). Rules live in copy-presentation.
+ */
 export function buildGoogleEventBody(input: CopyEventInput): GoogleEventBody {
   return {
-    summary: input.tentative
-      ? `${TENTATIVE_TITLE_PREFIX}${input.title}`
-      : input.title,
+    summary: copySummary(input),
     description: input.description,
-    transparency: input.tentative ? 'transparent' : 'opaque',
+    transparency: copyIsBusy(input) ? 'opaque' : 'transparent',
     start: { dateTime: input.start.toISOString() },
     end: { dateTime: input.end.toISOString() },
     extendedProperties: { private: { rlCopyId: input.copyId } },

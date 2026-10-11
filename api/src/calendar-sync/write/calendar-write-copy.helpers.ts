@@ -1,6 +1,6 @@
 /**
  * ROK-1596 D4: what a Raid Ledger copy of an event says. Title from the
- * event (the adapter adds "(Tentative) "), the event link, and a fixed
+ * event (the adapter adds "(Tentative) " / "(Bench) "), the event link, and a fixed
  * "Added by Raid Ledger" line — never member names or notes (privacy, L5).
  * Bounds come from the zone-less `events.duration` tsrange (UTC wall clock).
  */
@@ -66,6 +66,31 @@ export async function loadSignupStatus(
   return row?.status ?? null;
 }
 
+/**
+ * F11: true when the user's signup sits on the bench. Bench is a roster
+ * assignment (`roster_assignments.role = 'bench'`), not a signup status.
+ */
+export async function loadSignupBenched(
+  db: Db,
+  eventId: number,
+  userId: number,
+): Promise<boolean> {
+  const ra = schema.rosterAssignments;
+  const [row] = await db
+    .select({ id: ra.id })
+    .from(ra)
+    .innerJoin(schema.eventSignups, eq(schema.eventSignups.id, ra.signupId))
+    .where(
+      and(
+        eq(ra.eventId, eventId),
+        eq(ra.role, 'bench'),
+        eq(schema.eventSignups.userId, userId),
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
 /** `<clientUrl>/events/<id>` (trailing slashes on the base dropped). */
 export function eventPageUrl(clientUrl: string, eventId: number): string {
   return `${clientUrl.replace(/\/+$/, '')}/events/${eventId}`;
@@ -77,6 +102,7 @@ export interface CopyInputSource {
   userId: number;
   event: CopyEventRow;
   tentative: boolean;
+  benched: boolean;
 }
 
 /** The provider-neutral copy (D4); the copy id stamps this instance (§5). */
@@ -95,5 +121,6 @@ export function buildCopyInput(src: CopyInputSource): CopyEventInput {
     start: src.event.start,
     end: src.event.end,
     tentative: src.tentative,
+    benched: src.benched,
   };
 }

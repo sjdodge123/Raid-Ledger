@@ -24,12 +24,16 @@ export interface DesiredStateInput {
   event: { title: string; cancelled: boolean; endsAt: Date } | null;
   /** The user's signup status for the event; null when there is no signup. */
   signupStatus: string | null;
+  /** The signup's roster assignment is the bench (F11). Absent = false. */
+  benched?: boolean;
   link: { state: string } | null;
   now: Date;
 }
 
 export interface DesiredCopy {
   tentative: boolean;
+  /** F11: Free + "(Bench) "; wins over `tentative` (copy-presentation). */
+  benched: boolean;
   title: string;
 }
 
@@ -83,6 +87,10 @@ export function computeDesiredState(input: DesiredStateInput): DesiredState {
   return {
     action: input.link ? 'update' : 'create',
     reason: 'active_signup',
-    copy: { tentative: signupStatus === 'tentative', title: event.title },
+    copy: {
+      tentative: signupStatus === 'tentative',
+      benched: input.benched ?? false,
+      title: event.title,
+    },
   };
 }

@@ -31,6 +31,7 @@ import {
   buildCopyInput,
   type CopyEventRow,
   loadCopyEvent,
+  loadSignupBenched,
   loadSignupStatus,
 } from './calendar-write-copy.helpers';
 import {
@@ -229,6 +230,7 @@ async function apply(
     userId: ctx.key.userId,
     event,
     tentative: desired.copy.tentative,
+    benched: desired.copy.benched,
   });
   const ref = await writeCopy(ctx, input);
   if (!(await saveLink(ctx.db, ctx.key, ref))) {
@@ -245,9 +247,10 @@ async function decide(
   key: ReconcileKey,
   conn: ConnectionRow,
 ) {
-  const [event, signupStatus, link, killSwitchOn] = await Promise.all([
+  const [event, signupStatus, benched, link, killSwitchOn] = await Promise.all([
     loadCopyEvent(deps.db, key.eventId),
     loadSignupStatus(deps.db, key.eventId, key.userId),
+    loadSignupBenched(deps.db, key.eventId, key.userId),
     loadLink(deps.db, key),
     deps.isSyncEnabled(),
   ]);
@@ -256,6 +259,7 @@ async function decide(
     killSwitchOn,
     event: event && { ...event, endsAt: event.end },
     signupStatus,
+    benched,
     link,
     now: deps.now?.() ?? new Date(),
   });
