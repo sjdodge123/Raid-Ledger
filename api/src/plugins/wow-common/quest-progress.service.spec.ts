@@ -160,6 +160,8 @@ function foreverWithCompleted(questId: number): ForeverEventProgress {
         userId: 1,
         username: 'Roknua',
         characterId: 'char-1',
+        charClass: null,
+        charRace: null,
         snapshot: {
           quests: { completed: [questId], inProgress: [] },
           capturedAt: '2026-10-01T00:00:00.000Z',

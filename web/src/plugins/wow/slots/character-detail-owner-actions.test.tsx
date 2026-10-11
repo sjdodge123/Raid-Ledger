@@ -22,7 +22,8 @@ const registry = vi.hoisted(() => ({ games: [] as { id: number; slug: string }[]
 vi.mock('../../../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: registry.games, isLoading: false, error: null }),
 }));
-vi.mock('../../../hooks/use-auth', () => ({
+vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
     useAuth: () => ({ user: { id: detail.userId }, isAuthenticated: true }),
 }));
 

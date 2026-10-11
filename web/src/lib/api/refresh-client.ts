@@ -2,6 +2,12 @@ import { API_BASE_URL } from '../config';
 import { RefreshResponseSchema } from '@raid-ledger/contract';
 import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 import { isTokenStale } from './token-expiry';
+import { getAuthMethod } from './silent-reauth';
+import {
+  endDeactivatedSession,
+  isDeactivatedResponse,
+  readErrorCode,
+} from './deactivated-session';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -17,6 +23,10 @@ import { isTokenStale } from './token-expiry';
  * 10s race grace answers a replay inside the window (an old bundle, or a
  * browser without `navigator.locks`) with a non-revoking 409 `refresh_raced`,
  * which is indeterminate here — never a reason to clear auth storage.
+ *
+ * ROK-1753: a 401 `USER_DEACTIVATED` is terminal — the session is ended in
+ * shared storage, and a tab that queued on the lock sees it cleared and
+ * reports 'rejected' without a POST.
  */
 
 /**
@@ -33,6 +43,7 @@ export type RefreshOutcome =
 type PostOutcome = RefreshOutcome | { kind: 'raced' };
 
 const INDETERMINATE: RefreshOutcome = { kind: 'indeterminate' };
+const REJECTED: RefreshOutcome = { kind: 'rejected' };
 const LOCK_NAME = 'rl-refresh';
 
 let inFlight: Promise<RefreshOutcome> | null = null;
@@ -42,15 +53,10 @@ function storeAccessToken(token: string): void {
   localStorage.setItem(ACCESS_TOKEN_KEY, token);
 }
 
-async function isRacedResponse(res: Response): Promise<boolean> {
-  if (res.status !== 409) return false;
-  try {
-    const body: unknown = await res.json();
-    return typeof body === 'object' && body !== null
-      && (body as { code?: unknown }).code === 'refresh_raced';
-  } catch {
-    return false;
-  }
+/** 401/403 → rejected; a deactivated account also ends the session (ROK-1753). */
+async function rejectedOutcome(res: Response): Promise<RefreshOutcome> {
+  if (await isDeactivatedResponse(res)) endDeactivatedSession();
+  return REJECTED;
 }
 
 async function postRefresh(): Promise<PostOutcome> {
@@ -59,8 +65,10 @@ async function postRefresh(): Promise<PostOutcome> {
       method: 'POST',
       credentials: 'include',
     });
-    if (res.status === 401 || res.status === 403) return { kind: 'rejected' };
-    if (await isRacedResponse(res)) return { kind: 'raced' };
+    if (res.status === 401 || res.status === 403) return await rejectedOutcome(res);
+    if (res.status === 409 && (await readErrorCode(res)) === 'refresh_raced') {
+      return { kind: 'raced' };
+    }
     if (!res.ok) return INDETERMINATE;
     const parsed = RefreshResponseSchema.safeParse(await res.json());
     if (!parsed.success) return INDETERMINATE;
@@ -92,22 +100,48 @@ async function refreshAndSettle(startToken: string | null): Promise<RefreshOutco
   return outcome.kind === 'raced' ? settleRace(startToken) : outcome;
 }
 
+function isLockManager(value: unknown): value is LockManager {
+  return typeof value === 'object' && value !== null
+    && 'request' in value && typeof value.request === 'function';
+}
+
 function lockManager(): LockManager | null {
   if (typeof navigator === 'undefined') return null;
-  const locks = (navigator as Navigator & { locks?: LockManager }).locks;
-  return locks && typeof locks.request === 'function' ? locks : null;
+  const candidate: unknown = navigator.locks;
+  return isLockManager(candidate) ? candidate : null;
+}
+
+/** What this tab saw when its refresh started (before any lock wait). */
+interface RefreshStart {
+  token: string | null;
+  method: string | null;
+}
+
+/**
+ * Runs once this tab holds the lock. Shared storage may have changed while it
+ * queued, so the gates are re-checked here (ROK-1755 nits, ROK-1753):
+ * impersonation that began meanwhile must not POST (the cookie is the admin's),
+ * and a session a sibling ended (logout / deactivation) must not be revived.
+ */
+function refreshUnderLock(start: RefreshStart): Promise<RefreshOutcome> {
+  if (isImpersonating()) return Promise.resolve(INDETERMINATE);
+  if (start.method !== null && getAuthMethod() === null) return Promise.resolve(REJECTED);
+  const adopted = siblingToken(start.token);
+  return adopted ? Promise.resolve(adopted) : refreshAndSettle(start.token);
 }
 
 async function doRefresh(): Promise<RefreshOutcome> {
-  const startToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+  const start: RefreshStart = {
+    token: localStorage.getItem(ACCESS_TOKEN_KEY),
+    method: getAuthMethod(),
+  };
   const locks = lockManager();
-  if (!locks) return refreshAndSettle(startToken);
+  if (!locks) return refreshUnderLock(start);
   try {
-    return await locks.request(LOCK_NAME, () =>
-      siblingToken(startToken) ?? refreshAndSettle(startToken));
+    return await locks.request(LOCK_NAME, () => refreshUnderLock(start));
   } catch {
     // The lock itself failed (e.g. an opaque origin) — refresh unlocked.
-    return refreshAndSettle(startToken);
+    return refreshUnderLock(start);
   }
 }
 

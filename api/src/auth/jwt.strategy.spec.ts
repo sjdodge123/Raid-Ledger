@@ -186,3 +186,74 @@ describe('JwtStrategy — ban/kick per-request lockout (ROK-313)', () => {
     expect(mockDb.select).not.toHaveBeenCalled();
   });
 });
+
+describe('JwtStrategy — non-integer sub is a 401 before any lookup (ROK-1764)', () => {
+  beforeEach(setupModule);
+
+  it.each([
+    ['missing', undefined],
+    ['a numeric string', '1'],
+    ['a word', 'abc'],
+    ['zero', 0],
+    ['negative', -3],
+    ['a float', 1.5],
+    ['above the int4 users.id range', 2_147_483_648],
+  ])('rejects a sub that is %s', async (_label, sub) => {
+    await expect(strategy.validate(buildPayload({ sub }))).rejects.toThrow(
+      new UnauthorizedException('Invalid session token'),
+    );
+    expect(mockBlocklist.isBlocked).not.toHaveBeenCalled();
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('rejects an intent-token payload shape (no sub at all)', async () => {
+    const intent = { eventId: 7, discordId: '42', action: 'signup', iat: 1 };
+    await expect(
+      strategy.validate(intent as unknown as ReturnType<typeof buildPayload>),
+    ).rejects.toThrow('Invalid session token');
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+});
+
+describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
+  beforeEach(setupModule);
+
+  it('rejects a deactivated user with 401 USER_DEACTIVATED', async () => {
+    mockDbReturns({ ...mockUser, deactivatedAt: new Date() });
+    const err = await strategy.validate(buildPayload()).catch((e) => e);
+    expect(err).toBeInstanceOf(UnauthorizedException);
+    expect((err as UnauthorizedException).getResponse()).toEqual({
+      code: 'USER_DEACTIVATED',
+      message: 'Account deactivated',
+    });
+  });
+
+  it('rejects a deactivated user served from the auth cache', async () => {
+    setCachedAuthUser(1, {
+      ...mockUser,
+      role: 'member',
+      deactivatedAt: new Date(),
+    });
+    await expect(strategy.validate(buildPayload())).rejects.toThrow(
+      'Account deactivated',
+    );
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
+  it('lets an admin impersonating a deactivated user through', async () => {
+    mockDbReturns({ ...mockUser, deactivatedAt: new Date() });
+    const result = await strategy.validate(buildPayload({ impersonatedBy: 9 }));
+    expect(result).toMatchObject({ id: 1, impersonatedBy: 9 });
+  });
+
+  it('still prefers the ban message for a banned + deactivated user', async () => {
+    mockDbReturns({
+      ...mockUser,
+      deactivatedAt: new Date(),
+      bannedAt: new Date(),
+    });
+    await expect(strategy.validate(buildPayload())).rejects.toThrow(
+      'Your account has been suspended',
+    );
+  });
+});

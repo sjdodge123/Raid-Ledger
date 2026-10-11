@@ -1,6 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type {
   EventQuestPrereqsResponse,
   QuestCoverageEntry,
@@ -10,7 +10,10 @@ import * as schema from '../../drizzle/schema';
 import { wowClassicQuestProgress } from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { memorySwr, type MemoryCacheEntry } from '../../common/swr-cache';
-import { loadForeverEventProgress } from './event-forever-progress.query';
+import {
+  loadForeverEventProgress,
+  loadForeverMemberProgress,
+} from './event-forever-progress.query';
 import {
   buildViewerPrereqs,
   groupCoverage,
@@ -74,16 +77,16 @@ export class QuestProgressReadService {
   /**
    * The viewer's pre-req chain state (D11). Null when the event is not
    * Forever or the viewer has no signed-up character with a quests snapshot.
+   * Reads only the viewer's snapshot and manual rows (ROK-1758).
    */
   async getPrereqsForViewer(
     eventId: number,
     userId: number,
   ): Promise<EventQuestPrereqsResponse> {
-    const forever = await loadForeverEventProgress(this.db, eventId);
+    const forever = await loadForeverMemberProgress(this.db, eventId, userId);
     const member = forever?.members.find((m) => m.userId === userId);
     if (!forever || !member) return null;
-    const manual = await this.queryManualRows(eventId);
-    const mine = manual.filter((r) => r.userId === userId);
+    const mine = await this.queryManualRows(eventId, userId);
     return buildViewerPrereqs(forever, member, mine);
   }
 
@@ -94,8 +97,11 @@ export class QuestProgressReadService {
     return forever ? toProgressDtos(eventId, manual, forever) : manual;
   }
 
-  /** Manual progress rows for an event, joined with usernames. */
-  private async queryManualRows(eventId: number): Promise<ManualRowWithName[]> {
+  /** Manual progress rows for an event (or one user's), joined with usernames. */
+  private async queryManualRows(
+    eventId: number,
+    userId?: number,
+  ): Promise<ManualRowWithName[]> {
     const p = wowClassicQuestProgress;
     return this.db
       .select({
@@ -109,6 +115,11 @@ export class QuestProgressReadService {
       })
       .from(p)
       .innerJoin(schema.users, eq(p.userId, schema.users.id))
-      .where(eq(p.eventId, eventId));
+      .where(
+        and(
+          eq(p.eventId, eventId),
+          userId === undefined ? undefined : eq(p.userId, userId),
+        ),
+      );
   }
 }

@@ -66,6 +66,7 @@ describe('useAddonImportApply', () => {
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(bodies).toEqual([{ importString: CHAR_STRING, dryRun: false, confirm: { repinGuid: true } }]);
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters', CHARACTER_ID] });
+        expect(invalidate, 'the Quests section reads the imported snapshot (ROK-1758)').toHaveBeenCalledWith({ queryKey: ['character-quests', CHARACTER_ID] });
     });
 
     it('does not invalidate when the apply fails', async () => {
@@ -102,6 +103,7 @@ describe('create route (ROK-1738)', () => {
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['me', 'characters'] });
         expect(invalidate).toHaveBeenCalledWith({ queryKey: ['characters'] });
         expect(invalidate, 'the profile caches the main character too').toHaveBeenCalledWith({ queryKey: ['userProfile'] });
+        expect(invalidate, 'every Quests section re-reads its snapshot (ROK-1758)').toHaveBeenCalledWith({ queryKey: ['character-quests'] });
     });
 
     it('treats a success body without a target as off-contract', async () => {

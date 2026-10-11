@@ -15,7 +15,7 @@ function StepMark({ step }: { step: QuestPrereqStep }) {
     const done = step.done;
     return (
         <span className={done ? 'text-success' : 'text-warning'} data-testid={`quest-prereq-mark-${step.questId}`}>
-            {done ? '✓ ' : '○ '}
+            <span aria-hidden="true">{done ? '✓ ' : '○ '}</span>
             <span className="sr-only">{done ? 'done' : 'needed'}</span>
         </span>
     );

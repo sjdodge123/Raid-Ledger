@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
 
 export const AD_HOC_GRACE_QUEUE = 'ad-hoc-grace-period';
 
@@ -29,6 +30,8 @@ export class AdHocGracePeriodQueueService {
     const jobId = `grace-${eventId}`;
     try {
       await removeDelayedJob(this.queue, jobId);
+      // ROK-1762: a retained completed/failed job would block the add.
+      await clearFinishedJob(this.queue, jobId);
       await this.queue.add(
         'grace-expire',
         { eventId } satisfies AdHocGracePeriodJobData,

@@ -190,6 +190,8 @@ export const CharacterSchema = z.object({
     roleOverride: CharacterRoleSchema.nullable(),
     effectiveRole: CharacterRoleSchema.nullable(),
     isMain: z.boolean(),
+    /** ROK-1756: true when the character is bound to a LedgerLink GUID (the GUID itself is never exposed). */
+    addonLinked: z.boolean().optional(),
     itemLevel: z.number().int().nullable(),
     externalId: z.string().max(255).nullable(),
     avatarUrl: z.string().url().nullable(),

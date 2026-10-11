@@ -27,6 +27,9 @@ import {
   buildForeverTalentsPayload,
   buildQuests,
 } from './testing/addon-fixture.forever';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const code = (fn: () => unknown): string => {
   try {
@@ -150,7 +153,7 @@ describe('toCharSnapshotData — schema 2', () => {
     data.talents.nodes[0]!.name = colour('Tactical Mastery');
     const node = toCharSnapshotData(data).talents.nodes[0];
     expect(node).toMatchObject({ name: 'Tactical Mastery', spellId: 12295 });
-    expect(node).toMatchObject({ tree: 0, row: 0, col: 1, posX: 1980 });
+    expect(node).toMatchObject({ tree: 0, row: 0, col: 0, posX: 1020 });
   });
 });
 

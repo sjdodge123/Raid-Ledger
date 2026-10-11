@@ -1,7 +1,8 @@
 /**
  * Error code → dialog copy for the addon "Import string" flow (ROK-1724 §4.4).
  * Codes: `AddonImportErrorCodeSchema` (contract) and
- * `packages/contract/ledgerlink/v1/CONTRACT.md` §7. Copy never echoes the paste.
+ * `packages/contract/ledgerlink/v1/CONTRACT.md` §7. Copy never echoes the paste;
+ * INVALID_PAYLOAD shows the server's message, which the contract keeps paste-free.
  */
 import type { AddonImportAddCharacterPrefill, AddonImportErrorCode } from '@raid-ledger/contract';
 import { AddonImportRequestError } from './use-addon-import';
@@ -40,7 +41,7 @@ const COPY: Record<AddonImportErrorCode, Omit<AddonImportErrorCopy, 'action'>> =
     UNSUPPORTED_VERSION: { title: 'Unsupported addon version', body: 'This string comes from a newer or older addon version. Update the addon and export again.' },
     CUT_OFF: { title: 'String looks cut off', body: 'Part of the string is missing. Copy it again from the addon window with Ctrl+A, Ctrl+C.' },
     DECODED_TOO_LARGE: { title: 'Export too large', body: 'This export expands to more data than one import allows.' },
-    INVALID_PAYLOAD: { title: 'Unreadable export', body: 'The string decoded, but its contents are not in the expected format.' },
+    INVALID_PAYLOAD: { title: "Can't import this string", body: 'The string decoded, but its contents are not in the expected format.' },
     PAGES_INCOMPLETE: { title: 'Pages missing', body: 'This export has several pages. Paste every page once, in one box.' },
     WRONG_GAME: { title: 'Not a WoW: Forever character', body: 'Addon strings can only be imported into a WoW: Forever character.' },
     REGION_MISMATCH: { title: 'Different region', body: 'The export is from a character in another region than this one.' },
@@ -79,6 +80,12 @@ export function addonImportErrorCopy(error: unknown, gameId?: number): AddonImpo
     const copy = COPY[error.code];
     if (error.code === 'NAME_MISMATCH' && error.addCharacter && gameId !== undefined) {
         return { ...copy, action: nameMismatchAction(error.addCharacter, gameId) };
+    }
+    if (error.code === 'INVALID_PAYLOAD' && error.message.trim()) {
+        // The server's INVALID_PAYLOAD message is the specific, actionable part
+        // (a field path, the export-clock bound, a hardcore/name/GUID reject) and
+        // never echoes the paste (CONTRACT.md §7), so it replaces the generic body.
+        return { ...copy, body: error.message };
     }
     return copy;
 }

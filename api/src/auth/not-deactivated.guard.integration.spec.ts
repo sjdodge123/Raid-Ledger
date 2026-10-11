@@ -230,14 +230,16 @@ function sendWith(token: string, ep: Endpoint) {
 
 describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
   describe.each(ENDPOINTS)('$method $path', (ep) => {
-    it(`${ep.name}: deactivated user receives 403 USER_DEACTIVATED`, async () => {
+    // ROK-1753: JwtStrategy now rejects a deactivated session first (401,
+    // same USER_DEACTIVATED code) — the guard stays as defence in depth.
+    it(`${ep.name}: deactivated user receives 401 USER_DEACTIVATED`, async () => {
       const user = await createMember(`deact-${ep.name.replace(/\W+/g, '-')}`, {
         deactivated: true,
       });
       await ensureCacheConsistent(user.id, true);
       const token = signFor(user);
       const res = await sendWith(token, ep);
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(401);
       expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
     });
 
@@ -270,5 +272,6 @@ describe('NotDeactivatedGuard — integration (ROK-1275)', () => {
       .send({});
 
     expect(res.status).not.toBe(403);
+    expect(res.status).not.toBe(401);
   });
 });

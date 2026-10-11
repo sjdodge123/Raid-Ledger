@@ -29,6 +29,8 @@ import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import { AddonImportController } from './addon-import/addon-import.controller';
+import { AddonImportAdminController } from './addon-import/addon-import-admin.controller';
+import { AddonCharacterUnlinkService } from './addon-import/addon-import.unlink';
 import { AddonImportService } from './addon-import/addon-import.service';
 import { AddonImportCreateService } from './addon-import/addon-import-create.service';
 import { AddonImportAuditService } from './addon-import/addon-import.audit';
@@ -49,6 +51,7 @@ import { CharacterQuestsService } from './character-quests.service';
     BossEncountersController,
     QuestProgressController,
     AddonImportController,
+    AddonImportAdminController,
     CharacterQuestsController,
   ],
   providers: [
@@ -68,6 +71,7 @@ import { CharacterQuestsService } from './character-quests.service';
     QuestProgressService,
     QuestProgressReadService,
     AddonImportService,
+    AddonCharacterUnlinkService,
     AddonImportCreateService,
     AddonImportAuditService,
     WowItemMetaService,

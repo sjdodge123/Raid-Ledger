@@ -17,6 +17,15 @@ import {
 import { decodeImportPaste } from './addon-import.decoder';
 import { AddonImportError } from './addon-import.errors';
 import { ledgerLinkFixtureView } from './testing/ledgerlink-fixture-view';
+import {
+  TALENT_COL_STEP,
+  TALENT_ROW_ORIGIN,
+  TALENT_ROW_STEP,
+  clusterOrigins,
+} from '../forever-talents.adapter';
+import { pinExportClock } from './testing/pin-export-clock';
+
+pinExportClock();
 
 const V1 = join(
   __dirname,
@@ -97,6 +106,45 @@ describe('LedgerLink v1 golden fixtures — invalid', () => {
     };
     expect(AddonImportErrorCodeSchema.options).toContain(code);
     expect(decodeErrorCode(read(INVALID, `${name}.txt`))).toBe(code);
+  });
+});
+
+interface PositionedNode {
+  name: string;
+  tree: number;
+  row: number;
+  col: number;
+  posX: number;
+  posY: number;
+}
+
+/** CONTRACT.md §3: tree = posX cluster, col/row = rounded 600-unit steps. */
+function contractSlot(n: PositionedNode, origins: number[]) {
+  const tree = origins.filter((o) => o <= n.posX).length - 1;
+  const origin = origins[tree] ?? Number.NaN;
+  return {
+    name: n.name,
+    tree,
+    row: Math.round((n.posY - TALENT_ROW_ORIGIN) / TALENT_ROW_STEP),
+    col: Math.round((n.posX - origin) / TALENT_COL_STEP),
+  };
+}
+
+describe('char-forever-talents-named — hints follow CONTRACT §3 (ROK-1758)', () => {
+  it('every tree/row/col hint equals the rule applied to its own posX/posY', () => {
+    const fixture = JSON.parse(
+      read(FIXTURES, 'char-forever-talents-named.json'),
+    ) as { payload: { data: { talents: { nodes: PositionedNode[] } } } };
+    const nodes = fixture.payload.data.talents.nodes;
+    const origins = clusterOrigins(nodes.map((n) => n.posX));
+    expect(origins).toHaveLength(3);
+    const hints = nodes.map(({ name, tree, row, col }) => ({
+      name,
+      tree,
+      row,
+      col,
+    }));
+    expect(hints).toEqual(nodes.map((n) => contractSlot(n, origins)));
   });
 });
 
