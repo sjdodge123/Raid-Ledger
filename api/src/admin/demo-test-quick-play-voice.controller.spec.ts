@@ -37,6 +37,14 @@ function controller(): DemoTestQuickPlayVoiceController {
 }
 
 const body = { userId: 7, bindingId: BINDING_ID, channelId: CHANNEL };
+const LOBBY_ROW = {
+  id: BINDING_ID,
+  gameId: null,
+  channelId: CHANNEL,
+  bindingPurpose: 'general-lobby',
+  recurrenceGroupId: null,
+  config: null,
+};
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 
 beforeEach(() => {
@@ -144,18 +152,65 @@ describe('DemoTestQuickPlayVoiceController.voiceJoin', () => {
     expect(adHoc.ensureNotSuppressed).not.toHaveBeenCalled();
   });
 
-  it('rejects a binding that is not a game-voice-monitor', async () => {
+  it('rejects a binding that is not a voice monitor or lobby', async () => {
     bindings.getBindingById.mockResolvedValue({
-      id: BINDING_ID,
-      gameId: null,
-      channelId: CHANNEL,
-      bindingPurpose: 'general-lobby',
-      recurrenceGroupId: null,
-      config: null,
+      ...LOBBY_ROW,
+      bindingPurpose: 'game-announcements',
     });
 
     await expect(controller().voiceJoin(body)).rejects.toThrow(
-      BadRequestException,
+      `Binding ${BINDING_ID} is not a game-voice-monitor or general-lobby`,
+    );
+    expect(adHoc.handleVoiceJoin).not.toHaveBeenCalled();
+  });
+
+  it('rejects a general-lobby join that carries no gameId', async () => {
+    bindings.getBindingById.mockResolvedValue(LOBBY_ROW);
+
+    await expect(controller().voiceJoin(body)).rejects.toThrow(
+      `Binding ${BINDING_ID} is a general-lobby: pass gameId`,
+    );
+    expect(adHoc.ensureNotSuppressed).not.toHaveBeenCalled();
+  });
+
+  it('rejects a gameId on a game-voice-monitor (its game is its own)', async () => {
+    await expect(
+      controller().voiceJoin({ ...body, gameId: 9 }),
+    ).rejects.toThrow('gameId/gameName are lobby-only');
+    expect(adHoc.handleVoiceJoin).not.toHaveBeenCalled();
+  });
+
+  // ROK-1766: bots are filtered out of lobby presence groups, so the smoke
+  // supplies the group's game; it must reach handleVoiceJoin as resolvedGame*.
+  it('passes a general-lobby join its body game as the resolved game', async () => {
+    bindings.getBindingById.mockResolvedValue(LOBBY_ROW);
+    adHoc.getActiveState.mockImplementation((_id: string, game: number) =>
+      game === 9 ? { eventId: 77 } : undefined,
+    );
+
+    const result = await controller().voiceJoin({
+      ...body,
+      gameId: 9,
+      gameName: 'Valheim',
+    });
+
+    expect(result).toEqual({ spawned: true, eventId: 77 });
+    expect(adHoc.ensureNotSuppressed).toHaveBeenCalledWith(
+      BINDING_ID,
+      9,
+      CHANNEL,
+    );
+    expect(adHoc.handleVoiceJoin).toHaveBeenCalledWith(
+      BINDING_ID,
+      expect.objectContaining({ userId: 7 }),
+      expect.objectContaining({
+        gameId: null,
+        bindingPurpose: 'general-lobby',
+      }),
+      9,
+      'Valheim',
+      CHANNEL,
+      CLEARANCE,
     );
   });
 

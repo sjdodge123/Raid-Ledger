@@ -1,6 +1,14 @@
 /**
  * DemoTestQuickPlayVoiceController — DEMO_MODE-only Quick Play voice join for
- * a `game-voice-monitor` binding (ROK-1390).
+ * a `game-voice-monitor` binding (ROK-1390), or for a `general-lobby` binding
+ * with an explicit game (ROK-1766).
+ *
+ * The lobby branch exists because a lobby binding has no stored game: a real
+ * lobby spawn takes its game from the members' presence groups, and the
+ * listener filters bots out of those groups, so the companion bot can never
+ * form one. The body's `gameId` (+ optional `gameName`) stands in for the
+ * group's game and reaches `handleVoiceJoin` as `resolvedGameId` /
+ * `resolvedGameName`, exactly where the listener would pass it.
  *
  * The series quick-play smoke (`series-dual-binding.test.ts`) used to trigger
  * the spawn by joining voice with the companion bot under a /playing override.
@@ -46,12 +54,24 @@ import {
   snowflakeSchema,
 } from './demo-test.utils';
 
-/** `{ userId, bindingId, channelId }` — a seeded user, the bind, its voice channel. */
+/**
+ * `{ userId, bindingId, channelId }` — a seeded user, the bind, its voice
+ * channel. `gameId`/`gameName` are the lobby group's game: required for a
+ * `general-lobby` bind, refused for a monitor (its game is the bind's own).
+ */
 const QuickPlayVoiceSchema = z.object({
   userId: z.number().int().positive(),
   bindingId: z.string().uuid(),
   channelId: snowflakeSchema,
+  gameId: z.number().int().positive().optional(),
+  gameName: z.string().min(1).max(200).optional(),
 });
+type QuickPlayVoiceBody = z.infer<typeof QuickPlayVoiceSchema>;
+
+const VOICE_PURPOSES: ReadonlySet<string> = new Set([
+  'game-voice-monitor',
+  'general-lobby',
+]);
 
 /** `eventId` is the minted (or joined) event; null when nothing was recorded. */
 export interface QuickPlayVoiceResult {
@@ -85,16 +105,15 @@ export class DemoTestQuickPlayVoiceController {
   @HttpCode(HttpStatus.OK)
   async voiceJoin(@Body() body: unknown): Promise<QuickPlayVoiceResult> {
     await this.assertDemoMode();
-    const { userId, bindingId, channelId } = parseDemoBody(
-      QuickPlayVoiceSchema,
-      body,
-    );
-    const binding = await this.loadMonitorBinding(bindingId, channelId);
-    const member = await this.loadMember(userId);
+    const parsed = parseDemoBody(QuickPlayVoiceSchema, body);
+    const { channelId } = parsed;
+    const binding = await this.loadVoiceBinding(parsed.bindingId, channelId);
+    const gameId = this.effectiveGameId(binding, parsed);
+    const member = await this.loadMember(parsed.userId);
     const svc = this.adHocEventService;
     const clearance = await svc.ensureNotSuppressed(
       binding.bindingId,
-      binding.gameId,
+      gameId,
       channelId,
     );
     if (!clearance)
@@ -103,13 +122,32 @@ export class DemoTestQuickPlayVoiceController {
       binding.bindingId,
       member,
       binding,
-      undefined,
-      undefined,
+      parsed.gameId,
+      parsed.gameName,
       channelId,
       clearance,
     );
-    const state = svc.getActiveState(binding.bindingId, binding.gameId);
+    const state = svc.getActiveState(binding.bindingId, gameId);
     return { spawned, eventId: spawned ? (state?.eventId ?? null) : null };
+  }
+
+  /** A lobby needs the body's game; a monitor keeps its own and refuses one. */
+  private effectiveGameId(
+    binding: ResolvedBinding,
+    body: QuickPlayVoiceBody,
+  ): number | null {
+    const lobby = binding.bindingPurpose === 'general-lobby';
+    if (lobby && body.gameId === undefined) {
+      throw new BadRequestException(
+        `Binding ${binding.bindingId} is a general-lobby: pass gameId`,
+      );
+    }
+    if (!lobby && (body.gameId !== undefined || body.gameName !== undefined)) {
+      throw new BadRequestException(
+        `Binding ${binding.bindingId} is a game-voice-monitor: gameId/gameName are lobby-only`,
+      );
+    }
+    return lobby ? (body.gameId ?? null) : binding.gameId;
   }
 
   /**
@@ -117,15 +155,15 @@ export class DemoTestQuickPlayVoiceController {
    * reaches a binding only through its own channel, and suppression is
    * channel-scoped, so a `channelId` other than the bind's is refused.
    */
-  private async loadMonitorBinding(
+  private async loadVoiceBinding(
     id: string,
     channelId: string,
   ): Promise<ResolvedBinding> {
     const row = await this.channelBindingsService.getBindingById(id);
     if (!row) throw new NotFoundException(`Binding ${id} not found`);
-    if (row.bindingPurpose !== 'game-voice-monitor') {
+    if (!VOICE_PURPOSES.has(row.bindingPurpose)) {
       throw new BadRequestException(
-        `Binding ${id} is not a game-voice-monitor`,
+        `Binding ${id} is not a game-voice-monitor or general-lobby`,
       );
     }
     if (row.channelId !== channelId) {
