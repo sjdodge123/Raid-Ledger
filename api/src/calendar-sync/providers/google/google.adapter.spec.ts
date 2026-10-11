@@ -236,7 +236,6 @@ describe('GoogleCalendarAdapter write — rlCopyId lookup + restore (review M1, 
     const next = await a.upsertEvent(CREDS, cal, COPY, null);
     expect(next.providerEventId).not.toBe(ref.providerEventId);
   });
-
 });
 
 describe('GoogleCalendarAdapter write — errors', () => {
