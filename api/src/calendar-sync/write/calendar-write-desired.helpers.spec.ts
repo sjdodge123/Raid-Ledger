@@ -26,7 +26,7 @@ describe('computeDesiredState — active signups', () => {
     expect(computeDesiredState(input())).toEqual({
       action: 'create',
       reason: 'active_signup',
-      copy: { tentative: false, title: 'Raid Night' },
+      copy: { tentative: false, benched: false, title: 'Raid Night' },
     });
   });
 
@@ -34,12 +34,12 @@ describe('computeDesiredState — active signups', () => {
     expect(computeDesiredState(input({ link: SYNCED }))).toEqual({
       action: 'update',
       reason: 'active_signup',
-      copy: { tentative: false, title: 'Raid Night' },
+      copy: { tentative: false, benched: false, title: 'Raid Night' },
     });
   });
 
   it('tentative → a tentative copy (create, then update)', () => {
-    const copy = { tentative: true, title: 'Raid Night' };
+    const copy = { tentative: true, benched: false, title: 'Raid Night' };
     expect(computeDesiredState(input({ signupStatus: 'tentative' }))).toEqual({
       action: 'create',
       reason: 'active_signup',
@@ -48,6 +48,37 @@ describe('computeDesiredState — active signups', () => {
     expect(
       computeDesiredState(input({ signupStatus: 'tentative', link: SYNCED })),
     ).toEqual({ action: 'update', reason: 'active_signup', copy });
+  });
+
+  it('benched (F11) → a benched copy, Free + "(Bench) " downstream', () => {
+    const out = computeDesiredState(input({ benched: true, link: SYNCED }));
+    expect(out).toEqual({
+      action: 'update',
+      reason: 'active_signup',
+      copy: { tentative: false, benched: true, title: 'Raid Night' },
+    });
+  });
+
+  it('tentative + benched (F11) → both flags kept; bench wins at render', () => {
+    const out = computeDesiredState(
+      input({ signupStatus: 'tentative', benched: true }),
+    );
+    expect(out).toEqual({
+      action: 'create',
+      reason: 'active_signup',
+      copy: { tentative: true, benched: true, title: 'Raid Night' },
+    });
+  });
+
+  it('a benched declined signup still gets no copy', () => {
+    const out = computeDesiredState(
+      input({ signupStatus: 'declined', benched: true, link: SYNCED }),
+    );
+    expect(out).toEqual({
+      action: 'delete',
+      reason: 'not_signed_up',
+      copy: null,
+    });
   });
 
   it('a failed link with an active signup is retried as an update', () => {
