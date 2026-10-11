@@ -30,17 +30,18 @@ export async function connectCDP(): Promise<Page> {
   }
 
   // Discord Electron typically has one main context
-  const contexts = browser.contexts();
-  if (contexts.length === 0) {
+  const [context] = browser.contexts();
+  if (!context) {
     throw new Error('No browser contexts found — Discord may not expose CDP correctly');
   }
 
-  const pages = contexts[0].pages();
+  const pages = context.pages();
   // Find the main Discord app page (not DevTools or splash)
   page =
     pages.find((p) => p.url().includes('discord.com')) ??
     pages.find((p) => p.url().includes('discordapp.com')) ??
-    pages[0];
+    pages[0] ??
+    null;
 
   if (!page) throw new Error('No Discord page found in CDP contexts');
 

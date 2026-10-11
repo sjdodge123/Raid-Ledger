@@ -14,7 +14,7 @@ export const TOOL_SCHEMA = {
 };
 
 export async function execute(params: {
-  channelName?: string;
+  channelName?: string | undefined;
 }): Promise<{ members: string[]; channelName: string | null }> {
   const page = await getPage();
 
