@@ -9,15 +9,17 @@
  * Every end audits ONE `impersonate_stop` row per deleted marker
  * (`DELETE … RETURNING`), so retries never double-audit.
  */
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { and, eq, gt, lte } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import type { RefreshFamilyImpersonation } from '../../drizzle/schema';
-import { insertAdminAction } from '../../users/users-admin-actions.helpers';
 import {
-  auditMetadata,
+  auditImpersonationStart,
+  endMarkersWhere,
+} from './impersonation-markers.db';
+import {
   markerEndReason,
   markerExpiry,
   type ImpersonationEndReason,
@@ -33,14 +35,17 @@ export interface ImpersonationTarget {
 
 @Injectable()
 export class ImpersonationSessionService {
-  private readonly logger = new Logger(ImpersonationSessionService.name);
-
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
   ) {}
 
-  /** Upsert the family's marker (fresh 1h cap) and audit `impersonate_start`. */
+  /**
+   * Start (or replace) the family's impersonation, fresh 1h cap. One
+   * transaction: a live marker for another target is ended with a `replaced`
+   * stop audit first, then the marker + `impersonate_start` audit are written
+   * together — an audit failure rolls the marker back.
+   */
   async start(
     familyId: string,
     adminId: number,
@@ -54,13 +59,16 @@ export class ImpersonationSessionService {
       startedAt: now,
       expiresAt: markerExpiry(now),
     };
-    const [row] = await this.db
-      .insert(markers)
-      .values(values)
-      .onConflictDoUpdate({ target: markers.familyId, set: values })
-      .returning();
-    await this.auditStart(adminId, targetId, familyId);
-    return row ?? values;
+    return this.db.transaction(async (tx) => {
+      await endMarkersWhere(tx, eq(markers.familyId, familyId), 'replaced');
+      const [row] = await tx
+        .insert(markers)
+        .values(values)
+        .onConflictDoUpdate({ target: markers.familyId, set: values })
+        .returning();
+      await auditImpersonationStart(tx, adminId, targetId, familyId);
+      return row ?? values;
+    });
   }
 
   /** Audit a start; `familyId: null` = cookie-less, non-renewable token. */
@@ -69,12 +77,7 @@ export class ImpersonationSessionService {
     targetId: number,
     familyId: string | null,
   ): Promise<void> {
-    await insertAdminAction(this.db, {
-      action: 'impersonate_start',
-      actorId: adminId,
-      targetId,
-      metadata: auditMetadata({ familyId, persistent: familyId !== null }),
-    });
+    await auditImpersonationStart(this.db, adminId, targetId, familyId);
   }
 
   /** The family's marker if it has not passed `expires_at`, else null. */
@@ -96,11 +99,7 @@ export class ImpersonationSessionService {
     familyId: string,
     reason: ImpersonationEndReason,
   ): Promise<boolean> {
-    const rows = await this.db
-      .delete(markers)
-      .where(eq(markers.familyId, familyId))
-      .returning();
-    await this.auditStops(rows, reason);
+    const rows = await endMarkersWhere(this.db, eq(markers.familyId, familyId), reason);
     return rows.length > 0;
   }
 
@@ -109,21 +108,13 @@ export class ImpersonationSessionService {
     userId: number,
     reason: ImpersonationEndReason,
   ): Promise<number> {
-    const rows = await this.db
-      .delete(markers)
-      .where(eq(markers.impersonatorUserId, userId))
-      .returning();
-    await this.auditStops(rows, reason);
+    const rows = await endMarkersWhere(this.db, eq(markers.impersonatorUserId, userId), reason);
     return rows.length;
   }
 
   /** Cron: delete markers at/after `expires_at`, one `expired` audit each. */
   async sweepExpired(): Promise<number> {
-    const rows = await this.db
-      .delete(markers)
-      .where(lte(markers.expiresAt, new Date()))
-      .returning();
-    await this.auditStops(rows, 'expired');
+    const rows = await endMarkersWhere(this.db, lte(markers.expiresAt, new Date()), 'expired');
     return rows.length;
   }
 
@@ -165,31 +156,11 @@ export class ImpersonationSessionService {
         username: schema.users.username,
         role: schema.users.role,
         bannedAt: schema.users.bannedAt,
+        kickedAt: schema.users.kickedAt,
       })
       .from(schema.users)
       .where(eq(schema.users.id, id))
       .limit(1);
     return row ?? null;
-  }
-
-  private async auditStops(
-    rows: RefreshFamilyImpersonation[],
-    reason: ImpersonationEndReason,
-  ): Promise<void> {
-    for (const row of rows) {
-      this.logger.log(
-        `IMPERSONATION END: admin id:${row.impersonatorUserId} -> id:${row.targetUserId} (${reason})`,
-      );
-      await insertAdminAction(this.db, {
-        action: 'impersonate_stop',
-        actorId: row.impersonatorUserId,
-        targetId: row.targetUserId,
-        metadata: auditMetadata({
-          familyId: row.familyId,
-          persistent: true,
-          reason,
-        }),
-      });
-    }
   }
 }

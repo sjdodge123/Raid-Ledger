@@ -16,6 +16,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { eq, inArray, or } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
+import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -148,6 +149,11 @@ export const WIPE_SPECIAL_TABLES: readonly PgTable[] = [
   schema.playerCoPlay,
   schema.lfgInvites,
   schema.communityLineups,
+  // ROK-1754: impersonation markers carry TWO user FKs (impersonator, target).
+  // Ended (with a `user_wiped` stop audit) on either side in
+  // deleteDualUserOwnedRows — ban+wipe keeps the users row, so CASCADE never
+  // fires and a banned target's marker would otherwise outlive the wipe.
+  schema.refreshFamilyImpersonations,
 ];
 
 /** REASSIGN bucket — user-authored shared entities transferred to the actor. */
@@ -198,6 +204,7 @@ async function deleteDualUserOwnedRows(tx: Db, userId: number): Promise<void> {
         eq(schema.lfgInvites.inviterUserId, userId),
       ),
     );
+  await endMarkersInvolvingUser(tx, userId);
 }
 
 /** Delete every user-owned row (Phase A RESTRICT + all ON DELETE CASCADE). */

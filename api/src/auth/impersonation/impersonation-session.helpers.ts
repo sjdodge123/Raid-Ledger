@@ -15,6 +15,9 @@ export type ImpersonationEndReason =
   | 'expired'
   | 'session_mismatch'
   | 'impersonator_role_lost'
+  | 'impersonator_suspended'
+  | 'replaced'
+  | 'user_wiped'
   | 'target_promoted'
   | 'target_suspended';
 
@@ -27,6 +30,7 @@ export interface UserLike {
   id: number;
   role: UserRole;
   bannedAt: Date | null;
+  kickedAt?: Date | null;
 }
 
 /** `expires_at` for a marker started at `now`. */
@@ -55,6 +59,9 @@ export function markerEndReason(
   if (marker.impersonatorUserId !== refreshUserId) return 'session_mismatch';
   const role = impersonator?.role;
   if (role !== 'operator' && role !== 'admin') return 'impersonator_role_lost';
+  if (impersonator?.bannedAt || impersonator?.kickedAt) {
+    return 'impersonator_suspended';
+  }
   if (!target || target.role === 'admin') return 'target_promoted';
   if (target.bannedAt) return 'target_suspended';
   return null;
