@@ -26,14 +26,22 @@ function errorAction(error: Error): 'consent' | 'alreadyEnabled' | 'saveFailed' 
     return error.message === 'write_already_enabled' ? 'alreadyEnabled' : 'saveFailed';
 }
 
-/** Saves one `write` change; shows the pending value until the overview refetches. */
+/**
+ * Saves one `write` change. The picked value shows from the click itself (a
+ * local optimistic copy, set inside the event so the controlled radio never
+ * snaps back) until the save settles — which `useUpdateConnection` holds open
+ * through the overview refetch — and reverts on an error.
+ */
 function useWriteSettings(connection: CalendarConnection) {
     const update = useUpdateConnection();
     const consent = useStartOAuth('primary');
     const [error, setError] = useState<string | null>(null);
-    const save = (write: Partial<Write>): void => {
+    const [picked, setPicked] = useState<Partial<Write> | null>(null);
+    const save = (next: Partial<Write>): void => {
         setError(null);
-        update.mutate({ id: connection.id, body: { write } }, {
+        setPicked(next);
+        update.mutate({ id: connection.id, body: { write: next } }, {
+            onSettled: () => setPicked(null),
             onError: (e) => {
                 const action = errorAction(e);
                 if (action === 'consent') consent.mutate();
@@ -41,13 +49,12 @@ function useWriteSettings(connection: CalendarConnection) {
             },
         });
     };
-    const pending = update.isPending ? update.variables?.body.write : undefined;
     const write: Write = {
-        enabled: pending?.enabled ?? connection.write.enabled,
-        target: pending?.target ?? connection.write.target,
+        enabled: picked?.enabled ?? connection.write.enabled,
+        target: picked?.target ?? connection.write.target,
     };
     const message = error ?? (consent.isError ? S.consentFailed : null);
-    return { write, save, message, busy: update.isPending || consent.isPending };
+    return { write, save, message, busy: picked !== null || update.isPending || consent.isPending };
 }
 
 function TwoWayTag(): JSX.Element {

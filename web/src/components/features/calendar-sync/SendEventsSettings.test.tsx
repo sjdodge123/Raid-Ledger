@@ -86,6 +86,21 @@ describe('SendEventsSettings', () => {
         await waitFor(() => expect(bodies).toEqual([{ write: { target: 'primary' } }]));
     });
 
+    it('a picked radio shows checked from the click itself, before the save settles', async () => {
+        let release: (() => void) | null = null;
+        server.use(http.patch(CALENDAR_CONNECTION_URL, async () => {
+            await new Promise<void>((resolve) => { release = resolve; });
+            return new HttpResponse(null, { status: 204 });
+        }));
+        renderSettings({ enabled: true, target: 'primary' });
+        const dedicated = screen.getByRole('radio', { name: S.dedicated });
+        fireEvent.click(dedicated);
+        expect(dedicated, 'the controlled radio snapped back to the stale target after the click').toBeChecked();
+        await waitFor(() => expect(release, 'the PATCH never reached the server').not.toBeNull());
+        release!();
+        await waitFor(() => expect(screen.getByRole('radio', { name: S.dedicated })).toBeEnabled());
+    });
+
     it('409 needs_consent starts Google with intent=primary and leaves for the consent URL', async () => {
         capturePatches(409, 'needs_consent');
         const intents: (string | null)[] = [];
