@@ -6,11 +6,15 @@
  * Discord silent re-auth fallback.
  */
 
-/** localStorage key holding the current access token. */
-export const ACCESS_TOKEN_KEY = 'raid_ledger_token';
+/**
+ * PURGE-ONLY (ROK-1754): the access token used to live here. It is now held
+ * in memory only (`access-token-store.ts`); this key is read once at boot to
+ * remove what an older bundle left behind. Never write it.
+ */
+export const LEGACY_ACCESS_TOKEN_KEY = 'raid_ledger_token';
 
-/** localStorage key holding the admin's token while impersonating. */
-export const ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
+/** PURGE-ONLY (ROK-1754): the admin JWT an older bundle kept while impersonating. */
+export const LEGACY_ORIGINAL_TOKEN_KEY = 'raid_ledger_original_token';
 
 /** localStorage key recording how the user last authenticated. */
 export const AUTH_METHOD_KEY = 'raid_ledger_auth_method';

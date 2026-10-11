@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/use-auth';
 import { consumeAuthRedirect } from '../components/auth';
 import { API_BASE_URL } from '../lib/config';
 import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/silent-reauth';
-import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
+import { clearAccessToken } from '../lib/api/access-token-store';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
 
@@ -69,7 +69,7 @@ function dispatchAuthCallback(
  * redirect, and route to the login screen.
  */
 function handleSilentFailed(navigate: ReturnType<typeof useNavigate>) {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
+    clearAccessToken();
     armSilentGuard();
     navigate('/', { replace: true });
 }

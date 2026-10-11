@@ -1,6 +1,6 @@
 import { TokenResponseSchema, type RedeemMagicLinkDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from './config';
-import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './api/auth-storage-keys';
+import { legacySessionPurged, setAccessToken } from './api/access-token-store';
 import { refreshWithOutcome } from './api/refresh-client';
 import { clearSilentGuard, getAuthMethod, setAuthMethod } from './api/silent-reauth';
 
@@ -20,22 +20,6 @@ let pending: Promise<void> | null = null;
 type StoredSession = 'none' | 'valid' | 'unknown';
 
 /**
- * OQ6: only a 401/403 from /auth/me proves the stored access token is dead. A
- * 429, 5xx or network error proves nothing, so the session is 'unknown'.
- */
-async function probeStoredToken(stored: string): Promise<StoredSession> {
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/me`, {
-      headers: { Authorization: `Bearer ${stored}` },
-    });
-    if (res.ok) return 'valid';
-    return res.status === 401 || res.status === 403 ? 'none' : 'unknown';
-  } catch {
-    return 'unknown';
-  }
-}
-
-/**
  * #1384 (operator ruling 2026-09-28): a session the refresh cookie can still
  * renew is VALID — the 1h access token expiring must not let a planted link
  * swap it (login CSRF). Only a refresh the server rejects (401/403) leaves
@@ -48,11 +32,13 @@ async function probeRefreshSession(): Promise<StoredSession> {
   return outcome.kind === 'rejected' ? 'none' : 'unknown';
 }
 
+/**
+ * ROK-1754: memory is empty at boot, so the refresh cookie is the session.
+ * A prior sign-in (marker, or a legacy stored token just purged) is probed.
+ */
 async function checkStoredSession(): Promise<StoredSession> {
-  const stored = localStorage.getItem(ACCESS_TOKEN_KEY);
-  if (!stored && !getAuthMethod()) return 'none';
-  const probed = stored ? await probeStoredToken(stored) : 'none';
-  return probed === 'none' ? probeRefreshSession() : probed;
+  if (!getAuthMethod() && !legacySessionPurged()) return 'none';
+  return probeRefreshSession();
 }
 
 async function postRedeem(token: string): Promise<string | null> {
@@ -72,10 +58,9 @@ async function postRedeem(token: string): Promise<string | null> {
   }
 }
 
-/** A redeem is a fresh sign-in: any impersonation it replaces is over. */
+/** A redeem is a fresh sign-in (ROK-1754: the token is held in memory only). */
 function adoptSession(accessToken: string): void {
-  localStorage.removeItem(ORIGINAL_TOKEN_KEY);
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  setAccessToken(accessToken);
   setAuthMethod('magic');
   clearSilentGuard();
 }

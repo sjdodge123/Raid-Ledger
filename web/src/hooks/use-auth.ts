@@ -1,9 +1,10 @@
 import { useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
-import { ensureFreshToken } from '../lib/api/refresh-client';
+import { ensureFreshToken, refreshWithOutcome } from '../lib/api/refresh-client';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
-import { ACCESS_TOKEN_KEY as TOKEN_KEY, ORIGINAL_TOKEN_KEY, USER_CACHE_KEY } from '../lib/api/auth-storage-keys';
+import { USER_CACHE_KEY } from '../lib/api/auth-storage-keys';
+import { clearAccessToken, getAccessToken, isImpersonatingToken, setAccessToken } from '../lib/api/access-token-store';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
 import type { UserRole } from '@raid-ledger/contract';
@@ -32,26 +33,19 @@ export function isOperatorOrAdmin(user: User | null | undefined): boolean {
     return user?.role === 'operator' || user?.role === 'admin';
 }
 
-/**
- * Get stored auth token
- */
+/** The in-memory access token (ROK-1754: never in storage). */
 export function getAuthToken(): string | null {
-    return localStorage.getItem(TOKEN_KEY);
+    return getAccessToken();
 }
 
-/**
- * Store an auth token (e.g., from a magic link).
- * Does NOT trigger React Query invalidation — call login() for that.
- */
+/** Hold an auth token in memory. No React Query invalidation — use login(). */
 export function setAuthToken(token: string): void {
-    localStorage.setItem(TOKEN_KEY, token);
+    setAccessToken(token);
 }
 
-/**
- * Check if currently in impersonation mode
- */
+/** Impersonating = the in-memory token carries `impersonatedBy` (ROK-1754). */
 export function isImpersonating(): boolean {
-    return !!localStorage.getItem(ORIGINAL_TOKEN_KEY);
+    return isImpersonatingToken();
 }
 
 /**
@@ -74,8 +68,7 @@ export function getCachedUser(): User | null {
  * seeded cache data instead of overwriting it with null.
  */
 function clearAllAuthStorage(): void {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+    clearAccessToken();
     localStorage.removeItem(USER_CACHE_KEY);
 }
 
@@ -162,7 +155,7 @@ export async function fetchCurrentUser(): Promise<User | null> {
  */
 function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
     return useCallback(async (token: string): Promise<User | null> => {
-        localStorage.setItem(TOKEN_KEY, token);
+        setAccessToken(token);
         try {
             const user = await fetchCurrentUser();
             queryClient.setQueryData(['auth', 'me'], user);
@@ -187,8 +180,7 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
         const data = await response.json();
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, data.original_token);
-        localStorage.setItem(TOKEN_KEY, data.access_token);
+        setAccessToken(data.access_token); // ROK-1754: memory only (lane C finishes start)
         await queryClient.invalidateQueries();
         return true;
     } catch (error) {
@@ -197,14 +189,13 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
     }
 }
 
+// ROK-1754 interim (lane C adds POST /auth/impersonate/exit first): re-mint from the admin's cookie.
 async function performExitImpersonation(queryClient: ReturnType<typeof useQueryClient>): Promise<boolean> {
-    const originalToken = localStorage.getItem(ORIGINAL_TOKEN_KEY);
-    if (!originalToken) return false;
-
-    localStorage.setItem(TOKEN_KEY, originalToken);
-    localStorage.removeItem(ORIGINAL_TOKEN_KEY);
+    if (!isImpersonatingToken()) return false;
+    clearAccessToken();
+    const ok = (await refreshWithOutcome()).kind === 'ok';
     await queryClient.invalidateQueries();
-    return true;
+    return ok;
 }
 
 /**

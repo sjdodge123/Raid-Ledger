@@ -13,10 +13,6 @@
  * remains the source of truth via the reactive 401 backstop.
  */
 
-interface JwtPayload {
-  exp?: unknown;
-}
-
 /** Decode a base64url segment to its UTF-8 string, or null if it can't. */
 function decodeBase64Url(segment: string): string | null {
   try {
@@ -28,8 +24,8 @@ function decodeBase64Url(segment: string): string | null {
   }
 }
 
-/** Parse a JWT's (unverified) payload object, or null if undecodable. */
-function readPayload(token: string): JwtPayload | null {
+/** A JWT's (unverified) claims, or null if undecodable. Never use for authz. */
+export function readClaims(token: string): Record<string, unknown> | null {
   const parts = token.split('.');
   const body = parts[1];
   if (parts.length !== 3 || body === undefined) return null;
@@ -37,7 +33,7 @@ function readPayload(token: string): JwtPayload | null {
   if (json === null) return null;
   try {
     const payload: unknown = JSON.parse(json);
-    return payload && typeof payload === 'object' ? (payload as JwtPayload) : null;
+    return payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null;
   } catch {
     return null;
   }
@@ -45,7 +41,7 @@ function readPayload(token: string): JwtPayload | null {
 
 /** Parse the `exp` (seconds since epoch) out of a JWT, or null if undecodable. */
 function readExp(token: string): number | null {
-  const exp = readPayload(token)?.exp;
+  const exp = readClaims(token)?.exp;
   return typeof exp === 'number' ? exp : null;
 }
 

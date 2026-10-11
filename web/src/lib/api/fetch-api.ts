@@ -8,6 +8,10 @@ import type { ZodType } from 'zod';
 import { withHttpStatus } from './api-error';
 import { endDeactivatedSession, isDeactivatedResponse } from './deactivated-session';
 
+// Captured at module init, before tooltips.js can patch `window.fetch` and
+// read our Authorization headers (ROK-1754 §3.6).
+const nativeFetch: typeof fetch = window.fetch.bind(window);
+
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();
     const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -53,7 +57,7 @@ export class SchemaValidationError extends Error {
  */
 /** Issue the actual HTTP request with the current auth headers. */
 function sendRequest(endpoint: string, options: RequestInit): Promise<Response> {
-    return fetch(`${API_BASE_URL}${endpoint}`, {
+    return nativeFetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers: buildHeaders(options),
         credentials: 'include',
@@ -76,8 +80,8 @@ function sendRequest(endpoint: string, options: RequestInit): Promise<Response> 
  * request when the stored access token is already expired (the boot/resume
  * case), so a burst of parallel initial queries makes ONE refresh up front
  * instead of each 401ing and triggering a retry. `ensureFreshToken` is
- * single-flight and self-guards impersonation (returns null) — on null we
- * proceed with the stored token and lean on the reactive 401 backstop below.
+ * single-flight (and renews impersonation server-side, ROK-1754) — on null we
+ * proceed with the held token and lean on the reactive 401 backstop below.
  */
 export async function fetchWithAuth(
     endpoint: string,
