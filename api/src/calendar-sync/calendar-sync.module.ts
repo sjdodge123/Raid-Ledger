@@ -14,6 +14,7 @@ import {
 } from './providers/calendar-provider.registry';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
+import { CalendarWriteProcessor } from './write/calendar-write.processor';
 
 /**
  * L15: the Fake is always constructed (an inert in-memory object) but is
@@ -52,6 +53,7 @@ const fakeProvider = {
     GoogleCalendarAdapter,
     CalendarProviderRegistry,
     fakeProvider,
+    CalendarWriteProcessor,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })
