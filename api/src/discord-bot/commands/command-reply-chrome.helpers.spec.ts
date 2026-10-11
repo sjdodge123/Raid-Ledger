@@ -166,6 +166,17 @@ describe('settingsFields (D6)', () => {
     ]);
   });
 
+  it('gives a Quick Play Announcements bind no voice fields (ROK-1766)', () => {
+    expect(
+      settingsFields({
+        channelName: 'valheim',
+        purpose: 'quick-play-announcements',
+        config: { minPlayers: 9, gracePeriod: 9 },
+        gameName: 'Valheim',
+      }),
+    ).toEqual([{ name: 'Game', value: 'Valheim', inline: true }]);
+  });
+
   it('omits Series and Game when they are not set', () => {
     const names = settingsFields({
       channelName: 'announcements',

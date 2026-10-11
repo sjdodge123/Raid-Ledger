@@ -408,3 +408,30 @@ describe('BindingsCommand — shared chrome (ROK-1477)', () => {
     expect((await replyEmbed(1)).title).toBe('Channel Bindings');
   });
 });
+
+describe('BindingsCommand — contract purpose labels (ROK-1766)', () => {
+  let command: BindingsCommand;
+  let bindingsService: jest.Mocked<ChannelBindingsService>;
+
+  beforeEach(async () => {
+    delete process.env.CLIENT_URL;
+    const module: TestingModule = await buildModule();
+    command = module.get(BindingsCommand);
+    bindingsService = module.get(ChannelBindingsService);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('labels a quick-play-announcements binding "Quick Play Announcements"', async () => {
+    bindingsService.getBindings.mockResolvedValue([
+      makeBinding({ bindingPurpose: 'quick-play-announcements', gameId: null }),
+    ]);
+    const interaction = mockInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    const reply = JSON.stringify(interaction.editReply.mock.calls);
+    expect(reply).toContain('(Quick Play Announcements)');
+    expect(reply).not.toContain('(quick-play-announcements)');
+  });
+});
