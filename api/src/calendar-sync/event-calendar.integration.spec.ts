@@ -351,3 +351,32 @@ describe('GET /events/:id/ics (D9, F7, F10)', () => {
     }
   });
 });
+
+describe('POST …/undo — final review m5 (suppress before delete)', () => {
+  it('suppresses BEFORE the remote delete: a reconcile racing the delete restores nothing (m5)', async () => {
+    const connectionId = await seedConnection();
+    const eventId = await signedUpEvent();
+    await reconcile(connectionId, eventId);
+    expect(copiesOf(eventId)).toHaveLength(1);
+    const statesAtDelete: string[] = [];
+    const original = fake.deleteEvent.bind(fake);
+    const deleteEvent = jest
+      .spyOn(fake, 'deleteEvent')
+      .mockImplementation(async (creds, ref) => {
+        statesAtDelete.push(...(await linkOf(eventId)).map((l) => l.state));
+        await original(creds, ref);
+        // The race: a queued reconcile lands right after the remote delete.
+        if (statesAtDelete.length === 1) await reconcile(connectionId, eventId);
+      });
+    try {
+      expect((await undo(eventId)).status).toBe(204);
+    } finally {
+      deleteEvent.mockRestore();
+    }
+    expect(statesAtDelete).toEqual(['suppressed']);
+    expect(copiesOf(eventId)).toHaveLength(0);
+    expect((await reconcile(connectionId, eventId)).result).toBe('noop');
+    expect(copiesOf(eventId)).toHaveLength(0);
+    expect((await linkOf(eventId)).map((l) => l.state)).toEqual(['suppressed']);
+  });
+});

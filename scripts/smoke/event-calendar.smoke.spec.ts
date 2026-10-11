@@ -27,6 +27,7 @@ import {
     getInviteeFixture,
 } from './api-helpers';
 import { isPhoneLayout } from './helpers';
+import { seedFixtureVoter } from './scheduling-poll-fixtures';
 
 const CALENDARS = '/profile/gaming/calendars';
 const MENU_ITEMS = ['Google Calendar', 'Outlook', 'Download .ics'];
@@ -43,7 +44,8 @@ const eventIds: number[] = [];
 async function seedViewer(project: string): Promise<Viewer> {
     const slot = VIEWER_SLOT_BY_PROJECT[project];
     if (slot === undefined) throw new Error(`no viewer slot for project "${project}": add one to VIEWER_SLOT_BY_PROJECT`);
-    const res = (await apiPost(token, '/admin/test/seed-fixture-user', { slot })) as Partial<Viewer> | null;
+    // Retries the 500 a concurrent first seed of the same slot answers (slot 4 is shared with scheduling-anti-vote).
+    const res = (await seedFixtureVoter(token, slot)) as Partial<Viewer> | null;
     if (typeof res?.userId !== 'number' || typeof res.jwt !== 'string') throw new Error(`seed-fixture-user(slot ${slot}) returned no user`);
     return { userId: res.userId, jwt: res.jwt };
 }

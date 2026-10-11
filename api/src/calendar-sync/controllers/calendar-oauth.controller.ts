@@ -225,18 +225,31 @@ export class CalendarOAuthController {
     grantedScopes: readonly string[],
   ): Promise<'connected' | 'unavailable'> {
     // The contract has no dedicated code; `unavailable` + Sentry it is.
-    const applied = await intents
-      .applyConsentIntent(this.db, {
-        intent,
-        connectionId,
-        userId,
-        provider,
-        grantedScopes,
-        queue: this.writeQueue,
-      })
+    const applied = await this.runConsentIntent({
+      intent,
+      connectionId,
+      userId,
+      provider,
+      grantedScopes,
+      queue: this.writeQueue,
+    });
+    if (applied === 'failed') return 'unavailable';
+    if (applied === 'other_account') {
+      this.logger.warn('primary consent landed on a non-writing account');
+    }
+    return 'connected';
+  }
+
+  /** The consent intent + any interrupted write-off; a throw → `failed`. */
+  private runConsentIntent(
+    input: Parameters<typeof intents.applyConsentIntent>[1],
+  ) {
+    return intents
+      .applyConsentIntent(this.db, input)
       .then(async (outcome) => {
         // Pipe review m3: a write-off an auth error interrupted resumes now.
-        await enqueuePendingWriteOff(this.db, this.enqueueDeps(), connectionId);
+        const deps = this.enqueueDeps();
+        await enqueuePendingWriteOff(this.db, deps, input.connectionId);
         return outcome;
       })
       .catch((err: unknown) => {
@@ -244,11 +257,6 @@ export class CalendarOAuthController {
         this.logger.error(`calendar consent apply failed (${errorClass(err)})`);
         return 'failed' as const;
       });
-    if (applied === 'failed') return 'unavailable';
-    if (applied === 'other_account') {
-      this.logger.warn('primary consent landed on a non-writing account');
-    }
-    return 'connected';
   }
 
   /**

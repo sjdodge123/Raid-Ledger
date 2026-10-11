@@ -4,13 +4,14 @@
  * gate). The worker is paused so queued jobs are run explicitly through
  * `CalendarWriteProcessor.process` — deterministic, no 5 s debounce.
  */
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   loginAsAdmin,
   truncateAllTables,
+  waitFor,
 } from '../common/testing/integration-helpers';
 import {
   createFutureEvent,
@@ -32,6 +33,7 @@ import {
   type FakeCalendarProvider,
 } from './providers/testing/fake-calendar.provider';
 import { upsertCalendarConnection } from './services/calendar-connect.helpers';
+import { CALENDAR_WRITE_LOCK_CLASS } from './services/calendar-write-settings.helpers';
 import type { CalendarWriteJobData } from './write/calendar-write.enqueue.helpers';
 import { CalendarWriteProcessor } from './write/calendar-write.processor';
 
@@ -329,5 +331,55 @@ describe('PATCH write settings — review fixes (m1, m2)', () => {
     expect(res.status).toBe(409);
     expect(res.body.message).toBe('needs_consent');
     expect((await rowOf(id))?.writeEnabled).toBe(false);
+  });
+});
+
+describe('PATCH write settings — final review (row read inside the lock)', () => {
+  it('a target-only PATCH queued behind a disable keeps write OFF (row read inside the lock)', async () => {
+    const id = await seedConnection({
+      scopes: WITH_EVENTS,
+      writeEnabled: true,
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let held!: () => void;
+    const lockHeld = new Promise<void>((r) => (held = r));
+    // Stands in for the disable PATCH: holds the per-user lock, then commits.
+    const disable = testApp.db.transaction(async (tx) => {
+      await tx.execute(
+        sql`SELECT pg_advisory_xact_lock(${CALENDAR_WRITE_LOCK_CLASS}::int4, ${user.userId}::int4)`,
+      );
+      held();
+      await gate;
+      await tx
+        .update(conns)
+        .set({ writeEnabled: false })
+        .where(eq(conns.id, id));
+    });
+    await lockHeld;
+    const targetOnly = patch(id, { write: { target: 'primary' } }).then(
+      (r) => r,
+    );
+    await waitFor(
+      async () => {
+        const waiting = await testApp.db.execute<{ n: number }>(
+          sql`SELECT count(*)::int AS n FROM pg_locks WHERE locktype = 'advisory' AND NOT granted AND classid = ${CALENDAR_WRITE_LOCK_CLASS} AND objid = ${user.userId} AND objsubid = 2`,
+        );
+        expect(waiting[0]?.n).toBe(1);
+      },
+      5000,
+      20,
+    );
+    release();
+    await disable;
+    expect((await targetOnly).status).toBe(204);
+    const row = await rowOf(id);
+    expect({
+      writeEnabled: row?.writeEnabled,
+      target: row?.writeTarget,
+    }).toEqual({
+      writeEnabled: false,
+      target: 'primary',
+    });
   });
 });

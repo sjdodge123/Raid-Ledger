@@ -63,36 +63,42 @@ interface NextWrite {
   target: CalendarWriteTarget;
 }
 
+/** The PATCH body's `write` block: either key may be absent. */
+interface WriteBody {
+  enabled?: boolean | undefined;
+  target?: CalendarWriteTarget | undefined;
+}
+
 /** Validate, persist and enqueue one write-settings change. */
 export async function updateCalendarWriteSettings(
   deps: CalendarWriteSettingsDeps,
   input: CalendarWriteSettingsInput,
 ): Promise<void> {
   const write = parseWriteBody(input.body);
-  const row = await loadOwnConnection(deps.db, input);
-  if (!write) return;
-  const next: NextWrite = {
-    enabled: write.enabled ?? row.writeEnabled,
-    target: write.target ?? (row.writeTarget as CalendarWriteTarget),
-  };
-  const flipsToPrimary = row.writeTarget !== 'primary';
-  if (next.target === 'primary' && (next.enabled || flipsToPrimary)) {
-    assertEventsScope(row);
+  if (!write) {
+    await loadOwnConnection(deps.db, input); // still 404 a foreign id
+    return;
   }
-  await persistWrite(deps.db, row, next);
+  const { row, next } = await persistWrite(deps.db, input, write);
   await enqueueFollowUp(deps, row, next);
 }
 
-/** m2: check + write under a per-user advisory lock, one transaction. */
+/**
+ * m2: check + write under a per-user advisory lock, one transaction. The row
+ * is read INSIDE the lock (final review): a value read before it could be a
+ * stale `writeEnabled` that a concurrent target-only PATCH writes back.
+ */
 async function persistWrite(
   db: Db,
-  row: ConnectionRow,
-  next: NextWrite,
-): Promise<void> {
-  await db.transaction(async (tx) => {
+  input: CalendarWriteSettingsInput,
+  write: WriteBody,
+): Promise<{ row: ConnectionRow; next: NextWrite }> {
+  return db.transaction(async (tx) => {
     await tx.execute(
-      sql`SELECT pg_advisory_xact_lock(${CALENDAR_WRITE_LOCK_CLASS}::int4, ${row.userId}::int4)`,
+      sql`SELECT pg_advisory_xact_lock(${CALENDAR_WRITE_LOCK_CLASS}::int4, ${input.userId}::int4)`,
     );
+    const row = await loadOwnConnection(tx, input);
+    const next = resolveNextWrite(row, write);
     if (next.enabled) await assertNoOtherWriteConnection(tx, row);
     await tx
       .update(schema.calendarConnections)
@@ -102,7 +108,21 @@ async function persistWrite(
         updatedAt: new Date(),
       })
       .where(eq(schema.calendarConnections.id, row.id));
+    return { row, next };
   });
+}
+
+/** The settings after the PATCH; 409 `needs_consent` if primary lacks scope. */
+function resolveNextWrite(row: ConnectionRow, write: WriteBody): NextWrite {
+  const next: NextWrite = {
+    enabled: write.enabled ?? row.writeEnabled,
+    target: write.target ?? (row.writeTarget as CalendarWriteTarget),
+  };
+  const flipsToPrimary = row.writeTarget !== 'primary';
+  if (next.target === 'primary' && (next.enabled || flipsToPrimary)) {
+    assertEventsScope(row);
+  }
+  return next;
 }
 
 /** 400 on a malformed body or any `read` key; the `write` block or null. */
@@ -117,7 +137,7 @@ function parseWriteBody(body: unknown) {
 
 /** The caller's own row; anything else (incl. another user's id) → 404. */
 async function loadOwnConnection(
-  db: Db,
+  db: Db | Tx,
   input: CalendarWriteSettingsInput,
 ): Promise<ConnectionRow> {
   const t = schema.calendarConnections;

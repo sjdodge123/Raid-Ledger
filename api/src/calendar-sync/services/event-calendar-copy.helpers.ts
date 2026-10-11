@@ -185,11 +185,13 @@ async function suppressExistingLinks(
     .where(and(eq(l.userId, userId), eq(l.eventId, eventId)));
   for (const { link, conn } of links) {
     if (link.state === 'suppressed') continue;
-    await deleteCopyBestEffort(deps, conn, link);
+    // m5: suppress FIRST — a reconcile racing the delete must already see
+    // `suppressed` (noop / guarded upsert), or its PATCH resurrects the copy.
     await deps.db
       .update(l)
       .set({ state: 'suppressed', updatedAt: new Date() })
       .where(eq(l.id, link.id));
+    await deleteCopyBestEffort(deps, conn, link);
   }
   return links.length > 0;
 }
