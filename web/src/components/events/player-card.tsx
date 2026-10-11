@@ -154,7 +154,7 @@ function PlayerAvatar({ player, avatarUser, gameId, isCompact }: { player: Viewe
     if (!c) return avatar;
     return (
         <ForeverPortraitFallback size={isCompact ? 'sm' : 'md'}
-            character={{ name: c.name, avatarUrl: c.avatarUrl, race: c.race, class: c.className, gameVariant: c.gameVariant, ruleset: c.ruleset }}>
+            character={{ name: c.name, avatarUrl: c.avatarUrl, race: c.race, class: c.className, gameVariant: c.gameVariant, ruleset: c.ruleset, gameId: c.gameId }}>
             {avatar}
         </ForeverPortraitFallback>
     );

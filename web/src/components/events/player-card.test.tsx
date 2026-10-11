@@ -5,6 +5,11 @@ import { PlayerCard } from './player-card';
 import { formatRole } from '../../lib/role-colors';
 import type { RosterAssignmentResponse } from '@raid-ledger/contract';
 import { at } from '../../test/defined';
+import { renderWithProviders } from '../../test/render-helpers';
+
+vi.mock('../../hooks/use-game-registry', () => ({
+    useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
+}));
 import type { ViewerRosterAssignment } from '../../lib/api/viewer-event-schemas';
 
 /** Create a minimal RosterAssignmentResponse for testing. */
@@ -320,5 +325,11 @@ describe('PlayerCard — Forever fallback portrait (ROK-1761)', () => {
         const { container } = renderCard({ player: createMockPlayer({ character: { ...foreverChar, avatarUrl } }) });
         expect(screen.queryByTestId('forever-portrait')).toBeNull();
         expect(container.querySelector(`img[src="${avatarUrl}"]`), 'character render shown').not.toBeNull();
+    });
+
+    it("a LedgerLink Forever character (variant + ruleset null) resolves the tile from its own gameId", () => {
+        const ledgerLink = { ...foreverChar, ruleset: null, gameVariant: null, gameId: 7 };
+        renderWithProviders(<PlayerCard player={createMockPlayer({ character: ledgerLink })} />);
+        expect(screen.queryByTestId('forever-portrait'), 'roster row draws the tile from the character game id').not.toBeNull();
     });
 });

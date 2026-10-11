@@ -52,6 +52,7 @@ export function buildRosterCharacter(characters: CharacterRow) {
     race: characters.race,
     ruleset: characters.ruleset,
     gameVariant: characters.gameVariant,
+    gameId: characters.gameId,
   };
 }
 

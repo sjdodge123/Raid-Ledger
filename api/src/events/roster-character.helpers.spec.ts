@@ -66,6 +66,7 @@ describe('buildRosterCharacter — Forever portrait fields (ROK-1761)', () => {
         race: 'Night Elf',
         ruleset: 'normal',
         gameVariant: null,
+        gameId: 7,
       }),
     );
   });
