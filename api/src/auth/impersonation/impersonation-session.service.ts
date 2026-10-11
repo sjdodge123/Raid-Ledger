@@ -99,7 +99,11 @@ export class ImpersonationSessionService {
     familyId: string,
     reason: ImpersonationEndReason,
   ): Promise<boolean> {
-    const rows = await endMarkersWhere(this.db, eq(markers.familyId, familyId), reason);
+    const rows = await endMarkersWhere(
+      this.db,
+      eq(markers.familyId, familyId),
+      reason,
+    );
     return rows.length > 0;
   }
 
@@ -108,13 +112,21 @@ export class ImpersonationSessionService {
     userId: number,
     reason: ImpersonationEndReason,
   ): Promise<number> {
-    const rows = await endMarkersWhere(this.db, eq(markers.impersonatorUserId, userId), reason);
+    const rows = await endMarkersWhere(
+      this.db,
+      eq(markers.impersonatorUserId, userId),
+      reason,
+    );
     return rows.length;
   }
 
   /** Cron: delete markers at/after `expires_at`, one `expired` audit each. */
   async sweepExpired(): Promise<number> {
-    const rows = await endMarkersWhere(this.db, lte(markers.expiresAt, new Date()), 'expired');
+    const rows = await endMarkersWhere(
+      this.db,
+      lte(markers.expiresAt, new Date()),
+      'expired',
+    );
     return rows.length;
   }
 
