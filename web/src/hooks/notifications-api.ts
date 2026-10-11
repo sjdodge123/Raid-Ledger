@@ -5,6 +5,7 @@
 import { API_BASE_URL } from '../lib/config';
 import { getAuthToken } from './use-auth';
 import type { Notification, NotificationPreferences, UpdatePreferencesInput, ChannelAvailability } from './use-notifications';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 /** Fetch all notifications for the current user */
 export async function fetchNotifications(
@@ -14,7 +15,7 @@ export async function fetchNotifications(
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications?limit=${limit}&offset=${offset}`,
         { headers: { Authorization: `Bearer ${token}` } },
     );
@@ -31,7 +32,7 @@ export async function fetchUnreadCount(): Promise<number> {
     const token = getAuthToken();
     if (!token) return 0;
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/unread/count`,
         { headers: { Authorization: `Bearer ${token}` } },
     );
@@ -51,7 +52,7 @@ export async function markNotificationRead(
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/${notificationId}/read`,
         { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
     );
@@ -66,7 +67,7 @@ export async function markAllNotificationsRead(): Promise<void> {
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/read-all`,
         { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
     );
@@ -81,7 +82,7 @@ export async function fetchPreferences(): Promise<NotificationPreferences> {
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/preferences`,
         { headers: { Authorization: `Bearer ${token}` } },
     );
@@ -100,7 +101,7 @@ export async function patchPreferences(
     const token = getAuthToken();
     if (!token) throw new Error('Not authenticated');
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/preferences`,
         {
             method: 'PATCH',
@@ -126,7 +127,7 @@ export async function fetchChannelAvailability(): Promise<ChannelAvailability> {
         return { discord: { available: false, reason: 'Not authenticated' } };
     }
 
-    const response = await fetch(
+    const response = await nativeFetch(
         `${API_BASE_URL}/notifications/channels`,
         { headers: { Authorization: `Bearer ${token}` } },
     );

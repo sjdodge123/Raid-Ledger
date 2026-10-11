@@ -8,6 +8,7 @@ import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/sile
 import { clearAccessToken } from '../lib/api/access-token-store';
 import { TokenResponseSchema } from '@raid-ledger/contract';
 import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 /**
  * Handles OAuth callback - exchanges one-time auth code for JWT token.
@@ -92,7 +93,7 @@ function handleOAuthError(error: string, navigate: ReturnType<typeof useNavigate
 async function exchangeAuthCode(code: string) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
-    const response = await fetch(`${API_BASE_URL}/auth/exchange-code`, {
+    const response = await nativeFetch(`${API_BASE_URL}/auth/exchange-code`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }), signal: controller.signal,
     });

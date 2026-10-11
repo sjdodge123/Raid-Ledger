@@ -6,6 +6,7 @@ import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contrac
 import { resolveSocketTarget } from '../lib/socket-target';
 import { getAccessToken } from '../lib/api/access-token-store';
 import { socketAuth } from '../lib/api/socket-auth';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -26,7 +27,7 @@ async function fetchInitialRoster(
 ): Promise<{ participants: AdHocParticipantDto[]; activeCount: number } | null> {
   try {
     const token = getAccessToken();
-    const res = await fetch(`${API_BASE}/events/${eventId}/ad-hoc-roster`, {
+    const res = await nativeFetch(`${API_BASE}/events/${eventId}/ad-hoc-roster`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     if (!res.ok) return null;

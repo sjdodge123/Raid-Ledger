@@ -12,6 +12,7 @@ import { DiscordIcon } from '../components/icons/DiscordIcon';
 import type { LoginMethodDto } from '@raid-ledger/contract';
 import { LocalLoginForm } from './login/LocalLoginForm';
 import { Button } from '../components/ui/button';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 /** Watches for OAuth error query param and displays a toast */
 function useOAuthErrorHandler(): void {
@@ -144,7 +145,7 @@ async function performLocalLogin({ username, password, login, isFirstRun, naviga
     login: (token: string) => Promise<{ role?: string; onboardingCompletedAt: string | null } | null>;
     isFirstRun: boolean; navigate: ReturnType<typeof useNavigate>;
 }): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/auth/local`, {
+    const response = await nativeFetch(`${API_BASE_URL}/auth/local`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),

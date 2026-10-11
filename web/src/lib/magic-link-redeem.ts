@@ -3,6 +3,7 @@ import { API_BASE_URL } from './config';
 import { legacySessionPurged, setAccessToken } from './api/access-token-store';
 import { refreshWithOutcome } from './api/refresh-client';
 import { clearSilentGuard, getAuthMethod, setAuthMethod } from './api/silent-reauth';
+import { nativeFetch } from './api/native-fetch';
 
 /**
  * ROK-1366: exchange a single-use magic-link token for a real session.
@@ -44,7 +45,7 @@ async function checkStoredSession(): Promise<StoredSession> {
 async function postRedeem(token: string): Promise<string | null> {
   const body: RedeemMagicLinkDto = { token };
   try {
-    const res = await fetch(`${API_BASE_URL}/auth/redeem-magic-link`, {
+    const res = await nativeFetch(`${API_BASE_URL}/auth/redeem-magic-link`, {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
