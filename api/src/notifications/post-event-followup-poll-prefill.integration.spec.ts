@@ -121,6 +121,8 @@ function pollResponse(
     memberCount: 1,
     status: 'scheduling',
     createdAt: new Date().toISOString(),
+    visibility: 'public',
+    shareToken: null,
   };
 }
 

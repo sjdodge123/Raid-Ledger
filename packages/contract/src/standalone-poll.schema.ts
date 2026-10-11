@@ -1,5 +1,14 @@
 import { z } from 'zod';
 
+/**
+ * Standalone poll visibility (ROK-1750). `private` = "Private — anyone with
+ * the link": only the creator, picked members and link redeemers may view or
+ * vote, and the poll carries a 256-bit share token.
+ */
+export const StandalonePollVisibilitySchema = z.enum(['public', 'private']);
+
+export type StandalonePollVisibility = z.infer<typeof StandalonePollVisibilitySchema>;
+
 // ============================================================
 // Standalone Scheduling Poll Schemas (ROK-977)
 // ============================================================
@@ -20,6 +29,11 @@ export const CreateSchedulingPollSchema = z.object({
     memberUserIds: z.array(z.number().int().positive()).optional(),
     /** Minimum unique voters before organizer is notified (ROK-1015). */
     minVoteThreshold: z.number().int().positive().optional(),
+    /** ROK-1750: poll visibility. Absent = `public`. */
+    visibility: StandalonePollVisibilitySchema.optional(),
+}).refine((d) => !(d.visibility === 'private' && d.linkedEventId !== undefined), {
+    message: 'A reschedule poll (linkedEventId) cannot be private',
+    path: ['visibility'],
 });
 
 export type CreateSchedulingPollDto = z.infer<typeof CreateSchedulingPollSchema>;
@@ -46,6 +60,10 @@ export const SchedulingPollResponseSchema = z.object({
     status: z.literal('scheduling'),
     /** ISO datetime when the poll was created. */
     createdAt: z.string().datetime(),
+    /** ROK-1750: poll visibility. */
+    visibility: StandalonePollVisibilitySchema,
+    /** ROK-1750: share token — non-null only for a private poll. */
+    shareToken: z.string().nullable(),
 });
 
 export type SchedulingPollResponseDto = z.infer<typeof SchedulingPollResponseSchema>;
@@ -67,6 +85,47 @@ export const ActiveStandalonePollSchema = z.object({
     memberCount: z.number(),
     /** Number of proposed time slots. */
     slotCount: z.number(),
+    /** ROK-1750: poll visibility (drives the banner's Private chip). */
+    visibility: StandalonePollVisibilitySchema.optional(),
 });
 
 export type ActiveStandalonePollDto = z.infer<typeof ActiveStandalonePollSchema>;
+
+// ============================================================
+// Private poll share links (ROK-1750)
+// ============================================================
+
+/**
+ * Un-authed preview for GET /scheduling-polls/share/:token. Deliberately
+ * minimal (ROK-1629 projection rule): no voter names, slot times or
+ * Discord ids.
+ */
+export const PollSharePreviewSchema = z.object({
+    gameName: z.string(),
+    gameCoverUrl: z.string().nullable(),
+    creatorDisplayName: z.string(),
+    /** False once the poll is locked in, cancelled or expired. */
+    isOpen: z.boolean(),
+    memberCount: z.number().int().nonnegative(),
+});
+
+export type PollSharePreviewDto = z.infer<typeof PollSharePreviewSchema>;
+
+/**
+ * Response from POST /scheduling-polls/share/:token/join. `joined` is false
+ * when the caller was already in, is the creator, or the poll is closed.
+ */
+export const PollShareJoinResponseSchema = z.object({
+    lineupId: z.number().int().positive(),
+    matchId: z.number().int().positive(),
+    joined: z.boolean(),
+});
+
+export type PollShareJoinResponseDto = z.infer<typeof PollShareJoinResponseSchema>;
+
+/** Response from POST /scheduling-polls/:matchId/share-token/reset. */
+export const PollShareTokenResponseSchema = z.object({
+    shareToken: z.string().min(1),
+});
+
+export type PollShareTokenResponseDto = z.infer<typeof PollShareTokenResponseSchema>;
