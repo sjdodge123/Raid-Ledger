@@ -237,8 +237,10 @@ const lobbySpawnPostsQuickPlayCard: SmokeTest = {
       await expectLobbyCardUnchanged(ctx, ch, room, card, eventId);
     } finally {
       await setLobbyPresence(ctx.api, ch.voice.id, null).catch(() => {});
-      if (eventId !== null) await deleteEvent(ctx.api, eventId);
-      for (const id of bindingIds) await deleteBinding(ctx.api, id);
+      if (eventId !== null) await deleteEvent(ctx.api, eventId).catch(() => {});
+      for (const id of bindingIds) {
+        await deleteBinding(ctx.api, id).catch(() => {});
+      }
     }
   },
 };
