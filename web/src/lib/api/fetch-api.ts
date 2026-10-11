@@ -7,12 +7,8 @@ import { Sentry } from '../../sentry';
 import type { ZodType } from 'zod';
 import { withHttpStatus } from './api-error';
 import { endDeactivatedSession, isDeactivatedResponse } from './deactivated-session';
+import { nativeFetch } from './native-fetch';
 
-// Captured at module init, before tooltips.js can patch `window.fetch` and
-// read our Authorization headers (ROK-1754 §3.6). Tests that stub `fetch` for
-// a request routed through here must install the stub before this module is
-// imported (`vi.hoisted`), or route the request through MSW.
-const nativeFetch: typeof fetch = window.fetch.bind(window);
 
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();

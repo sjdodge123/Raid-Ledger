@@ -7,6 +7,7 @@ import {
   isDeactivatedResponse,
   readErrorCode,
 } from './deactivated-session';
+import { nativeFetch } from './native-fetch';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -50,8 +51,6 @@ const INDETERMINATE: RefreshOutcome = { kind: 'indeterminate' };
 const REJECTED: RefreshOutcome = { kind: 'rejected' };
 const LOCK_NAME = 'rl-refresh';
 
-// Captured at module init, before tooltips.js can patch `window.fetch` (§3.6).
-const nativeFetch: typeof fetch = window.fetch.bind(window);
 
 let inFlight: Promise<RefreshOutcome> | null = null;
 
