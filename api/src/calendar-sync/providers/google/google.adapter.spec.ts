@@ -235,6 +235,15 @@ describe('GoogleCalendarAdapter write — Google specifics', () => {
     expect(err).toBeInstanceOf(NotFoundError);
   });
 
+  it('deleting a dedicated calendar that is already gone resolves', async () => {
+    const { api, a } = fakeGoogle();
+    const cal = await a.ensureRaidLedgerCalendar(CREDS, null);
+    api.removeCalendar(cal);
+    await expect(
+      a.deleteRaidLedgerCalendar(CREDS, cal),
+    ).resolves.toBeUndefined();
+  });
+
   it('rejects non-OAuth credentials without calling Google', async () => {
     const { api, a } = fakeGoogle();
     const caldav = { kind: 'caldav', username: 'u', appPassword: 'p' } as const;
