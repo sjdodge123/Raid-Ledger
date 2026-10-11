@@ -8,6 +8,12 @@ import type { ZodType } from 'zod';
 import { withHttpStatus } from './api-error';
 import { endDeactivatedSession, isDeactivatedResponse } from './deactivated-session';
 
+// Captured at module init, before tooltips.js can patch `window.fetch` and
+// read our Authorization headers (ROK-1754 §3.6). Tests that stub `fetch` for
+// a request routed through here must install the stub before this module is
+// imported (`vi.hoisted`), or route the request through MSW.
+const nativeFetch: typeof fetch = window.fetch.bind(window);
+
 function buildHeaders(options: RequestInit): Record<string, string> {
     const token = getAuthToken();
     const authHeaders: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
@@ -53,10 +59,7 @@ export class SchemaValidationError extends Error {
  */
 /** Issue the actual HTTP request with the current auth headers. */
 function sendRequest(endpoint: string, options: RequestInit): Promise<Response> {
-    // Resolved at call time, not captured at module init: a module-load
-    // capture bypasses the per-test `fetch` stubs that route through here.
-    // ROK-1754 §3.6's init-time capture is kept in refresh-client.ts only.
-    return globalThis.fetch(`${API_BASE_URL}${endpoint}`, {
+    return nativeFetch(`${API_BASE_URL}${endpoint}`, {
         ...options,
         headers: buildHeaders(options),
         credentials: 'include',
