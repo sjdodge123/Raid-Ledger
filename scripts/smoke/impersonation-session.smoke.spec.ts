@@ -34,7 +34,9 @@ function exitButton(page: Page) {
 async function expectAdminMenu(page: Page): Promise<void> {
     const trigger = page.getByTestId('user-menu-trigger');
     const openMenu = page.getByRole('button', { name: 'Open menu' });
-    await expect(trigger.or(openMenu).first()).toBeVisible({ timeout: 15_000 });
+    // Both are in the DOM at every width (the desktop trigger is CSS-hidden on
+    // the phone), so pick the VISIBLE one — `.first()` alone is the hidden trigger.
+    await expect(trigger.or(openMenu).filter({ visible: true }).first()).toBeVisible({ timeout: 15_000 });
     if (await trigger.isVisible()) {
         await trigger.click();
         await expect(
