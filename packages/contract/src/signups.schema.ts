@@ -48,6 +48,10 @@ export const SignupCharacterSchema = z.object({
     faction: z.enum(['alliance', 'horde']).nullable().optional(),
     /** ROK-1130: profession data for the roster meta-row pills. */
     professions: CharacterProfessionsSchema.nullable().optional(),
+    /** ROK-1761: the character's OWN game / variant / ruleset, so the web draws the Forever portrait from the character, not the event (additive, optional). */
+    gameId: z.number().int().nullable().optional(),
+    gameVariant: z.string().max(30).nullable().optional(),
+    ruleset: z.string().nullable().optional(),
 });
 
 export type SignupCharacterDto = z.infer<typeof SignupCharacterSchema>;

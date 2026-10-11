@@ -95,6 +95,10 @@ export function buildCharacterDto(
     faction: character.faction as 'alliance' | 'horde' | null,
     professions:
       (character.professions as CharacterProfessionsDto | null) ?? null,
+    // ROK-1761: the web draws the Forever portrait from the character's own game.
+    gameId: character.gameId,
+    gameVariant: character.gameVariant,
+    ruleset: character.ruleset,
   };
 }
 
