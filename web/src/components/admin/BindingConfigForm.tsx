@@ -49,15 +49,23 @@ function PurposeConfigSections({ f }: { f: BindingForm }) {
           onGracePeriodChange={f.setGracePeriod}
         />
       )}
-      {f.purpose === "quick-play-announcements" && (
+      <AnnouncementNotes purpose={f.purpose} />
+    </>
+  );
+}
+
+/** Announcement purposes have no config; Quick Play adds its one-line help (ROK-1766). */
+function AnnouncementNotes({ purpose }: { purpose: BindingForm["purpose"] }) {
+  const isQuickPlay = purpose === "quick-play-announcements";
+  if (purpose !== "game-announcements" && !isQuickPlay) return null;
+  return (
+    <>
+      {isQuickPlay && (
         <p className="text-xs text-muted">{QUICK_PLAY_ANNOUNCE_HELP}</p>
       )}
-      {(f.purpose === "game-announcements" ||
-        f.purpose === "quick-play-announcements") && (
-        <p className="text-sm text-muted">
-          No additional configuration needed for announcement channels.
-        </p>
-      )}
+      <p className="text-sm text-muted">
+        No additional configuration needed for announcement channels.
+      </p>
     </>
   );
 }
