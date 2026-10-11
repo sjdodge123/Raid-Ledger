@@ -7,7 +7,7 @@
  *   • `character.professions` wins over flat prop
  *   • null/missing → no badge DOM
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import type {
     CharacterDto,
@@ -17,6 +17,11 @@ import { CharacterCardCompact } from './character-card-compact';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { usePluginStore } from '../../stores/plugin-store';
+
+// Reset the plugin store after every test so a failing assertion cannot leak an active plugin.
+afterEach(() => {
+    usePluginStore.setState({ activeSlugs: new Set() });
+});
 
 vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
@@ -137,7 +142,6 @@ describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', (
         activateWowPlugin();
         renderWithProviders(<CharacterCardCompact character={makeCharacter({ gameId: 7, gameVariant: null, ruleset: null })} />);
         expect(screen.getByText('Forever')).toBeInTheDocument();
-        usePluginStore.setState({ activeSlugs: new Set() });
     });
 });
 
@@ -155,7 +159,6 @@ describe('CharacterCardCompact — Forever portrait from portraitGameId (event a
         activateWowPlugin();
         renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={7} />);
         expect(screen.queryByText('Forever'), 'variant badge unchanged for flat-props cards').toBeNull();
-        usePluginStore.setState({ activeSlugs: new Set() });
     });
 
     it('a non-Forever game id keeps the normal avatar', () => {
