@@ -5,7 +5,7 @@ import type {
   SignupStatus,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { buildCharacterDto } from './signup-response.helpers';
+import { buildCharacterDto } from './signups-roster.helpers';
 
 type SignupRow = typeof schema.eventSignups.$inferSelect;
 type UserRow = typeof schema.users.$inferSelect;
