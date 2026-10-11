@@ -5,9 +5,6 @@ import { BOOT_BYPASS_PATHS, isBootSettled, subscribeBootSession } from '../../li
 const SLOW_THRESHOLD_MS = 30_000;
 const FADE_DURATION_MS = 300;
 
-/** Routes that must bypass the startup gate (time-sensitive auth flows) — shared with the boot. */
-const BYPASS_PATHS = BOOT_BYPASS_PATHS;
-
 function FadingOverlay({ onTransitionEnd }: { onTransitionEnd: () => void }) {
     return (
         <div
@@ -63,7 +60,7 @@ export function StartupGate({ children }: { children: ReactNode }) {
     }, [ready]);
 
     const handleTransitionEnd = useCallback(() => setGateVisible(false), []);
-    const isBypassRoute = BYPASS_PATHS.includes(window.location.pathname);
+    const isBypassRoute = BOOT_BYPASS_PATHS.includes(window.location.pathname);
 
     const gateActive = gateVisible && !isBypassRoute;
     if (gateActive && !ready) {

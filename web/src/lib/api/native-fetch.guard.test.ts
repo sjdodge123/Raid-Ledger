@@ -30,14 +30,35 @@ const TOKEN_MARKERS: string[] = [
     'getAuth' + 'Token',
     'getAccess' + 'Token',
     'access' + '_token',
+    // Review r4: a file can carry the token via an imported header builder.
+    'getHead' + 'ers',
+    'authHead' + 'ers',
 ];
 
+/** Assembled so this file never matches itself (see header). */
+const F = 'fe' + 'tch';
+const GLOBALS = '(?:window|globalThis|self)';
+/** Not part of a longer identifier or a member of something else, nor a type. */
+const BARE = '(?<![\\w.$])(?<!typeof\\s{1,10})';
+const OWNER = `(?:${GLOBALS}\\s*(?:\\?\\.|\\.)\\s*)?`;
+
 /**
- * A call to the global fetch: bare (not a member call and not part of a longer
- * identifier such as a refetch or nativeFetch) or through `window`.
+ * Any reach for the global fetch (review r4 widened this):
+ *   - a call, bare or via window/globalThis/self, incl. `?.(` and `fetch (`
+ *   - bracket access: `window['fetch']`
+ *   - an alias / reference: `const f = fetch;`, `{ fetch }`, `use(fetch)`
+ *   - `fetch.call(` / `.apply(` / `.bind(`
+ *   - a token-carrying XHR built from the global constructor (review r3)
  */
 const GLOBAL_FETCH = new RegExp(
-    '(?<![\\w.$])' + 'fe' + 'tch\\(' + '|' + 'window\\.' + 'fe' + 'tch\\(',
+    [
+        `${BARE}${OWNER}${F}\\s*(?:\\?\\.\\s*)?\\(`,
+        `${GLOBALS}\\s*(?:\\?\\.)?\\[\\s*['"\`]${F}['"\`]\\s*\\]`,
+        `${BARE}${OWNER}${F}\\s*(?:[;,)\\]}]|$)`,
+        `${BARE}${OWNER}${F}\\s*\\.\\s*(?:call|apply|bind)\\b`,
+        'new\\s+' + 'XMLHttp' + 'Request\\b',
+    ].join('|'),
+    'm',
 );
 
 function isTestPath(rel: string): boolean {
@@ -81,7 +102,7 @@ describe('nativeFetch guard (ROK-1754 §3.6)', () => {
 
     it('flags a bypass and ignores nativeFetch, refetch and comments', () => {
         const auth = 'Author' + 'ization';
-        const call = 'fe' + 'tch(';
+        const call = F + '(';
         const fixtures: Record<string, string> = {
             'bad.ts': `await ${call}url, { headers: { ${auth}: t } });`,
             'bad-window.ts': `window.${call}url, { headers: { ${auth}: t } });`,
@@ -89,10 +110,37 @@ describe('nativeFetch guard (ROK-1754 §3.6)', () => {
             'ok-refetch.ts': `re${call}); const h = { ${auth}: t };`,
             'ok-comment.ts': `// ${call}\nconst h = { ${auth}: t };`,
             'ok-no-token.ts': `await ${call}'/health');`,
+            // Review r4: shapes the first regex missed.
+            'bad-globalthis.ts': `await globalThis.${call}u, { headers: { ${auth}: t } });`,
+            'bad-self.ts': `await self.${call}u, { headers: { ${auth}: t } });`,
+            'bad-optional.ts': `await ${F}?.(u, { headers: { ${auth}: t } });`,
+            'bad-spaced.ts': `await ${F} (u, { headers: { ${auth}: t } });`,
+            'bad-alias.ts': `const f = ${F};\nawait f(u, { headers: { ${auth}: t } });`,
+            'bad-alias-eol.ts': `const f = ${F}\nawait f(u, { headers: { ${auth}: t } });`,
+            'bad-bracket.ts': `await window['${F}'](u, { headers: { ${auth}: t } });`,
+            'bad-call.ts': `await ${F}.call(window, u, { headers: { ${auth}: t } });`,
+            'bad-shorthand.ts': `useClient({ ${F} }); const h = { ${auth}: t };`,
+            'bad-imported-headers.ts': `await ${call}u, { headers: getHead${'ers'}() });`,
+            'bad-xhr.ts': `const x = new XMLHttp${'Request'}(); x.setRequestHeader('${auth}', t);`,
+            'ok-typeof.ts': `const f: typeof ${F} = n; const h = { ${auth}: t };`,
+            'ok-member.ts': `await client.${call}u); const h = { ${auth}: t };`,
+            'ok-native-xhr.ts': `const x = new NativeXHR(); const h = { ${auth}: t };`,
+            'ok-string.ts': `throw new Error('Failed to ${F}'); const h = { ${auth}: t };`,
         };
         expect(findBypasses(Object.keys(fixtures), (rel) => fixtures[rel])).toEqual([
             'bad.ts',
             'bad-window.ts',
+            'bad-globalthis.ts',
+            'bad-self.ts',
+            'bad-optional.ts',
+            'bad-spaced.ts',
+            'bad-alias.ts',
+            'bad-alias-eol.ts',
+            'bad-bracket.ts',
+            'bad-call.ts',
+            'bad-shorthand.ts',
+            'bad-imported-headers.ts',
+            'bad-xhr.ts',
         ]);
     });
 });

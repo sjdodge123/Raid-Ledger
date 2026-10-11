@@ -11,6 +11,14 @@ import { IDENTITY_EPOCH_KEY, bumpIdentityEpoch, installCrossTabAuth } from './cr
 const refresh = vi.hoisted(() => vi.fn());
 // Review m1: an identity change uses freshRefresh (never joins a stale in-flight POST).
 vi.mock('./refresh-client', () => ({ freshRefresh: refresh }));
+const toastInfo = vi.hoisted(() => vi.fn());
+vi.mock('../toast', () => ({ toast: { info: toastInfo } }));
+
+/** An unsigned JWT carrying `impersonatedBy` (readClaims never verifies). */
+function impersonationJwt(): string {
+    const b64 = (o: object) => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+    return `${b64({ alg: 'none' })}.${b64({ sub: 7, impersonatedBy: 1, exp: 4102444800 })}.sig`;
+}
 
 function siblingTabWrote(key: string, oldValue: string | null, newValue: string | null): void {
     window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue }));
@@ -23,6 +31,7 @@ describe('ROK-1754 B2: cross-tab auth signals', () => {
     beforeEach(() => {
         localStorage.clear();
         refresh.mockReset();
+        toastInfo.mockReset();
         queryClient = new QueryClient();
         uninstall = installCrossTabAuth(queryClient);
     });
@@ -58,6 +67,21 @@ describe('ROK-1754 B2: cross-tab auth signals', () => {
         await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
         expect(order).toEqual(['refresh(held=null)', 'invalidate']);
         expect(refresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('fix-round n1: "Impersonation ended" only after a definite re-mint, never an indeterminate one', async () => {
+        const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
+        setAccessToken(impersonationJwt());
+        refresh.mockResolvedValue({ kind: 'indeterminate' });
+        siblingTabWrote(IDENTITY_EPOCH_KEY, '1', '2');
+        await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+        expect(toastInfo).not.toHaveBeenCalled();
+
+        setAccessToken(impersonationJwt());
+        refresh.mockResolvedValue({ kind: 'ok', token: 'admin-token' });
+        siblingTabWrote(IDENTITY_EPOCH_KEY, '2', '3');
+        await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+        expect(toastInfo).toHaveBeenCalledWith('Impersonation ended');
     });
 
     it('an unrelated key leaves the token alone', () => {

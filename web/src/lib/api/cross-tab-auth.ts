@@ -30,9 +30,10 @@ async function followIdentityChange(queryClient: QueryClient): Promise<void> {
   const wasImpersonating = isImpersonatingToken();
   clearAccessToken();
   // Never join a refresh POSTed under the old identity (review m1).
-  await freshRefresh();
+  const outcome = await freshRefresh();
   // Clearing memory first hides the end from use-auth's subscriber (review n1).
-  if (wasImpersonating && !isImpersonatingToken()) toast.info('Impersonation ended');
+  // Only a definite re-mint says it ended: an indeterminate one leaves no token (fix-round n1).
+  if (wasImpersonating && outcome.kind === 'ok' && !isImpersonatingToken()) toast.info('Impersonation ended');
   await queryClient.invalidateQueries();
 }
 
