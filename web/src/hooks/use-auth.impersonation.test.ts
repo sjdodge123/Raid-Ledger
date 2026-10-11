@@ -9,6 +9,7 @@ import { useAuth } from './use-auth';
 import { getAccessToken, setAccessToken } from '../lib/api/access-token-store';
 import { ensureFreshToken } from '../lib/api/refresh-client';
 import { toast } from '../lib/toast';
+import { IDENTITY_EPOCH_KEY } from '../lib/api/cross-tab-auth';
 
 vi.mock('../lib/toast', () => ({ toast: { info: vi.fn(), error: vi.fn(), success: vi.fn() } }));
 
@@ -69,6 +70,15 @@ describe('ROK-1754 C: impersonation is server-side, the token memory-only', () =
         expect(ok).toBe(true);
         expect(getAccessToken()).toBe(IMP);
         expect(storageValues().filter((v) => v.includes(IMP) || v.includes(ADMIN))).toEqual([]);
+    });
+
+    it('start bumps the cross-tab identity epoch so other tabs re-mint (B2)', async () => {
+        serveAuth([]);
+        setAccessToken(ADMIN);
+        const { result } = renderAuth();
+        expect(localStorage.getItem(IDENTITY_EPOCH_KEY)).toBeNull();
+        await act(async () => { await result.current.impersonate(7); });
+        expect(localStorage.getItem(IDENTITY_EPOCH_KEY)).toMatch(/^\d+$/);
     });
 
     it('isImpersonating follows the in-memory claim, reactively (no other re-render trigger)', () => {
