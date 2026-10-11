@@ -34,6 +34,7 @@ import {
 } from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
+import type { CalendarWriteJobData } from './calendar-write.enqueue.helpers';
 import { CalendarWriteProcessor } from './calendar-write.processor';
 import {
   enqueuePendingWriteOff,
@@ -66,7 +67,29 @@ beforeAll(async () => {
     registry: testApp.app.get(CalendarProviderRegistry),
   };
   await processor.worker.pause(true);
+  await flushInFlightFetch();
 });
+
+/**
+ * `pause(true)` does not cancel the worker's in-flight blocking fetch, so the
+ * FIRST job added afterwards (m3's re-queued write-off) was still processed
+ * by the worker — finishing the write-off before the test's own run, which
+ * then found nothing left (`deletedCopies: 0`). Feed that fetch a harmless
+ * job (no such connection → noop) and wait, bounded, until it is consumed;
+ * if no fetch was in flight it is drained. Same as the disconnect specs.
+ */
+async function flushInFlightFetch(): Promise<void> {
+  const data: CalendarWriteJobData = { kind: 'disconnect', connectionId: 0 };
+  await queue.add('disconnect', data, {
+    jobId: 'wo-flush',
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+  for (let i = 0; i < 30 && (await queue.getJob('wo-flush')); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  await queue.drain(true);
+}
 
 afterAll(() => processor.worker.resume());
 
@@ -208,5 +231,36 @@ describe('write-off job — review P2 fixes', () => {
     await expect(
       enqueuePendingWriteOff(testApp.db, enqueueDeps, id),
     ).resolves.toBeNull();
+  });
+});
+
+describe('write-off job — review round 3', () => {
+  it('MAJOR: a failed placeholder link (empty ids) is dropped without a provider delete; the write-off completes', async () => {
+    const { id, calendarId } = await seedWriteOff();
+    const eventId = await createFutureEvent(testApp, adminToken, {
+      title: 'Raid failed',
+    });
+    await testApp.db.insert(links).values({
+      connectionId: id,
+      userId,
+      eventId,
+      calendarId: '',
+      providerEventId: '',
+      state: 'failed',
+    });
+    const spy = jest.spyOn(fake, 'deleteEvent');
+    try {
+      await expect(runCalendarWriteOff(deps, id)).resolves.toEqual({
+        result: 'done',
+        deletedCopies: 1,
+      });
+      const ids = spy.mock.calls.map(([, ref]) => ref.providerEventId);
+      expect(ids).not.toContain('');
+      expect(ids).toHaveLength(1);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(fake.store.hasCalendar(calendarId)).toBe(false);
+    expect(await statesOf(id)).toEqual([]);
   });
 });
