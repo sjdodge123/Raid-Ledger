@@ -25,6 +25,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { DiscordNotificationEmbedService } from '../notifications/discord-notification-embed.service';
 import { RenderDmEmbedSchema } from './demo-test.schemas';
@@ -45,7 +46,7 @@ export interface RenderedDmEmbed {
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestRenderDmEmbedController {
   constructor(
     private readonly settingsService: SettingsService,

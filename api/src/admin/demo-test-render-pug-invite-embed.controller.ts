@@ -47,6 +47,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
@@ -70,7 +71,7 @@ export interface RenderedPugInviteEmbed {
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestRenderPugInviteEmbedController {
   constructor(
     private readonly settingsService: SettingsService,

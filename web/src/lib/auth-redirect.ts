@@ -1,3 +1,5 @@
+import { safeReturnPath } from './safe-return-path';
+
 const AUTH_REDIRECT_KEY = 'authRedirect';
 const AUTH_REDIRECT_SAVED_AT_KEY = 'authRedirectSavedAt';
 
@@ -31,6 +33,9 @@ export function saveAuthRedirect(path: string): void {
  * Both keys are always removed. Returns null when nothing is saved or the
  * entry is expired: a missing or unparseable save time, one more than
  * AUTH_REDIRECT_CLOCK_SKEW_MS in the future, or one older than the TTL.
+ * ROK-1757: the value is also run through safeReturnPath, so only a
+ * same-origin relative path ever reaches navigate() — a full URL, a
+ * protocol-relative `//host` or a backslash variant returns null.
  */
 export function consumeAuthRedirect(): string | null {
     const redirect: string | null = sessionStorage.getItem(AUTH_REDIRECT_KEY);
@@ -41,5 +46,5 @@ export function consumeAuthRedirect(): string | null {
     const savedAt = Number(savedAtRaw);
     if (!Number.isFinite(savedAt)) return null;
     const age = Date.now() - savedAt;
-    return age >= -AUTH_REDIRECT_CLOCK_SKEW_MS && age <= AUTH_REDIRECT_TTL_MS ? redirect : null;
+    return age >= -AUTH_REDIRECT_CLOCK_SKEW_MS && age <= AUTH_REDIRECT_TTL_MS ? safeReturnPath(redirect) : null;
 }

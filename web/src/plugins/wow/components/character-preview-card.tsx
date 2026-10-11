@@ -3,6 +3,7 @@
  * Displays character info with faction theming and action buttons.
  */
 import type { BlizzardCharacterPreviewDto } from '@raid-ledger/contract';
+import { safeHttpUrl } from '../../../lib/safe-http-url';
 
 /** Props for the character preview card */
 export interface CharacterPreviewCardProps {
@@ -102,6 +103,7 @@ function CharacterAvatar({ preview }: { preview: BlizzardCharacterPreviewDto }) 
 
 /** Footer stats: level, item level, armory link */
 function CharacterFooterStats({ preview }: { preview: BlizzardCharacterPreviewDto }) {
+    const armoryUrl = safeHttpUrl(preview.profileUrl);
     return (
         <div className="flex items-center gap-4 px-3 py-2 border-t border-edge/30 mt-auto">
             <div className="text-sm">
@@ -114,8 +116,8 @@ function CharacterFooterStats({ preview }: { preview: BlizzardCharacterPreviewDt
                     <span className="text-amber-400 font-medium">{preview.itemLevel}</span>
                 </div>
             )}
-            {preview.profileUrl && (
-                <a href={preview.profileUrl} target="_blank" rel="noopener noreferrer"
+            {armoryUrl && (
+                <a href={armoryUrl} target="_blank" rel="noopener noreferrer"
                     className="ml-auto text-xs text-blue-400 hover:text-blue-300 transition-colors">
                     Armory &rarr;
                 </a>

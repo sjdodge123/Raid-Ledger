@@ -28,6 +28,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import { and, desc, eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from '../admin/demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
@@ -55,7 +56,7 @@ function toSnapshotMember({
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestLobbyPresenceController {
   constructor(
     @Inject(DrizzleAsyncProvider)

@@ -25,6 +25,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { z } from 'zod';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { VersionCheckService } from '../version/version-check.service';
 import { SETTING_KEYS, type SettingKey } from '../drizzle/schema/app-settings';
@@ -53,7 +54,7 @@ const FIELD_KEYS: Array<[keyof SeedBody, SettingKey]> = [
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestVersionController {
   constructor(
     private readonly settings: SettingsService,

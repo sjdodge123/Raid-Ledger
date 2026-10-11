@@ -16,7 +16,7 @@ import { defined } from '../../common/testing/narrow';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { clearKnownQuestMemo } from './event-forever-progress.query';
 
-/** Create a test event owned by the admin user. */
+/** Create a test event owned by (and signed up to by) the admin user. */
 async function createTestEvent(
   testApp: TestApp,
   title: string,
@@ -31,7 +31,13 @@ async function createTestEvent(
       duration: [now, later],
     })
     .returning();
-  return defined(event, 'inserted event');
+  const created = defined(event, 'inserted event');
+  // ROK-1757: PUT requires an active signup — the admin writer is on the roster.
+  await testApp.db.insert(schema.eventSignups).values({
+    eventId: created.id,
+    userId: testApp.seed.adminUser.id,
+  });
+  return created;
 }
 
 let testApp: TestApp;

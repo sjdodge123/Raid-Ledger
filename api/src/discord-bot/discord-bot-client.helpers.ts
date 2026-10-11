@@ -3,6 +3,7 @@ import {
   GatewayIntentBits,
   Partials,
   PermissionsBitField,
+  type ClientOptions,
   type Guild,
 } from 'discord.js';
 
@@ -101,9 +102,22 @@ export function checkBotPermissions(
   }));
 }
 
+/**
+ * Client-wide mention default (ROK-1757). Every send/edit/reply that does not
+ * pass its own `allowedMentions` inherits this, so user-controlled text
+ * (event titles, character/game names, push content) can never ping
+ * `@everyone`, a role or a user. A message that MEANS to ping passes an
+ * explicit `allowedMentions: { users: [...] }` / `{ roles: [...] }`.
+ * `repliedUser: true` keeps today's reply-ping behaviour unchanged.
+ */
+export const DEFAULT_ALLOWED_MENTIONS: NonNullable<
+  ClientOptions['allowedMentions']
+> = { parse: [], repliedUser: true };
+
 /** Create a fresh Discord.js Client with all required intents. */
 export function createDiscordClient(): Client {
   return new Client({
+    allowedMentions: DEFAULT_ALLOWED_MENTIONS,
     intents: [
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,

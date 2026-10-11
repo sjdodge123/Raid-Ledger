@@ -252,15 +252,15 @@ async function deleteReferencing(
   column: string,
   loserId: number,
 ): Promise<void> {
-  const sp = `sp_del_ref_${table}`;
-  await tx.execute(sql.raw(`SAVEPOINT ${sp}`));
+  const sp = sql.identifier(`sp_del_ref_${table}`);
+  await tx.execute(sql`SAVEPOINT ${sp}`);
   try {
     await tx.execute(
-      sql.raw(`DELETE FROM ${table} WHERE ${column} = ${loserId}`),
+      sql`DELETE FROM ${sql.identifier(table)} WHERE ${sql.identifier(column)} = ${loserId}`,
     );
-    await tx.execute(sql.raw(`RELEASE SAVEPOINT ${sp}`));
+    await tx.execute(sql`RELEASE SAVEPOINT ${sp}`);
   } catch {
-    await tx.execute(sql.raw(`ROLLBACK TO SAVEPOINT ${sp}`));
+    await tx.execute(sql`ROLLBACK TO SAVEPOINT ${sp}`);
   }
 }
 

@@ -20,12 +20,13 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
+import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { RecruitmentReminderService } from '../notifications/recruitment-reminder.service';
 
 @Controller('admin/test')
 @SkipThrottle()
-@UseGuards(AuthGuard('jwt'), AdminGuard)
+@UseGuards(AuthGuard('jwt'), AdminGuard, DemoModeGuard)
 export class DemoTestRecruitmentController {
   constructor(
     private readonly settingsService: SettingsService,
