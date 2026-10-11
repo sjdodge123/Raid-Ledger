@@ -107,19 +107,19 @@ function parseJson<T>(stdout: string): T | null {
 export interface ExecuteStatusParams {
   task_id: string;
   /** Bug B: default 51200 bytes (50KB), max 1048576 (1MB). */
-  log_tail_bytes?: number;
+  log_tail_bytes?: number | undefined;
   /**
    * A3-B P4: opt in to `admin_password` on a `local-` deploy task. Default
    * false — polling a deploy must not hand the env credential to the poller.
    * No effect on VM tasks (they never carry one).
    */
-  include_credentials?: boolean;
+  include_credentials?: boolean | undefined;
   /**
    * ROK-1567: return the PROGRESS-ONLY projection (no cmd/env/cwd/log_* keys).
    * Defaults to true while the task is non-terminal and false once it is
    * terminal, so a poll loop is cheap and the final read stays forensic.
    */
-  brief?: boolean;
+  brief?: boolean | undefined;
 }
 
 export async function executeStatus(params: ExecuteStatusParams): Promise<ExecuteStatusReturn> {

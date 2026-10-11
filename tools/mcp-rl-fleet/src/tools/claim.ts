@@ -52,7 +52,7 @@ export interface ClaimResult {
 }
 
 export interface ClaimParams {
-  branch?: string;
+  branch?: string | undefined;
   /**
    * Absolute path to the agent's git worktree. The rl CLI runs
    * `git rev-parse --show-toplevel` from this cwd to determine which tree
@@ -60,13 +60,13 @@ export interface ClaimParams {
    * the MCP server uses its own cwd (where Claude started, usually the
    * main repo) and the sync grabs the WRONG branch's files.
    */
-  worktree_path?: string;
+  worktree_path?: string | undefined;
   /** Default true — poll until acquired or wait_timeout_seconds elapses. */
-  wait?: boolean;
+  wait?: boolean | undefined;
   /** Default 600 (10 min). Min 5, max 3600. */
-  wait_timeout_seconds?: number;
+  wait_timeout_seconds?: number | undefined;
   /** Poll interval. Default 10s. Min 2, max 60. */
-  poll_interval_seconds?: number;
+  poll_interval_seconds?: number | undefined;
   /**
    * Pin the claim to a specific slot number (1..N). When set, the claim ONLY
    * grabs that slot — if it's busy, the agent enqueues on THAT slot rather than
@@ -81,7 +81,7 @@ export interface ClaimParams {
    * slot 2. Release first to move; use a separate git worktree to hold both.
    * See rl-infra/README.md → "One claim per worktree".
    */
-  slot?: number;
+  slot?: number | undefined;
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

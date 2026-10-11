@@ -32,15 +32,15 @@ export const TOOL_DESCRIPTION =
 
 export interface BuildImageParams {
   tag: string;
-  no_push?: boolean;
-  worktree_path?: string;
-  timeout_seconds?: number;
+  no_push?: boolean | undefined;
+  worktree_path?: string | undefined;
+  timeout_seconds?: number | undefined;
   /** ROK-1331: default false (async). When true, chains to rl_task_wait. */
-  wait?: boolean;
+  wait?: boolean | undefined;
   /** Wait budget when wait:true. Default 1800. */
-  wait_timeout_seconds?: number;
+  wait_timeout_seconds?: number | undefined;
   /** ROK-1470 admission weight. Defaults to `heavy` — a monolith build is the heaviest fleet job. */
-  weight?: TaskWeight;
+  weight?: TaskWeight | undefined;
 }
 
 export interface BuildImageResult {

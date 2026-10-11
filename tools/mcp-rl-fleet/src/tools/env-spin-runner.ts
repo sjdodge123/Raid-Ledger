@@ -16,7 +16,7 @@ import { spinEnv, type EnvSpinParams, type EnvSpinResult } from './env-spin.js';
 
 export interface SpinTaskOutcome {
   ok: boolean;
-  error?: string;
+  error?: string | undefined;
   message: string;
 }
 

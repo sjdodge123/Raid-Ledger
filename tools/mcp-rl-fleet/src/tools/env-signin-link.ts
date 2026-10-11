@@ -44,13 +44,13 @@ export interface SigninLinkParams {
 
 export interface SigninLinkResult {
   ok: boolean;
-  url?: string;
-  user_id?: number;
-  expires_in_seconds?: number;
-  base_url?: string;
-  error?: string;
-  status?: number;
-  message?: string;
+  url?: string | undefined;
+  user_id?: number | undefined;
+  expires_in_seconds?: number | undefined;
+  base_url?: string | undefined;
+  error?: string | undefined;
+  status?: number | undefined;
+  message?: string | undefined;
 }
 
 export interface SigninLinkDeps {

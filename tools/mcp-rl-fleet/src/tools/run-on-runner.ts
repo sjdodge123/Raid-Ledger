@@ -35,16 +35,16 @@ export interface RunOnRunnerParams {
   /** Shell command to run inside the runner container (executed in /workspace). */
   command: string;
   /** Same worktree_path used at rl_claim / rl_claim_wait time. */
-  worktree_path?: string;
+  worktree_path?: string | undefined;
   /** Soft timeout in seconds. Default 60. >120 auto-routes through task-start. */
-  timeout_seconds?: number;
+  timeout_seconds?: number | undefined;
   /**
    * ROK-1470 admission weight for the task-routed (>120s) path. Omitted →
    * derived from the command: anything running jest / vitest / playwright /
    * validate-ci / docker build is `heavy` and waits for host memory.
    * The synchronous (<=120s) path is never gated — it is for short probes.
    */
-  weight?: TaskWeight;
+  weight?: TaskWeight | undefined;
 }
 
 export interface RunOnRunnerResult {

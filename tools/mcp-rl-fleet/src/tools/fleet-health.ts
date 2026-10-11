@@ -23,7 +23,7 @@ export interface FleetHealthParams {
 
 export interface FleetHealthResult {
   ok: boolean;
-  generated_at?: string;
+  generated_at?: string | undefined;
   stale_heartbeat_slots?: Array<{
     slot: number;
     agent_id: string | null;
@@ -83,9 +83,9 @@ export interface FleetHealthResult {
     held_slots_with_failed_validate_ci: number;
     config_warnings?: number;
   };
-  error?: string;
-  status?: number;
-  message?: string;
+  error?: string | undefined;
+  status?: number | undefined;
+  message?: string | undefined;
 }
 
 export async function execute(_p: FleetHealthParams = {}): Promise<FleetHealthResult> {
