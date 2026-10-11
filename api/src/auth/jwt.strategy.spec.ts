@@ -277,8 +277,8 @@ describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)
 
   it('rejects when the impersonator is blocklisted (e.g. role change)', async () => {
     seedAdmin();
-    mockBlocklist.isBlocked.mockImplementation(
-      async (id: number) => id === ADMIN_ID,
+    mockBlocklist.isBlocked.mockImplementation((id: number) =>
+      Promise.resolve(id === ADMIN_ID),
     );
     await expect(strategy.validate(impersonation())).rejects.toThrow(
       'Token has been revoked',
