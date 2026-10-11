@@ -2,6 +2,7 @@
  * Events smoke tests — events list, event detail, reschedule modal, regressions.
  */
 import { test, expect } from './base';
+import { signInAsAdmin } from './browser-session';
 import { navigateToFirstEvent, isMobile, isPhoneLayout } from './helpers';
 import { getAdminToken, apiGet, apiPost, apiPatch, apiDelete } from './api-helpers';
 import { STORAGE_STATE_PATH } from '../auth-paths';
@@ -324,6 +325,7 @@ test.describe('Regression: ROK-886 — event detail mobile layout', () => {
             // three agree on every target.
             storageState: STORAGE_STATE_PATH,
         });
+        await signInAsAdmin(context); // ROK-1754: own rl_rt family, storageState holds no token
         const page = await context.newPage();
 
         await page.goto('/events');

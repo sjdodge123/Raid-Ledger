@@ -8,7 +8,7 @@
  * index redirect + lazy tabs under a Suspense boundary, as App.tsx does).
  */
 import { Suspense, useSyncExternalStore } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { act, screen, waitFor } from '@testing-library/react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { createTestQueryClient, renderWithProviders } from '../../test/render-helpers';
@@ -86,6 +86,16 @@ async function settle(queryClient: ReturnType<typeof createTestQueryClient>) {
 }
 
 describe('Insights community tab fetches each endpoint once (ROK-1128 #14)', () => {
+    // Warm the lazy route modules first. The first case otherwise pays the cold
+    // transform of the whole community-tab graph (charts, social graph, hooks)
+    // INSIDE its findBy window; under the full coverage run that alone has
+    // starved past asyncUtilTimeout (ROK-1754 gate, DOM stuck on the Suspense
+    // fallback). The routes stay lazy + Suspense-wrapped; only the module
+    // cache is pre-filled, so the late-auth, fetch-once assertions are unchanged.
+    beforeAll(async () => {
+        await Promise.all([import('../insights-hub-page'), import('../insights-community-tab')]);
+    }, 60_000);
+
     beforeEach(() => {
         hits = new Map();
         authStore.set(true);

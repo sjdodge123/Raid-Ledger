@@ -14,6 +14,7 @@ import { ImpersonateSection } from './more-drawer-impersonate';
 import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
 import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
+import { nativeFetch } from '../../lib/api/native-fetch';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -47,7 +48,7 @@ function useImpersonateUsers(user: ReturnType<typeof useAuth>['user'], isImperso
         queryFn: async () => {
             const token = getAuthToken();
             if (!token) return [];
-            const res = await fetch(`${API_BASE_URL}/auth/users`, { headers: { 'Authorization': `Bearer ${token}` } });
+            const res = await nativeFetch(`${API_BASE_URL}/auth/users`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (!res.ok) return [];
             return res.json();
         },

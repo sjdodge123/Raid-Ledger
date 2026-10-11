@@ -26,6 +26,7 @@ import { TokenBlocklistService } from './token-blocklist.service';
 import { RefreshTokenService } from './refresh/refresh-token.service';
 import { RefreshTokenController } from './refresh/refresh-token.controller';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
+import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -75,6 +76,7 @@ import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.serv
     TokenBlocklistService,
     RefreshTokenService,
     RefreshTokenCleanupService,
+    ImpersonationSessionService,
   ],
   exports: [
     AuthService,

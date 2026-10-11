@@ -57,6 +57,7 @@ export * from './schema/community-insights-snapshots';
 export * from './schema/games-dedup-audit';
 export * from './schema/channel-bindings-dedup-audit';
 export * from './schema/refresh-tokens';
+export * from './schema/refresh-family-impersonations';
 export * from './schema/admin-actions';
 export * from './schema/lfg-intents';
 export * from './schema/lfg-invites';

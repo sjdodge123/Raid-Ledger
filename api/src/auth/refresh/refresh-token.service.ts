@@ -20,13 +20,23 @@ import {
   claimGraceOnce,
   indeterminateReplayError,
   replayVerdict,
+  rotationAgeMs,
 } from './refresh-grace.helpers';
+import {
+  DB_CLOCK,
+  findReplayCandidate,
+  markFirstChildIssued,
+} from './refresh-rotation.helpers';
+import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
+import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
 
 /** Result of issuing/rotating: the raw token (for the cookie) + lifetime. */
 export interface IssuedRefreshToken {
   rawToken: string;
   maxAgeMs: number;
   userId: number;
+  /** ROK-1754: the refresh family — keys the impersonation marker. */
+  familyId: string;
 }
 
 /**
@@ -49,6 +59,7 @@ export class RefreshTokenService {
     private readonly settings: SettingsService,
     private readonly blocklist: TokenBlocklistService,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
+    private readonly impersonation: ImpersonationSessionService,
   ) {}
 
   /** Mint a brand-new refresh family for a fresh login. */
@@ -67,7 +78,7 @@ export class RefreshTokenService {
       userAgent: opts.userAgent ?? null,
       expiresAt: new Date(Date.now() + maxAgeMs),
     });
-    return { rawToken, maxAgeMs, userId };
+    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**
@@ -86,11 +97,14 @@ export class RefreshTokenService {
       throw deactivatedException();
     }
     const consumed = await this.consumeRow(presentedHash);
-    if (consumed) return this.mintChild(consumed);
+    if (consumed) return this.mintChild(consumed, true);
     return this.handleNoConsume(presentedHash);
   }
 
-  /** Revoke every active refresh row for a user (deactivation). */
+  /**
+   * Revoke every active refresh row for a user (deactivation, ban). ROK-1754:
+   * also ends every impersonation this user is running.
+   */
   async revokeAllForUser(userId: number): Promise<void> {
     await this.db
       .update(schema.refreshTokens)
@@ -101,10 +115,20 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
+    await this.endImpersonationBestEffort(`user ${userId}`, () =>
+      this.impersonation.endForUser(userId, 'session_revoked'),
+    );
   }
 
-  /** Revoke every active row in a family (logout / reuse-detection). */
-  async revokeFamily(familyId: string): Promise<void> {
+  /**
+   * Revoke every active row in a family (logout / reuse-detection). ROK-1754:
+   * also ends the family's impersonation marker with `reason` (logout passes
+   * `logout`).
+   */
+  async revokeFamily(
+    familyId: string,
+    reason: ImpersonationEndReason = 'session_revoked',
+  ): Promise<void> {
     await this.db
       .update(schema.refreshTokens)
       .set({ revokedAt: sql`NOW()` })
@@ -114,6 +138,28 @@ export class RefreshTokenService {
           isNull(schema.refreshTokens.revokedAt),
         ),
       );
+    await this.endImpersonationBestEffort(`family ${familyId}`, () =>
+      this.impersonation.end(familyId, reason),
+    );
+  }
+
+  /**
+   * ROK-1754: ending a marker (delete + audit) runs AFTER the revoke and never
+   * throws, so an audit failure cannot skip the revoke, the reuse-path
+   * `blockUser`, or logout's cookie clear. A marker left behind is harmless:
+   * its family is revoked, so `/auth/refresh` can never resume it.
+   */
+  private async endImpersonationBestEffort(
+    what: string,
+    end: () => Promise<unknown>,
+  ): Promise<void> {
+    try {
+      await end();
+    } catch (err: unknown) {
+      this.logger.error(
+        `ROK-1754: ending impersonation for ${what} failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   /** Look up an active (un-rotated, un-revoked, unexpired) row by hash. */
@@ -153,7 +199,7 @@ export class RefreshTokenService {
   private async consumeRow(tokenHash: string) {
     const [row] = await this.db
       .update(schema.refreshTokens)
-      .set({ rotatedAt: sql`NOW()` })
+      .set({ rotatedAt: DB_CLOCK })
       .where(
         and(
           eq(schema.refreshTokens.tokenHash, tokenHash),
@@ -166,29 +212,35 @@ export class RefreshTokenService {
     return row;
   }
 
-  /** Mint the child row for a successfully consumed parent. */
-  private async mintChild(parent: typeof schema.refreshTokens.$inferSelect) {
+  /**
+   * Mint the child row for a consumed parent. Only the FIRST child links and
+   * re-stamps the parent (`markFirstChildIssued` — the race grace runs from
+   * here, see `rotationAgeMs`); a grace sibling leaves the parent untouched.
+   */
+  private async mintChild(
+    parent: Pick<
+      typeof schema.refreshTokens.$inferSelect,
+      'id' | 'userId' | 'familyId' | 'authMethod' | 'userAgent'
+    >,
+    firstChild = false,
+  ) {
     const maxAgeMs = await this.sessionMaxAgeMs();
     const rawToken = generateRawToken();
-    const childHash = hashToken(rawToken);
     const [child] = await this.db
       .insert(schema.refreshTokens)
       .values({
         userId: parent.userId,
-        tokenHash: childHash,
+        tokenHash: hashToken(rawToken),
         familyId: parent.familyId,
         authMethod: parent.authMethod,
         userAgent: parent.userAgent,
         expiresAt: new Date(Date.now() + maxAgeMs),
       })
       .returning({ id: schema.refreshTokens.id });
-    await this.db
-      .update(schema.refreshTokens)
-      .set({
-        replacedBy: defined(child, 'inserted child refresh token row').id,
-      })
-      .where(eq(schema.refreshTokens.id, parent.id));
-    return { rawToken, maxAgeMs, userId: parent.userId };
+    const childId = defined(child, 'inserted child refresh token row').id;
+    if (firstChild) await markFirstChildIssued(this.db, parent.id, childId);
+    const { userId, familyId } = parent;
+    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**
@@ -209,11 +261,14 @@ export class RefreshTokenService {
   private async handleNoConsume(
     tokenHash: string,
   ): Promise<IssuedRefreshToken | null> {
-    const existing = await this.findActiveByHash(tokenHash);
+    const existing = await findReplayCandidate(this.db, tokenHash);
     if (!existing) return null;
     if (existing.revokedAt) return null;
-    if (!existing.rotatedAt) return null;
-    const rotatedAgoMs = Date.now() - existing.rotatedAt.getTime();
+    if (existing.rotatedAgoMs == null) return null;
+    const rotatedAgoMs = rotationAgeMs({
+      rotatedAgoMs: existing.rotatedAgoMs,
+      replacedBy: existing.replacedBy,
+    });
     const verdict = await replayVerdict(rotatedAgoMs, () =>
       claimGraceOnce(this.redis, existing.id),
     );

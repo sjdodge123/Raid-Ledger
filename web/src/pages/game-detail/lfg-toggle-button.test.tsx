@@ -21,8 +21,8 @@ import {
     buildLfgGroupSummary,
     buildLfgIntentResponse,
 } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LfgToggleButton } from './lfg-toggle-button';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 const GAME_ID = 42;
 
@@ -96,7 +96,7 @@ function renderButton() {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
 });
 
 describe('LfgToggleButton — raising an intent', () => {

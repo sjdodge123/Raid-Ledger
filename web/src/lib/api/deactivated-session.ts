@@ -1,9 +1,11 @@
 import {
-  ACCESS_TOKEN_KEY,
   AUTH_METHOD_KEY,
-  ORIGINAL_TOKEN_KEY,
+  LEGACY_ACCESS_TOKEN_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
+  LEGACY_ORIGINAL_TOKEN_KEY,
   USER_CACHE_KEY,
 } from './auth-storage-keys';
+import { clearAccessToken } from './access-token-store';
 
 /**
  * ROK-1753: a deactivated user's session is terminal. The API answers every
@@ -23,7 +25,13 @@ export const USER_DEACTIVATED_CODE = 'USER_DEACTIVATED';
 export const DEACTIVATED_LOGIN_PATH = '/login?error=deactivated';
 export const DEACTIVATED_MESSAGE = 'Your account has been deactivated.';
 
-const SESSION_KEYS = [ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY, USER_CACHE_KEY, AUTH_METHOD_KEY];
+const SESSION_KEYS = [
+  USER_CACHE_KEY,
+  AUTH_METHOD_KEY,
+  LEGACY_ACCESS_TOKEN_KEY,
+  LEGACY_ORIGINAL_TOKEN_KEY,
+  LEGACY_MIGRATION_PENDING_KEY,
+];
 
 /** The `code` of a JSON error body, read from a clone (the body stays usable). */
 export async function readErrorCode(res: Response): Promise<string | null> {
@@ -53,6 +61,7 @@ function goTo(path: string): void {
  * place, no redirect. Returns true when a redirect is under way.
  */
 export function endDeactivatedSession(redirect: (path: string) => void = goTo): boolean {
+  clearAccessToken();
   for (const key of SESSION_KEYS) localStorage.removeItem(key);
   if (window.location.pathname !== '/login') {
     redirect(DEACTIVATED_LOGIN_PATH);

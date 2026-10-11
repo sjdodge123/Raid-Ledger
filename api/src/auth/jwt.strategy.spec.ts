@@ -242,6 +242,8 @@ describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
 
   it('lets an admin impersonating a deactivated user through', async () => {
     mockDbReturns({ ...mockUser, deactivatedAt: new Date() });
+    // ROK-1754: the impersonator (id 9) is looked up too — an active admin.
+    setCachedAuthUser(9, { ...mockUser, role: 'admin' });
     const result = await strategy.validate(buildPayload({ impersonatedBy: 9 }));
     expect(result).toMatchObject({ id: 1, impersonatedBy: 9 });
   });
@@ -255,5 +257,58 @@ describe('JwtStrategy — deactivated per-request lockout (ROK-1753)', () => {
     await expect(strategy.validate(buildPayload())).rejects.toThrow(
       'Your account has been suspended',
     );
+  });
+});
+
+describe('JwtStrategy — impersonator checks on impersonation tokens (ROK-1754)', () => {
+  beforeEach(setupModule);
+
+  const ADMIN_ID = 9;
+  const impersonation = () => buildPayload({ impersonatedBy: ADMIN_ID });
+  const seedAdmin = (over: Record<string, unknown> = {}) =>
+    setCachedAuthUser(ADMIN_ID, { ...mockUser, role: 'admin', ...over });
+
+  it('lets a live operator impersonator through', async () => {
+    seedAdmin({ role: 'operator' });
+    const result = await strategy.validate(impersonation());
+    expect(result).toMatchObject({ id: 1, impersonatedBy: ADMIN_ID });
+    expect(mockBlocklist.isBlocked).toHaveBeenCalledWith(ADMIN_ID, 1700000000);
+  });
+
+  it('rejects when the impersonator is blocklisted (e.g. role change)', async () => {
+    seedAdmin();
+    mockBlocklist.isBlocked.mockImplementation((id: number) =>
+      Promise.resolve(id === ADMIN_ID),
+    );
+    await expect(strategy.validate(impersonation())).rejects.toThrow(
+      'Token has been revoked',
+    );
+  });
+
+  it('rejects when the impersonator is banned', async () => {
+    seedAdmin({ bannedAt: new Date(), banReason: 'abuse' });
+    await expect(strategy.validate(impersonation())).rejects.toThrow(
+      'Your account has been suspended',
+    );
+  });
+
+  it('rejects when the impersonator is deactivated', async () => {
+    seedAdmin({ deactivatedAt: new Date() });
+    await expect(strategy.validate(impersonation())).rejects.toThrow(
+      'Account deactivated',
+    );
+  });
+
+  it('rejects when the impersonator was demoted below operator', async () => {
+    seedAdmin({ role: 'member' });
+    await expect(strategy.validate(impersonation())).rejects.toThrow(
+      'Impersonation has ended',
+    );
+  });
+
+  it('does not look the impersonator up for an ordinary token', async () => {
+    await strategy.validate(buildPayload());
+    expect(mockBlocklist.isBlocked).toHaveBeenCalledTimes(1);
+    expect(mockDb.select).toHaveBeenCalledTimes(1);
   });
 });

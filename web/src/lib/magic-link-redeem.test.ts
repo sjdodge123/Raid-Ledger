@@ -5,11 +5,11 @@ import { toast } from 'sonner';
 import { server } from '../test/mocks/server';
 import { awaitMagicLinkRedeem, startMagicLinkRedeem } from './magic-link-redeem';
 import {
-  ACCESS_TOKEN_KEY,
   AUTH_METHOD_KEY,
-  ORIGINAL_TOKEN_KEY,
+  LEGACY_ACCESS_TOKEN_KEY,
   SILENT_GUARD_KEY,
 } from './api/auth-storage-keys';
+import { getAccessToken, isImpersonatingToken } from './api/access-token-store';
 
 vi.mock('sonner', () => ({
   toast: { error: vi.fn(), success: vi.fn(), info: vi.fn(), warning: vi.fn() },
@@ -36,14 +36,6 @@ function redeemReturns(status: number, body: Record<string, unknown>): Seen {
     }),
   );
   return seen;
-}
-
-function meReturns(status: number): void {
-  server.use(
-    http.get(`${API_BASE}/auth/me`, () =>
-      HttpResponse.json(status === 200 ? { id: 1 } : {}, { status }),
-    ),
-  );
 }
 
 const REFRESHED = 'refreshed.jwt';
@@ -81,7 +73,7 @@ describe('ROK-1366: startMagicLinkRedeem with no stored session', () => {
     expect(seen.calls).toBe(1);
     expect(seen.contentType).toBe('application/json');
     expect(seen.body).toEqual({ token: MAGIC });
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
+    expect(getAccessToken()).toBe('session.jwt');
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('magic');
     expect(sessionStorage.getItem(SILENT_GUARD_KEY)).toBeNull();
     expect(storedValues()).not.toContain(MAGIC);
@@ -92,7 +84,7 @@ describe('ROK-1366: startMagicLinkRedeem with no stored session', () => {
 
     await startMagicLinkRedeem(MAGIC);
 
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    expect(getAccessToken()).toBeNull();
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
     expect(storedValues()).not.toContain(MAGIC);
     expect(toast.error).not.toHaveBeenCalled();
@@ -103,7 +95,7 @@ describe('ROK-1366: startMagicLinkRedeem with no stored session', () => {
 
     await expect(startMagicLinkRedeem(MAGIC)).resolves.toBeUndefined();
 
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    expect(getAccessToken()).toBeNull();
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
   });
 
@@ -112,7 +104,7 @@ describe('ROK-1366: startMagicLinkRedeem with no stored session', () => {
 
     await startMagicLinkRedeem(MAGIC);
 
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+    expect(getAccessToken()).toBeNull();
   });
 });
 
@@ -128,183 +120,82 @@ const USER_A = 1;
 const USER_B = 2;
 const ADMIN = 9;
 
-describe('ROK-1366 OQ6: a stored session decides whether to redeem', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-  });
-
-  it('keeps a stored token that passes /auth/me and never redeems', async () => {
-    const impersonated = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, impersonated);
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
-    meReturns(200);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(ADMIN));
-
-    expect(seen.calls).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(impersonated);
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
-  });
-
-  it("redeems the same user's link over their own expired token", async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_A));
-
-    expect(seen.calls).toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-  });
-});
-
 /**
- * OQ6 (operator ruling 2026-09-27): a missing, expired (401/403) or
- * unreadable stored token does not block a redeem — whoever the link is for —
- * once the refresh also fails (the default MSW /auth/refresh answers 401).
+ * ROK-1754: memory is empty at boot by construction, so the redeem no longer
+ * probes a stored access token with /auth/me — the refresh cookie IS the
+ * session. With no prior sign-in recorded there is nothing to protect.
  */
-describe('ROK-1366 OQ6: an expired or unverifiable stored token never blocks a redeem', () => {
+describe('ROK-1754: no prior sign-in → redeem without probing', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
   });
 
-  it("redeems user B's link over user A's expired token", async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_B));
-
-    expect(seen.calls, "an expired session of another user must not block the link").toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('magic');
-  });
-
-  it('redeems over a stored token that /auth/me answers with 403 (counts as expired)', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(403);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_B));
-
-    expect(seen.calls, 'a 403 from /auth/me means the stored session is gone').toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-  });
-
-  it('redeems over a stored token whose user it cannot read', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'not-a-jwt');
-    meReturns(401);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_B));
-
-    expect(seen.calls, 'an unreadable, invalid stored token must not block the link').toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
-  });
-
-});
-
-/**
- * OQ6 review fix: a 429, 5xx or network error from /auth/me proves nothing
- * about the stored session, so it must not be swapped. The redeem is skipped
- * and the stored session is left untouched.
- */
-describe('ROK-1366 OQ6: a transient /auth/me failure never swaps a stored session', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-  });
-
-  it.each([429, 500, 502, 503])('keeps the stored session and skips the redeem on a %i from /auth/me', async (status) => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
-    meReturns(status);
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_B));
-
-    expect(seen.calls, `a ${status} from /auth/me must not spend the link or swap the session`).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
-  });
-
-  it('keeps the stored session and skips the redeem when /auth/me is unreachable', async () => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
-    server.use(http.get(`${API_BASE}/auth/me`, () => HttpResponse.error()));
-    const seen = redeemReturns(200, { access_token: 'session.jwt' });
-
-    await startMagicLinkRedeem(linkFor(USER_B));
-
-    expect(seen.calls, 'a network error must not spend the link or swap the session').toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
-  });
-});
-
-/**
- * #1384 (operator ruling 2026-09-28): a refreshable session is a VALID one.
- * The 1h access token expiring must not let a planted link swap a live
- * refresh-cookie session (login CSRF): refresh first, redeem only when the
- * refresh really fails, and treat a thrown refresh as 'unknown'.
- */
-describe('ROK-1366 #1384: a refreshable session blocks a planted link', () => {
-  beforeEach(() => {
-    localStorage.clear();
-    sessionStorage.clear();
-  });
-
-  it('keeps the session and never redeems when the expired token refreshes', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(401);
+  it('redeems at once: no /auth/me probe and no refresh probe', async () => {
+    let meCalls = 0;
+    server.use(http.get(`${API_BASE}/auth/me`, () => { meCalls += 1; return HttpResponse.json({ id: 1 }); }));
     const refresh = refreshReturns(200);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(refresh.calls, 'an expired access token must be refreshed before redeeming').toBe(1);
-    expect(seen.calls, "a refreshable session must not be swapped for the link's user").toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(REFRESHED);
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+    expect(meCalls, 'the stored-token /auth/me probe is gone').toBe(0);
+    expect(refresh.calls, 'an anonymous visitor makes no refresh probe').toBe(0);
+    expect(seen.calls).toBe(1);
+    expect(getAccessToken()).toBe('session.jwt');
   });
 
-  it('redeems when the expired token cannot be refreshed', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(401);
-    const refresh = refreshReturns(401);
+  it('a legacy stored token purged at load still counts as a prior sign-in (probe first)', async () => {
+    localStorage.setItem(LEGACY_ACCESS_TOKEN_KEY, jwtFor(USER_A));
+    vi.resetModules();
+    const fresh = await import('./magic-link-redeem');
+    const store = await import('./api/access-token-store');
+    const refresh = refreshReturns(200);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
-    await startMagicLinkRedeem(linkFor(USER_B));
+    await fresh.startMagicLinkRedeem(linkFor(USER_B));
 
+    expect(localStorage.getItem(LEGACY_ACCESS_TOKEN_KEY)).toBeNull();
     expect(refresh.calls).toBe(1);
-    expect(seen.calls, 'a failed refresh means there is no session to keep').toBe(1);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('session.jwt');
+    expect(seen.calls, 'a refreshable upgraded session must not be swapped').toBe(0);
+    expect(store.getAccessToken()).toBe(REFRESHED);
+  });
+});
+
+/**
+ * #1384 (operator ruling 2026-09-28): a refreshable session is a VALID one.
+ * A planted link must not swap a live refresh-cookie session (login CSRF):
+ * refresh first, redeem only when the refresh really fails (401/403).
+ */
+describe('ROK-1366 #1384: a refreshable session blocks a planted link', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    localStorage.setItem(AUTH_METHOD_KEY, 'discord');
   });
 
-  it('refreshes first when no token is stored but a prior sign-in is recorded', async () => {
-    localStorage.setItem(AUTH_METHOD_KEY, 'discord');
+  it('keeps the session and never redeems when the refresh cookie is live', async () => {
     const refresh = refreshReturns(200);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
     expect(refresh.calls, 'a refresh-cookie session must be probed before redeeming').toBe(1);
-    expect(seen.calls, 'a live refresh-cookie session must not be swapped').toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(REFRESHED);
+    expect(seen.calls, "a refreshable session must not be swapped for the link's user").toBe(0);
+    expect(getAccessToken()).toBe(REFRESHED);
     expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('discord');
   });
 
-  it('redeems when the refresh rejects with a 403', async () => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, jwtFor(USER_A));
-    meReturns(401);
-    refreshReturns(403);
+  it.each([401, 403])('redeems when the refresh rejects with a %i', async (status) => {
+    const refresh = refreshReturns(status);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expect(seen.calls, 'a 403 from /auth/refresh means there is no session to keep').toBe(1);
+    expect(refresh.calls).toBe(1);
+    expect(seen.calls, `a ${status} from /auth/refresh means there is no session to keep`).toBe(1);
+    expect(getAccessToken()).toBe('session.jwt');
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('magic');
   });
 });
 
@@ -312,69 +203,61 @@ describe('ROK-1366 #1384: a refreshable session blocks a planted link', () => {
  * #1384 review fix: only a 401/403 from /auth/refresh proves the session is
  * gone. A 429 (an attacker on the victim's NAT can drain the shared refresh
  * bucket), a 5xx, a network error or an unparseable 200 is indeterminate —
- * the stored session is kept and the link is left unspent.
+ * the session is kept and the link is left unspent.
  */
-describe('ROK-1366 #1384: an indeterminate refresh never swaps a stored session', () => {
+describe('ROK-1366 #1384: an indeterminate refresh never swaps a session', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    localStorage.setItem(AUTH_METHOD_KEY, 'local');
   });
 
-  function expectKept(seen: Seen, stored: string, why: string): void {
+  function expectKept(seen: Seen, why: string): void {
     expect(seen.calls, why).toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(stored);
-    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();
+    expect(getAccessToken()).toBeNull();
+    expect(localStorage.getItem(AUTH_METHOD_KEY)).toBe('local');
   }
 
   it.each([429, 500, 502, 503])('keeps the session and skips the redeem on a %i from /auth/refresh', async (status) => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
-    meReturns(401);
     const refresh = refreshReturns(status);
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
     expect(refresh.calls).toBe(1);
-    expectKept(seen, stored, `a ${status} from /auth/refresh must not spend the link or swap the session`);
+    expectKept(seen, `a ${status} from /auth/refresh must not spend the link or swap the session`);
   });
 
   it('keeps the session and skips the redeem when /auth/refresh is unreachable', async () => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
-    meReturns(401);
     server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.error()));
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await expect(startMagicLinkRedeem(linkFor(USER_B))).resolves.toBeUndefined();
 
-    expectKept(seen, stored, 'a network error on refresh must not spend the link or swap the session');
+    expectKept(seen, 'a network error on refresh must not spend the link or swap the session');
   });
 
   it('keeps the session and skips the redeem when /auth/refresh answers 200 with a malformed body', async () => {
-    const stored = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, stored);
-    meReturns(401);
     server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.json({ nope: true })));
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(USER_B));
 
-    expectKept(seen, stored, 'an unparseable refresh 200 must not spend the link or swap the session');
+    expectKept(seen, 'an unparseable refresh 200 must not spend the link or swap the session');
   });
 });
 
 /**
- * #1384 review fix (supersedes the 2026-09-27 OQ6 impersonation cases): while
- * impersonating, the refresh cookie is the admin's and is still live, but the
- * client may not probe it (it would swap the bearer back to the admin). An
- * unprobed refresh is 'unknown', so an expired impersonation blocks every
- * link — the admin's, the impersonated user's, or an attacker's.
+ * ROK-1754 D1 (supersedes the #1384 "never probe while impersonating" cases):
+ * impersonation lives server-side on the refresh family, so the probe renews
+ * it. A live impersonation blocks every link — the admin's, the impersonated
+ * user's, or a planted one — and its claim survives.
  */
-describe('ROK-1366 #1384: an expired impersonation never lets a link swap the admin session', () => {
+describe('ROK-1754: a live impersonation never lets a link swap the session', () => {
   beforeEach(() => {
     localStorage.clear();
     sessionStorage.clear();
+    localStorage.setItem(AUTH_METHOD_KEY, 'local');
   });
 
   it.each([
@@ -382,19 +265,15 @@ describe('ROK-1366 #1384: an expired impersonation never lets a link swap the ad
     ['the impersonated user', USER_A],
     ['another user (planted link)', USER_B],
   ])("keeps the impersonation and never redeems %s's link", async (_who, sub) => {
-    const impersonated = jwtFor(USER_A);
-    localStorage.setItem(ACCESS_TOKEN_KEY, impersonated);
-    localStorage.setItem(ORIGINAL_TOKEN_KEY, jwtFor(ADMIN));
-    meReturns(401);
-    const refresh = refreshReturns(200);
+    const renewed = jwtFor(USER_A, { impersonatedBy: ADMIN, exp: 4102444800 });
+    server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.json({ access_token: renewed })));
     const seen = redeemReturns(200, { access_token: 'session.jwt' });
 
     await startMagicLinkRedeem(linkFor(sub));
 
-    expect(refresh.calls, "the admin's refresh cookie must not be probed while impersonating").toBe(0);
-    expect(seen.calls, "an expired impersonation must not let a link replace the admin's live session").toBe(0);
-    expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe(impersonated);
-    expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBe(jwtFor(ADMIN));
+    expect(seen.calls, 'a live impersonation must not be replaced by a link').toBe(0);
+    expect(getAccessToken()).toBe(renewed);
+    expect(isImpersonatingToken()).toBe(true);
   });
 });
 

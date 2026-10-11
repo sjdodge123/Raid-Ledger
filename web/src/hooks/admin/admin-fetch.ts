@@ -7,6 +7,7 @@ import { ensureFreshToken } from '../../lib/api/refresh-client';
 import { getAuthMethod } from '../../lib/api/silent-reauth';
 import { isTokenStale } from '../../lib/api/token-expiry';
 import { getAuthToken } from '../use-auth';
+import { nativeFetch } from '../../lib/api/native-fetch';
 
 /** Build auth headers with current token */
 export function getHeaders(): Record<string, string> {
@@ -32,14 +33,14 @@ export async function adminFetch<T>(
         if (getAuthMethod() && isTokenStale(getAuthToken())) {
             await ensureFreshToken();
         }
-        response = await fetch(`${API_BASE_URL}${path}`, {
+        response = await nativeFetch(`${API_BASE_URL}${path}`, {
             ...options,
             headers: getHeaders(),
         });
         // ROK-1353: expired 1h access token — transparent single-flight
         // refresh + one retry (no-op while impersonating).
         if (response.status === 401 && (await ensureFreshToken())) {
-            response = await fetch(`${API_BASE_URL}${path}`, {
+            response = await nativeFetch(`${API_BASE_URL}${path}`, {
                 ...options,
                 headers: getHeaders(),
             });

@@ -28,9 +28,9 @@ import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfgGroupSummary } from '../../test/factories/lfg';
 import type { LfgGroupSummaryFixture } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LfgSummaryBanner } from './lfg-summary-banner';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 /** N distinct groups — the banner only counts rows, so ids are enough. */
 function groups(n: number) {
@@ -52,7 +52,7 @@ function renderBanner(count: number) {
 
 beforeEach(() => {
     // `GET /lfg` is jwt-gated, so the query is `enabled: !!token`.
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
 });
 
 describe('LfgSummaryBanner', () => {

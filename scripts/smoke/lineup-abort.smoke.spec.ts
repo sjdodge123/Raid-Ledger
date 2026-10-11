@@ -22,7 +22,8 @@
  * pattern from `lineup-creation.smoke.spec.ts`, ROK-1147).
  */
 import { test, expect } from './base';
-import { API_BASE, getAdminToken, createLineupOrRetry } from './api-helpers';
+import { API_BASE, getAdminToken, getInviteeFixture, createLineupOrRetry } from './api-helpers';
+import { signInContextAs } from './browser-session';
 
 // This file mutates a single lineup through abort and asserts on the
 // global "no active lineup" UI state on the detail page. Run serially
@@ -282,9 +283,13 @@ test.describe('Regression: ROK-1207 — aborted-lineup detail page banner + read
         });
         expect(abortRes.status).toBe(200);
 
-        // Anonymous reload — non-organizer perspective. Banner must still be
-        // present and the Nominate button must not render at all.
-        await page.context().clearCookies();
+        // Non-organizer perspective: re-sign this context in as the member
+        // fixture. (The old `clearCookies()` never signed anyone out — the
+        // admin token lived in localStorage — and a truly signed-out visitor
+        // gets /login here, since the route is behind AuthGuard.) Banner must
+        // still be present and the Nominate button must not render at all.
+        const invitee = await getInviteeFixture();
+        await signInContextAs(page.context(), invitee.userId);
         await page.goto(`/community-lineup/${lineupId}`);
 
         const banner = page.getByTestId('lineup-aborted-banner');

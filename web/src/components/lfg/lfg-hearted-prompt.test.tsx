@@ -28,12 +28,12 @@ import {
     buildLfgHeartedGame,
     buildLfgIntentResponse,
 } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { renderWithProviders } from '../../test/render-helpers';
 import { LFG_COPY } from '../../pages/lfg/lfg-copy';
 import { LFG_HEARTED_QUERY_KEY } from '../../hooks/use-lfg-hearted';
 import { LfgHeartedPrompt } from './lfg-hearted-prompt';
 import { at } from '../../test/defined';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 const DISMISS_KEY = 'lfg-hearted-prompt-dismissed';
 
@@ -73,7 +73,7 @@ async function awaitHeartedRead(queryClient: QueryClient): Promise<void> {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     sessionStorage.clear();
 });
 

@@ -5,6 +5,7 @@ import { getAuthToken } from './use-auth';
 import { toast } from '../lib/toast';
 import { useLinkStart } from './use-link-start';
 import type { SteamLinkStatusDto } from '@raid-ledger/contract';
+import { nativeFetch } from '../lib/api/native-fetch';
 
 /**
  * Hook for Steam account linking (ROK-417).
@@ -15,7 +16,7 @@ function steamAuthHeaders(): Record<string, string> {
 }
 
 async function steamFetch<T>(path: string, method = 'GET', errorMsg = 'Request failed'): Promise<T> {
-    const response = await fetch(`${API_BASE_URL}${path}`, { method, headers: steamAuthHeaders() });
+    const response = await nativeFetch(`${API_BASE_URL}${path}`, { method, headers: steamAuthHeaders() });
     if (!response.ok) {
         const body = await response.json().catch(() => ({ message: errorMsg }));
         throw new Error(body?.message || errorMsg);

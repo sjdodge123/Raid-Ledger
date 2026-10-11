@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import type { BackupFileDto } from '@raid-ledger/contract';
 import { DeleteModal, RestoreModal, ResetModal } from './backup-panel-modals';
+import { getAccessToken, setAccessToken } from '../../lib/api/access-token-store';
 
 vi.mock('../../lib/clipboard', () => ({ copyWithToast: vi.fn().mockResolvedValue(true) }));
 
@@ -98,21 +99,21 @@ describe('ResetModal result view — the password confirm names what is lost (TD
     });
 
     it('TDB:1928 — Stay keeps the password on screen', () => {
-        localStorage.setItem('raid_ledger_token', 'tok');
+        setAccessToken('tok');
         render(<ResetModal onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} result={{ password: 's3cret-pass' }} />);
         fireEvent.keyDown(document, { key: 'Escape' });
         fireEvent.click(screen.getByRole('button', { name: 'Stay' }));
         expect(screen.queryByRole('dialog', { name: 'Leave without copying the password?' })).toBeNull();
         expect(screen.getByRole('dialog', { name: 'Instance Reset Complete' })).toHaveTextContent('s3cret-pass');
-        expect(localStorage.getItem('raid_ledger_token')).toBe('tok');
+        expect(getAccessToken()).toBe('tok');
     });
 
     it('TDB:1928 — Leave on the password confirm signs out toward login', () => {
-        localStorage.setItem('raid_ledger_token', 'tok');
+        setAccessToken('tok');
         render(<ResetModal onClose={vi.fn()} onConfirm={vi.fn()} isPending={false} result={{ password: 's3cret-pass' }} />);
         fireEvent.click(screen.getByRole('button', { name: 'Close modal' }));
         fireEvent.click(screen.getByRole('button', { name: 'Leave' }));
-        expect(localStorage.getItem('raid_ledger_token')).toBeNull();
+        expect(getAccessToken()).toBeNull();
     });
 });
 

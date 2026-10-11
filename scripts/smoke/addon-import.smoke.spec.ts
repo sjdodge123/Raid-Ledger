@@ -26,6 +26,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import { apiDelete, apiGet, apiPost, getAdminToken, getInviteeFixture } from './api-helpers';
 
 const GAME_SLUG = 'world-of-warcraft-forever';
@@ -225,15 +226,17 @@ test.describe('Addon Import string dialog (ROK-1724)', () => {
 
         // Sign in as the invitee BEFORE the first navigation (the pattern of
         // scheduling-poll-live-updates / game-badges-personalization): the
-        // init script swaps the token ahead of the app on every document, so no
-        // admin page load ever runs and no admin `/auth/me` can be caught.
-        await page.addInitScript((t) => localStorage.setItem('raid_ledger_token', t), invitee.jwt);
-        // Wait for the invitee's own `/auth/me` (matched by its Bearer token),
+        // context's rl_rt cookie is swapped to the invitee's own refresh family
+        // before any document loads (ROK-1754), so no admin page load ever runs
+        // and no admin `/auth/me` can be caught.
+        await signInContextWithJwt(page.context(), invitee.jwt);
+        // Wait for the page's authenticated `/auth/me` (the token is minted in
+        // memory at boot, so it is not invitee.jwt; the body check below pins the user),
         // registered before navigating, so "no button" is not just "user not loaded yet".
         const me = page.waitForResponse(
             (r) =>
                 new URL(r.url()).pathname.endsWith('/auth/me') &&
-                r.request().headers()['authorization'] === `Bearer ${invitee.jwt}`,
+                (r.request().headers()['authorization'] ?? '').startsWith('Bearer '),
             { timeout: 20_000 },
         );
         await openCharacter(page, id, fullName);

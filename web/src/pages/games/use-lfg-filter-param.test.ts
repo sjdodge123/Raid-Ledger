@@ -29,10 +29,10 @@ import { MemoryRouter, useSearchParams } from 'react-router-dom';
 import { server } from '../../test/mocks/server';
 import { lfgGroupsHandler } from '../../test/mocks/lfg-handlers';
 import { buildLfgGroupSummary } from '../../test/factories/lfg';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { createTestQueryClient } from '../../test/render-helpers';
 import { useLfgFilterParam } from './use-lfg-filter-param';
 import { at } from '../../test/defined';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 /** Two games are looking; a third id is deliberately absent from the list. */
 const LOOKING_IDS = [11, 22];
@@ -73,7 +73,7 @@ function renderFilter(url: string) {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     seedGroups();
 });
 

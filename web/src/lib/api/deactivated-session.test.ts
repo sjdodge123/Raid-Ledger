@@ -7,12 +7,12 @@ import {
     readErrorCode,
 } from './deactivated-session';
 import {
-    ACCESS_TOKEN_KEY,
     AUTH_METHOD_KEY,
-    ORIGINAL_TOKEN_KEY,
+    LEGACY_ORIGINAL_TOKEN_KEY,
     USER_CACHE_KEY,
 } from './auth-storage-keys';
 import { toast } from '../toast';
+import { setAccessToken, getAccessToken } from './access-token-store';
 
 vi.mock('../toast', () => ({ toast: { error: vi.fn() } }));
 
@@ -59,8 +59,8 @@ describe('isDeactivatedResponse', () => {
 describe('endDeactivatedSession', () => {
     beforeEach(() => {
         localStorage.clear();
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'tok');
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-tok');
+        setAccessToken('tok');
+        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-tok');
         localStorage.setItem(USER_CACHE_KEY, '{"id":1}');
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
     });
@@ -70,8 +70,8 @@ describe('endDeactivatedSession', () => {
 
         endDeactivatedSession(redirect);
 
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
-        expect(localStorage.getItem(ORIGINAL_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
+        expect(localStorage.getItem(LEGACY_ORIGINAL_TOKEN_KEY)).toBeNull();
         expect(localStorage.getItem(USER_CACHE_KEY)).toBeNull();
         // The marker gates every refresh probe and the silent Discord re-auth.
         expect(localStorage.getItem(AUTH_METHOD_KEY)).toBeNull();

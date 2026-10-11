@@ -5,6 +5,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { downloadLogFile, filenameFromDisposition } from './use-logs';
 
+/**
+ * `use-logs` calls `nativeFetch`, captured from the global `fetch` when its
+ * module loads (ROK-1754 §3.6), so the stub must be installed before import.
+ */
+const fetchMock = vi.hoisted(() => {
+  const fn = vi.fn<typeof fetch>();
+  vi.stubGlobal('fetch', fn);
+  return fn;
+});
+
 describe('downloadLogFile (ROK-1164)', () => {
   let savedAs: string[];
 
@@ -23,7 +33,7 @@ describe('downloadLogFile (ROK-1164)', () => {
   function serve(disposition: string | null) {
     const headers = new Headers();
     if (disposition) headers.set('Content-Disposition', disposition);
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+    fetchMock.mockResolvedValue(
       new Response('text', { status: 200, headers }),
     );
   }

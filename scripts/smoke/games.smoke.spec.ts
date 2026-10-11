@@ -3,6 +3,7 @@
  * co-op filters in the Filters entry (ROK-1402, ROK-1659).
  */
 import { test, expect } from './base';
+import { signInAsAdmin } from './browser-session';
 import type { Locator, Page } from '@playwright/test';
 import { getAdminToken, apiGet, apiPost, pollForCondition } from './api-helpers';
 import { closeGamesFilters, openGamesFilters } from './games-filters';
@@ -28,6 +29,7 @@ test.describe('Regression: ROK-811 — games page mobile card spacing', () => {
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
         });
+        await signInAsAdmin(context); // ROK-1754: own rl_rt family, storageState holds no token
         const page = await context.newPage();
 
         await page.goto('/games');
@@ -58,6 +60,7 @@ test.describe('Regression: ROK-813 — games page mobile search styling', () => 
         const context = await browser.newContext({
             viewport: { width: 375, height: 812 },
         });
+        await signInAsAdmin(context); // ROK-1754: own rl_rt family, storageState holds no token
         const page = await context.newPage();
 
         await page.goto('/games');

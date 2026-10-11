@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { useAuth, isImpersonating } from '../../hooks/use-auth';
+import { useAuth } from '../../hooks/use-auth';
 import { deleteMyAccount } from '../../lib/api-client';
 import { Modal } from '../../components/ui/modal';
 import { Button } from '../../components/ui/button';
@@ -60,14 +60,14 @@ function DeleteConfirmModalBody({ expectedName, confirmName, setConfirmName, onC
 }
 
 export function DeleteAccountPanel() {
-    const { user } = useAuth();
+    const { user, isImpersonating } = useAuth();
     const [showModal, setShowModal] = useState(false);
     const [confirmName, setConfirmName] = useState('');
     const expectedName = user?.displayName || user?.username || '';
     const deleteMutation = useDeleteAccount(confirmName);
     const closeModal = () => { setShowModal(false); setConfirmName(''); };
 
-    if (!user || isImpersonating()) return null;
+    if (!user || isImpersonating) return null;
 
     return (
         <div className="space-y-6">

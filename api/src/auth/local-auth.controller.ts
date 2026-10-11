@@ -20,7 +20,13 @@ import { LocalAuthService } from './local-auth.service';
 import { OperatorGuard } from './operator.guard';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { RefreshTokenService } from './refresh/refresh-token.service';
-import { setRefreshCookie } from './refresh/refresh-cookie.helpers';
+import {
+  readRefreshCookie,
+  setRefreshCookie,
+} from './refresh/refresh-cookie.helpers';
+import { hashToken } from './refresh/refresh-token.helpers';
+import { SameOriginCookiePostGuard } from './refresh/same-origin-cookie-post.guard';
+import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 import { z } from 'zod';
 
 // Email regex that accepts local emails (admin@local) and standard emails
@@ -49,6 +55,7 @@ export class LocalAuthController {
   constructor(
     private localAuthService: LocalAuthService,
     private refreshService: RefreshTokenService,
+    private sessions: ImpersonationSessionService,
   ) {}
 
   /**
@@ -92,38 +99,57 @@ export class LocalAuthController {
   }
 
   /**
+   * POST /auth/impersonate/exit — ROK-1754. Declared ABOVE `impersonate/:userId`
+   * (Express matches in registration order; below it, `exit` hit ParseIntPipe
+   * → 400). Cookie-authenticated like /auth/logout, NOT JWT: an admin whose
+   * impersonation token already 401s can still exit. Ending only drops
+   * privilege, and it is idempotent (audits once).
+   */
+  @Post('impersonate/exit')
+  @UseGuards(SameOriginCookiePostGuard)
+  @HttpCode(HttpStatus.OK)
+  async exitImpersonation(
+    @Req() req: ExpressRequest,
+  ): Promise<{ success: boolean }> {
+    const familyId = await this.callerFamilyId(req);
+    if (familyId) await this.sessions.end(familyId, 'user_exit');
+    return { success: true };
+  }
+
+  /**
    * POST /auth/impersonate/:userId
-   * Operator+. Issue a JWT as the target user for testing/debugging.
-   * Returns both the impersonated token and the original admin token.
+   * Operator+. Issue a JWT as the target user for testing/debugging. With the
+   * `rl_rt` cookie the impersonation is bound to that refresh family
+   * (survives reload); the cookie must belong to the bearer (403 otherwise).
    */
   @Post('impersonate/:userId')
   @UseGuards(AuthGuard('jwt'), OperatorGuard)
   @HttpCode(HttpStatus.OK)
   async impersonate(
     @Param('userId', ParseIntPipe) userId: number,
-    @Request() req: AuthenticatedRequest,
+    @Request() req: AuthenticatedRequest & ExpressRequest,
   ) {
-    return this.localAuthService.impersonate(req.user, userId);
+    const familyId = await this.callerFamilyId(req, req.user.id);
+    return this.localAuthService.impersonate(req.user, userId, familyId);
   }
 
   /**
-   * POST /auth/impersonate/exit
-   * Exit impersonation and restore admin session.
+   * The live refresh family behind the request's `rl_rt` cookie, or null
+   * when there is none. With `mustBelongTo`, a cookie that is dead or owned
+   * by someone else is a 403 `session_mismatch`.
    */
-  @Post('impersonate/exit')
-  @UseGuards(AuthGuard('jwt'))
-  @HttpCode(HttpStatus.OK)
-  exitImpersonation(@Request() req: AuthenticatedRequest) {
-    if (!req.user.impersonatedBy) {
-      throw new ForbiddenException('Not currently impersonating');
-    }
-
-    // Return a message — the frontend handles token swap
-    // using the original_token it stored when starting impersonation
-    return {
-      message: 'Impersonation ended',
-      adminUserId: req.user.impersonatedBy,
-    };
+  private async callerFamilyId(
+    req: ExpressRequest,
+    mustBelongTo?: number,
+  ): Promise<string | null> {
+    const raw = readRefreshCookie(req);
+    if (!raw) return null;
+    const row = await this.refreshService.findActiveByHash(hashToken(raw));
+    const live =
+      row && !row.revokedAt && row.expiresAt > new Date() ? row : null;
+    if (mustBelongTo !== undefined && live?.userId !== mustBelongTo)
+      throw new ForbiddenException('session_mismatch');
+    return live?.familyId ?? null;
   }
 
   /**

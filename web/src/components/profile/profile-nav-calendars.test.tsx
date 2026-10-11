@@ -10,14 +10,15 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { calendarsOverviewVariants, userCalendarHandlers } from '../../test/mocks/calendar-sync-handlers';
 import { CALENDARS_PATH, getSections } from './profile-nav-data';
 import { ProfileSidebar } from './profile-sidebar';
+import { setAccessToken, clearAccessToken } from '../../lib/api/access-token-store';
 
 function gamingPaths(calendars: boolean): string[] {
     return getSections(1, { calendars }).find((s) => s.id === 'gaming')!.children.map((c) => c.to);
 }
 
 describe('profile nav — Calendars entry (ROK-1594)', () => {
-    beforeEach(() => localStorage.setItem('raid_ledger_token', 'test-token'));
-    afterEach(() => localStorage.removeItem('raid_ledger_token'));
+    beforeEach(() => setAccessToken('test-token'));
+    afterEach(() => clearAccessToken());
 
     it('getSections lists Calendars right after Game Time only when on', () => {
         expect(gamingPaths(true)).toEqual([
