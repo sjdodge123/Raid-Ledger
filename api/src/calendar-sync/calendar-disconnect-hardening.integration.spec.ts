@@ -43,7 +43,26 @@ beforeAll(async () => {
   queue = testApp.app.get<Queue>(getQueueToken(CALENDAR_WRITE_QUEUE));
   fake = testApp.app.get<FakeCalendarProvider>(CALENDAR_FAKE_PROVIDER);
   await processor.worker.pause(true);
+  await flushInFlightFetch();
 });
+
+/**
+ * `pause(true)` does not cancel the worker's in-flight blocking fetch, so the
+ * FIRST job added afterwards would race `processor.process` (same as
+ * calendar-disconnect.integration.spec.ts). Feed it a harmless job and wait.
+ */
+async function flushInFlightFetch(): Promise<void> {
+  const data: CalendarWriteJobData = { kind: 'disconnect', connectionId: 0 };
+  await queue.add('disconnect', data, {
+    jobId: 'afix-flush',
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+  for (let i = 0; i < 30 && (await queue.getJob('afix-flush')); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  await queue.drain(true);
+}
 
 afterAll(() => processor.worker.resume());
 
