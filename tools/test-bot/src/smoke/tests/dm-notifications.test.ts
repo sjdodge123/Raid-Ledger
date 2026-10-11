@@ -27,6 +27,7 @@ import {
 } from '../fixtures.js';
 import type { PugSlotListResponseDto } from '@raid-ledger/contract';
 import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast } from './must.js';
 
 /**
  * Read the caller's unread notification count.
@@ -91,7 +92,7 @@ const slotVacatedNotification: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 2) throw new Error('Need 2+ demo users');
+    assertAtLeast(users, 2, 'Need 2+ demo users');
     // Create event, sign up 2 demo users, then remove one
     const ev = await createEvent(ctx.api, 'dm-vacated', mmoOverrides(ctx));
     try {
@@ -137,7 +138,7 @@ const departureNotifSuppressedNotFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 2) throw new Error('Need 2+ demo users');
+    assertAtLeast(users, 2, 'Need 2+ demo users');
     // LIVE event with capacity 10, only 2 signups → not full
     const ev = await createEvent(ctx.api, 'depart-notfull', {
       startTime: futureTime(-5),
@@ -170,7 +171,7 @@ const departureNotifSentWhenFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 5) throw new Error('Need 5+ demo users');
+    assertAtLeast(users, 5, 'Need 5+ demo users');
     // LIVE event with capacity 5 (tank:1, healer:1, dps:3), 5 signups → full
     const ev = await createEvent(ctx.api, 'depart-full', {
       ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
@@ -252,7 +253,7 @@ const tentativeDisplacedNotification: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 6) throw new Error('Need 6+ demo users');
+    assertAtLeast(users, 6, 'Need 6+ demo users');
     // Fill roster with 4 confirmed + 1 tentative, then add 1 more confirmed.
     // ROK-1729: `flex: 0` is load-bearing — omitting it defaults flex to 5,
     // so the roster would never be full and only the role-full path ran.
@@ -284,7 +285,7 @@ const rosterReassignmentNotification: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 2) throw new Error('Need 2+ demo users');
+    assertAtLeast(users, 2, 'Need 2+ demo users');
     const ev = await createEvent(ctx.api, 'dm-reassign', mmoOverrides(ctx));
     try {
       await signupAs(ctx.api, ev.id, users[0], ['tank']);
@@ -545,7 +546,7 @@ const departureNotifSuppressedDpsFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 5) throw new Error('Need 5+ demo users');
+    assertAtLeast(users, 5, 'Need 5+ demo users');
     // LIVE full MMO event: tank:1, healer:1, dps:3 = 5 total
     const ev = await createEvent(ctx.api, 'depart-dps-mmo', {
       ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
@@ -582,7 +583,7 @@ const departureNotifSentHealerMmo: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     // LIVE MMO event, NOT full (3/5) — healer should still trigger
     const ev = await createEvent(ctx.api, 'depart-healer-mmo', {
       ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
@@ -620,7 +621,7 @@ const departureNotifSentGenericFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     // LIVE generic event at capacity (3/3)
     const ev = await createEvent(ctx.api, 'depart-generic-full', {
       startTime: futureTime(-5),
@@ -656,7 +657,7 @@ const departureNotifSuppressedGenericNotFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 2) throw new Error('Need 2+ demo users');
+    assertAtLeast(users, 2, 'Need 2+ demo users');
     // LIVE generic event NOT full (2/10)
     const ev = await createEvent(ctx.api, 'depart-generic-notfull', {
       startTime: futureTime(-5),
@@ -690,7 +691,7 @@ const cancelSuppressedGenericNotFull: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 2) throw new Error('Need 2+ demo users');
+    assertAtLeast(users, 2, 'Need 2+ demo users');
     // Future generic event with capacity 10, only 2 signups → NOT full
     const ev = await createEvent(ctx.api, 'cancel-gen-notfull', {
       slotConfig: { type: 'generic', player: 10 },
@@ -722,7 +723,7 @@ const cancelSuppressedDpsMmo: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     // Future MMO event — always pass slotConfig explicitly for CI
     const ev = await createEvent(ctx.api, 'cancel-dps-mmo', {
       ...(ctx.mmoGameId ? { gameId: ctx.mmoGameId } : {}),
@@ -754,7 +755,7 @@ const cancelFiredTankMmo: SmokeTest = {
   category: 'dm',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     // Future MMO event — always pass slotConfig so roster assignments work
     // even in CI where mmoGameId may not exist
     const ev = await createEvent(ctx.api, 'cancel-tank-mmo', {

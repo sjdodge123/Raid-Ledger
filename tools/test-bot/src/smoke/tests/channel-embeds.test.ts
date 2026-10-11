@@ -25,6 +25,7 @@ import {
   imminentAuthorPattern,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 import type { SimpleEmbed } from '../../helpers/messages.js';
 import type { ApiClient } from '../api.js';
 
@@ -126,7 +127,7 @@ const eventEmbedPosted: SmokeTest = {
     try {
       const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
       assertEmbedCount(msg.embeds, 1);
-      assertEmbedTitle(msg.embeds[0], new RegExp(ev.title));
+      assertEmbedTitle(must(msg.embeds[0], 'the posted embed'), new RegExp(ev.title));
     } finally {
       await deleteEvent(ctx.api, ev.id);
     }
@@ -344,7 +345,7 @@ const embedChromePerState: SmokeTest = {
       await awaitProcessing(ctx.api);
       const { count, max } = await fetchSignupCount(ctx.api, ev.id);
       const msg = await embedInChannel(ch.channelId, ev.title, ctx.config.timeoutMs);
-      const posted = msg.embeds[0];
+      const posted = must(msg.embeds[0], 'the posted embed');
       // Smoke events start 60 minutes out -> IMMINENT -> needs_you amber.
       assertEmbedColor(posted, REMINDER_AMBER);
       assertAuthorMatches(posted, imminentAuthorPattern(count, max));

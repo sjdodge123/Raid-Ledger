@@ -19,6 +19,7 @@ import {
   withThrowawayCharacter,
 } from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast } from './must.js';
 
 function mmoOverrides(ctx: TestContext) {
   if (!ctx.mmoGameId) return {};
@@ -73,7 +74,7 @@ const slotVacatedFlow: SmokeTest = {
   category: 'flow',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 1) throw new Error('Need demo users');
+    assertAtLeast(users, 1, 'Need demo users');
     const ch = channelForTest(ctx, 1);
     const ev = await createEvent(ctx.api, 'flow-vacated', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
@@ -107,7 +108,7 @@ const benchPromotionFlow: SmokeTest = {
   category: 'flow',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     const ch = channelForTest(ctx, 2);
     const ev = await createEvent(ctx.api, 'flow-bench-promote', {
       maxAttendees: 2,
@@ -175,7 +176,7 @@ const multiUserSignupFlow: SmokeTest = {
   category: 'flow',
   async run(ctx) {
     const users = ctx.demoUserIds ?? [];
-    if (users.length < 3) throw new Error('Need 3+ demo users');
+    assertAtLeast(users, 3, 'Need 3+ demo users');
     const ch = channelForTest(ctx, 4);
     const ev = await createEvent(ctx.api, 'flow-multi-signup', { ...mmoOverrides(ctx), ...(ch.gameId ? { gameId: ch.gameId } : {}) });
     try {
@@ -197,7 +198,7 @@ const multiUserSignupFlow: SmokeTest = {
           // ROK-1460: the count lives on the chrome author line, not in a
           // `ROSTER: n` description header.
           const match = (embed.author ?? '').match(/(\d+) of (\d+)/);
-          return match ? parseInt(match[1], 10) >= 3 : false;
+          return match?.[1] ? parseInt(match[1], 10) >= 3 : false;
         },
         ctx.config.timeoutMs,
       );

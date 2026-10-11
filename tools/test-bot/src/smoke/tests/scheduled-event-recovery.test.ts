@@ -68,7 +68,7 @@ async function createRawGuildSE(
     privacyLevel: GuildScheduledEventPrivacyLevel.GuildOnly,
     entityType: GuildScheduledEventEntityType.Voice,
     channel: channelId,
-    description,
+    ...(description !== undefined ? { description } : {}),
   });
   return se.id;
 }

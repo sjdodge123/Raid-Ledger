@@ -20,6 +20,7 @@ import {
 } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 
 /** Timeout for simulated responses — kept short for fast TDD failure. */
 const SIM_TIMEOUT = 8_000;
@@ -463,9 +464,10 @@ const searchByGameMultiVariant: SmokeTest = {
     // Prefer the most-specific variant (longest name) — current picker tends
     // to surface the shortest exact-match row first, so the longer sibling is
     // the one the bug hides events behind.
-    const targetGame = [...wowRows].sort(
-      (a, b) => b.name.length - a.name.length,
-    )[0];
+    const targetGame = must(
+      [...wowRows].sort((a, b) => b.name.length - a.name.length)[0],
+      'the longest WoW variant row',
+    );
 
     const ev = await createEvent(ctx.api, 'rok1084-search', {
       gameId: targetGame.id,

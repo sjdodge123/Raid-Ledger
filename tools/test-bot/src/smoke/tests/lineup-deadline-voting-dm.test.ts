@@ -19,6 +19,7 @@
 import { awaitProcessing } from '../fixtures.js';
 import { pollForCondition } from '../../helpers/polling.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { must } from './must.js';
 import type { ApiClient } from '../api.js';
 import { archiveOwnLeftoverLineups } from '../lineup-leftovers.js';
 
@@ -111,7 +112,7 @@ async function seedNominations(
   for (let i = 0; i < count; i += 1) {
     await ctx.api.post('/admin/test/nominate-game', {
       lineupId,
-      gameId: games[i].id,
+      gameId: must(games[i], `seeded game #${i}`).id,
       userId: userIds[i % userIds.length],
     });
   }
