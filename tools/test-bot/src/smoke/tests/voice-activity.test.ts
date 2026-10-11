@@ -42,6 +42,7 @@ import {
   SmokeAssertionError,
 } from '../assert.js';
 import type { SmokeTest, TestContext } from '../types.js';
+import { assertAtLeast, must } from './must.js';
 import { awaitProcessingLogged, pollClassifiedMetrics, resolveMonitorGameId } from '../voice-fixtures.js';
 
 /**
@@ -69,8 +70,8 @@ async function withVoiceBinding(
   // without changing what every existing caller creates.
   configOverride: Record<string, unknown> = {},
 ) {
-  const vCh = pickChannel(ctx.voiceChannels, index);
-  const tCh = pickChannel(ctx.textChannels, index);
+  const vCh = must(pickChannel(ctx.voiceChannels, index), `voice channel #${String(index)}`);
+  const tCh = must(pickChannel(ctx.textChannels, index), `text channel #${String(index)}`);
   let vBindingId: string | undefined;
   let tBindingId: string | undefined;
   try {
@@ -78,7 +79,7 @@ async function withVoiceBinding(
       channelId: vCh.id,
       channelType: 'voice',
       purpose,
-      gameId,
+      ...(gameId !== undefined ? { gameId } : {}),
       config: { minPlayers: 1, notificationChannelId: tCh.id, ...configOverride },
     });
     console.log(`  [voice] Created ${purpose} binding for ${vCh.name}`);
@@ -285,12 +286,12 @@ async function twoGames(ctx: TestContext): Promise<[number, number]> {
     '/admin/settings/games?limit=2',
   );
   const ids = res.data.map((g) => g.id);
-  if (ids.length < 2) {
-    throw new Error(
-      `Lobby presence needs two games in the DB to form two groups; ` +
-        `/admin/settings/games?limit=2 returned ${String(ids.length)}`,
-    );
-  }
+  assertAtLeast(
+    ids,
+    2,
+    `Lobby presence needs two games in the DB to form two groups; ` +
+      `/admin/settings/games?limit=2 returned ${String(ids.length)}`,
+  );
   return [ids[0], ids[1]];
 }
 
@@ -405,7 +406,9 @@ function assertLobbyRender(msg: SimpleMessage, eventId: number): void {
         `${String(msg.components.length)} component row(s)`,
     );
   }
-  const [lead, live, short] = msg.embeds;
+  const lead = must(msg.embeds[0], 'the lobby lead embed');
+  const live = must(msg.embeds[1], 'the lobby LIVE-group embed');
+  const short = must(msg.embeds[2], 'the lobby short-group embed');
 
   assertEmbedTitle(lead, /\u{1F50A} .+ · 5 in voice/u);
   assertEmbedColor(lead, SYSTEM_SLATE);
@@ -459,14 +462,15 @@ function assertRecapParticipants(description: string): void {
  * test's own note), so the recap renders lead-only today.
  */
 function assertRecapRender(msg: SimpleMessage): void {
-  assertEmbedTitle(msg.embeds[0], /\u{1F50A} .+ · session ended/u);
+  const recapLead = must(msg.embeds[0], 'the recap lead embed');
+  assertEmbedTitle(recapLead, /\u{1F50A} .+ · session ended/u);
   // ROK-1499: the room this recap covers HAD members — the D12 seam put them
   // there — so the occupancy ledger must have outlived them leaving. A lead
   // description with no "N in voice" line is the prod bug this closed: the
   // service keeps nothing between flushes, so a recap rendered from the room
   // it can no longer see says "No session started." for an evening three
   // people sat through.
-  assertEmbedDescription(msg.embeds[0], /\d+ in voice/);
+  assertEmbedDescription(recapLead, /\d+ in voice/);
   assertRecapParticipants(msg.embeds[0]?.description ?? '');
   for (const embed of msg.embeds) {
     assertEmbedColor(embed, SYSTEM_SLATE);
@@ -596,8 +600,8 @@ const SHARED_LOBBY_CHANNEL_INDEX = 2;
 
 /** Fail fast (never retried) when the pool folds both indexes onto one channel. */
 function assertOwnLobbyChannel(ctx: TestContext): void {
-  const own = pickChannel(ctx.voiceChannels, BRIEF_VISIT_CHANNEL_INDEX);
-  const shared = pickChannel(ctx.voiceChannels, SHARED_LOBBY_CHANNEL_INDEX);
+  const own = must(pickChannel(ctx.voiceChannels, BRIEF_VISIT_CHANNEL_INDEX), 'the brief-visit voice channel');
+  const shared = must(pickChannel(ctx.voiceChannels, SHARED_LOBBY_CHANNEL_INDEX), 'the shared-lobby voice channel');
   if (own.id === shared.id) {
     throw new SmokeAssertionError(
       `Brief-visit test needs a voice channel no other general-lobby test ` +
@@ -707,12 +711,13 @@ async function assertMergesIntoOneGroup(
     );
   }
   assertEmbedCountIs(msg, 2, 'Merged lobby presence message');
+  const mergedEmbed = must(msg.embeds[1], 'the merged group embed');
   assertAuthor(
-    msg.embeds[1],
+    mergedEmbed,
     /LIVE · .*Quick Play · 3 playing/,
     'merged group',
   );
-  assertRosterSize(msg.embeds[1].description ?? '', 3, 'merged group roster');
+  assertRosterSize(mergedEmbed.description ?? '', 3, 'merged group roster');
   const authors = msg.embeds.map((e) => e.author ?? '').join(' | ');
   assertLacks(authors, 'NEEDS', 'merged message author lines');
 }
@@ -876,7 +881,7 @@ const voiceMemberList: SmokeTest = {
   name: 'Voice members list includes bot after join',
   category: 'voice',
   async run(ctx) {
-    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const vCh = must(pickChannel(ctx.voiceChannels, 0), 'voice channel #0');
     await joinVoice(vCh.id);
     try {
       await pollForCondition(
@@ -901,15 +906,13 @@ const multiGameVoiceDetected: SmokeTest = {
   name: 'Multi-game channel detects second binding game event',
   category: 'voice',
   async run(ctx) {
-    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const vCh = must(pickChannel(ctx.voiceChannels, 0), 'voice channel #0');
     // Fetch live game IDs from API to avoid hardcoding seed data IDs
     const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
       '/admin/settings/games?limit=2',
     );
     const gameIds = gamesRes.data.map((g) => g.id);
-    if (gameIds.length < 2) {
-      throw new Error('Need at least 2 games in DB for multi-binding test');
-    }
+    assertAtLeast(gameIds, 2, 'Need at least 2 games in DB for multi-binding test');
     const [gameA, gameB] = gameIds;
     let bindA: string | undefined;
     let bindB: string | undefined;
@@ -1062,7 +1065,7 @@ const classifyPopulatesAttendance: SmokeTest = {
 
 async function rok943ClassifyAllStatuses(ctx: TestContext) {
   const users = ctx.demoUserIds ?? [];
-  if (users.length < 6) throw new Error('Need 6+ demo users for ROK-943');
+  assertAtLeast(users, 6, 'Need 6+ demo users for ROK-943');
 
   const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
     '/admin/settings/games?limit=1',
@@ -1103,13 +1106,13 @@ async function rok943SignupUsers(
 ) {
   // Link fake Discord IDs to 5 demo users (user[5] stays unlinked → unmarked)
   for (let i = 0; i < 5; i++) {
-    await linkDiscord(ctx.api, users[i], fakeIds[i], `smoke-user-${i}`);
+    await linkDiscord(ctx.api, must(users[i], `demo user #${i}`), must(fakeIds[i], `fake id #${i}`), `smoke-user-${i}`);
   }
   // Sign up all 7: dmRecipient + 6 demo users
   // discordUserId is now auto-populated from users.discordId at signup time (ROK-985)
   await signupAs(ctx.api, eventId, ctx.dmRecipientUserId);
   for (let i = 0; i < 6; i++) {
-    await signupAs(ctx.api, eventId, users[i]);
+    await signupAs(ctx.api, eventId, must(users[i], `demo user #${i}`));
   }
 }
 
@@ -1123,6 +1126,8 @@ async function rok943InjectSessions(
   end: Date,
 ) {
   const b = { eventId };
+  assertAtLeast(users, 4, 'ROK-943 session injection needs 4+ demo users');
+  assertAtLeast(fakeIds, 4, 'ROK-943 session injection needs 4+ fake Discord ids');
   // FULL — 50/60 min = 83%, on time
   await injectVoiceSession(ctx.api, { ...b, discordUserId: ctx.testBotDiscordId, userId: ctx.dmRecipientUserId, durationSec: 3000, firstJoinAt: start.toISOString(), lastLeaveAt: end.toISOString() });
   // PARTIAL — 25/60 min = 42%, on time, stayed till end
@@ -1224,14 +1229,12 @@ const siblingBindingSuppression: SmokeTest = {
   name: 'Sibling binding suppresses ad-hoc via channel-level check (ROK-959)',
   category: 'voice',
   async run(ctx) {
-    const vCh = pickChannel(ctx.voiceChannels, 0);
+    const vCh = must(pickChannel(ctx.voiceChannels, 0), 'voice channel #0');
     const gamesRes = await ctx.api.get<{ data: { id: number }[] }>(
       '/admin/settings/games?limit=2',
     );
     const gameIds = gamesRes.data.map((g) => g.id);
-    if (gameIds.length < 2) {
-      throw new Error('Need at least 2 games in DB for ROK-959 test');
-    }
+    assertAtLeast(gameIds, 2, 'Need at least 2 games in DB for ROK-959 test');
     const [gameA, gameB] = gameIds;
     let bindA: string | undefined;
     let bindB: string | undefined;
