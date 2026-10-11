@@ -102,7 +102,14 @@ export async function insertGoogleEvent(
   return readCopyRef(res.json, calendarId);
 }
 
-/** `events.patch` of an existing copy (same id) → its new ref. */
+/**
+ * `events.patch` of an existing copy (same id) → its new ref. The body also
+ * carries `status: 'confirmed'`: a copy the user deleted in Google is kept
+ * as a `cancelled` event that a PATCH still answers 200 for, and sending the
+ * status puts it back on their calendar instead of leaving it hidden
+ * (review m5 — behaviour reported by the community, not stated in Google's
+ * reference; a plain PATCH is otherwise unchanged).
+ */
 export async function patchGoogleEvent(
   accessToken: string,
   calendarId: string,
@@ -110,13 +117,31 @@ export async function patchGoogleEvent(
   input: CopyEventInput,
 ): Promise<CopyRef> {
   const url = eventsUrl(calendarId, providerEventId);
-  const res = await call(
-    'PATCH',
-    url,
-    accessToken,
-    buildGoogleEventBody(input),
-  );
+  const body = { ...buildGoogleEventBody(input), status: 'confirmed' };
+  const res = await call('PATCH', url, accessToken, body);
   return readCopyRef(res.json, calendarId);
+}
+
+/**
+ * Review M1: the live copy carrying `rlCopyId` in `calendarId`, or null —
+ * `events.list?privateExtendedProperty=rlCopyId=<id>`. Deleted (cancelled)
+ * events are left out (`showDeleted` defaults to false): only a visible copy
+ * can be a duplicate, and a cancelled one may no longer be patchable.
+ */
+export async function findGoogleEventByCopyId(
+  accessToken: string,
+  calendarId: string,
+  copyId: string,
+): Promise<CopyRef | null> {
+  const query = new URLSearchParams({
+    privateExtendedProperty: `rlCopyId=${copyId}`,
+    maxResults: '1',
+  });
+  const url = `${eventsUrl(calendarId)}?${query.toString()}`;
+  const res = await call('GET', url, accessToken);
+  const items = asRecord(res.json).items;
+  if (!Array.isArray(items)) throw new TransientError('malformed_response');
+  return items.length > 0 ? readCopyRef(items[0], calendarId) : null;
 }
 
 /** `events.delete` — NotFoundError on 404/410 (the adapter treats as ok). */

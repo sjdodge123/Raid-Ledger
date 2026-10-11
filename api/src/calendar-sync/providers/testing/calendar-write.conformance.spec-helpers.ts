@@ -84,6 +84,26 @@ function describeCopies(get: WriteHarness): void {
     expect(next.calendarId).toBe(cal);
   });
 
+  it('upsertEvent with no ref adopts the copy already carrying that rlCopyId (one copy, M1)', async () => {
+    const h = get();
+    const { cal, ref } = await seedCopy(h);
+    const tentative = { ...COPY, tentative: true };
+    const again = await h.provider.upsertEvent(h.credentials, cal, tentative, null);
+    expect(again.providerEventId).toBe(ref.providerEventId);
+    await expect(h.readCopy(ref)).resolves.toEqual({
+      title: '(Tentative) Raid Night',
+      busy: false,
+    });
+  });
+
+  it('a copy with the same rlCopyId in ANOTHER calendar is not adopted', async () => {
+    const h = get();
+    const { ref } = await seedCopy(h);
+    const other = await h.provider.upsertEvent(h.credentials, 'primary', COPY, null);
+    expect(other.calendarId).toBe('primary');
+    expect(other.providerEventId).not.toBe(ref.providerEventId);
+  });
+
   it('a confirmed copy is "<title>" and Busy', async () => {
     const h = get();
     const { ref } = await seedCopy(h);

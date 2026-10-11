@@ -9,7 +9,11 @@
  * - a pending (waiting / delayed) duplicate collapses — the job reconciles
  *   current state when it runs, so one run covers every trigger;
  * - an ACTIVE job may already have read the rows, so an update made mid-run
- *   would be lost. It gets exactly one `-rerun` follow-up instead.
+ *   would be lost. It gets exactly one `-rerun` follow-up instead;
+ * - while that `-rerun` is live (pending or active) a new trigger collapses
+ *   into it rather than re-adding the plain id, so two runs for one key never
+ *   overlap (review m1). An update landing during an ACTIVE `-rerun` is
+ *   picked up by the nightly reconcile cron (it scans the link rows).
  *
  * The kill switch drops `reconcile` jobs only; `write-off` and `disconnect`
  * are cleanup and always run (spec §8).
@@ -133,6 +137,11 @@ export async function enqueueCalendarWriteJob(
   const state = await clearFinishedJob(deps.queue, jobId);
   if (state === 'active') return addRerun(deps.queue, data, jobId);
   if (PENDING_STATES.has(state)) return { outcome: 'collapsed', jobId };
+  // A live `-rerun` already covers this key: a plain job now could run
+  // alongside it (review m1).
+  const rerunId = rerunJobId(jobId);
+  const rerunState = await clearFinishedJob(deps.queue, rerunId);
+  if (isLive(rerunState)) return { outcome: 'collapsed', jobId: rerunId };
   await addJob(deps.queue, data, jobId);
   return { outcome: 'added', jobId };
 }

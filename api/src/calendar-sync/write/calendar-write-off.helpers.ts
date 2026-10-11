@@ -9,20 +9,29 @@
  * Skipped when the connection is gone or sending is back on by the time the
  * job runs (the re-enable's reconciles own the copies then). A
  * `ProviderAuthError` flips the connection to `needs_reconnect` and keeps
- * the link rows — reconcile after a reconnect sees write off + a link and
- * deletes the copy. Rate-limit / transient errors rethrow for BullMQ retry.
+ * the link rows and `dedicated_calendar_id`: "write off + a calendar id or a
+ * live link" IS the unfinished-write-off marker, and the reconnect calls
+ * `enqueuePendingWriteOff` to run the job again (review m3). A
+ * `ProviderRequestError` (permanent 4xx) ends the job `failed` without a
+ * retry (m6). Rate-limit / transient errors rethrow for BullMQ retry.
  */
-import { and, eq, ne } from 'drizzle-orm';
+import { and, eq, isNotNull, ne, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   NotFoundError,
   ProviderAuthError,
+  ProviderRequestError,
 } from '../providers/calendar-provider.errors';
 import type { CalendarCredentials } from '../providers/calendar-provider.interface';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
 import { errorCode } from './calendar-write-reconcile.helpers';
+import {
+  enqueueCalendarWriteJob,
+  type CalendarWriteEnqueueDeps,
+  type EnqueueResult,
+} from './calendar-write.enqueue.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
@@ -57,6 +66,9 @@ export async function runCalendarWriteOff(
       writeOff(deps.db, conn, provider, creds),
     );
   } catch (err) {
+    if (err instanceof ProviderRequestError) {
+      return { result: 'failed', reason: errorCode(err) };
+    }
     if (!(err instanceof ProviderAuthError)) throw err;
     const code = errorCode(err);
     await deps.db
@@ -91,8 +103,50 @@ async function writeOff(
       .set({ dedicatedCalendarId: null, updatedAt: new Date() })
       .where(eq(schema.calendarConnections.id, conn.id));
   }
-  await db.delete(links).where(ofConn);
+  // Only the suppressed rows: a link written after `live` was read (a
+  // concurrent reconcile) keeps its row, so its copy is not orphaned (m2).
+  await db.delete(links).where(and(ofConn, eq(links.state, 'suppressed')));
   return { result: 'done', deletedCopies: live.length };
+}
+
+/**
+ * Review m3: true when a write-off for `connectionId` stopped part-way (an
+ * auth error) — sending is off but a dedicated calendar id or a live link
+ * row is still there.
+ */
+export async function hasPendingWriteOff(
+  db: Db,
+  connectionId: number,
+): Promise<boolean> {
+  const t = schema.calendarConnections;
+  const links = schema.calendarEventLinks;
+  const liveLink = sql`exists (select 1 from ${links} where ${links.connectionId} = ${t.id} and ${links.state} <> 'suppressed')`;
+  const [row] = await db
+    .select({ id: t.id })
+    .from(t)
+    .where(
+      and(
+        eq(t.id, connectionId),
+        eq(t.writeEnabled, false),
+        or(isNotNull(t.dedicatedCalendarId), liveLink),
+      ),
+    );
+  return Boolean(row);
+}
+
+/**
+ * Review m3: call after a reconnect (credentials stored, status `active`):
+ * re-queues the write-off a `ProviderAuthError` interrupted, so the
+ * dedicated calendar and every remaining copy are cleaned. null = nothing
+ * pending.
+ */
+export async function enqueuePendingWriteOff(
+  db: Db,
+  deps: CalendarWriteEnqueueDeps,
+  connectionId: number,
+): Promise<EnqueueResult | null> {
+  if (!(await hasPendingWriteOff(db, connectionId))) return null;
+  return enqueueCalendarWriteJob(deps, { kind: 'write-off', connectionId });
 }
 
 /** A calendar already gone remotely is the outcome we wanted. */

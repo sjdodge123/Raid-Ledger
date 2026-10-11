@@ -43,6 +43,7 @@ import {
 import {
   deleteGoogleCalendar,
   deleteGoogleEvent,
+  findGoogleEventByCopyId,
   getGoogleCalendar,
   insertGoogleCalendar,
   insertGoogleEvent,
@@ -120,7 +121,12 @@ export class GoogleCalendarAdapter
     return (await insertGoogleCalendar(token)).id;
   }
 
-  /** PATCH the existing copy (NotFound propagates: caller recreates). */
+  /**
+   * PATCH the existing copy (NotFound propagates: caller recreates). With no
+   * ref, adopt a live copy already carrying this `rlCopyId` in the calendar
+   * before inserting — a retried create (timeout, 5xx after Google
+   * committed, lost link row) must not leave a second copy (review M1).
+   */
   async upsertEvent(
     credentials: CalendarCredentials,
     calendarId: string,
@@ -128,9 +134,17 @@ export class GoogleCalendarAdapter
     existing: CopyRef | null,
   ): Promise<CopyRef> {
     const token = accessTokenOf(credentials);
-    if (!existing) return insertGoogleEvent(token, calendarId, input);
-    const id = existing.providerEventId;
-    return patchGoogleEvent(token, calendarId, id, input);
+    if (existing) {
+      const id = existing.providerEventId;
+      return patchGoogleEvent(token, calendarId, id, input);
+    }
+    const found = await findGoogleEventByCopyId(token, calendarId, input.copyId);
+    const adopted = found
+      ? await ignoreNotFound(
+          patchGoogleEvent(token, calendarId, found.providerEventId, input),
+        )
+      : null;
+    return adopted ?? insertGoogleEvent(token, calendarId, input);
   }
 
   /** A copy already gone (404/410) counts as deleted. */

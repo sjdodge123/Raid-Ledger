@@ -173,7 +173,10 @@ export class FakeCalendarProvider
           start: input.start,
           end: input.end,
         },
-        existing?.providerEventId ?? null,
+        // No ref → adopt a copy already carrying this id (review M1).
+        existing?.providerEventId ??
+          this.store.findCopyByCopyId(calendarId, input.copyId)?.id ??
+          null,
       );
       return { calendarId, providerEventId: copy.id, etag: copy.etag };
     });

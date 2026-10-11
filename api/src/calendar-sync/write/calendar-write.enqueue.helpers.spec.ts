@@ -176,6 +176,32 @@ describe('enqueueCalendarWriteJob — existing job with the same id', () => {
   });
 });
 
+describe('enqueueCalendarWriteJob — a live -rerun (review m1)', () => {
+  it.each(['waiting', 'delayed', 'active'])(
+    'plain job finished, -rerun %s → collapses into the -rerun, no plain job added',
+    async (state) => {
+      const { queue, enqueue } = setup();
+      queue.seed('cal-write-7-42-3-rerun', state);
+      await expect(enqueue(RECONCILE)).resolves.toEqual({
+        outcome: 'collapsed',
+        jobId: 'cal-write-7-42-3-rerun',
+      });
+      expect(queue.added).toEqual([]);
+      expect(queue.jobs.has('cal-write-7-42-3')).toBe(false);
+    },
+  );
+
+  it('a retained finished -rerun does not block a new plain job', async () => {
+    const { queue, enqueue } = setup();
+    queue.seed('cal-write-7-42-3-rerun', 'completed');
+    await expect(enqueue(RECONCILE)).resolves.toEqual({
+      outcome: 'added',
+      jobId: 'cal-write-7-42-3',
+    });
+    expect(queue.removed).toEqual(['cal-write-7-42-3-rerun']);
+  });
+});
+
 describe('enqueueCalendarWriteJob — kill switch', () => {
   it('off: reconcile is dropped without touching the queue', async () => {
     const { queue, enqueue, isSyncEnabled } = setup(false);

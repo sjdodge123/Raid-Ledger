@@ -1,7 +1,9 @@
 /**
  * ROK-1596 G2: an in-memory Google Calendar v3 behind the
  * `googleJsonRequest` seam — calendars.insert/get/delete and
- * events.insert/patch/delete, shaped from the `__fixtures__` replies.
+ * events.insert/patch/delete/list (the `rlCopyId` lookup, review M1), shaped
+ * from the `__fixtures__` replies. A copy the user deleted is kept as
+ * `status: cancelled` (`cancelEvent`), like Google.
  * Lets the write conformance suite run against the real adapter and the
  * real write helpers with no network. Install with
  * `jest.spyOn(googleHttp, 'googleJsonRequest').mockImplementation(api.handle)`.
@@ -58,16 +60,25 @@ export class FakeGoogleCalendarApi {
     return Promise.resolve(this.route(method, url, body as Json));
   };
 
-  private route(m: GoogleJsonMethod, url: string, body: Json) {
-    if (!url.startsWith(`${GOOGLE_CALENDAR_API}/calendars`)) {
+  /** The user deleted the copy in Google: it stays, as `cancelled`. */
+  cancelEvent(calendarId: string, eventId: string): void {
+    const cal = this.calendars.get(calendarId);
+    const current = cal?.get(eventId);
+    if (cal && current) cal.set(eventId, { ...current, status: 'cancelled' });
+  }
+
+  private route(m: GoogleJsonMethod, fullUrl: string, body: Json) {
+    if (!fullUrl.startsWith(`${GOOGLE_CALENDAR_API}/calendars`)) {
       return reply(400, { error: { code: 400 } });
     }
+    const [url, query = ''] = fullUrl.split('?');
     const path = url.slice(GOOGLE_CALENDAR_API.length + 1).split('/');
     const [, calId, events, evtId] = path.map(decodeURIComponent);
     if (!calId) return m === 'POST' ? this.insertCalendar() : bad();
     const cal = this.calendars.get(calId);
     if (!cal) return notFound();
     if (!events) return this.calendarOp(m, calId);
+    if (!evtId && m === 'GET') return this.listEvents(cal, query);
     if (!evtId) return m === 'POST' ? this.insertEvent(cal, body) : bad();
     return this.eventOp(m, cal, evtId, body);
   }
@@ -92,6 +103,19 @@ export class FakeGoogleCalendarApi {
     const event = { ...fixture('event-insert-ok'), ...body, id };
     cal.set(id, { ...event, etag: `"etag-${this.seq}"` });
     return reply(200, cal.get(id));
+  }
+
+  /** `privateExtendedProperty=rlCopyId=<id>`; cancelled events left out. */
+  private listEvents(cal: Map<string, Json>, query: string) {
+    const filter = new URLSearchParams(query).get('privateExtendedProperty');
+    const wanted = filter?.startsWith('rlCopyId=') ? filter.slice(9) : null;
+    if (!wanted) return bad();
+    const items = [...cal.values()].filter((e) => {
+      const props = (e.extendedProperties as Json | undefined)?.private;
+      const copyId = (props as Json | undefined)?.rlCopyId;
+      return copyId === wanted && e.status !== 'cancelled';
+    });
+    return reply(200, { ...fixture('events-list-copy'), items });
   }
 
   private eventOp(

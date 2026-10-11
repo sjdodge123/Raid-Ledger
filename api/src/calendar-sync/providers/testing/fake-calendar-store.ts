@@ -83,6 +83,12 @@ export class FakeCalendarStore {
     return this.copies.get(id) ?? null;
   }
 
+  /** The copy carrying `copyId` in `calendarId` (Google's rlCopyId lookup). */
+  findCopyByCopyId(calendarId: string, copyId: string): FakeCopy | null {
+    const found = this.copiesIn(calendarId).find((c) => c.copyId === copyId);
+    return found ?? null;
+  }
+
   /**
    * Insert (`existingId` null) or patch in place. Like Google: an unknown
    * calendar, or patching a copy that is gone, is a `NotFoundError`.
