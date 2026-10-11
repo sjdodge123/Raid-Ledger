@@ -22,9 +22,6 @@ export function ImpersonationBanner() {
     }
 
     const endsAt = endsAtLabel();
-    const handleExit = async () => {
-        await exitImpersonation();
-    };
 
     return (
         <>
@@ -36,7 +33,7 @@ export function ImpersonationBanner() {
                         {endsAt && <> · ends at {endsAt}</>}
                     </span>
                     <button
-                        onClick={handleExit}
+                        onClick={() => void exitImpersonation()}
                         className="impersonation-banner__exit"
                     >
                         Exit Impersonation
