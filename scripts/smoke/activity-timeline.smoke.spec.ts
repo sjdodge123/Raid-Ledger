@@ -4,6 +4,7 @@
  * Creates a fresh event via the API (which triggers activity logging),
  * then navigates to that event's detail page and verifies the timeline renders.
  */
+import type { Locator } from '@playwright/test';
 import { test, expect } from './base';
 import { API_BASE, apiPost, getAdminToken } from './api-helpers';
 
@@ -31,6 +32,18 @@ async function deleteEvent(token: string, eventId: number) {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
     });
+}
+
+/**
+ * Expand the timeline if collapsed. ROK-1596: keyed to the toggle's own
+ * aria-expanded — a page-wide `.border-t.border-edge` probe matched the
+ * event page's calendar line (also a bordered divider) and skipped the click.
+ */
+async function expandTimeline(activityBtn: Locator) {
+    if ((await activityBtn.getAttribute('aria-expanded')) !== 'true') {
+        await activityBtn.click();
+    }
+    await expect(activityBtn).toHaveAttribute('aria-expanded', 'true');
 }
 
 test.describe('Activity Timeline on event detail', () => {
@@ -75,11 +88,7 @@ test.describe('Activity Timeline on event detail', () => {
         const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
         await expect(activityBtn).toBeVisible({ timeout: 15_000 });
 
-        // Expand the timeline if collapsed
-        const expanded = page.locator('.border-t.border-edge');
-        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
-            await activityBtn.click();
-        }
+        await expandTimeline(activityBtn);
 
         // The creator auto-signs up, so we should see both actions.
         // ROK-1070: scope to .first() — earlier specs (notifications/events/
@@ -103,11 +112,7 @@ test.describe('Activity Timeline on event detail', () => {
         const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
         await expect(activityBtn).toBeVisible({ timeout: 15_000 });
 
-        // Expand the timeline if collapsed
-        const expanded = page.locator('.border-t.border-edge');
-        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
-            await activityBtn.click();
-        }
+        await expandTimeline(activityBtn);
 
         // Timestamps show as relative ("Just now", "1m ago") or absolute dates
         const timestamps = page.locator('p[class*="text-[11px]"]');
@@ -121,11 +126,7 @@ test.describe('Activity Timeline on event detail', () => {
         const activityBtn = page.locator('button', { hasText: /Activity · \d+ event/ });
         await expect(activityBtn).toBeVisible({ timeout: 15_000 });
 
-        // Expand the timeline if collapsed
-        const expanded = page.locator('.border-t.border-edge');
-        if (!(await expanded.isVisible({ timeout: 2_000 }).catch(() => false))) {
-            await activityBtn.click();
-        }
+        await expandTimeline(activityBtn);
 
         // Each entry has a colored dot (w-8 h-8 rounded-full)
         const dots = page.locator('.rounded-full.w-8');
