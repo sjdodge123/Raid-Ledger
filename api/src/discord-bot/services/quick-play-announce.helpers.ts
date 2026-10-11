@@ -1,9 +1,13 @@
 import { Logger } from '@nestjs/common';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { EMBED_STATES } from '../discord-bot.constants';
-import type { AdHocNotificationDeps } from './ad-hoc-notification.helpers';
+import {
+  type AdHocNotificationDeps,
+  isGeneralLobbyBinding,
+  resolveNotificationChannel,
+} from './ad-hoc-notification.helpers';
 
 /**
  * ROK-1766 — Quick Play Announcements posting helpers.
@@ -45,24 +49,75 @@ export async function resolveQuickPlayAnnounceChannel(
 }
 
 /**
- * D6 restart rehydration: the OLDEST still-LIVE `discord_event_messages` row
- * for an event, so an in-memory Map lost to a deploy does not freeze the card.
- * Oldest, not newest: the spawn card is inserted at spawn, while a link unfurl
- * (`event-link-track.helpers.ts`) or a share of the running session inserts a
- * later row whose derived state is also LIVE — the newest row would hijack
- * that message into the Quick Play card and freeze the real one.
+ * The channels this service itself could have posted `eventId`'s spawn card
+ * to: the QP channel for the event's game, plus — for a monitor, never a
+ * lobby (D7) — its notification channel. Anything else holding a LIVE row for
+ * the event (a link unfurl, a share) was not posted by us.
+ */
+async function spawnChannelsFor(
+  deps: AdHocNotificationDeps,
+  eventId: number,
+  bindingId: string,
+): Promise<string[]> {
+  const event = await deps.db.query.events.findFirst({
+    columns: { gameId: true },
+    where: eq(schema.events.id, eventId),
+  });
+  const gameId = event ? event.gameId : undefined;
+  const qp = await resolveQuickPlayAnnounceChannel(deps, bindingId, gameId);
+  const channels = qp ? [qp] : [];
+  if (await isGeneralLobbyBinding(deps, bindingId)) return channels;
+  const fallback = await resolveNotificationChannel(deps, bindingId, gameId);
+  if (fallback) channels.push(fallback);
+  return channels;
+}
+
+/**
+ * D6 restart rehydration: the spawn card an in-memory Map lost to a deploy,
+ * so the card does not freeze. Only rows in a channel this service could have
+ * posted to (`spawnChannelsFor`) qualify — a lobby event with no QP binding
+ * has none, so its unfurl/share rows are never adopted (AC8). Failures are
+ * logged and read as "untracked".
+ */
+export async function rehydrateSpawnMessage(
+  deps: AdHocNotificationDeps,
+  eventId: number,
+  bindingId: string,
+): Promise<TrackedMessage | null> {
+  try {
+    const channels = await spawnChannelsFor(deps, eventId, bindingId);
+    if (channels.length === 0) return null;
+    return await loadTrackedMessage(deps.db, eventId, channels);
+  } catch (err) {
+    logger.warn(
+      `Could not resolve spawn channels for event ${eventId}: ${err}`,
+    );
+    return null;
+  }
+}
+
+/**
+ * The OLDEST still-LIVE `discord_event_messages` row for an event within
+ * `channels`. Oldest, not newest: the spawn card is inserted at spawn, while a
+ * link unfurl (`event-link-track.helpers.ts`) or a share of the running
+ * session inserts a later row whose derived state is also LIVE.
  * A COMPLETED row is never returned — a late `queueUpdate` must not flip an
  * ended card back to LIVE. Failures are logged and read as "untracked".
  */
 export async function loadTrackedMessage(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
+  channels: string[],
 ): Promise<TrackedMessage | null> {
   const t = schema.discordEventMessages;
   try {
     const row = await db.query.discordEventMessages.findFirst({
       columns: { channelId: true, messageId: true },
-      where: and(eq(t.eventId, eventId), eq(t.embedState, EMBED_STATES.LIVE)),
+      where: and(
+        eq(t.eventId, eventId),
+        eq(t.embedState, EMBED_STATES.LIVE),
+        inArray(t.channelId, channels),
+      ),
       orderBy: [asc(t.createdAt)],
     });
     return row ?? null;

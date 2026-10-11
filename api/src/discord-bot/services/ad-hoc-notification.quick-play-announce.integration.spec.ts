@@ -258,6 +258,39 @@ describe('AdHocNotificationService — Quick Play Announcements (real DB)', () =
     expect(editedIds(after)).toEqual([`${QP_TEXT}/msg-1`]);
   });
 
+  it('lobby event with NO QP binding: a restart never adopts its share/unfurl row (AC8)', async () => {
+    const lobby = await insertBinding({
+      channelId: LOBBY_VOICE,
+      channelType: 'voice',
+      bindingPurpose: 'general-lobby',
+      gameId: null,
+    });
+    const eventId = await insertLiveEvent(lobby);
+    await spawn(buildService(stubs()), eventId, lobby);
+    await testApp.db.insert(dem).values({
+      eventId,
+      guildId: GUILD,
+      channelId: 'rok1766-c2-share',
+      messageId: 'share-msg',
+      embedState: 'live',
+    });
+
+    const after = stubs();
+    const restarted = buildService(after);
+    restarted.queueUpdate(eventId, lobby);
+    await flush(restarted);
+    await complete(restarted, eventId, lobby);
+
+    expect(editedIds(after)).toEqual([]);
+    expect(await rowsFor(eventId)).toEqual([
+      {
+        channelId: 'rok1766-c2-share',
+        messageId: 'share-msg',
+        embedState: 'live',
+      },
+    ]);
+  });
+
   it('a completed row is never rehydrated — a late update after a restart edits nothing', async () => {
     const lobby = await insertBinding({
       channelId: LOBBY_VOICE,

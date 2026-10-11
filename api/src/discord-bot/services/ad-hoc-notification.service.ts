@@ -28,8 +28,8 @@ import {
   toActiveParticipants,
 } from './ad-hoc-notification.helpers';
 import {
-  loadTrackedMessage,
   markTrackedCompleted,
+  rehydrateSpawnMessage,
   resolveQuickPlayAnnounceChannel,
   type TrackedMessage,
 } from './quick-play-announce.helpers';
@@ -91,6 +91,8 @@ export class AdHocNotificationService implements OnModuleDestroy {
     { channelId: string; messageId: string }
   >();
   private pendingUpdates = new Map<number, PendingUpdate>();
+  /** Events whose rehydration found no spawn card — not re-queried per flush. */
+  private untracked = new Set<number>();
   private flushTimer: NodeJS.Timeout | null = null;
   private flushing = false;
 
@@ -261,7 +263,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
     // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
     // land a LIVE-state editEmbed AFTER our COMPLETED edit.
     this.pendingUpdates.delete(eventId);
-    const tracked = await this.trackedFor(eventId);
+    const tracked = await this.trackedFor(eventId, bindingId);
     if (!tracked) return;
     // ROK-1243: re-read participants from DB so any join/leave that happened
     // during the final 5s batch window (or was lost to a silent editEmbed
@@ -277,12 +279,20 @@ export class AdHocNotificationService implements OnModuleDestroy {
     this.cleanup(eventId);
   }
 
-  /** ROK-1766 D6: the Map entry, or the still-LIVE DB row re-seeded into it. */
-  private async trackedFor(eventId: number): Promise<TrackedMessage | null> {
+  /**
+   * ROK-1766 D6: the Map entry, or our own still-LIVE spawn row re-seeded into
+   * it. A miss is cached so the 5 s flush does not re-query every cycle.
+   */
+  private async trackedFor(
+    eventId: number,
+    bindingId: string,
+  ): Promise<TrackedMessage | null> {
     const hit = this.messageIds.get(eventId);
     if (hit) return hit;
-    const row = await loadTrackedMessage(this.db, eventId);
+    if (this.untracked.has(eventId)) return null;
+    const row = await rehydrateSpawnMessage(this.deps, eventId, bindingId);
     if (row) this.messageIds.set(eventId, row);
+    else this.untracked.add(eventId);
     return row;
   }
 
@@ -305,6 +315,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
   private cleanup(eventId: number): void {
     this.messageIds.delete(eventId);
     this.pendingUpdates.delete(eventId);
+    this.untracked.delete(eventId);
   }
 
   /** Flush pending updates — edit-in-place the tracked messages. */
@@ -329,7 +340,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
   }
 
   private async processUpdate(update: PendingUpdate): Promise<void> {
-    const tracked = await this.trackedFor(update.eventId);
+    const tracked = await this.trackedFor(update.eventId, update.bindingId);
     if (!tracked) return;
     const rows = await this.db
       .select()

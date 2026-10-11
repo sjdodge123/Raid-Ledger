@@ -77,6 +77,8 @@ async function buildModule() {
   const mockDb = createDrizzleMock();
   const findFirst = jest.fn().mockResolvedValue(undefined);
   mockDb.query.discordEventMessages = { findFirst };
+  const eventFindFirst = jest.fn().mockResolvedValue(undefined);
+  mockDb.query.events = { findFirst: eventFindFirst };
   const m = buildMocks();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
@@ -94,6 +96,7 @@ async function buildModule() {
     service: module.get(AdHocNotificationService),
     mockDb,
     findFirst,
+    eventFindFirst,
     ...m,
   };
 }
@@ -259,6 +262,13 @@ describe('AdHocNotificationService — Quick Play Announcements (ROK-1766)', () 
   });
 
   describe('restart rehydration (D6)', () => {
+    beforeEach(() => {
+      ctx.channelBindingsService.getBindingById.mockResolvedValue(
+        LOBBY_BINDING,
+      );
+      ctx.eventFindFirst.mockResolvedValue({ gameId: VALHEIM });
+    });
+
     it('Map miss + a LIVE discord_event_messages row: processUpdate edits that message', async () => {
       ctx.findFirst.mockResolvedValueOnce({
         channelId: QP_TEXT,
@@ -285,6 +295,24 @@ describe('AdHocNotificationService — Quick Play Announcements (ROK-1766)', () 
       await flush();
       expect(ctx.findFirst).toHaveBeenCalledTimes(1);
       expect(ctx.clientService.editEmbed).not.toHaveBeenCalled();
+    });
+
+    it('lobby event with NO QP binding: an unfurl/share row is never adopted, and repeated flushes do not re-query (AC8)', async () => {
+      ctx.channelBindingsService.getQuickPlayChannelForGame.mockResolvedValue(
+        null,
+      );
+      // Would be adopted pre-fix: the oldest LIVE row of the event is a share.
+      ctx.findFirst.mockResolvedValue({
+        channelId: 'text-share-1',
+        messageId: 'share-msg',
+      });
+      for (let i = 0; i < 3; i++) {
+        ctx.service.queueUpdate(81, 'binding-lobby');
+        await flush();
+      }
+      expect(ctx.clientService.editEmbed).not.toHaveBeenCalled();
+      expect(ctx.findFirst).not.toHaveBeenCalled();
+      expect(ctx.eventFindFirst).toHaveBeenCalledTimes(1);
     });
 
     it('notifyCompleted rehydrates, edits to ended, then marks the rows completed', async () => {
