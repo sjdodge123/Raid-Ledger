@@ -106,11 +106,23 @@ export function useDisconnectCalendar() {
 
 const eventCopyKey = (eventId: number) => ['calendars', 'event-copy', eventId] as const;
 
+/**
+ * GET one event's copy. The server's null is an EMPTY 200 body (Nest's null
+ * return), which `response.json()` would throw on — so read the text first.
+ */
+async function fetchEventCopy(eventId: number): Promise<EventCalendarCopy | null> {
+    const res = await fetchWithAuth(`${BASE}/events/${eventId}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const text = await res.text();
+    if (!text.trim()) return null;
+    return EventCalendarCopySchema.nullable().parse(JSON.parse(text));
+}
+
 /** `GET /users/me/calendars/events/:eventId` — our copy of this event, or null (no write connection). */
 export function useEventCalendarCopy(eventId: number, enabled = true) {
     return useQuery<EventCalendarCopy | null>({
         queryKey: eventCopyKey(eventId),
-        queryFn: () => fetchApi(`${BASE}/events/${eventId}`, {}, EventCalendarCopySchema.nullable()),
+        queryFn: () => fetchEventCopy(eventId),
         enabled: enabled && !!getAuthToken(),
         retry: false,
     });
