@@ -107,7 +107,12 @@ export async function patchGoogleEvent(
   input: CopyEventInput,
 ): Promise<CopyRef> {
   const url = eventsUrl(calendarId, providerEventId);
-  const res = await call('PATCH', url, accessToken, buildGoogleEventBody(input));
+  const res = await call(
+    'PATCH',
+    url,
+    accessToken,
+    buildGoogleEventBody(input),
+  );
   return readCopyRef(res.json, calendarId);
 }
 
@@ -149,7 +154,10 @@ async function call(
   return res;
 }
 
-const RATE_LIMIT_REASONS = new Set(['rateLimitExceeded', 'userRateLimitExceeded']);
+const RATE_LIMIT_REASONS = new Set([
+  'rateLimitExceeded',
+  'userRateLimitExceeded',
+]);
 const SCOPE_REASONS = new Set([
   'insufficientPermissions',
   'ACCESS_TOKEN_SCOPE_INSUFFICIENT',
