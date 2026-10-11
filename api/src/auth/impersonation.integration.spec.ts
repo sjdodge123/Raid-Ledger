@@ -12,6 +12,8 @@ import { REFRESH_COOKIE_NAME } from './refresh/refresh-cookie.helpers';
 import { RefreshTokenService } from './refresh/refresh-token.service';
 import { hashToken } from './refresh/refresh-token.helpers';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
+import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
+import { wipeUserData } from '../users/users-delete.helpers';
 
 let testApp: TestApp;
 
@@ -292,5 +294,131 @@ describe('impersonation audit rows (ROK-1754)', () => {
     expect(
       stops.map((r) => [r.targetId, (meta(r) as { reason?: string }).reason]),
     ).toEqual([[target.id, 'expired']]);
+  });
+});
+
+// ── review fix round (ROK-1754 B1, m1, m3, m5) ───────────────────────────────
+
+/** `[targetId, reason]` per stop audit, in insert order. */
+async function stopPairs() {
+  const stops = await auditRows('impersonate_stop');
+  return stops
+    .sort((a, b) => a.id - b.id)
+    .map((r) => [r.targetId, (meta(r) as { reason?: string }).reason]);
+}
+
+describe('impersonation review fixes (ROK-1754)', () => {
+  it('start over a live marker ends the old target with a `replaced` stop audit', async () => {
+    const admin = await loginAdmin();
+    const first = await createUser('imp-first', 'member');
+    const second = await createUser('imp-second', 'member');
+    expect(
+      (await startImpersonation(first.id, admin.token, admin.rt)).status,
+    ).toBe(200);
+    expect(
+      (await startImpersonation(second.id, admin.token, admin.rt)).status,
+    ).toBe(200);
+
+    const rows = await testApp.db.select().from(markers);
+    expect(rows.map((r) => r.targetUserId)).toEqual([second.id]);
+    expect(await stopPairs()).toEqual([[first.id, 'replaced']]);
+    const starts = await auditRows('impersonate_start');
+    expect(starts.map((r) => r.targetId).sort()).toEqual(
+      [first.id, second.id].sort(),
+    );
+  });
+
+  it('ban+wipe ends markers where the user is the TARGET or the IMPERSONATOR (B1)', async () => {
+    const target = await createUser('imp-wiped-target', 'member');
+    const operator = await createUser('imp-wiped-op', 'operator');
+    const bystander = await createUser('imp-bystander', 'member');
+    const adminId = testApp.seed.adminUser.id;
+    const expiresAt = new Date(Date.now() + 3_600_000);
+    await testApp.db.insert(markers).values([
+      {
+        familyId: '00000000-0000-4000-8000-0000000000a1',
+        impersonatorUserId: adminId,
+        targetUserId: target.id,
+        expiresAt,
+      },
+      {
+        familyId: '00000000-0000-4000-8000-0000000000a2',
+        impersonatorUserId: operator.id,
+        targetUserId: bystander.id,
+        expiresAt,
+      },
+      {
+        familyId: '00000000-0000-4000-8000-0000000000a3',
+        impersonatorUserId: adminId,
+        targetUserId: bystander.id,
+        expiresAt,
+      },
+    ]);
+    await testApp.db.transaction((tx) => wipeUserData(tx, target.id, adminId));
+    await testApp.db.transaction((tx) =>
+      wipeUserData(tx, operator.id, adminId),
+    );
+
+    const left = await testApp.db.select().from(markers);
+    expect(left.map((r) => r.familyId)).toEqual([
+      '00000000-0000-4000-8000-0000000000a3',
+    ]);
+    expect(await stopPairs()).toEqual([
+      [target.id, 'user_wiped'],
+      [bystander.id, 'user_wiped'],
+    ]);
+  });
+
+  it('logout still revokes the family when ending the marker throws (m3)', async () => {
+    const admin = await loginAdmin();
+    const target = await createUser('imp-logout-throw', 'member');
+    expect(
+      (await startImpersonation(target.id, admin.token, admin.rt)).status,
+    ).toBe(200);
+    const spy = jest
+      .spyOn(testApp.app.get(ImpersonationSessionService), 'end')
+      .mockRejectedValueOnce(new Error('audit insert failed'));
+    try {
+      const res = await testApp.request
+        .post('/auth/logout')
+        .set('Cookie', cookie(admin.rt));
+      expect(res.status).toBe(200);
+      expect(String(res.headers['set-cookie'])).toContain(
+        `${REFRESH_COOKIE_NAME}=;`,
+      );
+    } finally {
+      spy.mockRestore();
+    }
+    const row = await testApp.app
+      .get(RefreshTokenService)
+      .findActiveByHash(hashToken(admin.rt));
+    expect(row?.revokedAt).not.toBeNull();
+    const refreshed = await testApp.request
+      .post('/auth/refresh')
+      .set('Cookie', cookie(admin.rt));
+    expect(refreshed.status).toBe(401);
+  });
+
+  it('refresh by a family whose marker names another impersonator → own token, session_mismatch (m5)', async () => {
+    const admin = await loginAdmin();
+    const operator = await createUser('imp-other-op', 'operator');
+    const target = await createUser('imp-mismatch-target', 'member');
+    await testApp.db.insert(markers).values({
+      familyId: await familyOf(admin.rt),
+      impersonatorUserId: operator.id,
+      targetUserId: target.id,
+      expiresAt: new Date(Date.now() + 3_600_000),
+    });
+    const res = await testApp.request
+      .post('/auth/refresh')
+      .set('Cookie', cookie(admin.rt));
+    expect(res.status).toBe(200);
+    const claims = decodeJwt(res.body.access_token);
+    expect({ sub: claims.sub, impersonatedBy: claims.impersonatedBy }).toEqual({
+      sub: testApp.seed.adminUser.id,
+      impersonatedBy: undefined,
+    });
+    expect(await testApp.db.select().from(markers)).toEqual([]);
+    expect(await stopPairs()).toEqual([[target.id, 'session_mismatch']]);
   });
 });
