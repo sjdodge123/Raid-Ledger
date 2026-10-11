@@ -13,12 +13,28 @@ const API_BASE = 'http://localhost:3000';
 const COPY_URL = `${API_BASE}/users/me/calendars/events/:eventId`;
 
 vi.mock('./use-auth', () => ({ getAuthToken: () => 'test-token' }));
+vi.mock('../lib/api-client', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../lib/api-client')>()),
+    signupForEvent: vi.fn(async () => ({})),
+    cancelSignup: vi.fn(async () => undefined),
+}));
 
-import { useEventCalendarCopy } from './use-calendar-sync';
+import { COPY_POLL_MAX_MS, COPY_POLL_MS, copyPollInterval, useEventCalendarCopy } from './use-calendar-sync';
+import { useCancelSignup, useSignup } from './use-signups';
 
 function wrapper({ children }: { children: ReactNode }) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     return createElement(QueryClientProvider, { client }, children);
+}
+
+const PENDING = { provider: 'google', state: 'pending', openUrl: null };
+const SYNCED = { provider: 'google', state: 'synced', openUrl: 'https://www.google.com/calendar/event?eid=x' };
+
+/** Serves each body in turn (the last one repeats) and counts the GETs. */
+function serveSequence(...bodies: unknown[]) {
+    const calls = { n: 0 };
+    server.use(http.get(COPY_URL, () => HttpResponse.json(bodies[Math.min(calls.n++, bodies.length - 1)])));
+    return calls;
 }
 
 describe('useEventCalendarCopy', () => {
@@ -43,5 +59,37 @@ describe('useEventCalendarCopy', () => {
         const { result } = renderHook(() => useEventCalendarCopy(7), { wrapper });
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(result.current.error?.message).toBe('HTTP 500');
+    });
+
+    it('re-reads a pending copy until it is synced (MAJOR 2: the line no longer sticks on "Adding…")', async () => {
+        const calls = serveSequence(PENDING, SYNCED);
+        const { result } = renderHook(() => useEventCalendarCopy(7), { wrapper });
+        await waitFor(() => expect(result.current.data?.state).toBe('pending'));
+        await waitFor(() => expect(result.current.data?.state).toBe('synced'), { timeout: COPY_POLL_MS + 2_000 });
+        expect(calls.n).toBe(2);
+    });
+});
+
+describe('copyPollInterval', () => {
+    it('polls only while pending, and stops after the cap', () => {
+        expect(copyPollInterval('pending', 1_000, 1_000)).toBe(COPY_POLL_MS);
+        expect(copyPollInterval('pending', 1_000, 1_000 + COPY_POLL_MAX_MS - 1)).toBe(COPY_POLL_MS);
+        expect(copyPollInterval('pending', 1_000, 1_000 + COPY_POLL_MAX_MS)).toBe(false);
+        for (const s of ['synced', 'failed', 'suppressed', undefined] as const) expect(copyPollInterval(s, 1_000, 1_000)).toBe(false);
+    });
+});
+
+describe('sign-up / cancel invalidate the copy', () => {
+    it.each([
+        ['sign-up', useSignup],
+        ['cancel', useCancelSignup],
+    ] as const)('%s success re-reads the event copy', async (_name, useMutationHook) => {
+        const calls = serveSequence(null, SYNCED);
+        const { result } = renderHook(() => ({ copy: useEventCalendarCopy(7), m: useMutationHook(7) }), { wrapper });
+        await waitFor(() => expect(result.current.copy.isFetched).toBe(true));
+        expect(calls.n).toBe(1);
+        await result.current.m.mutateAsync(undefined as never);
+        await waitFor(() => expect(result.current.copy.data?.state).toBe('synced'));
+        expect(calls.n).toBe(2);
     });
 });

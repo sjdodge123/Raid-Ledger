@@ -63,7 +63,7 @@ function SendEvents({ connections }: { connections: CalendarConnection[] }): JSX
     const desktop = useMediaQuery(DESKTOP_MQ);
     return (
         <>
-            {connections.map((c) => (desktop
+            {connections.filter((c) => c.status !== 'disconnecting').map((c) => (desktop
                 ? <SendEventsSettings key={c.id} connection={c} />
                 : <SendEventsEntryRow key={c.id} connection={c} />))}
         </>

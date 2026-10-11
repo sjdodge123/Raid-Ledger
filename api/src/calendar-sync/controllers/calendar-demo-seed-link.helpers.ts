@@ -29,6 +29,8 @@ export const SeedLinkSchema = z
     userId: z.number().int().positive(),
     eventId: z.number().int().positive(),
     state: z.enum(['synced', 'failed', 'suppressed']),
+    /** Pin the link to this `demo-fake:` connection (must be the user's); default: their newest. */
+    connectionId: z.number().int().positive().optional(),
   })
   .strict();
 export type SeedLinkInput = z.infer<typeof SeedLinkSchema>;
@@ -45,7 +47,11 @@ const PLACEHOLDER: LinkRef = {
   etag: null,
 };
 
-async function fakeConnectionOf(db: Db, userId: number): Promise<Connection> {
+async function fakeConnectionOf(
+  db: Db,
+  userId: number,
+  connectionId?: number,
+): Promise<Connection> {
   const t = schema.calendarConnections;
   const [conn] = await db
     .select()
@@ -54,6 +60,7 @@ async function fakeConnectionOf(db: Db, userId: number): Promise<Connection> {
       and(
         eq(t.userId, userId),
         like(t.accountSubject, `${FAKE_SUBJECT_PREFIX}%`),
+        connectionId === undefined ? undefined : eq(t.id, connectionId),
       ),
     )
     .orderBy(desc(t.id))
@@ -115,7 +122,7 @@ export async function seedDemoLink(
   clientUrl: string,
   input: SeedLinkInput,
 ): Promise<{ linkId: number }> {
-  const conn = await fakeConnectionOf(db, input.userId);
+  const conn = await fakeConnectionOf(db, input.userId, input.connectionId);
   const ref =
     input.state === 'synced'
       ? await seedCopy(db, fake, clientUrl, conn, input)

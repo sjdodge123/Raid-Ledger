@@ -11,11 +11,11 @@ import { useCalendarsOverview, useUndoCalendarCopy } from '../../../hooks/use-ca
 import { UNDO_HIT_AREA_CLASS } from '../game-time/away/use-absence-section';
 import { EVENT_CALENDAR_COPY as C, PROVIDER_CALENDAR_NAME } from './calendar-sync.copy';
 
-/** The provider whose calendar gets this user's events, when the kill switch is on. */
+/** The provider whose calendar gets this user's events, when the kill switch is on (any non-`disconnecting` status, like the server). */
 function useWriteProvider() {
     const { data } = useCalendarsOverview();
     if (!data?.enabled) return null;
-    return data.connections.find((c) => c.status === 'active' && c.write.enabled)?.provider ?? null;
+    return data.connections.find((c) => c.status !== 'disconnecting' && c.write.enabled)?.provider ?? null;
 }
 
 /** Returns `announce(assignedSlot)` — call it after a sign-up succeeds. */

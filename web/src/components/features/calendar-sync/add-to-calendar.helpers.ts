@@ -41,6 +41,9 @@ export function outlookCalendarUrl(e: AddToCalendarEvent): string {
     return `https://outlook.live.com/calendar/0/deeplink/compose?${query(params)}`;
 }
 
+/** How long the `.ics` blob URL outlives the click (WebKit reads it asynchronously). */
+export const ICS_REVOKE_DELAY_MS = 1_000;
+
 /** API path of the one-event `.ics` (E1, `GET /events/:id/ics`). */
 export function icsPath(eventId: number): string {
     return `/events/${eventId}/ics`;
@@ -57,6 +60,10 @@ export async function downloadIcs(e: Pick<AddToCalendarEvent, 'id' | 'title'>): 
     const a = document.createElement('a');
     a.href = href;
     a.download = `${e.title.replace(/[^\w -]+/g, '').trim() || 'event'}.ics`;
+    // WebKit (iPad, incl. its Chrome) cancels the save of a detached anchor or
+    // a blob URL revoked in the same task — attach it, revoke on a later tick.
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(href);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(href), ICS_REVOKE_DELAY_MS);
 }

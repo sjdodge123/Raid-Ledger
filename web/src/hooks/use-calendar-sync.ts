@@ -7,6 +7,7 @@
  * Responses parse with the contract schemas (`.strict()`), so a server that
  * ever leaked a credential key fails the parse instead of reaching the page.
  */
+import { useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     CalendarsOverviewSchema,
@@ -104,7 +105,18 @@ export function useDisconnectCalendar() {
     });
 }
 
-const eventCopyKey = (eventId: number) => ['calendars', 'event-copy', eventId] as const;
+export const eventCopyKey = (eventId: number) => ['calendars', 'event-copy', eventId] as const;
+
+/** A `pending` copy is re-read this often (the server writes it after a ~5 s debounce)… */
+export const COPY_POLL_MS = 3_000;
+/** …for at most this long; after that the window-focus refetch takes over. */
+export const COPY_POLL_MAX_MS = 60_000;
+
+/** Poll only while the copy is `pending`, and only for {@link COPY_POLL_MAX_MS} since it went pending. */
+export function copyPollInterval(state: EventCalendarCopy['state'] | undefined, pendingSince: number | null, now = Date.now()): number | false {
+    if (state !== 'pending' || pendingSince === null) return false;
+    return now - pendingSince < COPY_POLL_MAX_MS ? COPY_POLL_MS : false;
+}
 
 /**
  * GET one event's copy. The server's null is an EMPTY 200 body (Nest's null
@@ -120,11 +132,18 @@ async function fetchEventCopy(eventId: number): Promise<EventCalendarCopy | null
 
 /** `GET /users/me/calendars/events/:eventId` — our copy of this event, or null (no write connection). */
 export function useEventCalendarCopy(eventId: number, enabled = true) {
+    const pendingSince = useRef<number | null>(null);
     return useQuery<EventCalendarCopy | null>({
         queryKey: eventCopyKey(eventId),
         queryFn: () => fetchEventCopy(eventId),
         enabled: enabled && !!getAuthToken(),
         retry: false,
+        refetchInterval: (query) => {
+            const state = query.state.data?.state;
+            if (state !== 'pending') { pendingSince.current = null; return false; }
+            pendingSince.current ??= Date.now();
+            return copyPollInterval(state, pendingSince.current);
+        },
     });
 }
 
