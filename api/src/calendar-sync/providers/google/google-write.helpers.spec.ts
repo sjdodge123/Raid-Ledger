@@ -20,6 +20,7 @@ import {
 import {
   NotFoundError,
   ProviderAuthError,
+  ProviderRequestError,
   RateLimitError,
   TransientError,
 } from '../calendar-provider.errors';
@@ -233,6 +234,9 @@ describe('status mapping', () => {
     [403, { error: { code: 403 } }, ProviderAuthError, 'http_403'],
     [404, fixture('error-404'), NotFoundError, 'http_404'],
     [410, null, NotFoundError, 'http_410'],
+    [400, { error: { code: 400 } }, ProviderRequestError, 'http_400'],
+    [409, null, ProviderRequestError, 'http_409'],
+    [422, null, ProviderRequestError, 'http_422'],
     [500, null, TransientError, 'http_500'],
     [503, null, TransientError, 'http_503'],
   ])(

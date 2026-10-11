@@ -3,6 +3,7 @@ import {
   NotFoundError,
   ProviderAuthError,
   ProviderNotConfiguredError,
+  ProviderRequestError,
   RateLimitError,
   TransientError,
 } from './calendar-provider.errors';
@@ -13,6 +14,7 @@ describe('calendar provider errors', () => {
     [new RateLimitError(30_000, 'http_429'), 'rate_limited', 'RateLimitError'],
     [new TransientError('http_503'), 'transient', 'TransientError'],
     [new NotFoundError('http_410'), 'not_found', 'NotFoundError'],
+    [new ProviderRequestError('http_400'), 'rejected', 'ProviderRequestError'],
     [
       new ProviderNotConfiguredError('google'),
       'not_configured',

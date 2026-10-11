@@ -7,7 +7,9 @@
  * Status map (shared error classes; callers branch on the class):
  * 401 → ProviderAuthError · 403 insufficient scope → ProviderAuthError('scope')
  * · 403 rate-limit reasons / 429 → RateLimitError(Retry-After)
- * · 404 / 410 → NotFoundError · 5xx, network, timeout → TransientError.
+ * · 404 / 410 → NotFoundError · any other 4xx (400, 409, 422…) →
+ * ProviderRequestError (permanent, no retry) · 5xx, network, timeout →
+ * TransientError.
  * Nothing here logs, and no error carries a token or a response body: the
  * `reason` is `http_<status>`, `scope`, `network` or `timeout`.
  */
@@ -16,6 +18,7 @@ import type { GoogleHttpResponse, GoogleJsonMethod } from './google-http';
 import {
   NotFoundError,
   ProviderAuthError,
+  ProviderRequestError,
   RateLimitError,
   TransientError,
 } from '../calendar-provider.errors';
@@ -182,6 +185,7 @@ export function assertWriteOk(res: GoogleHttpResponse): void {
     throw new ProviderAuthError(scope ? 'scope' : reason);
   }
   if (status === 404 || status === 410) throw new NotFoundError(reason);
+  if (status >= 400 && status < 500) throw new ProviderRequestError(reason);
   throw new TransientError(reason);
 }
 

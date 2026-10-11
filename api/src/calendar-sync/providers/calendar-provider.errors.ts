@@ -14,7 +14,12 @@ function safeReason(reason: string | undefined): string {
 }
 
 export type CalendarProviderErrorCode =
-  'auth' | 'rate_limited' | 'transient' | 'not_found' | 'not_configured';
+  | 'auth'
+  | 'rate_limited'
+  | 'transient'
+  | 'not_found'
+  | 'rejected'
+  | 'not_configured';
 
 export abstract class CalendarProviderError extends Error {
   abstract readonly code: CalendarProviderErrorCode;
@@ -61,6 +66,18 @@ export class NotFoundError extends CalendarProviderError {
   readonly code = 'not_found' as const;
   constructor(reason?: string) {
     super('Calendar provider object not found', reason);
+  }
+}
+
+/**
+ * ROK-1596: a permanent refusal of the request itself (400 and any other
+ * 4xx that is not auth, not-found or rate-limit). Retrying cannot help —
+ * the caller marks the work `failed` without a retry.
+ */
+export class ProviderRequestError extends CalendarProviderError {
+  readonly code = 'rejected' as const;
+  constructor(reason?: string) {
+    super('Calendar provider rejected the request', reason);
   }
 }
 
