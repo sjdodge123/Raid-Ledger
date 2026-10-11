@@ -498,3 +498,134 @@ describe('CalendarWriteProcessor', () => {
     expect(copiesOf(eventId)).toHaveLength(1);
   });
 });
+
+/** Undo's placeholder (`undoEventCalendarCopy`) landing mid-reconcile. */
+function undoMidFlight(key: Key, after: (ref: unknown) => unknown) {
+  const real = fake.upsertEvent.bind(fake);
+  return jest.spyOn(fake, 'upsertEvent').mockImplementation(async (...args) => {
+    const ref = await real(...args);
+    await testApp.db
+      .insert(schema.calendarEventLinks)
+      .values({
+        ...key,
+        calendarId: '',
+        providerEventId: '',
+        state: 'suppressed',
+      })
+      .onConflictDoNothing();
+    return after(ref) as typeof ref;
+  });
+}
+
+describe('reconcileCalendarCopy — races (review B1, M2)', () => {
+  it('B1: concurrent reconciles of one connection end with ONE dedicated calendar holding both copies', async () => {
+    const connectionId = await seedConnection();
+    const e1 = await eventWithSignup();
+    const e2 = await eventWithSignup();
+    const real = fake.ensureRaidLedgerCalendar.bind(fake);
+    const created: string[] = [];
+    let release = (): void => undefined;
+    const bothCreated = new Promise<void>((r) => (release = r));
+    // Hold each run after its ensure until both have created a calendar.
+    jest
+      .spyOn(fake, 'ensureRaidLedgerCalendar')
+      .mockImplementation(async (creds, known) => {
+        const id = await real(creds, known);
+        created.push(id);
+        if (created.length === 2) release();
+        await bothCreated;
+        return id;
+      });
+
+    const results = await Promise.all(
+      [e1, e2].map((eventId) => reconcile({ connectionId, eventId, userId })),
+    );
+    expect(results).toEqual([{ result: 'created' }, { result: 'created' }]);
+    expect(new Set(created).size).toBe(2);
+    const winner = (await connectionOf(connectionId)).dedicatedCalendarId;
+    const live = created.filter((id) => fake.store.hasCalendar(id));
+    expect(live).toEqual([winner]);
+    const copies = [...copiesOf(e1), ...copiesOf(e2)];
+    expect(copies.map((c) => c.calendarId)).toEqual([winner, winner]);
+    for (const eventId of [e1, e2])
+      expect(
+        (await linkOf({ connectionId, eventId, userId }))?.calendarId,
+      ).toBe(winner);
+  });
+
+  it('M2: Undo between create and saveLink wins — link stays suppressed, no copy remains', async () => {
+    const { key, eventId } = await setup();
+    undoMidFlight(key, (ref) => ref);
+
+    expect(await reconcile(key)).toEqual({
+      result: 'noop',
+      reason: 'suppressed',
+    });
+    expect((await linkOf(key))?.state).toBe('suppressed');
+    expect(copiesOf(eventId)).toHaveLength(0);
+  });
+
+  it('M2: a terminal failure after a mid-flight Undo leaves the link suppressed', async () => {
+    const { key } = await setup();
+    undoMidFlight(key, () => {
+      throw new ProviderRequestError('http_400');
+    });
+
+    expect((await reconcile(key)).result).toBe('failed');
+    expect(await linkOf(key)).toMatchObject({
+      state: 'suppressed',
+      lastErrorCode: null,
+    });
+  });
+});
+
+describe('reconcileCalendarCopy — failures leave a trace (review m4)', () => {
+  it('a permanent 4xx on create (no link yet) records a failed link; a later run heals it', async () => {
+    const { key, eventId } = await setup();
+    fake.store.failNext(new ProviderRequestError('http_400'));
+
+    expect(await reconcile(key)).toEqual({
+      result: 'failed',
+      reason: 'rejected:http_400',
+    });
+    expect(await linkOf(key)).toMatchObject({
+      state: 'failed',
+      lastErrorCode: 'rejected:http_400',
+      providerEventId: '',
+    });
+
+    const del = jest.spyOn(fake, 'deleteEvent');
+    expect((await reconcile(key)).result).toBe('updated');
+    expect(del).not.toHaveBeenCalled();
+    const [copy] = nonEmpty(copiesOf(eventId), 'copy');
+    expect(await linkOf(key)).toMatchObject({
+      state: 'synced',
+      providerEventId: copy.id,
+      lastErrorCode: null,
+    });
+  });
+
+  it('a transient error on the FINAL attempt records a failed link and still rethrows', async () => {
+    const { key } = await setup();
+    const deps = testApp.app.get(CalendarWriteProcessor).reconcileDeps();
+    const err = new TransientError('http_503');
+    fake.store.failNext(err);
+
+    await expect(
+      reconcileCalendarCopy(deps, key, { finalAttempt: true }),
+    ).rejects.toBe(err);
+    expect(await linkOf(key)).toMatchObject({
+      state: 'failed',
+      lastErrorCode: 'transient:http_503',
+    });
+  });
+
+  it('a transient error before the final attempt records nothing (BullMQ retries)', async () => {
+    const { key } = await setup();
+    const err = new TransientError('http_503');
+    fake.store.failNext(err);
+
+    await expect(reconcile(key)).rejects.toBe(err);
+    expect(await linkOf(key)).toBeNull();
+  });
+});
