@@ -214,6 +214,10 @@ describe('DiscordEventListener', () => {
     eventUpdatedTests();
   });
 
+  describe('ad-hoc guard (ROK-1766)', () => {
+    adHocGuardTests();
+  });
+
   describe('handleEventCancelled', () => {
     eventCancelledTests();
   });
@@ -362,7 +366,57 @@ function eventUpdatedTests() {
   });
 }
 
+// ROK-1766: an ad-hoc event's tracked row is the Quick Play card — the
+// scheduled builders must never re-render (or re-post) it.
+function adHocGuardTests() {
+  it('does not re-render an ad-hoc event when the payload says isAdHoc', async () => {
+    mockDb.select.mockReturnValue(createSelectChainWithRecord(mockRecord));
+    mockDb.update.mockReturnValue(createUpdateChain());
+    await listener.handleEventUpdated({ ...mockPayload, isAdHoc: true });
+    expect(embedFactory.buildEventEmbed).not.toHaveBeenCalled();
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
+  it('reads the ad-hoc flag from the DB when the payload leaves it unset (bind/unbind)', async () => {
+    mockDb.select.mockReturnValue(
+      createSelectChainWithRecord({ ...mockRecord, isAdHoc: true }),
+    );
+    mockDb.update.mockReturnValue(createUpdateChain());
+    await listener.handleEventUpdated(mockPayload);
+    expect(embedFactory.buildEventEmbed).not.toHaveBeenCalled();
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
+    expect(embedPoster.postEmbed).not.toHaveBeenCalled();
+  });
+
+  it('still re-renders a scheduled event whose DB row is not ad-hoc', async () => {
+    mockDb.select.mockReturnValue(
+      createSelectChainWithRecord({ ...mockRecord, isAdHoc: false }),
+    );
+    mockDb.update.mockReturnValue(createUpdateChain());
+    await listener.handleEventUpdated(mockPayload);
+    expect(clientService.editEmbed).toHaveBeenCalledWith(
+      'channel-789',
+      'msg-456',
+      mockEmbed,
+      mockRow,
+      undefined,
+    );
+  });
+}
+
 function eventCancelledTests() {
+  it('does not turn an ad-hoc (Quick Play) card into the scheduled cancelled embed', async () => {
+    mockDb.select.mockReturnValue(
+      createSelectChainWithRecord({ ...mockRecord, isAdHoc: true }),
+    );
+    mockDb.update.mockReturnValue(createUpdateChain());
+    await listener.handleEventCancelled(mockPayload);
+    expect(embedFactory.buildEventCancelled).not.toHaveBeenCalled();
+    expect(clientService.editEmbed).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
+  });
+
   it('should edit embed to cancelled state', async () => {
     mockDb.select.mockReturnValue(createSelectChainWithRecord(mockRecord));
     mockDb.update.mockReturnValue(createUpdateChain());
