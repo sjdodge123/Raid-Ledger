@@ -172,7 +172,9 @@ describe('FakeCalendarProvider write store', () => {
     const b = await p.upsertEvent(CREDS, 'primary', COPY, a);
     expect(b.etag).not.toBe(a.etag);
   });
+});
 
+describe('FakeCalendarProvider write failures', () => {
   it('writing to a calendar that is gone is NotFoundError', async () => {
     const p = new FakeCalendarProvider();
     const cal = await p.ensureRaidLedgerCalendar(CREDS, null);
