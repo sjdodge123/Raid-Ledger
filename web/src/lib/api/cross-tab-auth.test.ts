@@ -9,7 +9,8 @@ import { getAccessToken, setAccessToken } from './access-token-store';
 import { IDENTITY_EPOCH_KEY, bumpIdentityEpoch, installCrossTabAuth } from './cross-tab-auth';
 
 const refresh = vi.hoisted(() => vi.fn());
-vi.mock('./refresh-client', () => ({ refreshWithOutcome: refresh }));
+// Review m1: an identity change uses freshRefresh (never joins a stale in-flight POST).
+vi.mock('./refresh-client', () => ({ freshRefresh: refresh }));
 
 function siblingTabWrote(key: string, oldValue: string | null, newValue: string | null): void {
     window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue }));
