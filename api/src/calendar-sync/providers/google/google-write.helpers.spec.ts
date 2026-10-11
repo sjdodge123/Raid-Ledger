@@ -76,6 +76,16 @@ const caught = async (p: Promise<unknown>): Promise<unknown> =>
     (err: unknown) => err,
   );
 
+describe('buildGoogleEventBody — bench (F11)', () => {
+  it('builds the benched body (F11): (Bench) prefix, Free; bench wins', () => {
+    for (const tentative of [false, true]) {
+      const body = buildGoogleEventBody({ ...input(tentative), benched: true });
+      expect(body.summary).toBe('(Bench) Molten Core');
+      expect(body.transparency).toBe('transparent');
+    }
+  });
+});
+
 describe('buildGoogleEventBody', () => {
   it('builds the exact confirmed body: plain title, Busy', () => {
     expect(buildGoogleEventBody(input(false))).toEqual({
@@ -99,14 +109,6 @@ describe('buildGoogleEventBody', () => {
       extendedProperties: { private: { rlCopyId: COPY_ID } },
       source: { title: 'Raid Ledger', url: EVENT_URL },
     });
-  });
-
-  it('builds the benched body (F11): (Bench) prefix, Free; bench wins', () => {
-    for (const tentative of [false, true]) {
-      const body = buildGoogleEventBody({ ...input(tentative), benched: true });
-      expect(body.summary).toBe('(Bench) Molten Core');
-      expect(body.transparency).toBe('transparent');
-    }
   });
 
   it('sends only the allowed keys, at every level', () => {

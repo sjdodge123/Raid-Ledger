@@ -211,7 +211,9 @@ describe('signup emits', () => {
     });
     expect(await queuedIds()).toEqual([]);
   });
+});
 
+describe('signupId-only emits (F11 bench moves)', () => {
   it('F11: a signupId-only emit for a web signup (bench move) queues that user', async () => {
     const [m, other] = [await member(), await member()];
     const eventId = await newEvent();
