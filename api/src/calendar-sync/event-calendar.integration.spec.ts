@@ -202,7 +202,12 @@ describe('POST /users/me/calendars/events/:eventId/undo (Q4)', () => {
     const signups = await testApp.db
       .select()
       .from(schema.eventSignups)
-      .where(eq(schema.eventSignups.eventId, eventId));
+      .where(
+        and(
+          eq(schema.eventSignups.eventId, eventId),
+          eq(schema.eventSignups.userId, userId),
+        ),
+      );
     expect(signups.map((s) => s.status)).toEqual(['signed_up']);
 
     expect((await reconcile(connectionId, eventId)).result).toBe('noop');
