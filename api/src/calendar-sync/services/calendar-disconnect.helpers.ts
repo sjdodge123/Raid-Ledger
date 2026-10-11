@@ -140,6 +140,7 @@ async function deleteRemote(
     .from(links)
     .where(and(eq(links.connectionId, row.id), ne(links.state, 'suppressed')));
   for (const ref of refs) {
+    if (!ref.providerEventId) continue; // E1 undo placeholder: no copy
     if (ref.calendarId === row.dedicatedCalendarId) continue;
     await ignoreNotFound(provider.deleteEvent(creds, ref));
   }

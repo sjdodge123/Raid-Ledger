@@ -500,6 +500,29 @@ describe('disconnect job — remote cleanup (D7, Q5) against the Fake', () => {
     expect(fake.revoked).toContain(refresh);
   });
 
+  it('a suppressed placeholder link (no remote ids) → no provider delete, row gone', async () => {
+    const { id } = await fakeConnection(alice.userId);
+    const eventId = await createFutureEvent(testApp, adminToken);
+    await testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId: id,
+      userId: alice.userId,
+      eventId,
+      calendarId: '',
+      providerEventId: '',
+      state: 'suppressed',
+    });
+    const deleteEvent = jest.spyOn(fake, 'deleteEvent');
+    expect((await del(id, alice.token)).status).toBe(202);
+    expect(await runDisconnectJob(id)).toEqual({
+      found: true,
+      remote: 'cleaned',
+      revoke: 'revoked',
+    });
+    expect(deleteEvent).not.toHaveBeenCalled();
+    expect(await connectionById(id)).toHaveLength(0);
+    expect(await linksOf(id)).toHaveLength(0);
+  });
+
   it('a transient error rethrows for retry and keeps the row', async () => {
     const { id } = await fakeConnection(alice.userId);
     await copyIn(id, alice.userId, FAKE_PRIMARY_CALENDAR_ID);
