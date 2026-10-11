@@ -52,7 +52,7 @@ const mockIsImpersonating = isImpersonating as ReturnType<typeof vi.fn>;
 describe('AccountPanel (ROK-548)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, logout: vi.fn() });
+        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, isImpersonating: false, logout: vi.fn() });
         mockIsImpersonating.mockReturnValue(false);
     });
 
@@ -101,7 +101,8 @@ describe('AccountPanel (ROK-548)', () => {
     });
 
     it('returns null when user is impersonating', () => {
-        mockIsImpersonating.mockReturnValue(true);
+        // ROK-1754 C: the panel reads the reactive, claim-derived flag from useAuth().
+        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, isImpersonating: true, logout: vi.fn() });
         const { container } = renderAccountPanel();
         expect(container.firstChild).toBeNull();
     });
@@ -131,7 +132,7 @@ describe('DeleteAccountPanel on the form primitives (ROK-1648)', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mockIsImpersonating.mockReturnValue(false);
-        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, logout: vi.fn() });
+        mockUseAuth.mockReturnValue({ user: { id: 1, username: 'TestUser', displayName: 'TestUser' }, isAuthenticated: true, isImpersonating: false, logout: vi.fn() });
     });
 
     it('the Danger Zone trigger is a Button and the warnings wear the danger token', () => {
