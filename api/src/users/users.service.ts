@@ -1,4 +1,11 @@
-import { Inject, Injectable, ConflictException, Logger } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  ConflictException,
+  Logger,
+  Optional,
+} from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -40,6 +47,7 @@ export class UsersService {
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     private readonly tokenBlocklist: TokenBlocklistService,
+    @Optional() private readonly events?: EventEmitter2,
   ) {}
 
   async findByDiscordId(discordId: string) {
@@ -231,19 +239,9 @@ export class UsersService {
     playHistory?: string,
     role?: string,
   ) {
-    return gameId
-      ? findAllByGame(
-          this.db,
-          page,
-          limit,
-          search,
-          gameId,
-          sources,
-          playtimeMin,
-          playHistory,
-          role,
-        )
-      : findAllUsers(this.db, page, limit, search, role);
+    if (!gameId) return findAllUsers(this.db, page, limit, search, role);
+    const filters = [sources, playtimeMin, playHistory, role] as const;
+    return findAllByGame(this.db, page, limit, search, gameId, ...filters);
   }
 
   /** Find recently joined users (last 30 days, max 10) (ROK-298). */
@@ -339,6 +337,7 @@ export class UsersService {
     // ROK-1353: refresh-token rows are removed by the FK ON DELETE CASCADE in
     // deleteUserTransaction; the orchestrated guild-leave path additionally
     // calls revokeAllForUser (see discord-notification-deactivate.helpers).
+    await this.events?.emitAsync('user.deleting', { userId }); // ROK-1596 Q11
     await deleteUserTransaction(this.db, userId, reassignToUserId);
     this.invalidateCountCache();
     this.logger.log(

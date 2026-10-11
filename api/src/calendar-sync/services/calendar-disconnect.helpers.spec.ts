@@ -11,8 +11,9 @@ import type {
 } from '../providers/calendar-provider.interface';
 import { encryptCalendarCredentials } from './calendar-credentials.helpers';
 import {
+  markCalendarDisconnecting,
   runCalendarDisconnect,
-  type AccountProviderResolver,
+  type CalendarDisconnectRegistry,
 } from './calendar-disconnect.helpers';
 
 const REFRESH = '1//DISCONNECT-SECRET-REFRESH';
@@ -29,6 +30,8 @@ function ownRow() {
     id: 5,
     provider: 'google',
     accountSubject: '1098',
+    status: 'disconnecting',
+    dedicatedCalendarId: null,
     credentialsEncrypted: encryptCalendarCredentials(CREDS),
   };
 }
@@ -42,14 +45,21 @@ function dbWith(own: unknown[], siblings: unknown[] = []): MockDb {
 
 function setup(disconnect = jest.fn().mockResolvedValue(undefined)) {
   const provider = { disconnect } as unknown as CalendarAccountProvider;
-  const registry: AccountProviderResolver = {
+  // No write adapter → remote cleanup is skipped; integration covers it (D7).
+  const registry: CalendarDisconnectRegistry = {
     getAccountProviderForConnection: jest.fn().mockResolvedValue(provider),
+    getWriteProviderForConnection: jest.fn().mockResolvedValue(null),
   };
   return { disconnect, registry };
 }
 
-const run = (db: MockDb, registry: AccountProviderResolver) =>
-  runCalendarDisconnect(db as never, registry, { userId: 3, connectionId: 5 });
+const run = (db: MockDb, registry: CalendarDisconnectRegistry) =>
+  runCalendarDisconnect({ db: db as never, registry }, 5);
+const done = (revoke: string) => ({
+  found: true,
+  remote: 'skipped_no_provider',
+  revoke,
+});
 
 beforeAll(() => {
   process.env.JWT_SECRET = 'calendar-disconnect-spec-secret';
@@ -58,20 +68,37 @@ beforeAll(() => {
 
 afterEach(() => jest.restoreAllMocks());
 
-describe('runCalendarDisconnect', () => {
-  it('own row, no sibling → marks disconnecting, deletes, then revokes with the stored token', async () => {
-    const db = dbWith([ownRow()]);
-    const { disconnect, registry } = setup();
-    await expect(run(db, registry)).resolves.toEqual({
-      found: true,
-      revoke: 'revoked',
-    });
+describe('markCalendarDisconnecting (the request half, D7)', () => {
+  it('own row → set status disconnecting, scoped to id AND user → true', async () => {
+    const db = createDrizzleMock();
+    db.returning.mockResolvedValueOnce([{ id: 5 }]);
+    await expect(
+      markCalendarDisconnecting(db as never, { userId: 3, connectionId: 5 }),
+    ).resolves.toBe(true);
     expect(db.set).toHaveBeenCalledWith(
       expect.objectContaining({
         status: 'disconnecting',
         updatedAt: expect.any(Date),
       }),
     );
+    expect(db.delete).not.toHaveBeenCalled();
+  });
+
+  it("another user's connection id → false (404), nothing deleted", async () => {
+    const db = createDrizzleMock();
+    db.returning.mockResolvedValueOnce([]);
+    await expect(
+      markCalendarDisconnecting(db as never, { userId: 3, connectionId: 5 }),
+    ).resolves.toBe(false);
+    expect(db.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('runCalendarDisconnect (the job body)', () => {
+  it('disconnecting row, no sibling → deletes, then revokes with the stored token', async () => {
+    const db = dbWith([ownRow()]);
+    const { disconnect, registry } = setup();
+    await expect(run(db, registry)).resolves.toEqual(done('revoked'));
     expect(disconnect).toHaveBeenCalledWith(CREDS);
     expect(db.delete).toHaveBeenCalledTimes(1);
     expect(disconnect.mock.invocationCallOrder[0]).toBeGreaterThan(
@@ -82,10 +109,7 @@ describe('runCalendarDisconnect', () => {
   it('last sibling: the account is counted AFTER the delete, and none remain → revoke runs', async () => {
     const db = dbWith([ownRow()], []);
     const { disconnect, registry } = setup();
-    await expect(run(db, registry)).resolves.toEqual({
-      found: true,
-      revoke: 'revoked',
-    });
+    await expect(run(db, registry)).resolves.toEqual(done('revoked'));
     // The sibling probe is the second .limit(); it must follow the delete, or
     // two concurrent disconnects each see the other and both skip the revoke.
     expect(db.limit.mock.invocationCallOrder[1]).toBeGreaterThan(
@@ -97,10 +121,7 @@ describe('runCalendarDisconnect', () => {
   it('a sibling row shares the account subject → revoke skipped, row still deleted', async () => {
     const db = dbWith([ownRow()], [{ id: 6 }]);
     const { disconnect, registry } = setup();
-    await expect(run(db, registry)).resolves.toEqual({
-      found: true,
-      revoke: 'skipped_sibling',
-    });
+    await expect(run(db, registry)).resolves.toEqual(done('skipped_sibling'));
     expect(disconnect).not.toHaveBeenCalled();
     expect(db.delete).toHaveBeenCalledTimes(1);
   });
@@ -113,10 +134,7 @@ describe('runCalendarDisconnect', () => {
     const { registry } = setup(
       jest.fn().mockRejectedValue(new TransientError('http_500')),
     );
-    await expect(run(db, registry)).resolves.toEqual({
-      found: true,
-      revoke: 'failed',
-    });
+    await expect(run(db, registry)).resolves.toEqual(done('failed'));
     expect(db.delete).toHaveBeenCalledTimes(1);
     const logged = JSON.stringify(warn.mock.calls);
     expect(logged).toContain('transient:http_500');
@@ -125,21 +143,29 @@ describe('runCalendarDisconnect', () => {
 
   it('no adapter for the row (e.g. demo-fake with the gate closed) → skip revoke, delete', async () => {
     const db = dbWith([ownRow()]);
-    const registry: AccountProviderResolver = {
+    const registry: CalendarDisconnectRegistry = {
       getAccountProviderForConnection: jest.fn().mockResolvedValue(null),
+      getWriteProviderForConnection: jest.fn().mockResolvedValue(null),
     };
-    await expect(run(db, registry)).resolves.toEqual({
-      found: true,
-      revoke: 'skipped_no_provider',
-    });
+    await expect(run(db, registry)).resolves.toEqual(
+      done('skipped_no_provider'),
+    );
     expect(db.delete).toHaveBeenCalledTimes(1);
   });
 
-  it("another user's connection id → not found; nothing updated, revoked or deleted", async () => {
+  it('row already gone → not found; nothing updated, revoked or deleted', async () => {
     const db = dbWith([]);
     const { disconnect, registry } = setup();
     await expect(run(db, registry)).resolves.toEqual({ found: false });
     expect(db.update).not.toHaveBeenCalled();
+    expect(disconnect).not.toHaveBeenCalled();
+    expect(db.delete).not.toHaveBeenCalled();
+  });
+
+  it('row no longer disconnecting (reconnected before the job ran) → untouched', async () => {
+    const db = dbWith([{ ...ownRow(), status: 'active' }]);
+    const { disconnect, registry } = setup();
+    await expect(run(db, registry)).resolves.toEqual({ found: false });
     expect(disconnect).not.toHaveBeenCalled();
     expect(db.delete).not.toHaveBeenCalled();
   });

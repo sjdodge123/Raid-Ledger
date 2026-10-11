@@ -2,9 +2,10 @@
  * ROK-1596 D1: the calendar write worker. Thin — it unpacks the job and calls
  * the reconcile function, which records terminal failures itself and
  * rethrows only retryable ones (BullMQ then backs off: attempts 6, 30s exp).
- * `write-off` runs `runCalendarWriteOff` (A5); `disconnect` lands with A6.
+ * `write-off` runs `runCalendarWriteOff` (A5); `disconnect` runs
+ * `runCalendarDisconnect` (A7, D7 — cleanup kinds run with the kill switch off).
  */
-import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
+import { Inject, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -22,14 +23,16 @@ import {
   type ReconcileOutcome,
 } from './calendar-write-reconcile.helpers';
 import {
+  type CalendarDisconnectResult,
+  runCalendarDisconnect,
+} from '../services/calendar-disconnect.helpers';
+import {
   runCalendarWriteOff,
   type WriteOffOutcome,
 } from './calendar-write-off.helpers';
 
 @Processor(CALENDAR_WRITE_QUEUE, { concurrency: 2 })
 export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
-  private readonly logger = new Logger(CalendarWriteProcessor.name);
-
   constructor(
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
@@ -58,17 +61,14 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
 
   async process(
     job: Job<CalendarWriteJobData>,
-  ): Promise<ReconcileOutcome | WriteOffOutcome | null> {
+  ): Promise<ReconcileOutcome | WriteOffOutcome | CalendarDisconnectResult> {
     const { data } = job;
+    const deps = { db: this.db, registry: this.registry };
     if (data.kind === 'write-off') {
-      const deps = { db: this.db, registry: this.registry };
       return runCalendarWriteOff(deps, data.connectionId);
     }
-    if (data.kind !== 'reconcile') {
-      this.logger.warn(
-        `calendar-write job kind ${data.kind} is not handled yet`,
-      );
-      return null;
+    if (data.kind === 'disconnect') {
+      return runCalendarDisconnect(deps, data.connectionId);
     }
     return reconcileCalendarCopy(this.reconcileDeps(), data);
   }

@@ -7,6 +7,7 @@
  * - `DELETE /users/me/calendars/:id` — disconnect (L9). Also NOT behind the
  *   guard (operator ruling Q-E, 2026-10-08): a user can always remove stored
  *   credentials, even while the switch is off. Another user's id → 404.
+ *   ROK-1596 D7: marks the row `disconnecting` and queues the cleanup → 202.
  * - `PATCH /users/me/calendars/:id` — send-my-events settings (ROK-1596 D6),
  *   behind the guard. 204; the remote work is queued.
  */
@@ -34,12 +35,12 @@ import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { SettingsService } from '../../settings/settings.service';
-import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { buildCalendarsOverview } from '../services/calendar-overview.helpers';
-import { runCalendarDisconnect } from '../services/calendar-disconnect.helpers';
+import { markCalendarDisconnecting } from '../services/calendar-disconnect.helpers';
 import { updateCalendarWriteSettings } from '../services/calendar-write-settings.helpers';
 import { getCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
+import { enqueueCalendarWriteJob } from '../write/calendar-write.enqueue.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
 
 @Controller('users/me/calendars')
@@ -49,7 +50,6 @@ export class CalendarConnectionsController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
-    private readonly registry: CalendarProviderRegistry,
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly queue: Queue,
   ) {}
 
@@ -66,11 +66,21 @@ export class CalendarConnectionsController {
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
   ): Promise<void> {
-    const result = await runCalendarDisconnect(this.db, this.registry, {
-      userId: req.user.id,
+    const input = { userId: req.user.id, connectionId: id };
+    if (!(await markCalendarDisconnecting(this.db, input))) {
+      throw new NotFoundException();
+    }
+    await enqueueCalendarWriteJob(this.enqueueDeps(), {
+      kind: 'disconnect',
       connectionId: id,
     });
-    if (!result.found) throw new NotFoundException();
+  }
+
+  private enqueueDeps() {
+    return {
+      queue: this.queue,
+      isSyncEnabled: () => getCalendarSyncEnabled(this.settings),
+    };
   }
 
   @Patch(':id')
@@ -81,11 +91,7 @@ export class CalendarConnectionsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
   ): Promise<void> {
-    const deps = {
-      db: this.db,
-      queue: this.queue,
-      isSyncEnabled: () => getCalendarSyncEnabled(this.settings),
-    };
+    const deps = { db: this.db, ...this.enqueueDeps() };
     await updateCalendarWriteSettings(deps, {
       userId: req.user.id,
       connectionId: id,
