@@ -26,6 +26,7 @@ export const BINDING_PURPOSE_LABELS: Record<BindingPurpose, string> = {
   'game-voice-monitor': 'Activity Monitor',
   'general-lobby': 'General Lobby',
   'lfg-board': 'LFG board',
+  'quick-play-announcements': 'Quick Play Announcements',
 };
 
 /**
@@ -40,6 +41,8 @@ export const MIN_PLAYERS_UNIT: Record<BindingPurpose, string> = {
   'game-announcements': 'per game',
   // The board has no threshold; its unit noun names what it posts instead.
   'lfg-board': 'per forming group',
+  // Quick Play announcements never render the field (ROK-1766).
+  'quick-play-announcements': 'per game',
 };
 
 /** Field/label noun for the minimum-player threshold. */
@@ -67,7 +70,13 @@ export const MIN_PLAYERS_HELP: Record<BindingPurpose, string> = {
     'A forum channel the bot posts one thread per forming group into. The bot ' +
     'normally creates and manages this channel itself — bind one only to ' +
     'override that with an existing forum.',
+  'quick-play-announcements': '',
 };
+
+/** One-line description of a Quick Play Announcements binding (ROK-1766). */
+export const QUICK_PLAY_ANNOUNCE_HELP =
+  'Posts a message for every Quick Play session of this game, from any lobby ' +
+  "or activity-monitor channel. The lobby's live room card is unaffected.";
 
 /**
  * The consequence an operator would otherwise file as a bug (ROK-1448).

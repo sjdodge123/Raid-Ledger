@@ -13,12 +13,14 @@
  * 23505 (races, the /bind path) into the same ConflictException.
  */
 import { ConflictException } from '@nestjs/common';
-import { and, eq, isNotNull, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
 const NONSERIES_CONSTRAINT_PREFIX = 'channel_bindings_nonseries_';
 const CONFLICT_CODE = 'BINDING_SLOT_OCCUPIED';
+/** ROK-1766: the one purpose that is keyed one-per-game across the guild. */
+export const QP_PURPOSE = 'quick-play-announcements';
 
 /** Fields needed to evaluate a non-series uniqueness collision. */
 export interface BindingConflictInput {
@@ -143,6 +145,64 @@ export async function assertNoBindingConflict(
       code: CONFLICT_CODE,
     });
   }
+  await assertQuickPlayGameFree(db, candidate);
+}
+
+/**
+ * The oldest non-series Quick Play Announcements row for (guild, game),
+ * optionally excluding one channel. Oldest-first keeps the read deterministic
+ * for rows that predate the write guard (ROK-1766 D3 — no DB index).
+ */
+export async function findQuickPlayBinding(
+  db: PostgresJsDatabase<typeof schema>,
+  guildId: string,
+  gameId: number,
+  excludeChannelId?: string,
+): Promise<{ channelId: string } | undefined> {
+  const cb = schema.channelBindings;
+  const [row] = await db
+    .select({ channelId: cb.channelId })
+    .from(cb)
+    .where(
+      and(
+        eq(cb.guildId, guildId),
+        eq(cb.gameId, gameId),
+        eq(cb.bindingPurpose, QP_PURPOSE),
+        isNull(cb.recurrenceGroupId),
+        excludeChannelId ? ne(cb.channelId, excludeChannelId) : undefined,
+      ),
+    )
+    .orderBy(asc(cb.createdAt), asc(cb.id))
+    .limit(1);
+  return row;
+}
+
+/**
+ * ROK-1766 D3: a game announces Quick Play in at most ONE channel. Writing a
+ * non-series QP binding for a game another channel already holds -> 409.
+ */
+export async function assertQuickPlayGameFree(
+  db: PostgresJsDatabase<typeof schema>,
+  c: Omit<BindingConflictInput, 'recurrenceGroupId'> & {
+    recurrenceGroupId?: string | null;
+  },
+): Promise<void> {
+  if (c.bindingPurpose !== QP_PURPOSE || c.gameId == null) return;
+  if (c.recurrenceGroupId != null) return;
+  const taken = await findQuickPlayBinding(
+    db,
+    c.guildId,
+    c.gameId,
+    c.channelId,
+  );
+  if (!taken) return;
+  throw new ConflictException({
+    message:
+      'That game already announces Quick Play in another channel. Remove or edit that binding first.',
+    code: 'BINDING_QP_GAME_TAKEN',
+    field: 'gameId',
+    channelId: taken.channelId,
+  });
 }
 
 /**
@@ -151,6 +211,7 @@ export async function assertNoBindingConflict(
  * app key stays WIDER than the DB key on purpose — do NOT narrow it: matching
  * on game is what stops /bind ever creating the dual-row the index rejects).
  * Handles NULL comparisons explicitly (PostgreSQL NULL != NULL).
+ * ROK-1766 D4: Quick Play Announcements rows live in their own match space.
  */
 export async function findExistingBinding(
   db: PostgresJsDatabase<typeof schema>,
@@ -159,6 +220,7 @@ export async function findExistingBinding(
     channelId: string;
     gameId: number | null;
     recurrenceGroupId?: string | null;
+    bindingPurpose?: string;
   },
 ): Promise<{ id: string } | undefined> {
   const cb = schema.channelBindings;
@@ -171,6 +233,12 @@ export async function findExistingBinding(
     opts.gameId != null
       ? eq(cb.gameId, opts.gameId)
       : sql`${cb.gameId} IS NULL`,
+    // ROK-1766 D4: purpose-aware for QP ONLY. QP matches QP; every other
+    // purpose excludes QP, so the ROK-1419 widening among the four original
+    // purposes is untouched and QP + Announcements coexist on one channel.
+    opts.bindingPurpose === QP_PURPOSE
+      ? eq(cb.bindingPurpose, QP_PURPOSE)
+      : ne(cb.bindingPurpose, QP_PURPOSE),
   ];
   const [existing] = await db
     .select({ id: cb.id })

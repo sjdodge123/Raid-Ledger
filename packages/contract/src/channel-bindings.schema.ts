@@ -6,6 +6,8 @@ export const BindingPurposeEnum = z.enum([
   'general-lobby',
   // ROK-1471: manual override binding a pre-existing forum as the LFG board.
   'lfg-board',
+  // ROK-1766: a text channel that receives every Quick Play session of one game.
+  'quick-play-announcements',
 ]);
 
 export const ChannelTypeEnum = z.enum(['text', 'voice', 'forum']);
@@ -62,8 +64,12 @@ export type ChannelType = z.infer<typeof ChannelTypeEnum>;
 export type ChannelBindingConfig = z.infer<typeof ChannelBindingConfigSchema>;
 export type ChannelBindingDto = z.infer<typeof ChannelBindingSchema>;
 export type ChannelBindingListDto = z.infer<typeof ChannelBindingListSchema>;
-export type CreateChannelBindingDto = z.infer<typeof CreateChannelBindingSchema>;
-export type UpdateChannelBindingDto = z.infer<typeof UpdateChannelBindingSchema>;
+export type CreateChannelBindingDto = z.infer<
+  typeof CreateChannelBindingSchema
+>;
+export type UpdateChannelBindingDto = z.infer<
+  typeof UpdateChannelBindingSchema
+>;
 
 // ─── ROK-1415: (channelType, bindingPurpose, gameId) invariant ──────────────
 // A (voice, game-voice-monitor, gameId=NULL) triple makes Quick Play
@@ -72,7 +78,10 @@ export type UpdateChannelBindingDto = z.infer<typeof UpdateChannelBindingSchema>
 
 /** A rejected binding triple: which rule broke, which field to blame, and why. */
 export type BindingTripleViolation = {
-  code: 'BINDING_MONITOR_REQUIRES_GAME' | 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE';
+  code:
+    | 'BINDING_MONITOR_REQUIRES_GAME'
+    | 'BINDING_QP_REQUIRES_GAME'
+    | 'BINDING_PURPOSE_WRONG_CHANNEL_TYPE';
   field: 'gameId' | 'bindingPurpose';
   message: string;
 };
@@ -93,6 +102,12 @@ const MONITOR_REQUIRES_GAME: BindingTripleViolation = {
     'from Discord Rich Presence).',
 };
 
+const QP_REQUIRES_GAME: BindingTripleViolation = {
+  code: 'BINDING_QP_REQUIRES_GAME',
+  field: 'gameId',
+  message: 'A Quick Play Announcements binding must have a game.',
+};
+
 export function classifyBindingTriple(
   channelType: ChannelType,
   bindingPurpose: BindingPurpose,
@@ -106,16 +121,26 @@ export function classifyBindingTriple(
       : wrongChannelType(channelType, bindingPurpose);
   }
   if (channelType === 'voice') {
-    if (bindingPurpose === 'game-announcements') {
+    if (isTextPurpose(bindingPurpose)) {
       return wrongChannelType(channelType, bindingPurpose);
     }
     return bindingPurpose === 'game-voice-monitor' && gameId == null
       ? MONITOR_REQUIRES_GAME
       : null;
   }
-  // text channels only carry announcements
+  // text channels carry announcements; Quick Play announcements need a game
   if (bindingPurpose === 'game-announcements') return null;
+  if (bindingPurpose === 'quick-play-announcements') {
+    return gameId == null ? QP_REQUIRES_GAME : null;
+  }
   return wrongChannelType(channelType, bindingPurpose);
+}
+
+/** The purposes a text channel can carry (ROK-1766). */
+function isTextPurpose(purpose: BindingPurpose): boolean {
+  return (
+    purpose === 'game-announcements' || purpose === 'quick-play-announcements'
+  );
 }
 
 function wrongChannelType(
@@ -127,7 +152,8 @@ function wrongChannelType(
     field: 'bindingPurpose',
     message:
       `A ${channelType} channel cannot use the '${bindingPurpose}' purpose. ` +
-      'Text channels use Game Announcements; voice channels use Game Voice ' +
+      'Text channels use Announcements or Quick Play Announcements; voice ' +
+      'channels use Game Voice ' +
       'Monitor or General Lobby; forum channels use LFG board.',
   };
 }
@@ -148,7 +174,8 @@ export function deriveBindingPurpose(
 /**
  * AC5 — drop config keys that no longer apply once the purpose resolves. Pure;
  * returns a fresh object. `allowJustChatting` is General-Lobby-only; a text
- * announcements channel carries none of the voice-monitor tuning keys.
+ * announcements channel (plain or Quick Play, ROK-1766) carries none of the
+ * voice-monitor tuning keys.
  *
  * Shared by the api write path (the backstop) and the admin edit form, so the
  * client and server prune cannot drift apart (TDB:261).
@@ -159,7 +186,7 @@ export function pruneConfigForPurpose(
 ): ChannelBindingConfig {
   const pruned: ChannelBindingConfig = { ...(config ?? {}) };
   if (purpose !== 'general-lobby') delete pruned.allowJustChatting;
-  if (purpose === 'game-announcements') {
+  if (isTextPurpose(purpose)) {
     delete pruned.minPlayers;
     delete pruned.autoClose;
     delete pruned.gracePeriod;

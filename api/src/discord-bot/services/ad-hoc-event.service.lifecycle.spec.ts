@@ -178,6 +178,30 @@ describe('AdHocEventService — lifecycle', () => {
       await service.onEventCancelled({ eventId: 999 });
       expect(mocks.gracePeriodQueue.cancel).not.toHaveBeenCalled();
     });
+
+    it('ROK-1766 M1: finalises the session card under its binding before teardown', async () => {
+      await createActiveEvent('binding-cancel', 801);
+      const order: string[] = [];
+      mocks.notificationService.notifyCancelled.mockImplementation(() => {
+        order.push('notify');
+        return Promise.resolve();
+      });
+      mocks.gracePeriodQueue.cancel.mockImplementation(() => {
+        order.push('cancel');
+        return Promise.resolve();
+      });
+      await service.onEventCancelled({ eventId: 801 });
+      expect(mocks.notificationService.notifyCancelled).toHaveBeenCalledWith(
+        801,
+        'binding-cancel',
+      );
+      expect(order).toEqual(['notify', 'cancel']);
+    });
+
+    it('ROK-1766 M1: a scheduled (non-active) event cancel finalises no ad-hoc card', async () => {
+      await service.onEventCancelled({ eventId: 999 });
+      expect(mocks.notificationService.notifyCancelled).not.toHaveBeenCalled();
+    });
   });
 
   describe('onEventDeleted', () => {
@@ -187,6 +211,8 @@ describe('AdHocEventService — lifecycle', () => {
       await service.onEventDeleted({ eventId: 850 });
       expect(service.getActiveState('binding-delete', 1)).toBeUndefined();
       expect(mocks.gracePeriodQueue.cancel).toHaveBeenCalledWith(850);
+      // The row is gone — there is nothing to re-read for a final card.
+      expect(mocks.notificationService.notifyCancelled).not.toHaveBeenCalled();
     });
   });
 

@@ -633,3 +633,19 @@ describe('ChannelBindingList — phone stacking + INERT badge tokens', () => {
   channelbindinglistRowStacksOnPhone();
   channelbindinglistInertBadgeTokens();
 });
+
+describe('ChannelBindingList — Quick Play Announcements (ROK-1766)', () => {
+  it('shows the "Quick Play" badge in its categorical teal and the purpose label', () => {
+    render(
+      <ChannelBindingList
+        bindings={[makeBinding({ bindingPurpose: 'quick-play-announcements', gameId: 42, gameName: 'Valheim' })]}
+        onUpdate={onUpdate}
+        onDelete={onDelete}
+        isUpdating={false}
+        isDeleting={false}
+      />,
+    );
+    expect(screen.getByText('Quick Play')).toHaveClass('bg-teal-500/15', 'text-teal-400');
+    expect(screen.getByText('Valheim · Quick Play Announcements')).toBeInTheDocument();
+  });
+});

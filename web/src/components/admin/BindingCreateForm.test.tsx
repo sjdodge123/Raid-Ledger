@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QUICK_PLAY_ANNOUNCE_HELP } from "@raid-ledger/contract";
 import { BindingCreateForm, type BindingChannelOption } from "./BindingCreateForm";
 
 // GameSearchInput (shown for the default voice-monitor purpose) calls
@@ -77,7 +80,58 @@ describe("BindingCreateForm — purpose options per channel type (TDB:261 pin)",
     expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveValue("game-voice-monitor");
 
     fireEvent.change(channelSelect(), { target: { value: "t-1" } });
-    expect(purposeOptions()).toEqual([["game-announcements", "Announcements"]]);
+    expect(purposeOptions()).toEqual([
+      ["game-announcements", "Announcements"],
+      ["quick-play-announcements", "Quick Play Announcements"],
+    ]);
+    // Announcements stays the text-channel default.
+    expect(screen.getByRole("combobox", { name: "Purpose" })).toHaveValue("game-announcements");
+  });
+});
+
+const VALHEIM = { id: 42, igdbId: 42, name: "Valheim", slug: "valheim", coverUrl: null };
+
+function chooseQuickPlay() {
+  renderOpen();
+  fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+  fireEvent.change(screen.getByRole("combobox", { name: "Purpose" }), {
+    target: { value: "quick-play-announcements" },
+  });
+}
+
+describe("BindingCreateForm — Quick Play Announcements (ROK-1766)", () => {
+  it("shows the Quick Play help line only for the Quick Play purpose", () => {
+    renderOpen();
+    fireEvent.change(channelSelect(), { target: { value: "t-1" } });
+    expect(screen.queryByText(QUICK_PLAY_ANNOUNCE_HELP)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByRole("combobox", { name: "Purpose" }), {
+      target: { value: "quick-play-announcements" },
+    });
+    expect(screen.getByText(QUICK_PLAY_ANNOUNCE_HELP)).toBeInTheDocument();
+  });
+
+  it("without a game keeps Create disabled and shows the game-field error", () => {
+    chooseQuickPlay();
+    expect(screen.getByRole("button", { name: "Create binding" })).toBeDisabled();
+    expect(screen.getByText("A Quick Play Announcements binding must have a game.")).toBeInTheDocument();
+  });
+
+  it("with a game posts a quick-play-announcements binding for that game", async () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    vi.mocked(useGameSearch).mockReturnValue({
+      data: { data: [VALHEIM], meta: { total: 1, cached: false, source: "local" } },
+      isLoading: false,
+    } as unknown as ReturnType<typeof useGameSearch>);
+    chooseQuickPlay();
+    await userEvent.type(screen.getByRole("combobox", { name: "Game" }), "Valh");
+    await userEvent.click(await screen.findByRole("option", { name: /Valheim/ }));
+    const create = screen.getByRole("button", { name: "Create binding" });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(1));
+    expect(onCreate).toHaveBeenCalledWith({
+      channelId: "t-1", channelType: "text", bindingPurpose: "quick-play-announcements", gameId: 42,
+    });
   });
 });
 
@@ -100,5 +154,24 @@ describe("BindingCreateForm — pending and error", () => {
     const alert = screen.getByRole("alert");
     expect(alert).toHaveTextContent("Channel already bound");
     expect(alert).toHaveClass("text-danger");
+  });
+});
+
+/** Models the page: the mutation's error lives above the form until reset. */
+function ErrorHarness() {
+  const [error, setError] = useState<string | null>("Channel already posts Quick Play");
+  return (
+    <BindingCreateForm channels={CHANNELS} onCreate={onCreate} isCreating={false}
+      createError={error} onResetError={() => setError(null)} />
+  );
+}
+
+describe("ROK-1766: a stale create error does not survive Cancel", () => {
+  it("Cancel then + Add binding reopens the form without the previous error", () => {
+    render(<ErrorHarness />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Add binding" }));
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

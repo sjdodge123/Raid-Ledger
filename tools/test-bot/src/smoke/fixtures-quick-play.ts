@@ -25,7 +25,7 @@ export interface QuickPlayVoiceResult {
   reason?: "suppressed";
 }
 
-/** A seeded user, the `game-voice-monitor` binding and its voice channel. */
+/** A seeded user, the voice binding (monitor or lobby) and its channel. */
 export interface QuickPlayVoiceTarget {
   /** `users.id` of a Discord-linked user (e.g. a `seedFixtureUser` slot). */
   userId: number;
@@ -33,6 +33,14 @@ export interface QuickPlayVoiceTarget {
   bindingId: string;
   /** The bound voice channel's snowflake. */
   channelId: string;
+  /**
+   * ROK-1766: the lobby group's game. Required for a `general-lobby` binding
+   * (the listener filters bots out of presence groups, so the seam names the
+   * game); refused for a `game-voice-monitor`, whose game is its own.
+   */
+  gameId?: number;
+  /** Optional display name for that game. */
+  gameName?: string;
 }
 
 /**

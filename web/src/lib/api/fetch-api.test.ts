@@ -6,7 +6,7 @@ import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
 import { AUTH_METHOD_KEY } from './auth-storage-keys';
-import { httpStatusOf, isConflictError } from './api-error';
+import { errorBodyOf, httpStatusOf, isConflictError } from './api-error';
 import { setAccessToken, getAccessToken } from './access-token-store';
 
 const captureExceptionMock = vi.fn();
@@ -130,6 +130,17 @@ describe('fetchApi — error status (ROK-1721)', () => {
         expect(httpStatusOf(err)).toBe(409);
         expect(isConflictError(err)).toBe(true);
         expect(Object.keys(err as object), 'status stays non-enumerable').not.toContain('status');
+    });
+
+    it('ROK-1766: carries the error body (code + channelId) non-enumerably', async () => {
+        server.use(
+            http.post(`${API_BASE}/bind`, () =>
+                HttpResponse.json({ message: 'taken', code: 'BINDING_QP_GAME_TAKEN', channelId: 'c-1' }, { status: 409 }),
+            ),
+        );
+        const err: unknown = await fetchApi('/bind', { method: 'POST' }).catch((e: unknown) => e);
+        expect(errorBodyOf(err)).toMatchObject({ code: 'BINDING_QP_GAME_TAKEN', channelId: 'c-1' });
+        expect(Object.keys(err as object), 'body stays non-enumerable').not.toContain('body');
     });
 });
 

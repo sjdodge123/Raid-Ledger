@@ -8,7 +8,7 @@ import { BINDING_PURPOSE_LABELS } from '@raid-ledger/contract';
  */
 export const PURPOSE_BY_TYPE: Record<ChannelType, readonly BindingPurpose[]> = {
     voice: ['game-voice-monitor', 'general-lobby'],
-    text: ['game-announcements'],
+    text: ['game-announcements', 'quick-play-announcements'],
     forum: ['lfg-board'],
 };
 

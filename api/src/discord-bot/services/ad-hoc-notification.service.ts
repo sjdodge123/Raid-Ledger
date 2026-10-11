@@ -4,7 +4,6 @@ import {
   Logger,
   type OnModuleDestroy,
 } from '@nestjs/common';
-import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -24,9 +23,16 @@ import {
   buildContext,
   buildEmbedEventData,
   isGeneralLobbyBinding,
+  readParticipants,
   resolveNotificationChannel,
   toActiveParticipants,
 } from './ad-hoc-notification.helpers';
+import {
+  markTrackedCompleted,
+  rehydrateSpawnMessage,
+  resolveQuickPlayAnnounceChannel,
+  type TrackedMessage,
+} from './quick-play-announce.helpers';
 
 /**
  * Batch flush interval for embed updates (ms).
@@ -69,6 +75,13 @@ interface PendingUpdate {
  * `onEventEnded(bindingId)` so the completion folds into the room's message.
  * `game-voice-monitor` bindings (D1) are OUT of scope and keep every behaviour
  * on this page unchanged.
+ *
+ * ROK-1766: a `quick-play-announcements` binding for the event's effective
+ * game adds ONE tracked per-event card in that text channel — for a lobby
+ * spawn alongside the (unchanged) room card, for a monitor spawn INSTEAD of
+ * `resolveNotificationChannel` (D2). A failed QP send falls back for monitors
+ * only (D7). Tracked messages rehydrate from `discord_event_messages` on a
+ * Map miss (D6), so a deploy mid-session does not freeze the card.
  */
 @Injectable()
 export class AdHocNotificationService implements OnModuleDestroy {
@@ -78,6 +91,8 @@ export class AdHocNotificationService implements OnModuleDestroy {
     { channelId: string; messageId: string }
   >();
   private pendingUpdates = new Map<number, PendingUpdate>();
+  /** Events whose rehydration found no spawn card — not re-queried per flush. */
+  private untracked = new Set<number>();
   private flushTimer: NodeJS.Timeout | null = null;
   private flushing = false;
 
@@ -123,10 +138,17 @@ export class AdHocNotificationService implements OnModuleDestroy {
     // own live message — announcing it again would ship two cards for one
     // spawn. Mark the room dirty and stop before anything is sent or tracked.
     const lobby = await isGeneralLobbyBinding(this.deps, bindingId);
-    if (lobby) {
-      this.channelPresence.markDirty(lobby.channelId);
-      return;
-    }
+    if (lobby) this.channelPresence.markDirty(lobby.channelId);
+    // ROK-1766 D2: a QP binding for the effective game wins outright.
+    const qpChannel = await resolveQuickPlayAnnounceChannel(
+      this.deps,
+      bindingId,
+      effectiveGameId,
+    );
+    const active = toActiveParticipants(participants);
+    if (qpChannel && (await this.postSpawn(eventId, qpChannel, active))) return;
+    // D7: a lobby never falls back — its room card already carries the session.
+    if (lobby) return;
     // ROK-1390: pass the event's effective game so announce routing follows the
     // runtime game fallback, not the binding's stored game.
     const channelId = await resolveNotificationChannel(
@@ -135,18 +157,26 @@ export class AdHocNotificationService implements OnModuleDestroy {
       effectiveGameId,
     );
     if (!channelId) return;
-    const active = toActiveParticipants(participants);
-    const embedData = await buildEmbedEventData(this.deps, eventId, active);
-    if (!embedData) return;
-    await this.sendSpawnEmbed(eventId, channelId, embedData);
+    await this.postSpawn(eventId, channelId, active);
   }
 
-  /** Send the spawn embed and track the message. */
+  /** Build the LIVE card and post it; true once a message landed. */
+  private async postSpawn(
+    eventId: number,
+    channelId: string,
+    active: AdHocParticipant[],
+  ): Promise<boolean> {
+    const embedData = await buildEmbedEventData(this.deps, eventId, active);
+    if (!embedData) return false;
+    return this.sendSpawnEmbed(eventId, channelId, embedData);
+  }
+
+  /** Send the spawn embed and track the message; true once a message landed. */
   private async sendSpawnEmbed(
     eventId: number,
     channelId: string,
     embedData: EmbedEventData,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { embed, row, content } = await this.buildEmbed(
       embedData,
       EMBED_STATES.LIVE,
@@ -158,15 +188,17 @@ export class AdHocNotificationService implements OnModuleDestroy {
         row,
         content,
       );
-      if (message) {
-        await this.trackSpawnMessage(eventId, channelId, message.id);
-      } else {
+      if (!message) {
         this.logger.warn(`No message returned for event ${eventId}`);
+        return false;
       }
+      await this.trackSpawnMessage(eventId, channelId, message.id);
+      return true;
     } catch (err) {
       this.logger.error(
         `Failed to send spawn notification for event ${eventId}: ${err}`,
       );
+      return false;
     }
   }
 
@@ -224,6 +256,28 @@ export class AdHocNotificationService implements OnModuleDestroy {
     }>,
   ): Promise<void> {
     /* eslint-enable @typescript-eslint/no-unused-vars */
+    await this.finalise(eventId, bindingId);
+  }
+
+  /**
+   * ROK-1766 M1: a cancelled ad-hoc session ends its card(s) the same way a
+   * completed one does — room fold, tracked card edited to `ended`, rows
+   * COMPLETED, in-memory state dropped. The scheduled CANCELLED builder skips
+   * ad-hoc events, so nothing else finalises them. Never throws: the caller
+   * still has to tear down the session's active state.
+   */
+  async notifyCancelled(eventId: number, bindingId: string): Promise<void> {
+    try {
+      await this.finalise(eventId, bindingId);
+    } catch (err) {
+      this.logger.error(
+        `Failed to finalise cancelled event ${eventId}: ${err}`,
+      );
+      this.cleanup(eventId);
+    }
+  }
+
+  private async finalise(eventId: number, bindingId: string): Promise<void> {
     // ROK-1446 D9: fold the completion into the room's message. Must run before
     // the `!tracked` early return — a suppressed lobby spawn never tracked one.
     this.channelPresence.onEventEnded(bindingId);
@@ -231,40 +285,56 @@ export class AdHocNotificationService implements OnModuleDestroy {
     // DB read so a 5s-interval flushUpdates cycle that fires mid-await cannot
     // land a LIVE-state editEmbed AFTER our COMPLETED edit.
     this.pendingUpdates.delete(eventId);
-    const tracked = this.messageIds.get(eventId);
-    if (!tracked) return;
+    // ROK-1766 m1: bypass the negative cache — one read per event end is cheap
+    // and a cached miss must not leave a real card LIVE.
+    const tracked = await this.trackedFor(eventId, bindingId, false);
+    if (!tracked) {
+      this.cleanup(eventId); // m2: drop the negative-cache entry too.
+      return;
+    }
     // ROK-1243: re-read participants from DB so any join/leave that happened
     // during the final 5s batch window (or was lost to a silent editEmbed
     // failure) is reflected in the COMPLETED historical record.
-    const reconciled = await this.readReconciledParticipants(eventId);
+    const reconciled = await readParticipants(this.db, eventId, true);
     const embedData = await buildEmbedEventData(this.deps, eventId, reconciled);
     if (!embedData) {
       this.cleanup(eventId);
       return;
     }
     await this.editTrackedEmbed(tracked, embedData, EMBED_STATES.COMPLETED);
+    await markTrackedCompleted(this.db, eventId);
     this.cleanup(eventId);
   }
 
-  /** ROK-1243: read every ad_hoc_participants row for the event; all inactive on COMPLETED. */
-  private async readReconciledParticipants(
+  /**
+   * ROK-1766 D6: the Map entry, or our own still-LIVE spawn row re-seeded into
+   * it. A definite miss is cached so the 5 s flush does not re-query every
+   * cycle; a thrown lookup is NOT (m1) — the next flush retries it.
+   */
+  private async trackedFor(
     eventId: number,
-  ): Promise<AdHocParticipant[]> {
-    const rows = await this.db
-      .select()
-      .from(schema.adHocParticipants)
-      .where(eq(schema.adHocParticipants.eventId, eventId));
-    return rows.map((r) => ({
-      discordUserId: r.discordUserId,
-      discordUsername: r.discordUsername,
-      isActive: false,
-    }));
+    bindingId: string,
+    useCache = true,
+  ): Promise<TrackedMessage | null> {
+    const hit = this.messageIds.get(eventId);
+    if (hit) return hit;
+    if (useCache && this.untracked.has(eventId)) return null;
+    try {
+      const row = await rehydrateSpawnMessage(this.deps, eventId, bindingId);
+      if (row) this.messageIds.set(eventId, row);
+      else this.untracked.add(eventId);
+      return row;
+    } catch (err) {
+      this.logger.warn(`Could not rehydrate event ${eventId}'s card: ${err}`);
+      return null;
+    }
   }
 
   /** Clean up tracked state for an event. */
   private cleanup(eventId: number): void {
     this.messageIds.delete(eventId);
     this.pendingUpdates.delete(eventId);
+    this.untracked.delete(eventId);
   }
 
   /** Flush pending updates — edit-in-place the tracked messages. */
@@ -289,17 +359,9 @@ export class AdHocNotificationService implements OnModuleDestroy {
   }
 
   private async processUpdate(update: PendingUpdate): Promise<void> {
-    const tracked = this.messageIds.get(update.eventId);
+    const tracked = await this.trackedFor(update.eventId, update.bindingId);
     if (!tracked) return;
-    const rows = await this.db
-      .select()
-      .from(schema.adHocParticipants)
-      .where(eq(schema.adHocParticipants.eventId, update.eventId));
-    const participants = rows.map((r) => ({
-      discordUserId: r.discordUserId,
-      discordUsername: r.discordUsername,
-      isActive: !r.leftAt,
-    }));
+    const participants = await readParticipants(this.db, update.eventId);
     const embedData = await buildEmbedEventData(
       this.deps,
       update.eventId,

@@ -45,9 +45,12 @@ export function useBindingConfigForm(binding: ChannelBindingDto) {
 
   // Clearing the game auto-derives the purpose (voice → General Lobby) so the
   // triple stays valid without the operator touching the purpose select (AC6).
+  // ROK-1766: a Quick Play Announcements binding stays QP — clearing its game
+  // surfaces the game-required error instead of silently becoming Announcements.
   const handleGameChange = (next: IgdbGameDto | null) => {
     setGame(next);
-    if (next == null) setPurpose(deriveBindingPurpose(channelType, null));
+    if (next == null && purpose !== "quick-play-announcements")
+      setPurpose(deriveBindingPurpose(channelType, null));
   };
 
   const buildDto = (finalPurpose: BindingPurpose): UpdateChannelBindingDto => {
