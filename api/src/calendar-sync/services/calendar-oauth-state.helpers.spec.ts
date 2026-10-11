@@ -133,3 +133,46 @@ describe('calendar OAuth state', () => {
     expect(await verify(state)).toBeNull();
   });
 });
+
+describe('calendar OAuth state intent (ROK-1596 D8)', () => {
+  const body = (state: string) =>
+    Buffer.from(state.split('.')[0] ?? '', 'base64url').toString();
+
+  it('round-trips i=primary', async () => {
+    const { state } = mintCalendarOAuthState({
+      uid: 42,
+      provider: 'google',
+      intent: 'primary',
+      bindToBrowser: () => R,
+      nowMs: NOW,
+    });
+    expect(must(await verify(state)).intent).toBe('primary');
+  });
+
+  it('defaults to connect, signed into the payload', async () => {
+    const { state } = mint();
+    expect(body(state)).toContain('"i":"connect"');
+    expect(must(await verify(state)).intent).toBe('connect');
+  });
+
+  it('a connect state edited to primary → null, nonce not consumed', async () => {
+    const { state } = mint();
+    const [b, sig] = state.split('.') as [string, string];
+    const forged = Buffer.from(
+      body(state).replace('"i":"connect"', '"i":"primary"'),
+    ).toString('base64url');
+    expect(forged).not.toBe(b);
+    expect(await verify(`${forged}.${sig}`)).toBeNull();
+    expect(consume).not.toHaveBeenCalled();
+  });
+
+  it('a validly signed unknown intent → null, nonce not consumed', async () => {
+    const state = signState(
+      { uid: 42, provider: 'google', n: 'nonce-1', r: R, i: 'read' },
+      'calendar-oauth',
+      { nowMs: NOW },
+    );
+    expect(await verify(state)).toBeNull();
+    expect(consume).not.toHaveBeenCalled();
+  });
+});
