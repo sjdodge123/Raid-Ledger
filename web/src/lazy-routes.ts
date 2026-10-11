@@ -110,6 +110,9 @@ export const WatchedGamesPanel = lazyWithRetry(() =>
 export const CalendarsPanel = lazyWithRetry(() =>
     import('./components/features/calendar-sync/CalendarsPage').then((m) => ({ default: m.CalendarsPage })),
 );
+export const SendEventsPanel = lazyWithRetry(() =>
+    import('./components/features/calendar-sync/SendEventsPage').then((m) => ({ default: m.SendEventsPage })),
+);
 export const AvatarPanel = lazyWithRetry(() =>
     import('./pages/profile/avatar-panel').then((m) => ({ default: m.AvatarPanel })),
 );

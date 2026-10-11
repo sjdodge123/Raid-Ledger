@@ -98,4 +98,9 @@ export const SEND_EVENTS_COPY = {
     alreadyEnabled: 'Another connected calendar already gets your events. Turn it off there first.',
     saveFailed: 'Could not save. Try again.',
     consentFailed: 'Could not start the Google sign-in. Try again.',
+    /* K5 as its own phone page (W1b), reached from K2's row. */
+    pageTitle: 'Send my events',
+    back: 'Calendars',
+    entrySub: { dedicated: 'To Google Calendar · a "Raid Ledger" calendar', primary: 'To Google Calendar · my main calendar', off: 'Off' },
+    notFound: 'That calendar is no longer connected.',
 } as const;

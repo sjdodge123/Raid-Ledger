@@ -79,7 +79,13 @@ function SendSwitchRow({ checked, helper, disabled, onChange }: SendSwitchRowPro
     );
 }
 
-export function SendEventsSettings({ connection }: { connection: CalendarConnection }): JSX.Element {
+interface SendEventsSettingsProps {
+    connection: CalendarConnection;
+    /** On the K5 phone page the page title replaces the card heading + tag. */
+    asPage?: boolean;
+}
+
+export function SendEventsSettings({ connection, asPage = false }: SendEventsSettingsProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const v = desktop ? S.desktop : S.phone;
     const { write, save, message, busy } = useWriteSettings(connection);
@@ -90,10 +96,12 @@ export function SendEventsSettings({ connection }: { connection: CalendarConnect
     return (
         <section className="bg-surface border border-edge-subtle rounded-xl p-4 space-y-3"
             data-testid="send-events-settings" data-connection-id={connection.id}>
-            <div className="flex items-center gap-2">
-                <h3 className="text-sm font-semibold text-foreground">{S.heading}</h3>
-                <TwoWayTag />
-            </div>
+            {!asPage && (
+                <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-foreground">{S.heading}</h3>
+                    <TwoWayTag />
+                </div>
+            )}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <SendSwitchRow checked={write.enabled} helper={v.helper} disabled={busy} onChange={(enabled) => save({ enabled })} />
                 <RadioGroup<CalendarWriteTarget> label={S.putThemIn} hideLabel={desktop} options={options}
