@@ -49,6 +49,7 @@ afterAll(() => processor.worker.resume());
 
 beforeEach(async () => {
   await queue.drain(true); // ids repeat across truncations
+  fake.store.clearFailures(); // another spec may leave one queued
   process.env.DEMO_MODE = 'true';
   await testApp.app.get(SettingsService).setDemoMode(true);
   seq += 1;
@@ -61,6 +62,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   jest.restoreAllMocks();
+  fake.store.clearFailures();
   await queue.drain(true);
   await testApp.app.get(SettingsService).setDemoMode(false);
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
