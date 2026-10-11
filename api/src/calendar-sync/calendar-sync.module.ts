@@ -14,6 +14,7 @@ import {
 } from './providers/calendar-provider.registry';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
+import { CalendarWriteListener } from './write/calendar-write.listener';
 import { CalendarWriteProcessor } from './write/calendar-write.processor';
 
 /**
@@ -54,6 +55,7 @@ const fakeProvider = {
     CalendarProviderRegistry,
     fakeProvider,
     CalendarWriteProcessor,
+    CalendarWriteListener,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })
