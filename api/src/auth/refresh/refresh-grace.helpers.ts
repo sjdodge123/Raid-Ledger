@@ -42,6 +42,29 @@ export interface GraceRedis {
   ): Promise<string | null>;
 }
 
+/**
+ * ROK-1754: a consumed row whose child is not issued yet is a rotation still
+ * IN FLIGHT for at most this long (a request timeout, not a session).
+ */
+export const IN_FLIGHT_MAX_MS = 60_000;
+
+/**
+ * ROK-1754: the age the race grace measures — from when the rotation's new
+ * cookie could first have reached the browser, not from the consume. The
+ * service re-stamps `rotatedAt` when it issues the child; a row with no child
+ * yet (`replacedBy` null) is still in flight, so a replay of it is a race
+ * loser (age 0), never theft. Fleet run 2c53b4959397: a 14 s API stall
+ * between consume and child turned a reload into "reuse" → blockUser(admin).
+ */
+export function rotationAgeMs(
+  row: { rotatedAt: Date; replacedBy: string | null },
+  now: number = Date.now(),
+): number {
+  const age = now - row.rotatedAt.getTime();
+  if (!row.replacedBy && age <= IN_FLIGHT_MAX_MS) return 0;
+  return age;
+}
+
 /** Atomically take the parent's single grace sibling. */
 export async function claimGraceOnce(
   redis: GraceRedis,

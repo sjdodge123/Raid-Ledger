@@ -239,6 +239,31 @@ describe('POST /auth/refresh rotation (AC2)', () => {
     expect(familyRows.every((r) => !r.revokedAt)).toBe(true);
   });
 
+  it('ROK-1754: a replay while the rotation is still in flight (no child yet) is never reuse', async () => {
+    const login = await loginLocal();
+    const adminId = testApp.seed.adminUser.id;
+    const cookie = extractRefreshCookie(login) as string;
+    const adminJwt = (login.body as { access_token: string }).access_token;
+
+    // Simulate a consume whose child insert has not landed yet, 30 s ago
+    // (fleet run 2c53b4959397: a 14 s API stall between the two).
+    await testApp.db
+      .update(schema.refreshTokens)
+      .set({ rotatedAt: new Date(Date.now() - 30_000) })
+      .where(eq(schema.refreshTokens.userId, adminId));
+
+    const replay = await testApp.request
+      .post('/auth/refresh')
+      .set('Cookie', cookieHeader(cookie));
+    expect(replay.status).toBe(200);
+    expect(await countActiveRefreshRows(adminId)).toBeGreaterThan(0);
+    // The user's existing access tokens were NOT blocklisted.
+    const me = await testApp.request
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${adminJwt}`);
+    expect(me.status).toBe(200);
+  });
+
   it('reuse of a consumed token revokes the WHOLE family', async () => {
     const login = await loginLocal();
     const adminId = testApp.seed.adminUser.id;

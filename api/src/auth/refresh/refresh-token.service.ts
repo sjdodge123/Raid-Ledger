@@ -20,6 +20,7 @@ import {
   claimGraceOnce,
   indeterminateReplayError,
   replayVerdict,
+  rotationAgeMs,
 } from './refresh-grace.helpers';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
@@ -91,7 +92,7 @@ export class RefreshTokenService {
       throw deactivatedException();
     }
     const consumed = await this.consumeRow(presentedHash);
-    if (consumed) return this.mintChild(consumed);
+    if (consumed) return this.mintChild(consumed, true);
     return this.handleNoConsume(presentedHash);
   }
 
@@ -206,16 +207,22 @@ export class RefreshTokenService {
     return row;
   }
 
-  /** Mint the child row for a successfully consumed parent. */
-  private async mintChild(parent: typeof schema.refreshTokens.$inferSelect) {
+  /**
+   * Mint the child row for a consumed parent. `firstChild` re-stamps the
+   * parent's `rotatedAt` at issue time (ROK-1754: the race grace runs from
+   * here — see `rotationAgeMs`); a grace sibling leaves it alone.
+   */
+  private async mintChild(
+    parent: typeof schema.refreshTokens.$inferSelect,
+    firstChild = false,
+  ) {
     const maxAgeMs = await this.sessionMaxAgeMs();
     const rawToken = generateRawToken();
-    const childHash = hashToken(rawToken);
     const [child] = await this.db
       .insert(schema.refreshTokens)
       .values({
         userId: parent.userId,
-        tokenHash: childHash,
+        tokenHash: hashToken(rawToken),
         familyId: parent.familyId,
         authMethod: parent.authMethod,
         userAgent: parent.userAgent,
@@ -226,14 +233,11 @@ export class RefreshTokenService {
       .update(schema.refreshTokens)
       .set({
         replacedBy: defined(child, 'inserted child refresh token row').id,
+        ...(firstChild ? { rotatedAt: sql`NOW()` } : {}),
       })
       .where(eq(schema.refreshTokens.id, parent.id));
-    return {
-      rawToken,
-      maxAgeMs,
-      userId: parent.userId,
-      familyId: parent.familyId,
-    };
+    const { userId, familyId } = parent;
+    return { rawToken, maxAgeMs, userId, familyId };
   }
 
   /**
@@ -258,7 +262,10 @@ export class RefreshTokenService {
     if (!existing) return null;
     if (existing.revokedAt) return null;
     if (!existing.rotatedAt) return null;
-    const rotatedAgoMs = Date.now() - existing.rotatedAt.getTime();
+    const rotatedAgoMs = rotationAgeMs({
+      rotatedAt: existing.rotatedAt,
+      replacedBy: existing.replacedBy,
+    });
     const verdict = await replayVerdict(rotatedAgoMs, () =>
       claimGraceOnce(this.redis, existing.id),
     );

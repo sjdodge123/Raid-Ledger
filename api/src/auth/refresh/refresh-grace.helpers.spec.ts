@@ -16,6 +16,8 @@ import {
   claimGraceOnce,
   indeterminateReplayError,
   replayVerdict,
+  rotationAgeMs,
+  IN_FLIGHT_MAX_MS,
 } from './refresh-grace.helpers';
 
 describe('refresh race grace (ROK-1755)', () => {
@@ -93,5 +95,35 @@ describe('indeterminateReplayError (ROK-1755 review B1/M1)', () => {
   it('sibling and reuse are not indeterminate', () => {
     expect(indeterminateReplayError('sibling')).toBeNull();
     expect(indeterminateReplayError('reuse')).toBeNull();
+  });
+});
+
+describe('rotationAgeMs (ROK-1754 — grace runs from child issue)', () => {
+  const now = Date.parse('2026-10-11T12:07:16.518Z');
+  const consumedAt = new Date('2026-10-11T12:07:02.074Z'); // 14.4 s earlier
+
+  it('a consumed row with no child yet is in flight: age 0, never reuse', async () => {
+    const age = rotationAgeMs({ rotatedAt: consumedAt, replacedBy: null }, now);
+    expect(age).toBe(0);
+    const { client } = createRedisMock();
+    expect(await replayVerdict(age, () => claimGraceOnce(client, 'p'))).toBe(
+      'sibling',
+    );
+  });
+
+  it('once the child is issued the age is measured from rotatedAt', () => {
+    const age = rotationAgeMs(
+      { rotatedAt: consumedAt, replacedBy: 'child' },
+      now,
+    );
+    expect(age).toBe(14_444);
+    expect(age).toBeGreaterThan(RACE_GRACE_MS);
+  });
+
+  it('an in-flight row stuck past IN_FLIGHT_MAX_MS ages normally', () => {
+    const stuck = new Date(now - IN_FLIGHT_MAX_MS - 1);
+    expect(rotationAgeMs({ rotatedAt: stuck, replacedBy: null }, now)).toBe(
+      IN_FLIGHT_MAX_MS + 1,
+    );
   });
 });
