@@ -7,7 +7,7 @@
  *   • `character.professions` wins over flat prop
  *   • null/missing → no badge DOM
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { screen } from '@testing-library/react';
 import type {
     CharacterDto,
@@ -17,6 +17,11 @@ import { CharacterCardCompact } from './character-card-compact';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { usePluginStore } from '../../stores/plugin-store';
+
+// Reset the plugin store after every test so a failing assertion cannot leak an active plugin.
+afterEach(() => {
+    usePluginStore.setState({ activeSlugs: new Set() });
+});
 
 vi.mock('../../hooks/use-game-registry', () => ({
     useGameRegistry: () => ({ games: [{ id: 7, slug: 'world-of-warcraft-forever' }], isLoading: false, error: null }),
@@ -137,6 +142,29 @@ describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', (
         activateWowPlugin();
         renderWithProviders(<CharacterCardCompact character={makeCharacter({ gameId: 7, gameVariant: null, ruleset: null })} />);
         expect(screen.getByText('Forever')).toBeInTheDocument();
-        usePluginStore.setState({ activeSlugs: new Set() });
+    });
+});
+
+/** ROK-1761: event attendees pass flat props (no variant/ruleset) plus the event's game id. */
+describe('CharacterCardCompact — Forever portrait from portraitGameId (event attendees)', () => {
+    // The tile reaches core through the WoW plugin's PortraitFallback seam (the file-level afterEach deactivates it).
+    beforeEach(activateWowPlugin);
+    const flat = { id: 'c1', name: 'Fernwhisper', avatarUrl: null, race: 'Night Elf', className: 'Druid' };
+
+    it('a Forever event (registry slug) shows the tile instead of the placeholder', () => {
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={7} />);
+        expect(screen.getByTestId('forever-portrait'), 'attendee card on a Forever event draws the tile').toHaveAttribute('aria-label', 'Fernwhisper');
+        expect(screen.getByTestId('forever-portrait-race').textContent).toBe('NE');
+    });
+
+    it('portraitGameId drives the portrait only — no Forever badge on the name row', () => {
+        activateWowPlugin();
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={7} />);
+        expect(screen.queryByText('Forever'), 'variant badge unchanged for flat-props cards').toBeNull();
+    });
+
+    it('a non-Forever game id keeps the normal avatar', () => {
+        renderWithProviders(<CharacterCardCompact {...flat} portraitGameId={99} />);
+        expect(screen.queryByTestId('forever-portrait')).toBeNull();
     });
 });

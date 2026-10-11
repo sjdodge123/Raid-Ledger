@@ -3,6 +3,7 @@ import type { CharacterDto, CharacterProfessionsDto } from '@raid-ledger/contrac
 import { getClassIconUrl } from '../../plugins/wow/lib/class-icons';
 import { ProfessionBadges } from '../../plugins/wow/components/ProfessionBadges';
 import { PluginSlot } from '../../plugins';
+import { CharacterPortraitFallback } from '../../plugins/character-portrait';
 
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
@@ -34,6 +35,10 @@ interface CharacterCardCompactProps {
     professions?: CharacterProfessionsDto | null | undefined;
     /** Visual size variant: 'default' for standard, 'sm' for compact/onboarding. */
     size?: 'default' | 'sm';
+    /** ROK-1761: the character's own game / variant / ruleset for a flat-props card (event attendees), so a plugin's portrait fallback can claim it. Portrait only. */
+    portraitGameId?: number | null | undefined;
+    portraitGameVariant?: string | null | undefined;
+    portraitRuleset?: string | null | undefined;
 }
 
 /**
@@ -49,6 +54,7 @@ interface ResolvedChar {
     level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
     spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
     isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null; gameId: number | null;
+    portraitGameId: number | null; portraitGameVariant: string | null; portraitRuleset: string | null;
     professions?: CharacterProfessionsDto | null | undefined;
 }
 
@@ -62,6 +68,9 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
         isMain: c?.isMain ?? props.isMain,
         gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null, gameId: c?.gameId ?? null,
+        portraitGameId: c?.gameId ?? props.portraitGameId ?? null,
+        portraitGameVariant: c?.gameVariant ?? props.portraitGameVariant ?? null,
+        portraitRuleset: c?.ruleset ?? props.portraitRuleset ?? null,
         professions: c?.professions ?? props.professions ?? null,
     };
 }
@@ -119,7 +128,9 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
     return (
         <Link to={`/characters/${c.charId}`}
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
-            <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
+            <CharacterPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.portraitGameVariant, ruleset: c.portraitRuleset, gameId: c.portraitGameId }}>
+                <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
+            </CharacterPortraitFallback>
             <div className="min-w-0 overflow-hidden">
                 <NameRow charName={c.charName} isMain={c.isMain} faction={c.faction} gameVariant={c.gameVariant} ruleset={c.ruleset} gameId={c.gameId} textSize={isSm ? 'text-sm' : ''} />
                 <MetadataRow level={c.level} race={c.race} charClass={c.charClass} spec={c.spec} role={c.role} itemLevel={c.itemLevel} professions={c.professions} textSize={isSm ? 'text-xs' : 'text-sm'} />
