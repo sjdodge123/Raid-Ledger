@@ -331,3 +331,33 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
     });
 });
 
+
+describe('fetchWithAuth — ROK-1754 §3.6 native fetch captured at module init', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        authState.token = FRESH_TOKEN;
+    });
+
+    it('a window.fetch patched AFTER import never sees the request or its Authorization header', async () => {
+        let seenAuth: string | null = null;
+        server.use(
+            http.get(`${API_BASE}/hardened`, ({ request }) => {
+                seenAuth = request.headers.get('Authorization');
+                return HttpResponse.json({ ok: true });
+            }),
+        );
+        // Stands in for a third-party script (Wowhead tooltips.js) that wraps
+        // fetch after our entry has loaded.
+        const patched = vi.fn(async () => new Response('{}', { status: 200 }));
+        vi.stubGlobal('fetch', patched);
+        try {
+            const response = await fetchWithAuth('/hardened');
+
+            expect(patched, 'a post-import window.fetch patch received fetchWithAuth\'s request').not.toHaveBeenCalled();
+            expect(response.status).toBe(200);
+            expect(seenAuth).toBe(`Bearer ${FRESH_TOKEN}`);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});

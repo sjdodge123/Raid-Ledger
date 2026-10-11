@@ -16,6 +16,24 @@ import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 
+// fetch-api captures `window.fetch` at module init (ROK-1754 §3.6), so the
+// stub must be in place before it is imported; each test reconfigures it via
+// stubFetchWith().
+const fetchMock = vi.hoisted(() => {
+    const original = globalThis.fetch;
+    const fn = vi.fn((...args: unknown[]) => (original as (...a: unknown[]) => unknown)(...args));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+});
+
+/** Reset the hoisted fetch mock to `impl` and make it the global fetch too. */
+function stubFetchWith(impl: (...args: unknown[]) => unknown) {
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(impl);
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+}
+
 vi.mock('./use-auth', () => ({
     getAuthToken: () => 'test-jwt',
 }));
@@ -53,10 +71,7 @@ describe('useUnlinkSteam (ROK-1307 AC-2b)', () => {
     });
 
     it('setQueryData(["steam","status"], { linked: false }) runs BEFORE invalidateQueries on the same key', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue({ ok: true, status: 204, json: async () => ({}) }),
-        );
+        stubFetchWith(async () => ({ ok: true, status: 204, json: async () => ({}) }));
         const { wrapper, queryClient } = createWrapper();
 
         // Seed the cache with the pre-unlink linked state.
@@ -97,10 +112,7 @@ describe('useUnlinkSteam (ROK-1307 AC-2b)', () => {
     });
 
     it('does NOT clear cache when unlink fails', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue({ ok: false, status: 500, json: async () => ({ message: 'boom' }) }),
-        );
+        stubFetchWith(async () => ({ ok: false, status: 500, json: async () => ({ message: 'boom' }) }));
         const { wrapper, queryClient } = createWrapper();
         queryClient.setQueryData(STATUS_KEY, { linked: true, personaName: 'Roknua' });
 
@@ -128,14 +140,11 @@ describe('useSyncLibrary onError (ROK-1307 AC-8)', () => {
     });
 
     it('invalidates ["steam","status"] on mutation error', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue({
-                ok: false,
-                status: 400,
-                json: async () => ({ message: 'Steam account not linked' }),
-            }),
-        );
+        stubFetchWith(async () => ({
+            ok: false,
+            status: 400,
+            json: async () => ({ message: 'Steam account not linked' }),
+        }));
         const { wrapper, queryClient } = createWrapper();
         const invalSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -164,14 +173,11 @@ describe('useSyncWishlist onError (ROK-1307 AC-8)', () => {
     });
 
     it('invalidates ["steam","status"] on mutation error', async () => {
-        vi.stubGlobal(
-            'fetch',
-            vi.fn().mockResolvedValue({
-                ok: false,
-                status: 400,
-                json: async () => ({ message: 'Steam profile is private — …' }),
-            }),
-        );
+        stubFetchWith(async () => ({
+            ok: false,
+            status: 400,
+            json: async () => ({ message: 'Steam profile is private — …' }),
+        }));
         const { wrapper, queryClient } = createWrapper();
         const invalSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
@@ -195,13 +201,11 @@ describe('useSyncWishlist onError (ROK-1307 AC-8)', () => {
 });
 
 function stubStart(status: number, body: unknown) {
-    const fn = vi.fn(async (url: string) =>
-        url.endsWith('/auth/steam/link/start')
+    return stubFetchWith(async (url: unknown) =>
+        String(url).endsWith('/auth/steam/link/start')
             ? { ok: status >= 200 && status < 300, status, json: async () => body }
             : { ok: true, status: 200, json: async () => ({ linked: false }) },
     );
-    vi.stubGlobal('fetch', fn);
-    return fn;
 }
 
 function startCall(fn: ReturnType<typeof stubStart>) {

@@ -6,6 +6,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 
+// fetch-api captures `window.fetch` at module init (ROK-1754 §3.6), so the
+// stub must be in place before it is imported; tests reconfigure this mock.
+const fetchMock = vi.hoisted(() => {
+    const original = globalThis.fetch;
+    const fn = vi.fn((...args: unknown[]) => (original as (...a: unknown[]) => unknown)(...args));
+    vi.stubGlobal('fetch', fn);
+    return fn;
+});
+
 vi.mock('./use-auth', () => ({ getAuthToken: () => 'access-jwt' }));
 vi.mock('../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
@@ -30,12 +39,15 @@ function stubLocation() {
 }
 
 function stubFetch(status: number, body: unknown) {
-    const fn = vi.fn().mockResolvedValue({ ok: status >= 200 && status < 300, status, json: async () => body });
-    vi.stubGlobal('fetch', fn);
-    return fn;
+    fetchMock.mockResolvedValue({ ok: status >= 200 && status < 300, status, json: async () => body });
+    return fetchMock;
 }
 
-beforeEach(stubLocation);
+beforeEach(() => {
+    stubLocation();
+    fetchMock.mockReset();
+    vi.stubGlobal('fetch', fetchMock);
+});
 afterEach(() => {
     Object.defineProperty(window, 'location', { configurable: true, writable: true, value: realLocation });
     vi.unstubAllGlobals();
@@ -89,8 +101,7 @@ describe('useDiscordLink (ROK-1630 AC16)', () => {
 
     it('isPending is true while start is in flight; a second call does not POST again', async () => {
         let resolveFetch!: (v: unknown) => void;
-        const fetchFn = vi.fn().mockReturnValue(new Promise((r) => { resolveFetch = r; }));
-        vi.stubGlobal('fetch', fetchFn);
+        const fetchFn = fetchMock.mockReturnValue(new Promise((r) => { resolveFetch = r; }));
         const { result } = renderHook(() => useDiscordLinkAction());
 
         let first!: Promise<void>;
