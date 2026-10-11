@@ -317,13 +317,17 @@ describe('ROK-1750 share join', () => {
     expect(await memberRows(poll.matchId, visitor.userId)).toHaveLength(1);
   });
 
-  it('403s a deactivated user and writes no rows', async () => {
+  // ROK-1753: JwtStrategy rejects a deactivated user's token (401
+  // USER_DEACTIVATED) before NotDeactivatedGuard's 403 can run.
+  it('401s a deactivated user and writes no rows', async () => {
     const creator = await loginAsMember('creator');
     const visitor = await loginAsMember('visitor');
     const poll = await createPoll(creator.token);
     await deactivate(visitor.userId);
 
-    expect((await join(poll.shareToken, visitor.token)).status).toBe(403);
+    const res = await join(poll.shareToken, visitor.token);
+    expect(res.status).toBe(401);
+    expect(res.body).toMatchObject({ code: 'USER_DEACTIVATED' });
     expect(await inviteeRows(poll.lineupId, visitor.userId)).toHaveLength(0);
     expect(await memberRows(poll.matchId, visitor.userId)).toHaveLength(0);
   });
