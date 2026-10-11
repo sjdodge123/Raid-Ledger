@@ -78,7 +78,7 @@ export async function applyConsentIntent(
 }
 
 /** Every linked event plus every active, upcoming sign-up of the user. */
-async function affectedEventIds(
+export async function affectedEventIds(
   db: Db,
   connectionId: number,
   userId: number,

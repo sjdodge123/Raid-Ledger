@@ -85,7 +85,7 @@ const refOf = (link: LinkRow): CopyRef => ({
 });
 
 /** Log-safe, column-sized code: never an error message (may echo a body). */
-function errorCode(err: unknown): string {
+export function errorCode(err: unknown): string {
   if (err instanceof CalendarProviderError)
     return `${err.code}:${err.reason}`.slice(0, 64);
   return err instanceof Error ? err.name.slice(0, 64) : 'unknown';

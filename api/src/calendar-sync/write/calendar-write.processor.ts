@@ -2,7 +2,7 @@
  * ROK-1596 D1: the calendar write worker. Thin — it unpacks the job and calls
  * the reconcile function, which records terminal failures itself and
  * rethrows only retryable ones (BullMQ then backs off: attempts 6, 30s exp).
- * `write-off` / `disconnect` kinds land with lanes A5/A6.
+ * `write-off` runs `runCalendarWriteOff` (A5); `disconnect` lands with A6.
  */
 import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
@@ -21,6 +21,10 @@ import {
   reconcileCalendarCopy,
   type ReconcileOutcome,
 } from './calendar-write-reconcile.helpers';
+import {
+  runCalendarWriteOff,
+  type WriteOffOutcome,
+} from './calendar-write-off.helpers';
 
 @Processor(CALENDAR_WRITE_QUEUE, { concurrency: 2 })
 export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
@@ -54,8 +58,12 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
 
   async process(
     job: Job<CalendarWriteJobData>,
-  ): Promise<ReconcileOutcome | null> {
+  ): Promise<ReconcileOutcome | WriteOffOutcome | null> {
     const { data } = job;
+    if (data.kind === 'write-off') {
+      const deps = { db: this.db, registry: this.registry };
+      return runCalendarWriteOff(deps, data.connectionId);
+    }
     if (data.kind !== 'reconcile') {
       this.logger.warn(
         `calendar-write job kind ${data.kind} is not handled yet`,
