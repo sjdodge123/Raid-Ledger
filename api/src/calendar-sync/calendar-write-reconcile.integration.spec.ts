@@ -294,14 +294,20 @@ describe('reconcileCalendarCopy — tentative (§5 test 8)', () => {
   });
 });
 
-/** F11: put the event's (only) signup on the bench, or into a role slot. */
+/**
+ * F11: put the test user's signup on the bench, or into a role slot — the
+ * row shape the app writes (`signup-bench-promote.helpers.ts`
+ * ensureBenchFallback: `roster_assignments{signupId, role: 'bench'}`).
+ * Keyed by user: `POST /events` also signs the creator (admin) up.
+ */
 async function assignRole(eventId: number, role: string) {
   const ra = schema.rosterAssignments;
+  const es = schema.eventSignups;
   const [signup] = await testApp.db
-    .select({ id: schema.eventSignups.id })
-    .from(schema.eventSignups)
-    .where(eq(schema.eventSignups.eventId, eventId));
-  if (!signup) throw new Error(`no signup on event ${eventId}`);
+    .select({ id: es.id })
+    .from(es)
+    .where(and(eq(es.eventId, eventId), eq(es.userId, userId)));
+  if (!signup) throw new Error(`no signup for user ${userId} on ${eventId}`);
   const moved = await testApp.db
     .update(ra)
     .set({ role })
