@@ -2549,3 +2549,7 @@ same day (#1278, #1279, #1280).
 - **low** `web/src/plugins/wow/slots/boss-loot-panel.tsx:190-191` — the boss-row Wowhead link's accessible name is only "↗" (the title is not a name). Suggested: `aria-label="View on Wowhead"`, as ROK-1758 did for the quest card link.
 - **low** `web/src/plugins/wow/slots/equipment-constants.ts` (LEGENDARY `orange-400`) — about 2.2:1 contrast on light schemes. ROK-1760 moved COMMON to `text-secondary`; the other quality colours still use raw Tailwind palette classes. Suggested: per-quality theme tokens.
 - **low** `api/src/plugins/wow-common/addon-equipment.adapter.ts:103-108` (ROK-1760) — `resolved` ignores whether the meta row is due for a retry. A view that triggers a retry won't show the result until a reload or the 5-min staleTime, and error rows on attempts 1–2 make the page poll for nothing. Suggested: `final = !isMetaDue(meta, now)`.
+
+### 2026-10-11 — feat/rok-1754-token-in-memory (surfaced during ROK-1754 lane D2, Playwright harness migration)
+
+- **med** `scripts/smoke/lineup-abort.smoke.spec.ts:357` — the "member" step writes storage keys the app never reads, so it has always run as the admin, not the member it names. Pre-existing on main: the keys were bogus before ROK-1754 moved sessions to the `rl_rt` cookie. The step's member-permission assertion is therefore unproven. Suggested: create the member context through `scripts/smoke/browser-session.ts` (ROK-1754 D1 endpoint) and re-check the expected member-side behaviour.
