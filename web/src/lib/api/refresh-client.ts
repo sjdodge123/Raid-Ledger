@@ -54,6 +54,18 @@ const LOCK_NAME = 'rl-refresh';
 
 let inFlight: Promise<RefreshOutcome> | null = null;
 
+/**
+ * Identity generation (review m1). Impersonation start/exit and a cross-tab
+ * identity change bump it; a refresh whose POST began under an older
+ * generation must not install its token over the new identity.
+ */
+let generation = 0;
+
+/** The held identity changed: in-flight refreshes may no longer install a token. */
+export function bumpRefreshGeneration(): void {
+  generation += 1;
+}
+
 /** 401/403 → rejected; a deactivated account also ends the session (ROK-1753). */
 async function rejectedOutcome(res: Response): Promise<RefreshOutcome> {
   if (await isDeactivatedResponse(res)) endDeactivatedSession();
@@ -61,6 +73,7 @@ async function rejectedOutcome(res: Response): Promise<RefreshOutcome> {
 }
 
 async function postRefresh(): Promise<PostOutcome> {
+  const startedAt = generation;
   try {
     const res = await nativeFetch(`${API_BASE_URL}/auth/refresh`, {
       method: 'POST',
@@ -73,6 +86,7 @@ async function postRefresh(): Promise<PostOutcome> {
     if (!res.ok) return INDETERMINATE;
     const parsed = RefreshResponseSchema.safeParse(await res.json());
     if (!parsed.success) return INDETERMINATE;
+    if (generation !== startedAt) return INDETERMINATE;
     setAccessToken(parsed.data.access_token);
     return { kind: 'ok', token: parsed.data.access_token };
   } catch {
@@ -145,4 +159,14 @@ export function refreshWithOutcome(): Promise<RefreshOutcome> {
  */
 export function ensureFreshToken(): Promise<string | null> {
   return sharedRefresh().then((o) => (o.kind === 'ok' ? o.token : null));
+}
+
+/**
+ * A refresh that STARTS after this call (review m1): bump the generation, wait
+ * out any in-flight POST (sent under the old identity), then refresh anew.
+ */
+export async function freshRefresh(): Promise<RefreshOutcome> {
+  bumpRefreshGeneration();
+  if (inFlight) await inFlight;
+  return sharedRefresh();
 }

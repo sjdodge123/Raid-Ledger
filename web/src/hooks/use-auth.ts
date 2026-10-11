@@ -1,7 +1,8 @@
 import { useCallback, useSyncExternalStore } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
-import { ensureFreshToken, refreshWithOutcome } from '../lib/api/refresh-client';
+import { bumpRefreshGeneration, freshRefresh, refreshWithOutcome } from '../lib/api/refresh-client';
+import { nativeFetch } from '../lib/api/native-fetch';
 import { clearSilentGuard, clearAuthMethod, getAuthMethod, attemptSilentReauth } from '../lib/api/silent-reauth';
 import { USER_CACHE_KEY } from '../lib/api/auth-storage-keys';
 import {
@@ -94,7 +95,7 @@ async function serverLogout(): Promise<void> {
 
 /** GET /auth/me with the current Bearer token. */
 function fetchMe(token: string): Promise<Response> {
-    return fetch(`${API_BASE_URL}/auth/me`, {
+    return nativeFetch(`${API_BASE_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` },
     });
 }
@@ -107,6 +108,18 @@ function handleRefreshFailure(): null {
     clearAllAuthStorage();
     attemptSilentReauth(window.location.pathname + window.location.search);
     return null;
+}
+
+/**
+ * ROK-1754 §3.2 / ROK-1366 #1384: only a refresh the server REJECTED (401/403)
+ * ends the session. An indeterminate one (429, 5xx, timeout, network) throws,
+ * so React Query keeps the seeded user and nobody is logged out or redirected.
+ */
+async function refreshOrThrow(): Promise<string | null> {
+    const outcome = await refreshWithOutcome();
+    if (outcome.kind === 'ok') return outcome.token;
+    if (outcome.kind === 'rejected') return null;
+    throw new Error('session refresh indeterminate');
 }
 
 export async function fetchCurrentUser(): Promise<User | null> {
@@ -122,7 +135,7 @@ export async function fetchCurrentUser(): Promise<User | null> {
         // async 401 re-renders the login page mid-interaction (it collapses
         // the username form under the user's cursor).
         if (!getAuthMethod()) return null;
-        token = await ensureFreshToken();
+        token = await refreshOrThrow();
         if (!token) return handleRefreshFailure();
     }
 
@@ -136,13 +149,10 @@ export async function fetchCurrentUser(): Promise<User | null> {
     // ROK-1353: a 401 means the access token expired — refresh from the
     // httpOnly cookie and retry once before clearing storage.
     if (response.status === 401) {
-        const refreshed = await ensureFreshToken();
-        if (refreshed) {
-            response = await fetchMe(refreshed);
-        }
-        if (response.status === 401) {
-            return handleRefreshFailure();
-        }
+        const refreshed = await refreshOrThrow();
+        if (!refreshed) return handleRefreshFailure();
+        response = await fetchMe(refreshed);
+        if (response.status === 401) return handleRefreshFailure();
     }
 
     if (!response.ok) {
@@ -207,13 +217,15 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
     const token = getAuthToken();
     if (!token) return false;
     try {
-        const response = await fetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
+        const response = await nativeFetch(`${API_BASE_URL}/auth/impersonate/${userId}`, {
             method: 'POST',
             credentials: 'include',
             headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data: { access_token: string } = await response.json();
+        // A refresh POSTed before the start must not overwrite this token (review m1).
+        bumpRefreshGeneration();
         setAccessToken(data.access_token);
         signalIdentityChange();
         await queryClient.invalidateQueries();
@@ -245,7 +257,8 @@ async function performExitImpersonation(queryClient: ReturnType<typeof useQueryC
         return false;
     }
     clearAccessToken();
-    const outcome = await refreshWithOutcome();
+    // Never JOIN a refresh sent while the marker was live (review m1).
+    const outcome = await freshRefresh();
     if (outcome.kind === 'rejected') {
         clearAllAuthStorage();
         queryClient.setQueryData(['auth', 'me'], null);

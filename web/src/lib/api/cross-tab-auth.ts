@@ -1,7 +1,8 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { AUTH_METHOD_KEY } from './auth-storage-keys';
-import { clearAccessToken } from './access-token-store';
-import { refreshWithOutcome } from './refresh-client';
+import { clearAccessToken, isImpersonatingToken } from './access-token-store';
+import { freshRefresh } from './refresh-client';
+import { toast } from '../toast';
 
 /**
  * ROK-1754 §3.3: tabs no longer share a token, so they share SIGNALS instead,
@@ -26,8 +27,12 @@ export function bumpIdentityEpoch(): void {
 }
 
 async function followIdentityChange(queryClient: QueryClient): Promise<void> {
+  const wasImpersonating = isImpersonatingToken();
   clearAccessToken();
-  await refreshWithOutcome();
+  // Never join a refresh POSTed under the old identity (review m1).
+  await freshRefresh();
+  // Clearing memory first hides the end from use-auth's subscriber (review n1).
+  if (wasImpersonating && !isImpersonatingToken()) toast.info('Impersonation ended');
   await queryClient.invalidateQueries();
 }
 

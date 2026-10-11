@@ -1,6 +1,6 @@
 import { refreshWithOutcome, type RefreshOutcome } from './refresh-client';
 import { legacySessionPurged } from './access-token-store';
-import { getAuthMethod } from './silent-reauth';
+import { getAuthMethod, setAuthMethod } from './silent-reauth';
 import { awaitMagicLinkRedeem, isMagicLinkRedeemPending } from '../magic-link-redeem';
 
 /**
@@ -15,6 +15,13 @@ export type BootOutcome = RefreshOutcome['kind'] | 'anonymous';
 
 /** A hung refresh must not hold the app behind the gate forever (§3.2: indeterminate renders). */
 export const BOOT_TIMEOUT_MS = 10_000;
+
+/** Routes that exchange their own credential: no boot refresh, no gate (review m3). */
+export const BOOT_BYPASS_PATHS = ['/auth/success'];
+
+function onBypassPath(): boolean {
+  return typeof window !== 'undefined' && BOOT_BYPASS_PATHS.includes(window.location.pathname);
+}
 
 let boot: Promise<BootOutcome> | null = null;
 let settled = false;
@@ -39,13 +46,18 @@ async function mintFromCookie(): Promise<BootOutcome> {
   // A deep magic link lands signed in on first render (its redeem shares the flight).
   if (isMagicLinkRedeemPending()) await Promise.race([awaitMagicLinkRedeem(), timeout]);
   clearTimeout(timer);
+  // A purged legacy session that re-minted has no marker: write one, or the
+  // NEXT load boots anonymous and REST 401s never refresh (review m2). 'local'
+  // is inert for silent re-auth, which only acts on 'discord'.
+  if (outcome === 'ok' && getAuthMethod() === null && legacySessionPurged()) setAuthMethod('local');
   return outcome;
 }
 
 /** Idempotent. Called once at module load from App.tsx, after the magic-link start. */
 export function startBootSession(): Promise<BootOutcome> {
   if (boot) return boot;
-  if (!getAuthMethod() && !legacySessionPurged() && !isMagicLinkRedeemPending()) {
+  const nothingToMint = !getAuthMethod() && !legacySessionPurged() && !isMagicLinkRedeemPending();
+  if (nothingToMint || onBypassPath()) {
     boot = Promise.resolve(settle('anonymous'));
   } else {
     boot = mintFromCookie().then(settle);

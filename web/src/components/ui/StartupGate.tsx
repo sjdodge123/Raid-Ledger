@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useSyncExternalStore, type ReactNode } from 'react';
 import { useConnectivityStore } from '../../stores/connectivity-store';
-import { isBootSettled, subscribeBootSession } from '../../lib/api/boot-session';
+import { BOOT_BYPASS_PATHS, isBootSettled, subscribeBootSession } from '../../lib/api/boot-session';
 
 const SLOW_THRESHOLD_MS = 30_000;
 const FADE_DURATION_MS = 300;
 
-/** Routes that must bypass the startup gate (time-sensitive auth flows). */
-const BYPASS_PATHS = ['/auth/success'];
+/** Routes that must bypass the startup gate (time-sensitive auth flows) — shared with the boot. */
+const BYPASS_PATHS = BOOT_BYPASS_PATHS;
 
 function FadingOverlay({ onTransitionEnd }: { onTransitionEnd: () => void }) {
     return (
