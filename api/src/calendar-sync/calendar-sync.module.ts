@@ -1,6 +1,7 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
 import { DrizzleModule } from '../drizzle/drizzle.module';
+import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
 import { CalendarSyncEnabledGuard } from './calendar-sync-enabled.guard';
 import { CALENDAR_WRITE_QUEUE } from './calendar-sync.constants';
@@ -8,6 +9,7 @@ import { CalendarConnectionsController } from './controllers/calendar-connection
 import { CalendarDemoSeedController } from './controllers/calendar-demo-seed.controller';
 import { CalendarOAuthController } from './controllers/calendar-oauth.controller';
 import { CalendarSyncAdminController } from './controllers/calendar-sync-admin.controller';
+import { EventCalendarController } from './controllers/event-calendar.controller';
 import {
   CALENDAR_FAKE_PROVIDER,
   CalendarProviderRegistry,
@@ -41,6 +43,7 @@ const fakeProvider = {
   imports: [
     DrizzleModule,
     SettingsModule,
+    EventsModule,
     BullModule.registerQueue({ name: CALENDAR_WRITE_QUEUE }),
   ],
   controllers: [
@@ -48,6 +51,7 @@ const fakeProvider = {
     CalendarOAuthController,
     CalendarDemoSeedController,
     CalendarSyncAdminController,
+    EventCalendarController,
   ],
   providers: [
     CalendarSyncEnabledGuard,
