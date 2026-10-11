@@ -20,6 +20,7 @@ import { MatchContextCard } from './scheduling/MatchContextCard';
 import { SchedulingComposite } from '../components/lineups/cycle-4/SchedulingComposite';
 import { SchedulingTerminalBanner } from '../components/lineups/cycle-4/SchedulingTerminalBanner';
 import { OtherPollsSection } from './scheduling/OtherPollsSection';
+import { PollPrivateBar } from './scheduling/PollPrivateBar';
 
 /** Loading skeleton for the scheduling poll page. */
 function SchedulePollSkeleton(): JSX.Element {
@@ -57,6 +58,7 @@ function CompletedPollState({ poll }: { poll: SchedulePollPageResponseDto }): JS
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
       <h1 className="text-xl font-bold text-foreground">Scheduling Poll</h1>
+      <PollPrivateBar poll={poll} />
       <MatchContextCard match={poll.match} uniqueVoterCount={poll.uniqueVoterCount} />
       <SchedulingTerminalBanner
         pollStatus="locked_in"
@@ -90,6 +92,7 @@ function ActivePollSections({ lineupId, matchId, poll }: {
   const { data: otherPolls, isLoading: otherLoading } = useOtherPolls(lineupId, matchId);
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 pb-20 md:pb-12 space-y-6">
+      <PollPrivateBar poll={poll} />
       <SchedulingComposite poll={poll} lineupId={lineupId} matchId={matchId} />
       <OtherPollsSection lineupId={lineupId} data={otherPolls} isLoading={otherLoading} />
     </div>

@@ -7,6 +7,7 @@ import { API_BASE_URL } from '../lib/config';
 import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/silent-reauth';
 import { clearAccessToken } from '../lib/api/access-token-store';
 import { TokenResponseSchema } from '@raid-ledger/contract';
+import { consumePendingPollShare } from '../lib/poll-share-redirect';
 import { joinIntentPath, type StoredJoinIntent } from './join-intent-path';
 import { nativeFetch } from '../lib/api/native-fetch';
 
@@ -107,6 +108,13 @@ function resolveNewUserRedirect(searchParams: URLSearchParams, navigate: ReturnT
     if (pendingInvite) {
         sessionStorage.removeItem('invite_code');
         navigate(`/i/${pendingInvite}?claim=1`, { replace: true });
+        return true;
+    }
+    // ROK-1750 (D5): a private poll's share link — its page parks the token
+    // and sends a not-yet-onboarded user through /onboarding, which hands it back.
+    const pendingPollShare = consumePendingPollShare();
+    if (pendingPollShare) {
+        navigate(pendingPollShare, { replace: true });
         return true;
     }
     toast.success('Welcome! Let\'s get you set up.');

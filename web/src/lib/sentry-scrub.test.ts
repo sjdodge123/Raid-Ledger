@@ -20,6 +20,24 @@ describe('ROK-1366: scrubTokenFromUrl', () => {
     );
 });
 
+/** ROK-1750: the private-poll share token is a path segment, not a param. */
+describe('ROK-1750: scrubTokenFromUrl — poll share token in the path', () => {
+    const TOKEN = 'AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcde';
+    it.each([
+        [`https://rl.test/p/poll/${TOKEN}`, 'https://rl.test/p/poll/[Filtered]'],
+        [`/p/poll/${TOKEN}?x=1`, '/p/poll/[Filtered]?x=1'],
+        [`https://rl.test/api/scheduling-polls/share/${TOKEN}`, 'https://rl.test/api/scheduling-polls/share/[Filtered]'],
+        [`POST /scheduling-polls/share/${TOKEN}/join`, 'POST /scheduling-polls/share/[Filtered]/join'],
+        [`https://rl.test/api/scheduling-polls/share/${TOKEN}/join`, 'https://rl.test/api/scheduling-polls/share/[Filtered]/join'],
+    ])('scrubs %s', (input, expected) => {
+        expect(scrubTokenFromUrl(input)).toBe(expected);
+    });
+
+    it('leaves a short non-token segment alone', () => {
+        expect(scrubTokenFromUrl('/p/poll/abc')).toBe('/p/poll/abc');
+    });
+});
+
 describe('ROK-1366: scrubBreadcrumb', () => {
     it('scrubs navigation from/to', () => {
         const crumb = scrubBreadcrumb({

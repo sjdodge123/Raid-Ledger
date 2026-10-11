@@ -22,11 +22,13 @@ import {
   CreateSchedulingPollSchema,
   type CreateSchedulingPollDto,
   type SchedulingPollResponseDto,
+  type PollShareTokenResponseDto,
 } from '@raid-ledger/contract';
 import {
   StandalonePollService,
   type CreatePollInput,
 } from './standalone-poll.service';
+import { StandalonePollShareService } from './standalone-poll-share.service';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { isOperatorOrAdmin } from '../../events/controller.helpers';
 
@@ -40,10 +42,12 @@ function toCreatePollInput(data: CreateSchedulingPollDto): CreatePollInput {
     durationHours,
     memberUserIds,
     minVoteThreshold,
+    visibility,
     ...rest
   } = data;
   return {
     ...rest,
+    ...(visibility !== undefined ? { visibility } : {}),
     ...(linkedEventId !== undefined ? { linkedEventId } : {}),
     ...(durationHours !== undefined ? { durationHours } : {}),
     ...(memberUserIds !== undefined ? { memberUserIds } : {}),
@@ -54,12 +58,33 @@ function toCreatePollInput(data: CreateSchedulingPollDto): CreatePollInput {
 @Controller('scheduling-polls')
 @UseGuards(AuthGuard('jwt'))
 export class StandalonePollController {
-  constructor(private readonly service: StandalonePollService) {}
+  constructor(
+    private readonly service: StandalonePollService,
+    private readonly share: StandalonePollShareService,
+  ) {}
 
-  /** List active standalone scheduling polls. */
+  /** List active standalone polls the caller may see (ROK-1750: private
+   *  polls only for their creator, invitees and admins). */
   @Get('active')
-  async listActive() {
-    return this.service.listActive();
+  async listActive(@Req() req: AuthenticatedRequest) {
+    return this.service.listActive({
+      id: req.user.id,
+      isAdmin: isOperatorOrAdmin(req.user.role),
+    });
+  }
+
+  /** ROK-1750: rotate a private poll's share link (creator / admin only). */
+  @Post(':matchId/share-token/reset')
+  @UseGuards(NotDeactivatedGuard)
+  @HttpCode(HttpStatus.OK)
+  async resetShareToken(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Req() req: AuthenticatedRequest,
+  ): Promise<PollShareTokenResponseDto> {
+    return this.share.reset(matchId, {
+      id: req.user.id,
+      isAdmin: isOperatorOrAdmin(req.user.role),
+    });
   }
 
   /** Mark a standalone poll as completed (after reschedule or event creation). */
