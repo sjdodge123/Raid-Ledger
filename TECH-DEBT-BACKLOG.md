@@ -2562,3 +2562,7 @@ same day (#1278, #1279, #1280).
 - **low** same service — the cancel path edits the card before cancelling the grace job, so the job can also end a just-cancelled event (double finalise). Suggested: cancel the grace job first, then finalise.
 - **low** same service — a roster flush already in flight can re-edit an ended card back to LIVE. Suggested: re-check the tracked row's `completed` state inside the edit.
 - **low** `ad-hoc-notification.service.ts` rehydration — a QP/monitor binding config change before an API restart can make rehydration reject the real tracked card (channel no longer matches). A proper fix records "tracked by the notification service" on the row (needs a migration). Suggested: a `tracked_by` column on `discord_event_messages`.
+
+### 2026-10-11 — feat/rok-1596-calendar-write (surfaced during review of the F11 bench-copy change)
+
+- **low** `api/src/events/signups*` evictVictim path — a tentative player displaced to the bench by someone else's sign-up emits no signup event, so their Google Calendar copy keeps the "(Tentative) " title (already Free) until the nightly reconcile retitles it "(Bench) ". Pre-existing emit gap, widened in visibility by F11. Related: ROK-1729. Suggested: emit `signup.updated` (or the existing bench event) for the displaced signup in the eviction path; touching signups* triggers the Discord smoke review.

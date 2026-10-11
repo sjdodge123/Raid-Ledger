@@ -102,7 +102,9 @@ export class CalendarWriteListener {
     return this.run(eventId, async () => {
       const uid =
         userId ??
-        (signupId != null ? await findSignupUserId(this.db, signupId) : null);
+        (signupId != null
+          ? await findSignupUserId(this.db, signupId, eventId)
+          : null);
       if (uid == null) return []; // Discord-only signup
       const ids = await findUserWriteConnectionIds(this.db, uid);
       return ids.map((connectionId) => ({
