@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
+import { calendarsOverviewVariants } from '../test/mocks/calendar-sync-handlers';
 
 const API_BASE = 'http://localhost:3000';
 const COPY_URL = `${API_BASE}/users/me/calendars/events/:eventId`;
@@ -19,7 +20,9 @@ vi.mock('../lib/api-client', async (importOriginal) => ({
     cancelSignup: vi.fn(async () => undefined),
 }));
 
-import { COPY_POLL_MAX_MS, COPY_POLL_MS, copyPollInterval, useEventCalendarCopy } from './use-calendar-sync';
+import {
+    COPY_POLL_MAX_MS, COPY_POLL_MS, copyPollInterval, useCalendarsOverview, useEventCalendarCopy, useUpdateConnection,
+} from './use-calendar-sync';
 import { useCancelSignup, useSignup } from './use-signups';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -91,5 +94,27 @@ describe('sign-up / cancel invalidate the copy', () => {
         await result.current.m.mutateAsync(undefined as never);
         await waitFor(() => expect(result.current.copy.data?.state).toBe('synced'));
         expect(calls.n).toBe(2);
+    });
+});
+
+describe('useUpdateConnection', () => {
+    it('stays pending until the overview refetch lands, so a saved control never snaps back to the stale value', async () => {
+        let releaseRefetch: () => void = () => {};
+        let gets = 0;
+        server.use(
+            http.patch(`${API_BASE}/users/me/calendars/:id`, () => new HttpResponse(null, { status: 204 })),
+            http.get(`${API_BASE}/users/me/calendars`, async () => {
+                gets += 1;
+                if (gets > 1) await new Promise<void>((resolve) => { releaseRefetch = resolve; });
+                return HttpResponse.json(calendarsOverviewVariants.connected);
+            }),
+        );
+        const { result } = renderHook(() => ({ overview: useCalendarsOverview(), update: useUpdateConnection() }), { wrapper });
+        await waitFor(() => expect(result.current.overview.isSuccess).toBe(true));
+        result.current.update.mutate({ id: 7, body: { write: { target: 'dedicated' } } });
+        await waitFor(() => expect(gets, 'the PATCH success should trigger the overview refetch').toBe(2));
+        expect(result.current.update.isPending, 'mutation settled before the refetch landed').toBe(true);
+        releaseRefetch();
+        await waitFor(() => expect(result.current.update.isSuccess).toBe(true));
     });
 });

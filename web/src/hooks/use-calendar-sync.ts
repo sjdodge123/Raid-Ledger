@@ -84,9 +84,9 @@ export function useUpdateConnection() {
         mutationFn: async ({ id, body }) => {
             await fetchApi<unknown>(`${BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
         },
-        onSuccess: () => {
-            void queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
-        },
+        // Returned, not voided: the mutation stays pending until the refetch lands, so a
+        // control showing the pending value never snaps back to the stale one in between.
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] }),
     });
 }
 
