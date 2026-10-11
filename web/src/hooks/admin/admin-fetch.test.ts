@@ -4,10 +4,10 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { adminFetch } from './admin-fetch';
 import {
-    ACCESS_TOKEN_KEY,
     AUTH_METHOD_KEY,
-    ORIGINAL_TOKEN_KEY,
+    LEGACY_ORIGINAL_TOKEN_KEY,
 } from '../../lib/api/auth-storage-keys';
+import { getAccessToken } from '../../lib/api/access-token-store';
 
 // Controllable stored access token for the ROK-1409 pre-flight gate.
 const authState = vi.hoisted(() => ({ token: null as string | null }));
@@ -65,7 +65,7 @@ describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
         expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(1);
         expect(result.header).toBe('Bearer fresh-token');
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+        expect(getAccessToken()).toBe('fresh-token');
     });
 
     it('does NOT pre-flight for a fresh token', async () => {
@@ -111,7 +111,7 @@ describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
 
     it('does NOT pre-flight while impersonating; proceeds on the stored token', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'local');
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
         authState.token = EXPIRED_TOKEN;
         let refreshCalls = 0;
         server.use(

@@ -6,8 +6,8 @@ import { http, HttpResponse } from 'msw';
 import { server } from '../test/mocks/server';
 import { fetchCurrentUser, getAuthToken, setAuthToken, useAuth } from './use-auth';
 import { startMagicLinkRedeem } from '../lib/magic-link-redeem';
+import { getAccessToken } from '../lib/api/access-token-store';
 
-const TOKEN_KEY = 'raid_ledger_token';
 
 describe('setAuthToken / getAuthToken', () => {
     beforeEach(() => {
@@ -31,7 +31,7 @@ describe('setAuthToken / getAuthToken', () => {
 
     it('stores the token under the expected localStorage key', () => {
         setAuthToken('my-token');
-        expect(localStorage.getItem(TOKEN_KEY)).toBe('my-token');
+        expect(getAccessToken()).toBe('my-token');
     });
 });
 

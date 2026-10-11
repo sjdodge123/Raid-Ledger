@@ -5,8 +5,9 @@ import { z } from 'zod';
 import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { fetchApi, fetchWithAuth, SchemaValidationError } from './fetch-api';
-import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY, LEGACY_ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
 import { httpStatusOf, isConflictError } from './api-error';
+import { setAccessToken, getAccessToken } from './access-token-store';
 
 const captureExceptionMock = vi.fn();
 
@@ -161,7 +162,7 @@ describe('fetchWithAuth — ROK-1367 transparent on-401 refresh', () => {
         expect(result).toEqual({ ok: true });
         expect(refreshCalls).toBe(1);
         expect(dataCalls).toBe(2);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+        expect(getAccessToken()).toBe('fresh-token');
     });
 
     it('returns the raw 401 (no retry) when refresh itself fails', async () => {
@@ -248,7 +249,7 @@ describe('fetchWithAuth — ROK-1409 pre-flight staleness gate', () => {
 
     it('does NOT refresh while impersonating (guard returns null), proceeds with the stored token', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
         authState.token = EXPIRED_TOKEN;
         let dataCalls = 0;
         let refreshCalls = 0;
@@ -300,7 +301,7 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
 
     it('a 401 USER_DEACTIVATED does NOT refresh or retry, and ends the shared session', async () => {
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(ACCESS_TOKEN_KEY, FRESH_TOKEN);
+        setAccessToken(FRESH_TOKEN);
         authState.token = FRESH_TOKEN;
         let dataCalls = 0;
         let refreshCalls = 0;
@@ -324,7 +325,7 @@ describe('fetchWithAuth — ROK-1753 deactivated session is terminal', () => {
 
         expect(refreshCalls).toBe(0);
         expect(dataCalls).toBe(1);
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
         // Never settles while the /login redirect lands, so no caller onError
         // toast flashes over the deactivated notice.
         expect(settled).not.toHaveBeenCalled();

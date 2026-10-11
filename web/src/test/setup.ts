@@ -1,7 +1,8 @@
 import '@testing-library/jest-dom/vitest';
 import * as matchers from 'vitest-axe/matchers';
 import { configure } from '@testing-library/react';
-import { expect, beforeAll, afterEach, afterAll } from 'vitest';
+import { expect, afterEach, afterAll } from 'vitest';
+import { clearAccessToken } from '../lib/api/access-token-store';
 import { server } from './mocks/server';
 
 // ROK-1285: raise Testing Library's async-util timeout (default 1000ms) so
@@ -42,9 +43,14 @@ if (typeof globalThis.localStorage?.getItem !== 'function') {
 // vitest-axe matchers (toHaveNoViolations)
 expect.extend(matchers);
 
-// MSW server lifecycle
-beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
-afterEach(() => server.resetHandlers());
+// MSW server lifecycle. listen() runs at setup time, BEFORE the test file's
+// imports: fetch-api / refresh-client capture `window.fetch` at module init
+// (ROK-1754 §3.6), so the interceptor must already be installed by then.
+server.listen({ onUnhandledRequest: 'warn' });
+afterEach(() => {
+    server.resetHandlers();
+    clearAccessToken(); // ROK-1754: the token is module memory, not localStorage
+});
 afterAll(() => server.close());
 
 // Mock IntersectionObserver for tests that use infinite scroll (ROK-754)

@@ -4,8 +4,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { useWantToPlay } from './use-want-to-play';
+import { setAccessToken } from '../lib/api/access-token-store';
 
-const TOKEN_KEY = 'raid_ledger_token';
 const GAME_ID = 19837;
 const PER_GAME_KEY = ['games', 'interest', GAME_ID];
 const BATCH_KEY_PREFIX = ['games', 'interest', 'batch'];
@@ -50,7 +50,7 @@ function findCallWithExactKey(
 
 describe('Regression: ROK-1311 — detail-page wishlist toggle invalidates batch key', () => {
     beforeEach(() => {
-        localStorage.setItem(TOKEN_KEY, 'test-jwt-token');
+        setAccessToken('test-jwt-token');
     });
 
     afterEach(() => {

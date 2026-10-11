@@ -10,7 +10,8 @@ import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
 import { getAiSuggestions } from './ai-suggestions-api';
-import { ACCESS_TOKEN_KEY, AUTH_METHOD_KEY } from './auth-storage-keys';
+import { AUTH_METHOD_KEY } from './auth-storage-keys';
+import { setAccessToken, getAccessToken } from './access-token-store';
 
 // Real Sentry import is heavy + irrelevant here; fetch-api pulls it in.
 vi.mock('../../sentry', () => ({ Sentry: { captureException: vi.fn() } }));
@@ -31,7 +32,7 @@ describe('getAiSuggestions — ROK-1367 transparent on-401 refresh', () => {
         sessionStorage.clear();
         // A prior-session auth-method marker gates the refresh probe.
         localStorage.setItem(AUTH_METHOD_KEY, 'discord');
-        localStorage.setItem(ACCESS_TOKEN_KEY, 'stale-token');
+        setAccessToken('stale-token');
     });
 
     it('refreshes on a 401 and retries, returning the resolved payload', async () => {
@@ -57,7 +58,7 @@ describe('getAiSuggestions — ROK-1367 transparent on-401 refresh', () => {
         expect(refreshCalls).toBe(1);
         expect(suggestionCalls).toBe(2);
         // The retry used the freshly-minted token.
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+        expect(getAccessToken()).toBe('fresh-token');
     });
 
     it('does not probe refresh for an anonymous 401 (no auth-method marker)', async () => {

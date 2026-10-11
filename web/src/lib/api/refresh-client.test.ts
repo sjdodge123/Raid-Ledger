@@ -3,7 +3,8 @@ import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
 import { ensureFreshToken, refreshWithOutcome } from './refresh-client';
-import { ACCESS_TOKEN_KEY, ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { LEGACY_ORIGINAL_TOKEN_KEY } from './auth-storage-keys';
+import { getAccessToken } from './access-token-store';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -31,7 +32,7 @@ describe('ensureFreshToken (ROK-1353 single-flight, ROK-1409 pre-flight caller)'
         expect(a).toBe('fresh-token');
         expect(b).toBe('fresh-token');
         expect(c).toBe('fresh-token');
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh-token');
+        expect(getAccessToken()).toBe('fresh-token');
     });
 
     it('starts a new in-flight refresh once the previous one settles', async () => {
@@ -57,7 +58,7 @@ describe('ensureFreshToken (ROK-1353 single-flight, ROK-1409 pre-flight caller)'
                 return HttpResponse.json({ access_token: 'should-not-happen' });
             }),
         );
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
 
         const result = await ensureFreshToken();
 
@@ -71,7 +72,7 @@ describe('ensureFreshToken (ROK-1353 single-flight, ROK-1409 pre-flight caller)'
         );
 
         expect(await ensureFreshToken()).toBeNull();
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
     });
 });
 
@@ -96,7 +97,7 @@ describe('refreshWithOutcome (ROK-1366 #1384 tri-state refresh)', () => {
         );
 
         expect(await refreshWithOutcome()).toEqual({ kind: 'ok', token: 'fresh' });
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBe('fresh');
+        expect(getAccessToken()).toBe('fresh');
     });
 
     it.each([401, 403])('reports rejected on a %i', async (status) => {
@@ -109,7 +110,7 @@ describe('refreshWithOutcome (ROK-1366 #1384 tri-state refresh)', () => {
         refreshAnswers(status);
 
         expect(await refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
     });
 
     it('reports indeterminate on a network error', async () => {
@@ -122,7 +123,7 @@ describe('refreshWithOutcome (ROK-1366 #1384 tri-state refresh)', () => {
         server.use(http.post(`${API_BASE}/auth/refresh`, () => HttpResponse.json({ nope: true })));
 
         expect(await refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
-        expect(localStorage.getItem(ACCESS_TOKEN_KEY)).toBeNull();
+        expect(getAccessToken()).toBeNull();
     });
 
     it('shares the single in-flight refresh with ensureFreshToken', async () => {
@@ -161,7 +162,7 @@ describe('refreshWithOutcome while impersonating (ROK-1366 #1384)', () => {
                 return HttpResponse.json({ access_token: 'should-not-happen' });
             }),
         );
-        localStorage.setItem(ORIGINAL_TOKEN_KEY, 'admin-token');
+        localStorage.setItem(LEGACY_ORIGINAL_TOKEN_KEY, 'admin-token');
 
         expect(await refreshWithOutcome()).toEqual({ kind: 'indeterminate' });
         expect(refreshCalls).toBe(0);

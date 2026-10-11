@@ -17,10 +17,10 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { server } from '../test/mocks/server';
-import { ACCESS_TOKEN_KEY } from '../lib/api/auth-storage-keys';
 import { WantToPlayProvider } from './use-want-to-play-batch';
 import { useWantToPlay } from './use-want-to-play';
 import { useLfgHearted } from './use-lfg-hearted';
+import { setAccessToken } from '../lib/api/access-token-store';
 
 const GAME_ID = 7;
 
@@ -82,7 +82,7 @@ function renderHarness(withProvider: boolean) {
 }
 
 beforeEach(() => {
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
 });
 
 describe('hearting a game refreshes the cold-start prompt (AC6)', () => {

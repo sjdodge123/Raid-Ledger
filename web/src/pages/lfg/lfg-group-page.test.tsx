@@ -23,9 +23,9 @@ import {
     LFG_TEST_SLUG,
 } from '../../test/mocks/lfg-handlers';
 import { Route, Routes } from 'react-router-dom';
-import { ACCESS_TOKEN_KEY } from '../../lib/api/auth-storage-keys';
 import { LFG_COPY } from './lfg-copy';
 import { LfgGroupPage } from './lfg-group-page';
+import { setAccessToken } from '../../lib/api/access-token-store';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -41,7 +41,7 @@ function renderPage(slug = LFG_TEST_SLUG) {
 beforeEach(() => {
     // The page and every LFG read are jwt-gated; ROK-1453's group hook is
     // `enabled: !!token`, so without this the queries never fire.
-    localStorage.setItem(ACCESS_TOKEN_KEY, 'test-token');
+    setAccessToken('test-token');
     server.use(...lfgGroupPageHandlers);
 });
 
