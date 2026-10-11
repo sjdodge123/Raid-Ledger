@@ -77,7 +77,28 @@ beforeAll(async () => {
   processor = testApp.app.get(CalendarWriteProcessor);
   queue = testApp.app.get<Queue>(getQueueToken(CALENDAR_WRITE_QUEUE));
   await processor.worker.pause(true);
+  await flushInFlightFetch();
 });
+
+/**
+ * `pause(true)` does not cancel the worker's in-flight blocking fetch: the
+ * FIRST job added afterwards is still processed by the worker, racing the
+ * explicit `processor.process` below (observed: a double revoke). Feed that
+ * fetch a harmless job (no such connection → `{found:false}`) and wait,
+ * bounded, until it is consumed; if no fetch was in flight it is drained.
+ */
+async function flushInFlightFetch(): Promise<void> {
+  const data: CalendarWriteJobData = { kind: 'disconnect', connectionId: 0 };
+  await queue.add('disconnect', data, {
+    jobId: 'a7-flush',
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+  for (let i = 0; i < 30 && (await queue.getJob('a7-flush')); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  await queue.drain(true);
+}
 
 afterAll(() => processor.worker.resume());
 
