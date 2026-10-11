@@ -211,6 +211,22 @@ describe('signup emits', () => {
     });
     expect(await queuedIds()).toEqual([]);
   });
+
+  it('F11: a signupId-only emit for a web signup (bench move) queues that user', async () => {
+    const [m, other] = [await member(), await member()];
+    const eventId = await newEvent();
+    const signupId = await signUp(eventId, m.userId);
+    await signUp(eventId, other.userId);
+    await emitter.emitAsync(SIGNUP_EVENTS.UPDATED, {
+      eventId,
+      signupId,
+      action: 'tentative_reslotted',
+    });
+    expect(await queuedIds()).toEqual([
+      reconcileJobId(m.connectionId, eventId, m.userId),
+    ]);
+    await expectQueued(m, eventId);
+  });
 });
 
 describe('kill switch', () => {

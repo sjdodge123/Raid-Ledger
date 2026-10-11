@@ -294,6 +294,63 @@ describe('reconcileCalendarCopy — tentative (§5 test 8)', () => {
   });
 });
 
+/** F11: put the event's (only) signup on the bench, or into a role slot. */
+async function assignRole(eventId: number, role: string) {
+  const ra = schema.rosterAssignments;
+  const [signup] = await testApp.db
+    .select({ id: schema.eventSignups.id })
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, eventId));
+  if (!signup) throw new Error(`no signup on event ${eventId}`);
+  const moved = await testApp.db
+    .update(ra)
+    .set({ role })
+    .where(eq(ra.signupId, signup.id))
+    .returning({ id: ra.id });
+  if (moved.length > 0) return;
+  await testApp.db
+    .insert(ra)
+    .values({ eventId, signupId: signup.id, role, position: 1 });
+}
+
+describe('reconcileCalendarCopy — bench (F11, ruled 2026-10-11)', () => {
+  it('benched → "(Bench) " + Free; promoted → same id, Busy, plain title', async () => {
+    const { key, eventId } = await setup('signed_up');
+    await assignRole(eventId, 'bench');
+    expect(await reconcile(key)).toEqual({ result: 'created' });
+    const [benched] = nonEmpty(copiesOf(eventId), 'copy');
+    expect(benched).toMatchObject({ title: '(Bench) Raid Night', busy: false });
+
+    await assignRole(eventId, 'dps');
+    expect(await reconcile(key)).toEqual({ result: 'updated' });
+    const copies = copiesOf(eventId);
+    expect(copies).toHaveLength(1);
+    expect(copies[0]).toMatchObject({
+      id: benched.id,
+      title: 'Raid Night',
+      busy: true,
+    });
+
+    await assignRole(eventId, 'bench');
+    expect(await reconcile(key)).toEqual({ result: 'updated' });
+    expect(copiesOf(eventId)[0]).toMatchObject({
+      id: benched.id,
+      title: '(Bench) Raid Night',
+      busy: false,
+    });
+  });
+
+  it('tentative + benched → bench wins: "(Bench) ", Free', async () => {
+    const { key, eventId } = await setup('tentative');
+    await assignRole(eventId, 'bench');
+    expect(await reconcile(key)).toEqual({ result: 'created' });
+    expect(nonEmpty(copiesOf(eventId), 'copy')[0]).toMatchObject({
+      title: '(Bench) Raid Night',
+      busy: false,
+    });
+  });
+});
+
 describe('reconcileCalendarCopy — removal (§5 test 6)', () => {
   const removals: [string, (eventId: number) => Promise<unknown>][] = [
     ['signup cancelled', (id) => setSignupStatus(id, 'declined')],
