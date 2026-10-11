@@ -22,6 +22,7 @@ import {
   reconcileCalendarCopy,
   type ReconcileOutcome,
 } from './calendar-write-reconcile.helpers';
+import { isFinalAttempt } from './calendar-write-reconcile-persist.helpers';
 import {
   type CalendarDisconnectResult,
   runCalendarDisconnect,
@@ -68,8 +69,12 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
       return runCalendarWriteOff(deps, data.connectionId);
     }
     if (data.kind === 'disconnect') {
-      return runCalendarDisconnect(deps, data.connectionId);
+      // Review M1: the last attempt never rethrows — the row is deleted.
+      const finalAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+      return runCalendarDisconnect(deps, data.connectionId, { finalAttempt });
     }
-    return reconcileCalendarCopy(this.reconcileDeps(), data);
+    return reconcileCalendarCopy(this.reconcileDeps(), data, {
+      finalAttempt: isFinalAttempt(job),
+    });
   }
 }

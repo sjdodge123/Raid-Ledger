@@ -8,18 +8,15 @@
  * `failed`, no retry (the nightly reconcile re-enqueues after reconnect).
  * `ProviderRequestError` (a permanent 4xx) and an unrecoverable
  * `NotFoundError` → link `failed`, no retry. Anything else (rate limit,
- * transient, unknown) is rethrown so BullMQ retries with backoff.
+ * transient, unknown) is rethrown so BullMQ retries with backoff; the final
+ * attempt also records `failed` + reports to Sentry. Races (review B1/M2):
+ * see `calendar-write-reconcile-persist.helpers.ts`.
  */
 import { Logger } from '@nestjs/common';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
-import {
-  CalendarProviderError,
-  NotFoundError,
-  ProviderAuthError,
-  ProviderRequestError,
-} from '../providers/calendar-provider.errors';
+import { NotFoundError } from '../providers/calendar-provider.errors';
 import type {
   CalendarCredentials,
   CopyEventInput,
@@ -40,6 +37,14 @@ import {
   computeDesiredState,
   type DesiredState,
 } from './calendar-write-desired.helpers';
+import {
+  claimDedicatedCalendar,
+  errorCode,
+  handleFailure,
+  saveLink,
+} from './calendar-write-reconcile-persist.helpers';
+
+export { errorCode };
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
@@ -84,13 +89,6 @@ const refOf = (link: LinkRow): CopyRef => ({
   ...(link.etag ? { etag: link.etag } : {}),
 });
 
-/** Log-safe, column-sized code: never an error message (may echo a body). */
-export function errorCode(err: unknown): string {
-  if (err instanceof CalendarProviderError)
-    return `${err.code}:${err.reason}`.slice(0, 64);
-  return err instanceof Error ? err.name.slice(0, 64) : 'unknown';
-}
-
 async function loadConnection(db: Db, id: number) {
   const [row] = await db
     .select()
@@ -116,22 +114,40 @@ async function loadLink(db: Db, key: ReconcileKey) {
   return row ?? null;
 }
 
-/** D5: the target calendar id; persists a changed dedicated calendar id. */
+/** Best-effort cleanup of something this run created but must not keep. */
+async function bestEffort(what: string, op: () => Promise<void>) {
+  try {
+    await op();
+  } catch (err) {
+    logger.warn(`calendar ${what} cleanup failed (${errorCode(err)})`);
+  }
+}
+
+/**
+ * D5: the target calendar id. A changed dedicated calendar id is claimed by
+ * compare-and-swap (B1); on a lost race the calendar this run just created
+ * is deleted and the winner's id used.
+ */
 async function resolveTarget(
   ctx: WriteCtx,
   knownId: string | null,
 ): Promise<string> {
   if (ctx.conn.writeTarget === 'primary') return PRIMARY_CALENDAR_ID;
   const id = await ctx.provider.ensureRaidLedgerCalendar(ctx.creds, knownId);
-  if (id !== ctx.conn.dedicatedCalendarId) {
-    await ctx.db
-      .update(schema.calendarConnections)
-      .set({ dedicatedCalendarId: id, updatedAt: new Date() })
-      .where(eq(schema.calendarConnections.id, ctx.conn.id));
-    ctx.conn = { ...ctx.conn, dedicatedCalendarId: id };
-  }
-  return id;
+  const current = ctx.conn.dedicatedCalendarId;
+  if (id === current) return id;
+  const winner = await claimDedicatedCalendar(ctx.db, ctx.conn.id, current, id);
+  if (winner !== id)
+    await bestEffort('calendar', () =>
+      ctx.provider.deleteRaidLedgerCalendar(ctx.creds, id),
+    );
+  ctx.conn = { ...ctx.conn, dedicatedCalendarId: winner };
+  return winner;
 }
+
+/** A link with a copy behind it ('' ids = an Undo/failed placeholder). */
+const copyLink = (link: LinkRow | null) =>
+  link && link.providerEventId ? link : null;
 
 /** `upsertEvent`, with a 404/410 (copy or calendar gone) mapped to null. */
 async function upsertOrNull(
@@ -156,10 +172,10 @@ async function upsertOrNull(
 /** §4.5.2.3/.4/.6: create, update in place, move on a target flip, heal. */
 async function writeCopy(ctx: WriteCtx, input: CopyEventInput) {
   const calendarId = await resolveTarget(ctx, ctx.conn.dedicatedCalendarId);
-  const moved = ctx.link !== null && ctx.link.calendarId !== calendarId;
-  if (ctx.link && moved)
-    await ctx.provider.deleteEvent(ctx.creds, refOf(ctx.link));
-  const existing = ctx.link && !moved ? refOf(ctx.link) : null;
+  const prior = copyLink(ctx.link);
+  const moved = prior !== null && prior.calendarId !== calendarId;
+  if (prior && moved) await ctx.provider.deleteEvent(ctx.creds, refOf(prior));
+  const existing = prior && !moved ? refOf(prior) : null;
   const first = await upsertOrNull(ctx, calendarId, input, existing);
   if (first) return first;
   // The copy was deleted remotely → recreate it in the same calendar.
@@ -174,28 +190,17 @@ async function writeCopy(ctx: WriteCtx, input: CopyEventInput) {
   return ctx.provider.upsertEvent(ctx.creds, fresh, input, null);
 }
 
-async function saveLink(db: Db, key: ReconcileKey, ref: CopyRef) {
-  const t = schema.calendarEventLinks;
-  const fields = {
-    calendarId: ref.calendarId,
-    providerEventId: ref.providerEventId,
-    etag: ref.etag ?? null,
-    state: 'synced',
-    lastErrorCode: null,
-    updatedAt: new Date(),
-  };
-  await db
-    .insert(t)
-    .values({
-      connectionId: key.connectionId,
-      eventId: key.eventId,
-      userId: key.userId,
-      ...fields,
-    })
-    .onConflictDoUpdate({
-      target: [t.connectionId, t.eventId, t.userId],
-      set: fields,
-    });
+/** Delete the copy and its link — a link suppressed meanwhile is kept. */
+async function applyDelete(ctx: WriteCtx): Promise<ReconcileOutcome> {
+  const prior = copyLink(ctx.link);
+  if (prior) await ctx.provider.deleteEvent(ctx.creds, refOf(prior));
+  if (ctx.link) {
+    const t = schema.calendarEventLinks;
+    await ctx.db
+      .delete(t)
+      .where(and(eq(t.id, ctx.link.id), ne(t.state, 'suppressed')));
+  }
+  return { result: 'deleted' };
 }
 
 async function apply(
@@ -204,15 +209,7 @@ async function apply(
   event: CopyEventRow | null,
   clientUrl: () => Promise<string>,
 ): Promise<ReconcileOutcome> {
-  if (desired.action === 'delete') {
-    if (ctx.link) {
-      await ctx.provider.deleteEvent(ctx.creds, refOf(ctx.link));
-      await ctx.db
-        .delete(schema.calendarEventLinks)
-        .where(eq(schema.calendarEventLinks.id, ctx.link.id));
-    }
-    return { result: 'deleted' };
-  }
+  if (desired.action === 'delete') return applyDelete(ctx);
   if (!event || !desired.copy) throw new Error('create/update without event');
   const input = buildCopyInput({
     clientUrl: await clientUrl(),
@@ -221,37 +218,13 @@ async function apply(
     event,
     tentative: desired.copy.tentative,
   });
-  await saveLink(ctx.db, ctx.key, await writeCopy(ctx, input));
+  const ref = await writeCopy(ctx, input);
+  if (!(await saveLink(ctx.db, ctx.key, ref))) {
+    // M2: Undo suppressed the link mid-flight — honour it, drop the copy.
+    await bestEffort('copy', () => ctx.provider.deleteEvent(ctx.creds, ref));
+    return { result: 'noop', reason: 'suppressed' };
+  }
   return { result: ctx.link ? 'updated' : 'created' };
-}
-
-/** Terminal failures are recorded and swallowed; the rest are retried. */
-async function handleFailure(
-  db: Db,
-  connectionId: number,
-  link: LinkRow | null,
-  err: unknown,
-): Promise<ReconcileOutcome> {
-  const auth = err instanceof ProviderAuthError;
-  const terminal =
-    auth || err instanceof ProviderRequestError || err instanceof NotFoundError;
-  if (!terminal) throw err;
-  const code = errorCode(err);
-  const now = new Date();
-  if (auth) {
-    await db
-      .update(schema.calendarConnections)
-      .set({ status: 'needs_reconnect', lastErrorCode: code, updatedAt: now })
-      .where(eq(schema.calendarConnections.id, connectionId));
-  }
-  if (link) {
-    await db
-      .update(schema.calendarEventLinks)
-      .set({ state: 'failed', lastErrorCode: code, updatedAt: now })
-      .where(eq(schema.calendarEventLinks.id, link.id));
-  }
-  logger.warn(`calendar copy failed for connection ${connectionId} (${code})`);
-  return { result: 'failed', reason: code };
 }
 
 /** Load the rows and decide (D2). */
@@ -277,9 +250,15 @@ async function decide(
   return { desired, event, link };
 }
 
+export interface ReconcileOptions {
+  /** The job's last attempt: a retryable error is recorded too (m4). */
+  finalAttempt?: boolean;
+}
+
 export async function reconcileCalendarCopy(
   deps: CalendarReconcileDeps,
   key: ReconcileKey,
+  opts: ReconcileOptions = {},
 ): Promise<ReconcileOutcome> {
   const conn = await loadConnection(deps.db, key.connectionId);
   if (!conn || conn.userId !== key.userId)
@@ -295,6 +274,6 @@ export async function reconcileCalendarCopy(
       apply({ ...ctx, creds }, desired, event, deps.getClientUrl),
     );
   } catch (err) {
-    return handleFailure(deps.db, conn.id, link, err);
+    return handleFailure(deps.db, key, err, opts.finalAttempt ?? false);
   }
 }
