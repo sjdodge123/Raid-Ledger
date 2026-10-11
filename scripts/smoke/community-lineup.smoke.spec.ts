@@ -6,6 +6,7 @@
  * and cleans up afterward.
  */
 import { test, expect } from './base';
+import { signInAsAdmin } from './browser-session';
 import {
     API_BASE,
     getAdminToken,
@@ -433,6 +434,7 @@ test.describe('Community Lineup responsive layout', () => {
             // three agree on every target.
             storageState: STORAGE_STATE_PATH,
         });
+        await signInAsAdmin(context); // ROK-1754: own rl_rt family, storageState holds no token
         const page = await context.newPage();
 
         await page.goto(`/community-lineup/${lineupId}`);

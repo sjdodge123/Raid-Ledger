@@ -20,8 +20,10 @@
  */
 import type { Browser, Page, Response } from '@playwright/test';
 import { test, expect } from './base';
+import { storageJwtEntries } from './browser-session';
 import { apiGet, apiPost, getAdminToken } from './api-helpers';
 
+/** The legacy (pre-ROK-1754) token key — asserted EMPTY now. */
 const ACCESS_TOKEN_KEY = 'raid_ledger_token';
 const AUTH_METHOD_KEY = 'raid_ledger_auth_method';
 /** A nested route whose heading renders on every project (desktop, phone, tablet). */
@@ -118,7 +120,12 @@ async function openLinkInFreshContext(browser: Browser, target: string) {
         const page = await context.newPage();
         const redeem = page.waitForResponse(isRedeem, { timeout: 15_000 });
         await page.goto(target, { waitUntil: 'domcontentloaded' });
-        return { context, page, redeemStatus: (await redeem).status() };
+        const res = await redeem;
+        // ROK-1754: the redeem response is the only place the access token
+        // appears — the app keeps it in memory, never in storage.
+        const body = res.ok() ? ((await res.json()) as { access_token?: unknown }) : {};
+        const redeemToken = typeof body.access_token === 'string' ? body.access_token : null;
+        return { context, page, redeemStatus: res.status(), redeemToken };
     } catch (err) {
         await context.close();
         throw err;
@@ -140,11 +147,18 @@ test.describe('Magic sign-in link is single-use (ROK-1366)', () => {
             expect(a.page.url(), 'the fragment token must be stripped from the address bar').not.toContain('token=');
 
             const stored = await readAuthStorage(a.page);
-            expect(stored.token, 'a session access token must be stored after redeem').toBeTruthy();
-            expect(stored.token, 'the raw magic-link token must never be stored').not.toBe(link.rawToken);
+            expect(stored.token, 'ROK-1754: the access token lives in memory, never in localStorage').toBeNull();
+            expect(await storageJwtEntries(a.page), 'ROK-1754: no JWT in web storage after a magic-link redeem').toEqual([]);
             expect(stored.method, 'a redeemed session records auth method "magic"').toBe('magic');
-            const me = (await apiGet(stored.token as string, '/auth/me')) as { id?: unknown } | null;
-            expect(me?.id, 'the stored token must be a live session for the link user').toBe(link.userId);
+            expect(a.redeemToken, 'the redeem must mint a session access token').toBeTruthy();
+            expect(a.redeemToken, 'the raw magic-link token is not the session token').not.toBe(link.rawToken);
+            const me = (await apiGet(a.redeemToken as string, '/auth/me')) as { id?: unknown } | null;
+            expect(me?.id, 'the minted token must be a live session for the link user').toBe(link.userId);
+
+            // Reload = memory gone: the session must come back from the rl_rt cookie.
+            await a.page.reload({ waitUntil: 'domcontentloaded' });
+            await expect(a.page.getByRole('heading', { name: 'Appearance' })).toBeVisible({ timeout: 15_000 });
+            expect(await storageJwtEntries(a.page), 'ROK-1754: no JWT in web storage after reload').toEqual([]);
         } finally {
             await a.context.close();
         }
@@ -158,6 +172,7 @@ test.describe('Magic sign-in link is single-use (ROK-1366)', () => {
             await expect(b.page.locator('[data-sonner-toast][data-type="error"]')).toHaveCount(0);
             const stored = await readAuthStorage(b.page);
             expect(stored.token, 'a spent link must not leave a session behind').toBeNull();
+            expect(await storageJwtEntries(b.page), 'a spent link leaves no JWT in web storage').toEqual([]);
         } finally {
             await b.context.close();
         }

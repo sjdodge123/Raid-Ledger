@@ -4,7 +4,7 @@
  * Companion spec to `lineup-confirmation-pills.smoke.spec.ts`. The organizer
  * spec runs as admin-as-creator → `organizer` persona because the shared
  * Playwright storageState authenticates as `admin@local`. This spec injects
- * a non-admin smoke-fixture user's JWT into `localStorage` so the lineup
+ * a non-admin smoke-fixture user's session (own `rl_rt` family, ROK-1754) so the lineup
  * detail page resolves to `invitee-not-acted` / `invitee-acted` and the
  * waiting-tone hero flip + per-row ✓ pills get exercised at the browser
  * level instead of only the vitest unit suite.
@@ -14,6 +14,7 @@
  * `api/src/admin/demo-test-fixture-user.controller.ts`.
  */
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import {
     getAdminToken,
     getInviteeFixture,
@@ -48,7 +49,7 @@ async function fetchGameIds(token: string, count: number): Promise<number[]> {
 
 /**
  * Swap the browser session from the shared admin storageState to the
- * invitee fixture user by overwriting `localStorage.raid_ledger_token`
+ * invitee fixture user by giving the context the invitee's `rl_rt` cookie
  * (matches `use-auth.ts` `TOKEN_KEY`). Reload so the auth hook re-resolves
  * with the new JWT.
  */
@@ -59,10 +60,8 @@ async function loginInvitee(
     // Visit any same-origin page first so localStorage is bound to the app
     // origin — `page.evaluate` against `about:blank` writes to the wrong
     // storage partition and the subsequent reload reads `null`.
+    await signInContextWithJwt(page.context(), token);
     await page.goto('/');
-    await page.evaluate((t) => {
-        localStorage.setItem('raid_ledger_token', t);
-    }, token);
 }
 
 test.beforeAll(async ({}, testInfo) => {

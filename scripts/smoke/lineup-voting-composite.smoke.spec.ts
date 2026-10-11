@@ -22,6 +22,7 @@
  *       until the Sv composite ships.
  */
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import {
     apiGet,
     apiPost,
@@ -570,9 +571,7 @@ test.describe('Sv composite — top-pick star (ROK-1474)', () => {
         // re-open the SAME lineup. `myTopPickGameId` is viewer-scoped, so the
         // admin's pick must be invisible here.
         const invitee = await getInviteeFixture();
-        await page.evaluate((t) => {
-            localStorage.setItem('raid_ledger_token', t);
-        }, invitee.jwt);
+        await signInContextWithJwt(page.context(), invitee.jwt);
         await page.goto(`/community-lineup/${votingLineupId}`);
         await expect(page.getByTestId('voting-leaderboard-v2')).toBeVisible({
             timeout: 20_000,

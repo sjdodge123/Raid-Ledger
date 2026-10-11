@@ -12,6 +12,7 @@
  * of the composite.
  */
 import { test, expect } from './base';
+import { signInAsAdmin, signInContextWithJwt } from './browser-session';
 import { devices, type Locator, type Page } from '@playwright/test';
 import { STORAGE_STATE_PATH } from '../auth-paths';
 import { dismissGameTimeCheck, isMobile, isPhoneLayout } from './helpers';
@@ -1663,10 +1664,8 @@ test.describe('Scheduling poll remind voters (ROK-1395)', () => {
         // the button must NOT render for them. Session swap pattern from
         // lineup-confirmation-pills-invitee.smoke.spec.ts.
         const invitee = await getInviteeFixture();
+        await signInContextWithJwt(page.context(), invitee.jwt);
         await page.goto('/');
-        await page.evaluate((t) => {
-            localStorage.setItem('raid_ledger_token', t);
-        }, invitee.jwt);
         await goToPoll(page, lineupId, matchId);
         await expect(
             page.getByRole('button', { name: /remind voters/i }),
@@ -1702,10 +1701,8 @@ test.describe('Scheduling poll add participants (ROK-1440)', () => {
         // Same session-swap pattern as the sibling Remind Voters case — a
         // non-creator member must not get a roster-management affordance.
         const invitee = await getInviteeFixture();
+        await signInContextWithJwt(page.context(), invitee.jwt);
         await page.goto('/');
-        await page.evaluate((t) => {
-            localStorage.setItem('raid_ledger_token', t);
-        }, invitee.jwt);
         await goToPoll(page, lineupId, matchId);
         await expect(page.getByTestId('add-poll-members-button')).toHaveCount(0);
         await expect(page.getByTestId('scheduling-manage')).toHaveCount(0);
@@ -3633,6 +3630,7 @@ test.describe('Game-time check before voting (ROK-1564)', () => {
             ...devices['Pixel 5'],
             storageState: STORAGE_STATE_PATH,
         });
+        await signInAsAdmin(fresh); // ROK-1754: own rl_rt family, storageState holds no token
         try {
             const freshPage = await fresh.newPage();
             await freshPage.goto(

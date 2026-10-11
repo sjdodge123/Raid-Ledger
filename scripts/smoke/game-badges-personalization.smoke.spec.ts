@@ -35,6 +35,7 @@
  * the pre-implementation tree.
  */
 import { test, expect } from './base';
+import { signInContextWithJwt } from './browser-session';
 import type { Page } from '@playwright/test';
 import {
     getAdminToken,
@@ -125,15 +126,13 @@ async function seedInterest(
 }
 
 /**
- * Swap the browser session to another user by overwriting the auth token in
- * localStorage (same key `use-auth.ts` reads). Mirrors the helper in
+ * Swap the browser session to another user: the context gets that user's own
+ * `rl_rt` refresh family (ROK-1754), and the next full load boots as them. Mirrors the helper in
  * `lineup-confirmation-pills-invitee.smoke.spec.ts`.
  */
 async function loginAs(page: Page, token: string): Promise<void> {
+    await signInContextWithJwt(page.context(), token);
     await page.goto('/');
-    await page.evaluate((t) => {
-        localStorage.setItem('raid_ledger_token', t);
-    }, token);
 }
 
 /**
