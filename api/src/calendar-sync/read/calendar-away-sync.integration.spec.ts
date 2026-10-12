@@ -45,6 +45,7 @@ import {
   type CalendarReadJobData,
 } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
+import { runCalendarDerive } from './calendar-away-persist.helpers';
 import {
   FOREIGN_INSTANCE,
   allDay,
@@ -597,5 +598,73 @@ describe('settings that re-derive', () => {
     expect(await processDerive(m.userId)).toBe('derived');
 
     expect(await calendarRangesOf(m.userId)).toEqual([]);
+  });
+});
+
+// ── Review fixes (ROK-1593 PR-B Fix-A) ──────────────────────────
+
+/** Run the derive directly on a fresh tx (the queued job skips while off). */
+function deriveNow(userId: number) {
+  return testApp.db.transaction((tx) =>
+    runCalendarDerive(tx, userId, { defaultTimezone: 'UTC' }),
+  );
+}
+
+describe('review fixes', () => {
+  it('BLOCKER-1: a manual absence ending 9999-12-31 derives normally and hides synced days', async () => {
+    const m = await member();
+    const created = await api(m.token).createAbsence(TOMORROW(), '9999-12-31');
+    expect(created.status).toBe(201);
+    expect(created.body).toEqual(
+      expect.objectContaining({ endDate: '9999-12-31', source: 'manual' }),
+    );
+    expect(await processDerive(m.userId)).toBe('derived');
+    fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), DAY_AFTER())]);
+
+    await sync(m.connectionId);
+
+    expect(await calendarRangesOf(m.userId)).toEqual([]);
+  });
+
+  it('MAJOR-1: a derive that runs after the switch went off purges instead of inserting', async () => {
+    const m = await member();
+    const far = dateOf(tomorrowAt(24 * 5));
+    expect((await api(m.token).createAbsence(far, far)).status).toBe(201);
+    fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), TOMORROW())]);
+    await sync(m.connectionId);
+    expect(await calendarRangesOf(m.userId)).toHaveLength(1);
+    // Off WITHOUT the admin purge: the state a derive that lost the race sees.
+    await setCalendarSyncEnabled(settings, false);
+
+    const result = await deriveNow(m.userId);
+
+    expect(result).toEqual({ inserted: 0, updated: 0, deleted: 1 });
+    expect(await calendarRangesOf(m.userId)).toEqual([]);
+    expect(await absencesOf(m.userId)).toEqual([
+      expect.objectContaining({ source: 'manual', startDate: far }),
+    ]);
+  });
+
+  it('MINOR-1: a row straddling today that stops matching keeps its past part', async () => {
+    const m = await member();
+    const yesterday = dateOf(tomorrowAt(-48));
+    await testApp.db.insert(schema.gameTimeAbsences).values({
+      userId: m.userId,
+      startDate: yesterday,
+      endDate: TOMORROW(),
+      source: 'calendar',
+      calendarConnectionId: m.connectionId,
+    });
+    const storedId = await calendarRowId(m.userId);
+    fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), TOMORROW())]);
+
+    await sync(m.connectionId);
+
+    expect(await calendarRangesOf(m.userId)).toEqual([
+      away(yesterday, yesterday, m.connectionId),
+      away(TOMORROW(), TOMORROW(), m.connectionId),
+    ]);
+    const rows = await absencesOf(m.userId);
+    expect(rows[0]?.id).toBe(storedId);
   });
 });
