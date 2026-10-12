@@ -72,6 +72,8 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
   async process(job: Job<CalendarReadJobData>): Promise<ReadSyncOutcome> {
     const isEnabled = () => getCalendarSyncEnabled(this.settings);
     if (!(await isEnabled())) return 'skipped';
+    // ROK-1593 B4: `derive` joined the union; lane B3b handles it here.
+    if (job.data.kind !== 'sync') return 'skipped';
     const conn = await this.loadConnection(job.data.connectionId);
     if (!conn) return 'skipped';
     const provider = await this.registry.getReadProviderForConnection(conn);

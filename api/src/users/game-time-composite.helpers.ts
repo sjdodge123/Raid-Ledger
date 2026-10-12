@@ -6,6 +6,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq, and, sql, gte, lte } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { isMissingTableError } from '../common/pg-error.helpers';
+import {
+  selectAbsencesWithSource,
+  toAbsenceRecord,
+} from './game-time-absence.helpers';
 import type {
   CompositeSlot,
   SignedUpEventRow,
@@ -96,21 +100,14 @@ export async function fetchAbsences(
   weekEndDate: string,
 ): Promise<AbsenceRecord[]> {
   try {
-    return await db
-      .select({
-        id: schema.gameTimeAbsences.id,
-        startDate: schema.gameTimeAbsences.startDate,
-        endDate: schema.gameTimeAbsences.endDate,
-        reason: schema.gameTimeAbsences.reason,
-      })
-      .from(schema.gameTimeAbsences)
-      .where(
-        and(
-          eq(schema.gameTimeAbsences.userId, userId),
-          lte(schema.gameTimeAbsences.startDate, weekEndDate),
-          gte(schema.gameTimeAbsences.endDate, weekStartDate),
-        ),
-      );
+    const rows = await selectAbsencesWithSource(db).where(
+      and(
+        eq(schema.gameTimeAbsences.userId, userId),
+        lte(schema.gameTimeAbsences.startDate, weekEndDate),
+        gte(schema.gameTimeAbsences.endDate, weekStartDate),
+      ),
+    );
+    return rows.map(toAbsenceRecord);
   } catch (err: unknown) {
     if (isMissingTableError(err)) return [];
     throw err;

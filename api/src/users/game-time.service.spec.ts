@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
 import { GameTimeService } from './game-time.service';
 import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -37,6 +39,10 @@ function describeGameTimeService() {
         {
           provide: DrizzleAsyncProvider,
           useValue: mockDb,
+        },
+        {
+          provide: getQueueToken(CALENDAR_READ_QUEUE),
+          useValue: { add: jest.fn(), getJob: jest.fn(), remove: jest.fn() },
         },
       ],
     }).compile();

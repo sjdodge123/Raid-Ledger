@@ -1,8 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { buildCompositeViewResult } from './game-time-composite-view.helpers';
 import {
   fetchUpcomingSignedUpEvents,
@@ -16,6 +18,12 @@ import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { defined } from '../common/defined.helpers';
 import { fetchCalendarBusyHours } from '../calendar-sync/read/calendar-busy-query.helpers';
 import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
+import { enqueueCalendarDerive } from '../calendar-sync/read/calendar-read.enqueue.helpers';
+import {
+  deleteManualAbsence,
+  ignoreCalendarAbsence,
+} from './game-time-absence-ignore.helpers';
 
 // Re-export types for backward compatibility
 export type {
@@ -56,6 +64,8 @@ export class GameTimeService {
   constructor(
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
+    @InjectQueue(CALENDAR_READ_QUEUE)
+    private readonly calendarReadQueue: Queue,
   ) {}
 
   private getCached<T>(key: string): T | undefined {
@@ -227,17 +237,26 @@ export class GameTimeService {
     return defined(row, 'inserted absence row');
   }
 
-  /** Delete an absence. */
+  /** Delete a manual absence; a synced one → 409 `use_ignore` (ROK-1593). */
   async deleteAbsence(userId: number, absenceId: number): Promise<void> {
     this.invalidateUserCache(userId);
-    await this.db
-      .delete(schema.gameTimeAbsences)
-      .where(
-        and(
-          eq(schema.gameTimeAbsences.id, absenceId),
-          eq(schema.gameTimeAbsences.userId, userId),
+    await deleteManualAbsence(this.db, userId, absenceId);
+  }
+
+  /**
+   * Ignore a synced calendar absence (ROK-1593): the row goes and its dates
+   * stay ignored. The derive re-runs so a neighbouring merged range is
+   * rebuilt; a queue failure is logged, not surfaced — the Ignore committed.
+   */
+  async ignoreAbsence(userId: number, absenceId: number): Promise<void> {
+    await ignoreCalendarAbsence(this.db, userId, absenceId);
+    this.invalidateUserCache(userId);
+    await enqueueCalendarDerive(this.calendarReadQueue, userId).catch(
+      (err: unknown) =>
+        this.logger.warn(
+          `derive enqueue failed for user ${userId}: ${String(err)}`,
         ),
-      );
+    );
   }
 
   /**

@@ -1,5 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
+import { BullModule } from '@nestjs/bullmq';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
 import * as multer from 'multer';
 import { UsersService } from './users.service';
 import { UsersModerationService } from './users-moderation.service';
@@ -29,6 +31,9 @@ import { TokenBlocklistService } from '../auth/token-blocklist.service';
     forwardRef(() => NotificationModule),
     CronJobModule,
     MulterModule.register({ storage: multer.memoryStorage() }),
+    // ROK-1593: Ignore enqueues an away-day derive (processor lives in
+    // CalendarSyncModule, which imports this module).
+    BullModule.registerQueue({ name: CALENDAR_READ_QUEUE }),
   ],
   controllers: [
     UsersMeController,

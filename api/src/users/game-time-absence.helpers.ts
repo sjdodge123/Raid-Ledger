@@ -12,6 +12,57 @@ import * as schema from '../drizzle/schema';
 import type { AbsenceRecord } from './game-time.types';
 import { isMissingTableError } from '../common/pg-error.helpers';
 import { defined } from '../common/defined.helpers';
+import {
+  CalendarProviderSchema,
+  GameTimeAbsenceSourceSchema,
+} from '@raid-ledger/contract';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/** A raw absence row with its source and (left-joined) provider (ROK-1593). */
+interface AbsenceRow {
+  id: number;
+  startDate: string;
+  endDate: string;
+  reason: string | null;
+  source: string;
+  provider: string | null;
+}
+
+/**
+ * Select absences with `source` and the provider of the connection a
+ * `calendar` row came from (left join: manual rows have no connection).
+ * Every absence read model goes through this so list and composite agree.
+ */
+export function selectAbsencesWithSource(db: Db) {
+  const a = schema.gameTimeAbsences;
+  const c = schema.calendarConnections;
+  return db
+    .select({
+      id: a.id,
+      startDate: a.startDate,
+      endDate: a.endDate,
+      reason: a.reason,
+      source: a.source,
+      provider: c.provider,
+    })
+    .from(a)
+    .leftJoin(c, eq(c.id, a.calendarConnectionId));
+}
+
+/** Narrow the varchar columns to the contract enums (unknown → omitted). */
+export function toAbsenceRecord(row: AbsenceRow): AbsenceRecord {
+  const source = GameTimeAbsenceSourceSchema.safeParse(row.source);
+  const provider = CalendarProviderSchema.safeParse(row.provider);
+  return {
+    id: row.id,
+    startDate: row.startDate,
+    endDate: row.endDate,
+    reason: row.reason,
+    ...(source.success ? { source: source.data } : {}),
+    ...(provider.success ? { provider: provider.data } : {}),
+  };
+}
 
 /**
  * Resolve "today" as a YYYY-MM-DD string in the caller's local timezone.
@@ -42,25 +93,18 @@ export function resolveLocalToday(
  * matching the week-bounded `fetchAbsences`; any other error propagates.
  */
 export async function fetchAbsencesEndingOnOrAfter(
-  db: PostgresJsDatabase<typeof schema>,
+  db: Db,
   userId: number,
   fromDate: string,
 ): Promise<AbsenceRecord[]> {
   try {
-    return await db
-      .select({
-        id: schema.gameTimeAbsences.id,
-        startDate: schema.gameTimeAbsences.startDate,
-        endDate: schema.gameTimeAbsences.endDate,
-        reason: schema.gameTimeAbsences.reason,
-      })
-      .from(schema.gameTimeAbsences)
-      .where(
-        and(
-          eq(schema.gameTimeAbsences.userId, userId),
-          gte(schema.gameTimeAbsences.endDate, fromDate),
-        ),
-      );
+    const rows = await selectAbsencesWithSource(db).where(
+      and(
+        eq(schema.gameTimeAbsences.userId, userId),
+        gte(schema.gameTimeAbsences.endDate, fromDate),
+      ),
+    );
+    return rows.map(toAbsenceRecord);
   } catch (err: unknown) {
     if (isMissingTableError(err)) return [];
     throw err;
