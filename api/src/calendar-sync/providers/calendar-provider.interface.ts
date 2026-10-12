@@ -133,6 +133,12 @@ export interface FetchBusyResult {
    * unreadable (404/410). Skipped, not fatal; the caller prunes them.
    */
   missingCalendarIds?: string[];
+  /**
+   * ROK-1593: requested calendars the provider refused this run (Google: a
+   * non-scope, non-quota 403 such as `domainPolicy`). Skipped and NOT
+   * pruned; the caller records `provider_error` while the others sync.
+   */
+  unreadableCalendarIds?: string[];
 }
 
 /** Read capability (ROK-1593). Google implements it; others follow. */

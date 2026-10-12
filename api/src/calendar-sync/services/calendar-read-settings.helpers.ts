@@ -156,7 +156,7 @@ export async function listConnectionCalendars(
  * - Healthy row: at most one per 5 min after the last SUCCESSFUL sync.
  * - `needs_reconnect`: always — no sync can succeed until the user
  *   reconnects, which resets the row.
- * - Failing row (`error`, or a `last_error_code`) still inside its backoff
+ * - Failing row (a `last_error_code`) still inside its backoff
  *   (`next_sync_at > now`): refused until the backoff ends, so a broken
  *   grant is not hammered. A failing sync never moves `last_synced_at`, so
  *   the 5-min rule alone would never throttle it. Once the backoff has
@@ -170,7 +170,7 @@ export function isManualSyncThrottled(
   nowMs: number,
 ): boolean {
   if (row.status === 'needs_reconnect') return true;
-  const failing = row.status === 'error' || row.lastErrorCode !== null;
+  const failing = row.lastErrorCode !== null;
   const backoffUntil = row.nextSyncAt?.getTime();
   if (failing && backoffUntil !== undefined && backoffUntil > nowMs) {
     return true;

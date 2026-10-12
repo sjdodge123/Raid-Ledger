@@ -13,13 +13,17 @@
  * - a 403 quota reply (`quotaExceeded`, `dailyLimitExceeded`, …) is a rate
  *   limit too, and a rate limit waits at least 60 s (plan D5);
  * - any OTHER 403 that is not a scope reply (`domainPolicy`, `forbidden`, …)
- *   is a TransientError: the run fails and retries/backs off, nothing is
- *   pruned and the connection's old blocks stay. Only a real 404/410 is
+ *   is a TransientError with reason `GOOGLE_POLICY_403`. On `events.list`
+ *   `readCalendarOrSkip` turns it into a per-calendar skip: the other
+ *   calendars still sync, that calendar is NOT pruned (its old blocks are
+ *   replaced by nothing this run) and the runner records `provider_error`
+ *   so the user sees a calendar is failing. Only a real 404/410 is
  *   NotFoundError — the one case the caller prunes the calendar (U9).
  */
 import * as googleHttp from './google-http';
 import type { GoogleHttpResponse } from './google-http';
 import {
+  NotFoundError,
   ProviderAuthError,
   RateLimitError,
   TransientError,
@@ -99,6 +103,9 @@ const QUOTA_REASONS: ReadonlySet<string> = new Set([
   'RATE_LIMIT_EXCEEDED',
 ]);
 
+/** The TransientError reason of a non-scope, non-quota 403 (see header). */
+export const GOOGLE_POLICY_403 = 'http_403';
+
 function isQuotaReply(res: GoogleHttpResponse): boolean {
   return googleErrorReasons(res.json).some((r) => QUOTA_REASONS.has(r));
 }
@@ -119,7 +126,7 @@ export function mapGoogleReadError(res: GoogleHttpResponse): void {
       throw new RateLimitError(wait, err.reason);
     }
     if (err instanceof ProviderAuthError && err.reason === 'http_403') {
-      throw new TransientError('http_403');
+      throw new TransientError(GOOGLE_POLICY_403);
     }
     throw err;
   }
@@ -171,6 +178,27 @@ function isDropped(event: Json): boolean {
       attendee.responseStatus === 'tentative'
     );
   });
+}
+
+type CalendarPages = Awaited<ReturnType<typeof readAllGooglePages>>;
+
+/**
+ * One calendar's `events.list`: 404/410 → `'missing'` (the caller prunes
+ * it), a policy 403 → `'refused'` (skipped this run, never pruned); any
+ * other error fails the whole fetch.
+ */
+export async function readCalendarOrSkip(
+  work: Promise<CalendarPages>,
+): Promise<CalendarPages | 'missing' | 'refused'> {
+  try {
+    return await work;
+  } catch (err) {
+    if (err instanceof NotFoundError) return 'missing';
+    if (err instanceof TransientError && err.reason === GOOGLE_POLICY_403) {
+      return 'refused';
+    }
+    throw err;
+  }
 }
 
 /** `YYYY-MM-DD` that is a real calendar date → its UTC midnight, else null. */

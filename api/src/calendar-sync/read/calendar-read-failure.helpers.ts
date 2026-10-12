@@ -109,9 +109,23 @@ function failureFields(
 }
 
 /**
+ * Which rows a failure may write. Auth / scope outcomes apply to any row
+ * not being disconnected. A transient outcome applies only to an `active`
+ * row: if the write side moved it to `needs_reconnect` mid-fetch, its
+ * `auth` code must not be overwritten by `provider_error`/`rate_limited`.
+ */
+function failureTarget(decision: ReadFailureDecision, id: number) {
+  const c = schema.calendarConnections;
+  const transient = decision.code !== 'auth' && decision.code !== 'read_scopes';
+  return transient
+    ? and(eq(c.id, id), eq(c.status, 'active'))
+    : and(eq(c.id, id), ne(c.status, 'disconnecting'));
+}
+
+/**
  * Record a failed sync on the connection (a non-final retryable attempt
  * writes nothing) and return the decision. Never touches a connection that
- * is `disconnecting`.
+ * is `disconnecting` (see `failureTarget`).
  */
 export async function recordReadSyncFailure(
   db: Db,
@@ -130,6 +144,6 @@ export async function recordReadSyncFailure(
   await db
     .update(c)
     .set({ ...fields, lastErrorCode: decision.code, updatedAt: now })
-    .where(and(eq(c.id, conn.id), ne(c.status, 'disconnecting')));
+    .where(failureTarget(decision, conn.id));
   return decision;
 }

@@ -13,7 +13,7 @@
  * Each returns the distinct user ids touched so the caller can invalidate
  * the game-time cache.
  */
-import { eq, lt } from 'drizzle-orm';
+import { asc, eq, lt } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 
@@ -44,13 +44,15 @@ export async function purgeConnectionBusyBlocks(
  * and first locks every connection row — the same lock a read sync takes
  * before writing (`runCalendarReadSync`). A sync that already holds a lock
  * commits first and its blocks are deleted here; one that locks later
- * re-checks the switch, sees it off and writes nothing.
+ * re-checks the switch, sees it off and writes nothing. Rows are locked in
+ * `id` order so two purges (or any other multi-row locker that also goes
+ * in id order) queue instead of deadlocking.
  */
 export async function purgeAllBusyBlocks(db: Db): Promise<number[]> {
   const t = schema.calendarBusyBlocks;
   const c = schema.calendarConnections;
   const rows = await db.transaction(async (tx) => {
-    await tx.select({ id: c.id }).from(c).for('update');
+    await tx.select({ id: c.id }).from(c).orderBy(asc(c.id)).for('update');
     return tx.delete(t).returning({ userId: t.userId });
   });
   return uniqueUsers(rows);

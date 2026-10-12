@@ -39,6 +39,7 @@ import {
   buildEventsListUrl,
   normalizeGoogleEvent,
   readAllGooglePages,
+  readCalendarOrSkip,
   toProviderCalendar,
 } from './google-calendar-read.helpers';
 import {
@@ -135,8 +136,10 @@ export class GoogleCalendarAdapter
 
   /**
    * Busy blocks across `calendarIds` (full window, no sync token — plan D4).
-   * A calendar that is gone/unreadable is skipped and reported in
-   * `missingCalendarIds`; every other error fails the whole fetch.
+   * A gone calendar (404/410) is skipped into `missingCalendarIds` (pruned
+   * by the caller); one refused by a policy 403 is skipped into
+   * `unreadableCalendarIds` (kept, recorded as `provider_error`). Every
+   * other error fails the whole fetch.
    */
   async fetchBusy(
     credentials: CalendarCredentials,
@@ -146,16 +149,17 @@ export class GoogleCalendarAdapter
     const token = accessTokenOf(credentials);
     const blocks: BusyBlock[] = [];
     const missing: string[] = [];
+    const refused: string[] = [];
     let truncated = 0;
     for (const calendarId of calendarIds) {
       const url = (page?: string) =>
         buildEventsListUrl(calendarId, range, page);
-      const read = await ignoreNotFound(readAllGooglePages(token, url));
-      if (!read) missing.push(calendarId);
-      else if (read.truncated) truncated += 1;
-      for (const item of read?.items ?? []) {
-        const block = normalizeGoogleEvent(item, null);
-        if (block) blocks.push(block);
+      const read = await readCalendarOrSkip(readAllGooglePages(token, url));
+      if (read === 'missing') missing.push(calendarId);
+      else if (read === 'refused') refused.push(calendarId);
+      else {
+        if (read.truncated) truncated += 1;
+        blocks.push(...normalizeItems(read.items));
       }
     }
     if (truncated > 0) {
@@ -163,9 +167,11 @@ export class GoogleCalendarAdapter
         `Google read hit the page cap on ${truncated} calendar(s)`,
       );
     }
-    return missing.length > 0
-      ? { blocks, missingCalendarIds: missing }
-      : { blocks };
+    return {
+      blocks,
+      ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
+      ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
+    };
   }
 
   /** Known id still there → it; gone (404/410) or none → a new calendar. */
@@ -261,6 +267,10 @@ function accessTokenOf(credentials: CalendarCredentials): string {
 }
 
 /** Resolve to null on NotFoundError; every other error propagates. */
+function normalizeItems(items: readonly unknown[]): BusyBlock[] {
+  return items.flatMap((item) => normalizeGoogleEvent(item, null) ?? []);
+}
+
 async function ignoreNotFound<T>(work: Promise<T>): Promise<T | null> {
   try {
     return await work;

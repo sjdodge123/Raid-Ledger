@@ -18,6 +18,9 @@
  *   (which then deletes its blocks) or sees the switch off.
  * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
  *   row's `read_calendar_ids`, so a settings PUT racing the fetch survives.
+ * - A calendar refused by a policy 403 (`unreadableCalendarIds`) is
+ *   skipped, never pruned: the rest commit and `last_error_code` is set to
+ *   `provider_error` so the user can tell a calendar is failing.
  * - A success never writes `status` (it is shared with the write side).
  *
  * PRIVACY (§6.4.2): only instants and dates are written; no calendar id,
@@ -167,14 +170,19 @@ async function replaceBlocks(
   await tx.insert(t).values(rows.map((r) => ({ ...r, ...owner })));
 }
 
-async function markSynced(
-  tx: ReadSyncTx,
-  conn: ReadSyncConnection,
+/**
+ * The success UPDATE's SET. Never `status` (shared with the write side —
+ * a success must not flip a `needs_reconnect` back). Pruned ids come from
+ * the LOCKED row; a calendar the provider refused this run (policy 403)
+ * leaves `provider_error` behind so the user can see something is failing.
+ */
+export function buildSyncedFields(
   locked: { readCalendarIds: string[] },
-  missing: readonly string[],
+  result: Pick<FetchBusyResult, 'missingCalendarIds' | 'unreadableCalendarIds'>,
   stamp: { now: Date; random: () => number },
-): Promise<void> {
-  const c = schema.calendarConnections;
+) {
+  const missing = result.missingCalendarIds ?? [];
+  const refused = result.unreadableCalendarIds ?? [];
   const pruned =
     missing.length > 0
       ? {
@@ -184,15 +192,24 @@ async function markSynced(
           ),
         }
       : {};
+  return {
+    lastErrorCode: refused.length > 0 ? ('provider_error' as const) : null,
+    lastSyncedAt: stamp.now,
+    nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
+    updatedAt: stamp.now,
+    ...pruned,
+  };
+}
+
+async function markSynced(
+  tx: ReadSyncTx,
+  conn: ReadSyncConnection,
+  fields: ReturnType<typeof buildSyncedFields>,
+): Promise<void> {
+  const c = schema.calendarConnections;
   await tx
     .update(c)
-    .set({
-      lastErrorCode: null,
-      lastSyncedAt: stamp.now,
-      nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
-      updatedAt: stamp.now,
-      ...pruned,
-    })
+    .set(fields)
     .where(and(eq(c.id, conn.id), eq(c.status, 'active')));
 }
 
@@ -215,14 +232,13 @@ export async function runCalendarReadSync(
     ? null
     : normalizeBusyBlocks(result.blocks, { instanceId, window });
   const stamp = { now, random: deps.random ?? Math.random };
-  const missing = result.missingCalendarIds ?? [];
   const written = await deps.db.transaction(async (tx) => {
     const locked = await lockReadable(tx, conn.id);
     if (!locked) return false;
     if (deps.stillAllowed && !(await deps.stillAllowed())) return false;
     if (rows) await replaceBlocks(tx, conn, window, rows);
     if (deps.afterBlocks) await deps.afterBlocks(tx, conn.userId);
-    await markSynced(tx, conn, locked, missing, stamp);
+    await markSynced(tx, conn, buildSyncedFields(locked, result, stamp));
     return true;
   });
   if (!written) return 'skipped';
