@@ -51,7 +51,6 @@ function sections(
   return {
     spotlight,
     playing: empty,
-    newGameIds: [],
     recap: null,
     priorRecap: null,
     milestones: null,

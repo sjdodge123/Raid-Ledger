@@ -2,8 +2,9 @@
  * Unit tests for the weekly digest v2 render layer (ROK-1771 L5, spec §4).
  * Pins: the §4.1 field order; each section omitted when empty; the per-field
  * caps; a max-length digest within 6000 and the §4.2 trim order; no mention
- * from a hostile name through ANY line builder; week-over-week arrows; the
- * `🆕 new` tag; and Discord timestamps only in the Coming up value.
+ * from a hostile name through ANY line builder; week-over-week arrows; no
+ * new-game tag on Been playing; and Discord timestamps only in the Coming up
+ * value.
  */
 import { embedLength, type APIEmbed } from 'discord.js';
 import type { DigestBestPriceLine } from './weekly-digest-best-price.helpers';
@@ -143,7 +144,6 @@ function full(): DigestSectionsV2 {
       ],
       total: 2,
     },
-    newGameIds: [4],
     recap: { eventsRun: 6, playersAttended: 14, attendances: 30 },
     priorRecap: { eventsRun: 4, playersAttended: 15, attendances: 20 },
     milestones: milestones(),
@@ -230,7 +230,6 @@ describe('weekly digest v2 — field order and empty sections', () => {
     const none: DigestSectionsV2 = {
       spotlight: null,
       playing: { items: [], total: 0 },
-      newGameIds: [],
       recap: null,
       priorRecap: null,
       milestones: null,
@@ -331,14 +330,12 @@ describe('weekly digest v2 — section lines', () => {
     );
   });
 
-  it('tags only the games in newGameIds with 🆕 new', () => {
+  it('renders Been playing as name · player count, with no new-game tag', () => {
     const [valheim, wow] = valueOf(
       build(full()),
       DIGEST_FIELD_NAMES.playing,
     ).split('\n');
-    expect(valheim).toBe(
-      `**[Valheim](${ORIGIN}/games/4)** · 7 players · 🆕 new`,
-    );
+    expect(valheim).toBe(`**[Valheim](${ORIGIN}/games/4)** · 7 players`);
     expect(wow).toBe(`**[World of Warcraft](${ORIGIN}/games/1)** · 6 players`);
   });
 });
@@ -492,7 +489,6 @@ function maxDigest(): DigestSectionsV2 {
       })),
       total: 80,
     },
-    newGameIds: many(5, (i) => i),
     milestones: {
       newMembers: { names: many(5, () => huge), total: 40 },
       eventMilestones: many(5, (i) => ({

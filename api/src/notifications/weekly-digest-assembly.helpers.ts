@@ -202,12 +202,7 @@ async function gatherOutlook(
   return { upcoming, lfg, bestPrice };
 }
 
-/**
- * Assemble every v2 section concurrently (all three groups start at once).
- * `newGameIds` stays `[]`: the v1 playing read cannot be re-run over a prior
- * window without redefining "played" (see HANDOVER-1771-L6), and `[]`
- * renders no 🆕 tags (AC8).
- */
+/** Assemble every v2 section concurrently (all three groups start at once). */
 export async function assembleDigestSections(
   sources: DigestSources,
   context: DigestSpotlightContext,
@@ -218,5 +213,5 @@ export async function assembleDigestSections(
     gatherActivity(sources, onError),
     gatherOutlook(sources, onError),
   ]);
-  return { spotlight, newGameIds: [], ...activity, ...outlook };
+  return { spotlight, ...activity, ...outlook };
 }

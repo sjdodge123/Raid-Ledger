@@ -1,7 +1,7 @@
 /**
  * Weekly Discord digest v2 — per-section field builders (ROK-1771 spec §4.1).
  *
- * One builder per field: Been playing (+ `🆕 new` tag), Last 7 days (+
+ * One builder per field: Been playing, Last 7 days (+
  * week-over-week arrows), Firsts & milestones, Coming up (Discord timestamps
  * in the value only), Looking for group and Best price. Each returns null when
  * its section is empty and fits its value under the §4.1 per-field cap. Every
@@ -91,17 +91,15 @@ export function recapField(
   return field(DIGEST_FIELD_NAMES.recap, value);
 }
 
-/** Been playing; `newGameIds` tags lines `· 🆕 new` (AC8). */
+/** Been playing: `**Game** · N players` per line. */
 export function playingField(
   section: DigestSection<DigestPlayingLine>,
-  newGameIds: readonly number[],
   links: DigestLinks | null,
 ): APIEmbedField | null {
   if (section.items.length === 0) return null;
   const lines = section.items.map((line) => {
-    const tag = newGameIds.includes(line.gameId) ? ' · 🆕 new' : '';
     const name = boldName(line.name, gameLink(links, line.gameId));
-    return `${name} · ${plural(line.playerCount, 'player')}${tag}`;
+    return `${name} · ${plural(line.playerCount, 'player')}`;
   });
   const value = fitOrClip(
     lines,

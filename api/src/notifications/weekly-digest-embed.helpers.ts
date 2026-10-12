@@ -67,8 +67,6 @@ export interface DigestSectionsV2 {
   /** `pickSpotlight`'s result; null ⇒ no spotlight field. */
   spotlight: SpotlightCandidate | null;
   playing: DigestSection<DigestPlayingLine>;
-  /** Game ids to tag `🆕 new`; `[]` when there is no prior-week data (AC8). */
-  newGameIds: readonly number[];
   /** This week's recap; null ⇒ no recap field. */
   recap: WeeklyRecap | null;
   /** The prior week (`endOffsetDays: 7`); null or all-zero ⇒ no arrows. */
@@ -129,11 +127,7 @@ export function renderDigestFields(
 ): APIEmbedField[] {
   return [
     spotlightField(s.spotlight, links),
-    playingField(
-      s.playing,
-      s.newGameIds,
-      applied.has('stripPlayingLinks') ? null : links,
-    ),
+    playingField(s.playing, applied.has('stripPlayingLinks') ? null : links),
     recapField(s.recap, s.priorRecap, links),
     milestonesField(
       s.milestones,

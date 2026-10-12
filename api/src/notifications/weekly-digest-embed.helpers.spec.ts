@@ -56,7 +56,6 @@ function deal(gameId: number, price: number): DigestBestPriceLine {
 
 const V2_EMPTY_EXTRAS = {
   spotlight: null,
-  newGameIds: [],
   priorRecap: null,
   milestones: null,
   upcoming: null,

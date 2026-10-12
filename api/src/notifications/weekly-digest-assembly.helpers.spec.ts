@@ -105,7 +105,7 @@ function sources(overrides: Partial<DigestSources> = {}): DigestSources {
 }
 
 describe('assembleDigestSections (v2)', () => {
-  it('assembles every section; newGameIds stays empty (no prior-week source)', async () => {
+  it('assembles every section', async () => {
     const s = await assembleDigestSections(sources(), NO_HISTORY);
     expect(s.playing.items.map((l) => l.gameId)).toEqual([1]);
     expect(s.recap).toEqual(RECAP);
@@ -114,7 +114,6 @@ describe('assembleDigestSections (v2)', () => {
     expect(s.upcoming).toEqual(UPCOMING);
     expect(s.lfg.items.map((l) => l.gameSlug)).toEqual(['valheim']);
     expect(s.bestPrice).toEqual({ items: [], total: 0 });
-    expect(s.newGameIds).toEqual([]);
     expect(s.spotlight?.kind).toBe('boss_kills');
   });
 
