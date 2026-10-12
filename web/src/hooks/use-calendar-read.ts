@@ -5,15 +5,14 @@
  * error (D3); classify any error with `calendarReadErrorOf`.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ProviderCalendarSchema, type CalendarReadMode, type CalendarsOverview, type ProviderCalendar } from '@raid-ledger/contract';
+import { ProviderCalendarSchema, type CalendarReadMode, type ProviderCalendar } from '@raid-ledger/contract';
 import { getAuthToken } from './use-auth';
 import { fetchApi, fetchWithAuth } from '../lib/api/fetch-api';
-import { CALENDARS_OVERVIEW_KEY } from './use-calendar-sync';
 import {
     invalidateReadDependents, optimisticOverview, patchConnectionRead, patchReadMode, responseError,
     restoreOverview, retryAfterOf, type OverviewSnapshot, type ReadPatch, type SyncNowResult,
 } from './calendar-read.helpers';
-import { lastSyncedOf, refreshWhenSynced, SYNC_LAND_DELAY_MS } from './calendar-sync-now.helpers';
+import { freshLastSynced, refreshWhenSynced, SYNC_LAND_DELAY_MS } from './calendar-sync-now.helpers';
 
 const BASE = '/users/me/calendars';
 const ProviderCalendarListSchema = ProviderCalendarSchema.array();
@@ -74,12 +73,12 @@ export function useSetReadCalendars() {
 /**
  * `POST /users/me/calendars/:id/sync`: 202 → `queued`, 429 → `throttled`; 409s throw.
  * A 202 only queues the sync, so the follow-through waits for `lastSyncedAt`
- * to move before refetching the read dependents (`refreshWhenSynced`, capped).
+ * (read fresh before the POST) to move before refetching the read dependents (`refreshWhenSynced`, capped).
  */
 export function useSyncNow(landDelayMs = SYNC_LAND_DELAY_MS) {
     const qc = useQueryClient();
     return useMutation<SyncNowResult, Error, number, { before: string | null }>({
-        onMutate: (id) => ({ before: lastSyncedOf(qc.getQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY]), id) }),
+        onMutate: async (id) => ({ before: await freshLastSynced(qc, id) }),
         mutationFn: async (id) => {
             const res = await fetchWithAuth(`${BASE}/${id}/sync`, { method: 'POST' });
             if (res.status === 429) return { outcome: 'throttled', retryAfterSeconds: retryAfterOf(res) };

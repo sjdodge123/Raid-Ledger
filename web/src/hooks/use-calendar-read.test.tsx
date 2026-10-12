@@ -176,7 +176,7 @@ describe('useSyncNow', () => {
         const landed: CalendarConnection = { ...readConnectionFixture, lastSyncedAt: '2026-10-12T09:05:00.000Z' };
         server.use(http.get(CALENDARS_OVERVIEW_URL, () => {
             reads += 1;
-            return HttpResponse.json(calendarsOverviewFixture({ connections: [reads >= 2 ? landed : readConnectionFixture] }));
+            return HttpResponse.json(calendarsOverviewFixture({ connections: [reads >= 3 ? landed : readConnectionFixture] }));
         }));
         const { invalidate, wrapper } = setup(readConnectionFixture);
         const { result } = renderHook(() => useSyncNow(1), { wrapper });
@@ -184,8 +184,8 @@ describe('useSyncNow', () => {
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data).toEqual({ outcome: 'queued' });
         await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(READ_DEPENDENTS));
-        // Landed on the 2nd re-read: not refreshed early, and not only after the cap ran out.
-        expect(reads).toBe(2);
+        // 1 fresh "before" read + landed on the 2nd re-read: not refreshed early, and not only after the cap ran out.
+        expect(reads).toBe(3);
     });
 
     it('202 whose sync never lands: re-reads the overview at most 6 times, then refreshes once', async () => {
@@ -198,7 +198,7 @@ describe('useSyncNow', () => {
         const { result } = renderHook(() => useSyncNow(1), { wrapper });
         act(() => result.current.mutate(readConnectionFixture.id));
         await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(READ_DEPENDENTS));
-        expect(reads).toBe(6);
+        expect(reads, '1 fresh "before" read + the 6-read cap').toBe(7);
     });
 
     it('429 → a throttled result (not an error), with no refetch', async () => {
@@ -227,5 +227,22 @@ describe('useSyncNow', () => {
         act(() => result.current.mutate(readConnectionFixture.id));
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(calendarReadErrorOf(result.current.error)).toBe(code);
+    });
+});
+
+describe('useSyncNow — the "before" stamp', () => {
+    it('a stale cached overview cannot trigger the early refresh: "before" is read fresh', async () => {
+        let reads = 0;
+        const landed: CalendarConnection = { ...readConnectionFixture, lastSyncedAt: '2026-10-12T09:05:00.000Z' };
+        // The server already holds a cron sync (09:00) the cache has never seen (null).
+        server.use(http.get(CALENDARS_OVERVIEW_URL, () => {
+            reads += 1;
+            return HttpResponse.json(calendarsOverviewFixture({ connections: [reads >= 3 ? landed : readConnectionFixture] }));
+        }));
+        const { invalidate, wrapper } = setup({ ...readConnectionFixture, lastSyncedAt: null });
+        const { result } = renderHook(() => useSyncNow(1), { wrapper });
+        act(() => result.current.mutate(readConnectionFixture.id));
+        await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(READ_DEPENDENTS));
+        expect(reads, 'refreshed only once THIS sync landed (fresh read + 2 re-reads), not on the cron sync').toBe(3);
     });
 });
