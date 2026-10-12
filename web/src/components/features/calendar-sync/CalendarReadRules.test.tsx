@@ -24,6 +24,10 @@ import { CalendarsPage } from './CalendarsPage';
 import { READ_COPY as R } from './calendar-sync.copy';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
+// `lib/toast` does `Object.assign(sonnerToast, { error: errorWithPersist })` at import time
+// (ROK-127), which swaps the mocked `toast.error` for a plain wrapper once anything in the page
+// tree imports it. Route it to the same sonner mock so `toast.error` stays a vi.fn.
+vi.mock('../../../lib/toast', async () => ({ toast: (await import('sonner')).toast }));
 
 const realMatchMedia = window.matchMedia;
 const realLocation = window.location;
