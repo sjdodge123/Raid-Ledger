@@ -539,34 +539,49 @@ function describeSchedulingAvailability() {
     expect(cellAt(res.body, 21)?.availableCount).toBe(1);
   });
 
-  // §5 test 4 (R4): raid 21:00–22:00; the block ends 22:02 when shifted, which
-  // makes hour 22 busy — so hour 22 shows whether the block survived.
+  /** The caller's own composite week (`GET /users/me/game-time`). */
+  function getOwnGameTime(token: string) {
+    return testApp.request
+      .get('/users/me/game-time')
+      .query({ week: WEEK_START, tzOffset: '0' })
+      .set('Authorization', `Bearer ${token}`);
+  }
+
+  // §5 test 4 (R4): raid 21:00–22:00. An exact-bounds block yields the same
+  // heatmap keys as the sign-up (R5 absorbs it), so the owner's composite
+  // `calendarBusy` is the observable; a shifted block's end spills into hour
+  // 22, so hour 22 shows whether it survived. ±30 s is inside the net.
   it.each([
-    ['exact raid bounds → dropped', 0, 0],
-    ['bounds ±2 min → kept', 2, 1],
-  ])('safety net: %s', async (_label, shiftMin, busyAt22) => {
+    ['exact raid bounds → dropped', 0, 0, undefined],
+    ['bounds ±30 s → dropped', 30, 0, undefined],
+    ['bounds ±2 min → kept', 120, 1, [{ startHour: 21, endHour: 23 }]],
+  ])('safety net: %s', async (_label, shiftSec, busyAt22, ranges) => {
     const raid = { start: BLOCK_21_START, end: BLOCK_21_END };
-    const fixture = await seedTwoTemplatedMembers(
-      `cal-r4-${shiftMin}`,
-      'signed_up',
-      raid,
-    );
+    const fixture = await seedCalendarFixture(`cal-r4-${shiftSec}`);
+    await signUpForTuesdayEvent(fixture.memberBId, 'signed_up', raid);
     await testApp.db.insert(schema.gameTimeTemplates).values({
       userId: fixture.memberBId,
       dayOfWeek: TUESDAY_TEMPLATE_DAY,
       startHour: 22,
     });
-    const shift = shiftMin * 60 * 1000;
-    await seedBusyBlock(
-      fixture.memberBId,
-      new Date(Date.parse(raid.start) - shift).toISOString(),
-      new Date(Date.parse(raid.end) + shift).toISOString(),
-    );
+    const shift = shiftSec * 1000;
+    const blockStart = new Date(Date.parse(raid.start) - shift).toISOString();
+    const blockEnd = new Date(Date.parse(raid.end) + shift).toISOString();
+    await seedBusyBlock(fixture.memberBId, blockStart, blockEnd);
 
     const res = await getAvailability(fixture, WEEK_START);
+    const own = await getOwnGameTime(fixture.memberBToken);
 
     expect(cellAt(res.body, 21)?.busyCount).toBe(1);
     expect(cellAt(res.body, 22)?.busyCount).toBe(busyAt22);
+    expect(own.status).toBe(200);
+    expect(own.body.data.calendarBusy).toEqual(
+      ranges?.map((r) => ({
+        ...r,
+        dayOfWeek: TUESDAY_GRID_DAY,
+        provider: 'google',
+      })),
+    );
   });
 
   it('ignores calendar blocks when the read mode is days', async () => {
@@ -631,14 +646,8 @@ function describeSchedulingAvailability() {
   it('carries calendarBusy on the owner composite only', async () => {
     const fixture = await seedCalendarFixture('cal-visibility');
     await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
-    const own = (token: string) =>
-      testApp.request
-        .get('/users/me/game-time')
-        .query({ week: WEEK_START, tzOffset: '0' })
-        .set('Authorization', `Bearer ${token}`);
-
-    const ownerRes = await own(fixture.memberBToken);
-    const otherRes = await own(fixture.token);
+    const ownerRes = await getOwnGameTime(fixture.memberBToken);
+    const otherRes = await getOwnGameTime(fixture.token);
 
     expect(ownerRes.status).toBe(200);
     expect(ownerRes.body.data.calendarBusy).toEqual([
