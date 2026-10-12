@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationController } from './notification.controller';
 import { NotificationService } from './notification.service';
+import { VoiceAccessLostListener } from './voice-access-lost.listener';
 import { RosterNotificationBufferService } from './roster-notification-buffer.service';
 import { EventReminderService } from './event-reminder.service';
 import { RoleGapAlertService } from './role-gap-alert.service';
@@ -38,6 +39,7 @@ import { SettingsModule } from '../settings/settings.module';
   controllers: [NotificationController],
   providers: [
     NotificationService,
+    VoiceAccessLostListener,
     RosterNotificationBufferService,
     EventReminderService,
     RoleGapAlertService,

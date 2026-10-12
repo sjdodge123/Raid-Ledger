@@ -1,4 +1,4 @@
-import { PermissionFlagsBits } from 'discord.js';
+import { OverwriteType, PermissionFlagsBits } from 'discord.js';
 import {
   computeAllowedDiscordIds,
   buildPrivateVoiceOverwrites,
@@ -59,9 +59,33 @@ describe('computeAllowedDiscordIds (ROK-1386)', () => {
     ]);
     expect(ids).toEqual(new Set(['ok']));
   });
+
+  it('drops local:/unlinked: placeholder ids, falling back to the signup id (ROK-1769)', () => {
+    const ids = computeAllowedDiscordIds([
+      row({ userDiscordId: 'local:admin@local' }),
+      row({ userDiscordId: 'unlinked:42' }),
+      row({ userDiscordId: 'local:x@y', signupDiscordUserId: 'anon2' }),
+      row({ userDiscordId: '111111111111111111' }),
+    ]);
+    expect(ids).toEqual(new Set(['anon2', '111111111111111111']));
+  });
 });
 
 describe('buildPrivateVoiceOverwrites (ROK-1386)', () => {
+  it('types every overwrite so discord.js never needs the id cached (ROK-1769)', () => {
+    const ow = buildPrivateVoiceOverwrites({
+      guildId: 'g',
+      botId: 'bot',
+      allowedDiscordIds: ['m1', 'm2'],
+    });
+    expect(ow.map((o) => [o.id, o.type])).toEqual([
+      ['g', OverwriteType.Role],
+      ['bot', OverwriteType.Member],
+      ['m1', OverwriteType.Member],
+      ['m2', OverwriteType.Member],
+    ]);
+  });
+
   it('denies Connect for @everyone but keeps it visible', () => {
     const ow = buildPrivateVoiceOverwrites({
       guildId: 'g',

@@ -4,6 +4,7 @@ import { NotificationService } from '../../notifications/notification.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
+import { VOICE_ACCESS_LOST_EVENT } from '../../notifications/voice-access-lost.helpers';
 import {
   createDrizzleMock,
   type MockDb,
@@ -884,6 +885,29 @@ describe('DepartureGraceProcessor — MMO relevance filter (ROK-919)', () => {
         userId: 99,
         type: 'slot_vacated',
       }),
+    );
+  });
+});
+
+// ─── ROK-1769: lost private-voice access signal ────────────────────────────
+
+describe('DepartureGraceProcessor — voice-access.lost (ROK-1769)', () => {
+  const departed = { eventId: 1, userId: 5, reason: 'departed' };
+  it.each([
+    ['unassigned', []],
+    ['bench', [{ id: 3, role: 'bench', position: 1 }]],
+  ])('vacated role %s', async (role, assignment) => {
+    mockDb.limit
+      .mockResolvedValueOnce([liveEvent])
+      .mockResolvedValueOnce([activeSignup])
+      .mockResolvedValueOnce(assignment)
+      .mockResolvedValueOnce([]);
+    await processor.process(makeJob(jobData));
+    const sent = mockEventEmitter.emit.mock.calls.filter(
+      (c: unknown[]) => c[0] === VOICE_ACCESS_LOST_EVENT,
+    );
+    expect(sent).toEqual(
+      role === 'bench' ? [] : [[VOICE_ACCESS_LOST_EVENT, departed]],
     );
   });
 });

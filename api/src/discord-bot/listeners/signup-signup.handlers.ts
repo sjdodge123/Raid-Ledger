@@ -10,6 +10,10 @@ import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import { tryGameSignupFlow } from './signup-signup-game.handlers';
 import { benchSuffix } from './signup-bench-feedback.helpers';
+import {
+  reactivateIfNeeded,
+  type Reactivation,
+} from './signup-reactivation.helpers';
 import { signupTimeSuffix } from './signup-event-time.helpers';
 import { loadGameContext } from './signup-signup-context.helpers';
 import type { GameContext } from './signup-signup-context.helpers';
@@ -31,13 +35,13 @@ export async function handleExistingSignup(
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
-  const wasReactivated = await reactivateIfNeeded(
+  const linkedUser = await findLinkedUser(interaction.user.id, deps);
+  const reactivation = await reactivateIfNeeded(
     eventId,
     existingSignup,
+    linkedUser,
     deps,
   );
-
-  const linkedUser = await findLinkedUser(interaction.user.id, deps);
   if (!linkedUser) {
     await interaction.editReply({ content: alreadySignedUpMessage() });
     return;
@@ -58,17 +62,17 @@ export async function handleExistingSignup(
       deps.activityLog,
       existingSignup,
     );
-    await replyReactivationResult(interaction, wasReactivated, healed);
+    await replyReactivationResult(interaction, reactivation, healed);
   }
 }
 
 async function replyReactivationResult(
   interaction: ButtonInteraction,
-  wasReactivated: boolean,
+  reactivation: Reactivation,
   healed: boolean,
 ): Promise<void> {
-  const content = wasReactivated
-    ? 'Your status has been changed to **signed up**!'
+  const content = reactivation.reactivated
+    ? `Your status has been changed to **signed up**!${benchSuffix(reactivation.assignedSlot)}`
     : healed
       ? "You're confirmed — see you there!"
       : alreadySignedUpMessage();
@@ -80,23 +84,6 @@ async function replyReactivationResult(
 
 function alreadySignedUpMessage(): string {
   return "You're already signed up! Use the Tentative or Decline buttons to change your status.";
-}
-
-async function reactivateIfNeeded(
-  eventId: number,
-  existingSignup: ExistingSignup,
-  deps: SignupInteractionDeps,
-): Promise<boolean> {
-  if (existingSignup.status === 'signed_up') return false;
-  await deps.signupsService.updateStatus(
-    eventId,
-    existingSignup.discordUserId
-      ? { discordUserId: existingSignup.discordUserId }
-      : { userId: existingSignup.user.id },
-    { status: 'signed_up' },
-  );
-  void deps.updateEmbedSignupCount(eventId);
-  return true;
 }
 
 /**

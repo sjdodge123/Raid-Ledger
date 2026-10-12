@@ -14,6 +14,15 @@ import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+
+/** ROK-1769 voice-line gate: ephemeral voice off globally. */
+function voiceGateSettingsOff() {
+  return {
+    getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+    getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+  };
+}
 
 describe('SignupsRosterService — emit timing (ROK-824)', () => {
   let service: SignupsRosterService;
@@ -74,6 +83,7 @@ describe('SignupsRosterService — emit timing (ROK-824)', () => {
       providers: [
         SignupsRosterService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
+        { provide: SettingsService, useValue: voiceGateSettingsOff() },
         {
           provide: NotificationService,
           useValue: {

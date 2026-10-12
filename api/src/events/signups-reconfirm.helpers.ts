@@ -25,6 +25,8 @@ type ActivityLogger = Pick<ActivityLogService, 'log'>;
 /** Shape of the duplicate-signup branch returned by signupTxBody. */
 export interface DuplicateSignupResult {
   reconfirmed?: boolean;
+  /** True when the duplicate reactivated a departed/declined row (ROK-1769). */
+  reactivated?: boolean;
   reconfirmedUserId?: number | null;
   response: SignupResponseDto;
 }

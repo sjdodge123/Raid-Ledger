@@ -52,6 +52,7 @@ import { weeklyDigestTests } from "./tests/weekly-digest.test.js";
 import { seriesDualBindingTests } from "./tests/series-dual-binding.test.js";
 import { quickPlayAnnouncementsTests } from "./tests/quick-play-announcements.test.js";
 import { ephemeralVoiceTests } from "./tests/ephemeral-voice.test.js";
+import { privateVoiceAccessTests } from "./tests/private-voice-access.test.js";
 import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
 import { lfgBoardTests } from "./tests/lfg-board.test.js";
@@ -199,6 +200,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...seriesDualBindingTests,
     ...quickPlayAnnouncementsTests,
     ...ephemeralVoiceTests,
+    ...privateVoiceAccessTests,
     ...lfmEmbedTests,
     ...lfmPlayingTests,
     ...lfgBoardTests,
