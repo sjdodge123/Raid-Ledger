@@ -17,6 +17,7 @@ import {
   ProviderAuthError,
   ProviderNotConfiguredError,
   ProviderRequestError,
+  RateLimitError,
   TransientError,
 } from '../calendar-provider.errors';
 import type { OAuthCredentials } from '../calendar-provider.interface';
@@ -314,5 +315,125 @@ describe('CalendarProviderRegistry write routing with the real Google adapter', 
         accountSubject: `${DEMO_FAKE_SUBJECT_PREFIX}user-7`,
       }),
     ).resolves.toBeNull();
+  });
+});
+
+describe('GoogleCalendarAdapter read (ROK-1593 A3)', () => {
+  const TOKEN = 'ya29.read-fixture-access-token';
+  const READ_CREDS: OAuthCredentials = { ...CREDS, accessToken: TOKEN };
+  const SECRET_CAL = 'secret-team-fixture@group.calendar.google.com';
+  const RANGE = {
+    start: new Date('2026-10-19T00:00:00Z'),
+    end: new Date('2026-11-16T00:00:00Z'),
+  };
+  let get: jest.SpyInstance;
+  beforeEach(() => {
+    get = jest.spyOn(googleHttp, 'googleJsonRequest');
+  });
+  const ok = (json: unknown, status = 200) =>
+    get.mockResolvedValueOnce({ status, json, retryAfter: null });
+  const urlOf = (call: number): URL =>
+    new URL(String(get.mock.calls[call]?.[1]));
+  const failure = async (work: Promise<unknown>): Promise<unknown> =>
+    work.then(
+      () => null,
+      (err: unknown) => err,
+    );
+
+  it('follows nextPageToken across pages with the bearer token', async () => {
+    ok(fixture('events-page1'));
+    ok(fixture('events-page2'));
+    const out = await configured().fetchBusy(READ_CREDS, RANGE, ['primary']);
+    expect(out.blocks).toHaveLength(3);
+    expect(out.missingCalendarIds).toBeUndefined();
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(get.mock.calls[0]?.[2]).toBe(TOKEN);
+    expect(urlOf(1).searchParams.get('pageToken')).toBe('fixture-page-2-token');
+  });
+
+  it('stops each calendar at the 10-page cap', async () => {
+    get.mockResolvedValue({
+      status: 200,
+      json: {
+        items: [
+          {
+            start: { dateTime: '2026-10-22T10:00:00Z' },
+            end: { dateTime: '2026-10-22T11:00:00Z' },
+          },
+        ],
+        nextPageToken: 'more',
+      },
+      retryAfter: null,
+    });
+    const out = await configured().fetchBusy(READ_CREDS, RANGE, [
+      'primary',
+      'b',
+    ]);
+    expect(get).toHaveBeenCalledTimes(20);
+    expect(out.blocks).toHaveLength(20);
+  });
+
+  it('a 404 calendar is skipped and reported in missingCalendarIds', async () => {
+    ok(fixture('events-page2'));
+    ok(fixture('error-404'), 404);
+    const out = await configured().fetchBusy(READ_CREDS, RANGE, [
+      'primary',
+      SECRET_CAL,
+    ]);
+    expect(out.blocks).toHaveLength(1);
+    expect(out.missingCalendarIds).toEqual([SECRET_CAL]);
+  });
+
+  it('keeps our copy with ourId — the runner drops it by instance (R2)', async () => {
+    ok(fixture('events-mixed'));
+    const out = await configured().fetchBusy(READ_CREDS, RANGE, ['primary']);
+    expect(out.blocks.map((b) => b.ourId).filter(Boolean)).toEqual([
+      'rl:0123456789ab:42:7',
+      'rl:fedcba987654:9:3',
+    ]);
+    expect(out.blocks).toHaveLength(6);
+  });
+
+  it.each([
+    [401, 'events-401', ProviderAuthError],
+    [403, 'events-403-scope', ProviderAuthError],
+    [403, 'events-403-rate', RateLimitError],
+    [500, 'error-404', TransientError],
+  ])(
+    '%i %s → %p; String(err) carries no token or calendar id',
+    async (status, name, cls) => {
+      ok(fixture(name), status);
+      const err = await failure(
+        configured().fetchBusy(READ_CREDS, RANGE, [SECRET_CAL]),
+      );
+      expect(err).toBeInstanceOf(cls);
+      expect(String(err)).not.toContain(TOKEN);
+      expect(String(err)).not.toContain('secret-team-fixture');
+      expect(JSON.stringify(err)).not.toContain('secret-team-fixture');
+    },
+  );
+
+  it('listCalendars maps calendarList (freeBusyReader and up)', async () => {
+    ok(fixture('calendar-list'));
+    const rows = await configured().listCalendars(READ_CREDS);
+    expect(rows.map((r) => [r.id, r.primary, r.writable])).toEqual([
+      ['fixture-owner@example.test', true, true],
+      ['team-fixture@group.calendar.google.com', false, true],
+      ['holidays-fixture@group.v.calendar.google.com', false, false],
+      ['boss-fixture@example.test', false, false],
+    ]);
+    expect(urlOf(0).searchParams.get('minAccessRole')).toBe('freeBusyReader');
+  });
+
+  it('rejects non-OAuth credentials without calling Google', async () => {
+    const err = await failure(
+      configured().fetchBusy(
+        { kind: 'caldav', username: 'u', appPassword: 'p' },
+        RANGE,
+        ['primary'],
+      ),
+    );
+    expect(err).toBeInstanceOf(ProviderAuthError);
+    expect(get).not.toHaveBeenCalled();
   });
 });
