@@ -71,3 +71,4 @@ export * from './schema/guilds';
 export * from './schema/guild-members';
 export * from './schema/calendar-connections';
 export * from './schema/calendar-busy-blocks';
+export * from './schema/calendar-ignored-days';
