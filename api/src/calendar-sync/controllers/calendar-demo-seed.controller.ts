@@ -33,6 +33,7 @@ import { DemoModeGuard } from '../../admin/demo-mode.guard';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { parseDemoBody } from '../../admin/demo-test.utils';
 import { SettingsService } from '../../settings/settings.service';
+import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
@@ -66,6 +67,7 @@ export class CalendarDemoSeedController {
     private readonly settings: SettingsService,
     @Inject(CALENDAR_FAKE_PROVIDER)
     private readonly fake: FakeCalendarProvider,
+    private readonly gameTime: GameTimeService,
   ) {}
 
   @Post('seed-connection')
@@ -110,7 +112,9 @@ export class CalendarDemoSeedController {
   async seedBusy(@Body() body: unknown): Promise<{ inserted: number }> {
     const fake = await this.assertDemoMode();
     const input = parseDemoBody(SeedBusySchema, body ?? {});
-    return seedDemoBusy(this.db, fake, input);
+    return seedDemoBusy(this.db, fake, input, (u) =>
+      this.gameTime.invalidateUserCache(u),
+    );
   }
 
   /** Request-time gate, same checks as `DemoTestCoreController`. */

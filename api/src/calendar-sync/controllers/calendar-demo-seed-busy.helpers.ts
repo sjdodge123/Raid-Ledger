@@ -75,11 +75,16 @@ function toBlockRow(conn: { id: number; userId: number }, b: BusyBlock) {
   };
 }
 
-/** Insert the blocks for the connection's owner; 404 on an unknown id. */
+/**
+ * Insert the blocks for the connection's owner; 404 on an unknown id. The
+ * owner's cached game-time is dropped (as the sync processor does) so a
+ * test-plan step sees the busy hours at once.
+ */
 export async function seedDemoBusy(
   db: Db,
   fake: FakeCalendarProvider,
   input: SeedBusyInput,
+  invalidateUser: (userId: number) => void,
 ): Promise<{ inserted: number }> {
   const conns = schema.calendarConnections;
   const [conn] = await db
@@ -97,5 +102,6 @@ export async function seedDemoBusy(
     .insert(schema.calendarBusyBlocks)
     .values(blocks.map((b) => toBlockRow(conn, b)));
   fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, blocks);
+  invalidateUser(conn.userId);
   return { inserted: blocks.length };
 }

@@ -5,6 +5,8 @@
  * `getCalendarProviderConfig` without `includeSecret`, field by field, so the
  * contract's `.strict()` schema matches exactly.
  */
+import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import type {
   AdminCalendarSyncSettings,
   UpdateAdminCalendarSyncSettings,
@@ -99,7 +101,7 @@ export async function applyAdminCalendarSyncUpdate(
   }
   if (update.enabled !== undefined) {
     await setCalendarSyncEnabled(svc, update.enabled);
-    if (effects) await applyKillSwitchEffects(effects, update.enabled);
+    if (effects) await applyKillSwitchEffectsSafely(effects, update.enabled);
   }
 }
 
@@ -130,4 +132,28 @@ export async function applyKillSwitchEffects(
     queue: effects.readQueue,
     isSyncEnabled: () => Promise.resolve(true),
   });
+}
+
+const logger = new Logger('CalendarSyncAdmin');
+
+/**
+ * The switch is already saved when the effects run, so a purge/enqueue
+ * failure (e.g. Redis down) must not turn the admin's save into a 500 for a
+ * setting that DID change. Logged + sent to Sentry instead: while off, the
+ * busy query ignores blocks anyway; the next enable (or the read cron)
+ * re-enqueues the syncs.
+ */
+async function applyKillSwitchEffectsSafely(
+  effects: KillSwitchEffects,
+  enabled: boolean,
+): Promise<void> {
+  try {
+    await applyKillSwitchEffects(effects, enabled);
+  } catch (err) {
+    const code = err instanceof Error ? err.name : 'unknown';
+    logger.error(
+      `calendar sync kill-switch effects failed (enabled=${enabled}): ${code}`,
+    );
+    Sentry.captureException(err);
+  }
 }

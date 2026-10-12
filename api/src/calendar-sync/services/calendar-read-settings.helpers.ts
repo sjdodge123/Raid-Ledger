@@ -9,7 +9,7 @@
  * - `GET :id/calendars` — the read picker, dedicated calendar flagged
  *   `isRaidLedger` (the adapters leave that flag to the caller).
  * - `POST :id/sync` — manual sync, 429 `sync_throttled` within 5 min of the
- *   last one (D-R6, no new column).
+ *   last one (D-R6, no new column) or while a failing row backs off.
  * - `PUT settings` — `user_preferences.calendar_read_mode` (D12). The busy
  *   query reads the mode at request time, so the cached hours are dropped.
  *   The `derive` job is PR-B: there is nothing to enqueue in PR-A.
@@ -47,6 +47,12 @@ type ReadBody = NonNullable<UpdateCalendarConnection['read']>;
 
 /** Manual sync: at most one per connection per 5 minutes (D-R6). */
 export const MANUAL_SYNC_THROTTLE_MS = 5 * 60 * 1000;
+
+/**
+ * Most source calendars one connection may read. Each one costs up to ten
+ * provider pages per sync; the contract allows 200 ids, the server caps it.
+ */
+export const MAX_READ_CALENDAR_IDS = 25;
 
 export interface CalendarReadSettingsDeps {
   db: Db;
@@ -91,10 +97,16 @@ export function planReadUpdate(
   }
   const ids = read.calendarIds ?? row.readCalendarIds;
   const dedicated = row.dedicatedCalendarId;
+  const readCalendarIds = [...new Set(ids)].filter((id) => id !== dedicated);
+  if (readCalendarIds.length > MAX_READ_CALENDAR_IDS) {
+    throw new BadRequestException(
+      `calendarIds: at most ${MAX_READ_CALENDAR_IDS} calendars can be read per connection`,
+    );
+  }
   return {
     row,
     readEnabled: read.enabled ?? row.readEnabled,
-    readCalendarIds: [...new Set(ids)].filter((id) => id !== dedicated),
+    readCalendarIds,
   };
 }
 
@@ -138,7 +150,36 @@ export async function listConnectionCalendars(
   }));
 }
 
-/** `POST :id/sync`: 409 when not reading, 429 inside the throttle window. */
+/**
+ * Whether a manual sync is refused (429 `sync_throttled`) right now.
+ *
+ * - Healthy row: at most one per 5 min after the last SUCCESSFUL sync.
+ * - `needs_reconnect`: always — no sync can succeed until the user
+ *   reconnects, which resets the row.
+ * - Failing row (`error`, or a `last_error_code`) still inside its backoff
+ *   (`next_sync_at > now`): refused until the backoff ends, so a broken
+ *   grant is not hammered. A failing sync never moves `last_synced_at`, so
+ *   the 5-min rule alone would never throttle it. Once the backoff has
+ *   passed the user may try again; that attempt sets the next backoff.
+ */
+export function isManualSyncThrottled(
+  row: Pick<
+    ConnectionRow,
+    'status' | 'lastErrorCode' | 'nextSyncAt' | 'lastSyncedAt'
+  >,
+  nowMs: number,
+): boolean {
+  if (row.status === 'needs_reconnect') return true;
+  const failing = row.status === 'error' || row.lastErrorCode !== null;
+  const backoffUntil = row.nextSyncAt?.getTime();
+  if (failing && backoffUntil !== undefined && backoffUntil > nowMs) {
+    return true;
+  }
+  const last = row.lastSyncedAt?.getTime();
+  return last !== undefined && nowMs - last < MANUAL_SYNC_THROTTLE_MS;
+}
+
+/** `POST :id/sync`: 409 when not reading, 429 while throttled (above). */
 export async function requestManualReadSync(
   deps: Pick<CalendarReadSettingsDeps, 'db' | 'readQueue'>,
   ref: OwnConnectionRef,
@@ -148,8 +189,7 @@ export async function requestManualReadSync(
   if (!row.readAccessGranted) throw new ConflictException('read_scopes');
   if (!row.readEnabled)
     throw new ConflictException(CalendarSyncErrorCodeSchema.enum.read_disabled);
-  const last = row.lastSyncedAt?.getTime();
-  if (last !== undefined && nowMs - last < MANUAL_SYNC_THROTTLE_MS) {
+  if (isManualSyncThrottled(row, nowMs)) {
     throw new HttpException('sync_throttled', HttpStatus.TOO_MANY_REQUESTS);
   }
   await enqueueCalendarReadSync(deps.readQueue, row.id);
