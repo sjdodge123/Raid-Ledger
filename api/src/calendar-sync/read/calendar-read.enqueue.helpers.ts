@@ -38,8 +38,12 @@ export interface CalendarReadEnqueueDeps {
   isSyncEnabled: () => Promise<boolean>;
 }
 
-/** The statuses a sync may run for (D7 + the D5 error backoff). */
-export const READ_SYNCABLE_STATUSES = ['active', 'error'] as const;
+/**
+ * The statuses a sync may run for (D7). A transient read failure leaves the
+ * row `active` and only pushes `next_sync_at` out (D5 backoff), so there is
+ * no `error` status to re-pick.
+ */
+export const READ_SYNCABLE_STATUSES = ['active'] as const;
 
 export const CALENDAR_READ_JOB_OPTIONS = {
   attempts: 4,
@@ -68,7 +72,14 @@ async function addJob(
   await queue.add(data.kind, data, { ...CALENDAR_READ_JOB_OPTIONS, jobId });
 }
 
-/** The plain-id job is running: queue (at most) one follow-up. */
+/**
+ * The plain-id job is running: queue (at most) one follow-up.
+ *
+ * Known, accepted overlap: the `-rerun` id differs from the active job's, so
+ * a worker may start it while the older job is still fetching, and the
+ * older fetch can commit LAST (its blocks win). Low impact — both fetches
+ * are recent, and the next sync (≤ 30 min) replaces the blocks again.
+ */
 async function addRerun(
   queue: CalendarReadQueue,
   data: CalendarReadJobData,

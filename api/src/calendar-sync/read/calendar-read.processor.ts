@@ -37,8 +37,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 type ReadConnection = typeof schema.calendarConnections.$inferSelect;
 
 /**
- * D11 hook point: a connection just went `needs_reconnect` / `error` (or
- * lost its read grant), so its days must stop counting. PR-B enqueues a
+ * D11 hook point: a read sync failed for good — `needs_reconnect`, lost
+ * read grant, or a transient failure backed off (status stays `active`). PR-B enqueues a
  * `derive` for `userId` here. PR-A: nothing to rebuild yet — busy hours
  * already filter on `status='active' AND read_enabled`.
  */
@@ -107,7 +107,7 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     throw new UnrecoverableError(`calendar read sync: ${decision.code}`);
   }
 
-  /** A connection that can sync now: read on, `active` or `error`. */
+  /** A connection that can sync now: read on and `active`. */
   private async loadConnection(id: number): Promise<ReadConnection | null> {
     const c = schema.calendarConnections;
     const [row] = await this.db

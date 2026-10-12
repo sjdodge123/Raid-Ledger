@@ -39,10 +39,20 @@ export async function purgeConnectionBusyBlocks(
   return uniqueUsers(rows);
 }
 
-/** Kill switch off (D10): every block. */
+/**
+ * Kill switch off (D10): every block. Runs AFTER the switch is stored off,
+ * and first locks every connection row — the same lock a read sync takes
+ * before writing (`runCalendarReadSync`). A sync that already holds a lock
+ * commits first and its blocks are deleted here; one that locks later
+ * re-checks the switch, sees it off and writes nothing.
+ */
 export async function purgeAllBusyBlocks(db: Db): Promise<number[]> {
   const t = schema.calendarBusyBlocks;
-  const rows = await db.delete(t).returning({ userId: t.userId });
+  const c = schema.calendarConnections;
+  const rows = await db.transaction(async (tx) => {
+    await tx.select({ id: c.id }).from(c).for('update');
+    return tx.delete(t).returning({ userId: t.userId });
+  });
   return uniqueUsers(rows);
 }
 

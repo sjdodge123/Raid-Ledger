@@ -128,9 +128,9 @@ describe('readErrorBackoffMs (1 h doubling, cap 6 h)', () => {
   const created = new Date('2026-10-01T00:00:00Z');
   const since = (h: number) => new Date(NOW.getTime() - h * HOUR);
 
-  it('starts at 1 h when the connection was not already in error', () => {
+  it('starts at 1 h when no transient read failure is recorded yet', () => {
     const conn = {
-      status: 'active',
+      lastErrorCode: null,
       lastSyncedAt: since(30),
       createdAt: created,
     };
@@ -140,7 +140,11 @@ describe('readErrorBackoffMs (1 h doubling, cap 6 h)', () => {
   it('doubles with the time already spent failing, capped at 6 h', () => {
     const at = (h: number) =>
       readErrorBackoffMs(
-        { status: 'error', lastSyncedAt: since(h), createdAt: created },
+        {
+          lastErrorCode: 'provider_error',
+          lastSyncedAt: since(h),
+          createdAt: created,
+        },
         NOW,
       );
     expect([at(0.5), at(1.5), at(3.5), at(7.5), at(40)]).toEqual([

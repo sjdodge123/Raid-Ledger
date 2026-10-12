@@ -8,9 +8,17 @@
  * - Other auth → `needs_reconnect`, `auth`, no retry.
  * - Rate limit → retry no sooner than `retryAfterMs`.
  * - 400-class refusal / missing OAuth client → `provider_error`, no retry.
- * - Anything else → `provider_error`, retry; after the final attempt the
- *   connection goes `error` with `next_sync_at` backing off 1 h → 2 h → 4 h
- *   → capped 6 h (stateless: the gap since the last success picks the step).
+ * - Anything else → `provider_error`, retry; after the final attempt only
+ *   `last_error_code` and a backed-off `next_sync_at` are written: 1 h →
+ *   2 h → 4 h → capped 6 h (stateless: the gap since the last success picks
+ *   the step once a transient code is already recorded).
+ *
+ * A transient read failure NEVER touches `status`: it is shared with the
+ * ROK-1596 write fan-out and reconcile cron, which only pick `active` rows,
+ * so a Google read hiccup must not stop write sync. The connection stays
+ * `active`, its blocks from the last good sync keep counting, and the read
+ * cron re-picks it once `next_sync_at` passes. Auth failure still goes
+ * `needs_reconnect` (a broken token breaks writes too).
  *
  * `last_error_code` is always one of the closed `CalendarSyncErrorCode`
  * values — never a provider message.
@@ -39,8 +47,14 @@ export interface ReadFailureDecision {
 
 export type ReadFailureConnection = Pick<
   typeof schema.calendarConnections.$inferSelect,
-  'id' | 'status' | 'lastSyncedAt' | 'createdAt'
+  'id' | 'lastErrorCode' | 'lastSyncedAt' | 'createdAt'
 >;
+
+/** Codes a retryable read failure records; a repeat of one backs off. */
+const TRANSIENT_READ_CODES: ReadonlySet<string> = new Set([
+  'rate_limited',
+  'provider_error',
+]);
 
 /** D5: map any thrown value to a closed error code + retry decision. */
 export function classifyReadFailure(err: unknown): ReadFailureDecision {
@@ -64,10 +78,15 @@ export function classifyReadFailure(err: unknown): ReadFailureDecision {
 
 /** 1 h on the first exhausted failure, then doubling, capped at 6 h. */
 export function readErrorBackoffMs(
-  conn: Pick<ReadFailureConnection, 'status' | 'lastSyncedAt' | 'createdAt'>,
+  conn: Pick<
+    ReadFailureConnection,
+    'lastErrorCode' | 'lastSyncedAt' | 'createdAt'
+  >,
   now: Date,
 ): number {
-  if (conn.status !== 'error') return HOUR_MS;
+  if (!conn.lastErrorCode || !TRANSIENT_READ_CODES.has(conn.lastErrorCode)) {
+    return HOUR_MS;
+  }
   const since = (conn.lastSyncedAt ?? conn.createdAt).getTime();
   const hours = Math.max(1, (now.getTime() - since) / HOUR_MS);
   const step = 2 ** Math.ceil(Math.log2(hours)) * HOUR_MS;
@@ -84,11 +103,9 @@ function failureFields(
   }
   if (decision.code === 'auth') return { status: 'needs_reconnect' };
   if (decision.retry && !opts.finalAttempt) return null;
+  // No `status`: see the file header (writes keep running).
   const backoff = readErrorBackoffMs(conn, opts.now);
-  return {
-    status: 'error',
-    nextSyncAt: new Date(opts.now.getTime() + backoff),
-  };
+  return { nextSyncAt: new Date(opts.now.getTime() + backoff) };
 }
 
 /**

@@ -37,8 +37,8 @@ import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import type { SignupStatus } from '../../drizzle/schema/event-signups';
 import { templateDayToGridDay } from '../../users/game-time-heatmap.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from './active-signup-statuses.constants';
 import {
   fetchCalendarBusyBlocks,
   type CalendarBusyBlock,
@@ -51,15 +51,6 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const MINUTE_MS = 60 * 1000;
 
-/**
- * Signup statuses that still occupy the member's evening. The complement —
- * `declined`, `roached_out`, `departed` — has released the slot, so those hours
- * are free again. One constant so the heatmap cannot drift from the roster.
- */
-export const ACTIVE_SIGNUP_STATUSES: readonly SignupStatus[] = [
-  'signed_up',
-  'tentative',
-];
 
 /** `${gridDayOfWeek}:${localHour}` — the key both templates and busy rows share. */
 export function busyKey(gridDayOfWeek: number, hour: number): string {

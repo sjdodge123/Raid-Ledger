@@ -77,17 +77,17 @@ describe('dueReadConnectionFilter', () => {
       })(),
   );
 
-  it('requires read on and status active OR error (D5 backoff re-pick)', () => {
+  it('requires read on and status active (a failed sync stays active, D5)', () => {
     expect(q.sql).toContain('"read_enabled" = $1');
-    expect(q.sql).toMatch(/"status" in \(\$2, \$3\)/);
-    expect(q.params.slice(0, 3)).toEqual([true, 'active', 'error']);
+    expect(q.sql).toMatch(/"status" in \(\$2\)/);
+    expect(q.params.slice(0, 2)).toEqual([true, 'active']);
   });
 
   it('is due when next_sync_at is unset or not after now', () => {
     expect(q.sql).toMatch(
-      /\("calendar_connections"\."next_sync_at" is null or "calendar_connections"\."next_sync_at" <= \$4\)/,
+      /\("calendar_connections"\."next_sync_at" is null or "calendar_connections"\."next_sync_at" <= \$3\)/,
     );
-    expect(q.params[3]).toBe(NOW.toISOString());
+    expect(q.params[2]).toBe(NOW.toISOString());
   });
 });
 

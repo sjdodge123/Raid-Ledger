@@ -9,15 +9,17 @@
  * id into a `BusyBlock`. Titles, locations and attendee e-mails never leave
  * this file. Nothing here logs; errors carry only a sanitised reason.
  *
- * Status map (read): as the write map (`assertWriteOk`), except a 403 that is
- * neither a scope nor a rate-limit reply means "this calendar is not readable
- * by us" → NotFoundError (the caller skips it, plan U9), and a rate limit
- * waits at least 60 s (plan D5).
+ * Status map (read): as the write map (`assertWriteOk`), except
+ * - a 403 quota reply (`quotaExceeded`, `dailyLimitExceeded`, …) is a rate
+ *   limit too, and a rate limit waits at least 60 s (plan D5);
+ * - any OTHER 403 that is not a scope reply (`domainPolicy`, `forbidden`, …)
+ *   is a TransientError: the run fails and retries/backs off, nothing is
+ *   pruned and the connection's old blocks stay. Only a real 404/410 is
+ *   NotFoundError — the one case the caller prunes the calendar (U9).
  */
 import * as googleHttp from './google-http';
 import type { GoogleHttpResponse } from './google-http';
 import {
-  NotFoundError,
   ProviderAuthError,
   RateLimitError,
   TransientError,
@@ -28,7 +30,11 @@ import type {
   TimeRange,
 } from '../calendar-provider.interface';
 import { decodeCopyId, parseCopyId } from '../rl-copy-id.helpers';
-import { assertWriteOk, GOOGLE_CALENDAR_API } from './google-write.helpers';
+import {
+  assertWriteOk,
+  GOOGLE_CALENDAR_API,
+  googleErrorReasons,
+} from './google-write.helpers';
 
 /** §6.4.1 — the exact `events.list` mask (Q-B/Q-C: `iCalUID` included). */
 export const GOOGLE_EVENTS_FIELDS =
@@ -84,8 +90,27 @@ export function buildCalendarListUrl(pageToken?: string): string {
   return `${GOOGLE_CALENDAR_API}/users/me/calendarList?${params.toString()}`;
 }
 
+/** Google 403 reasons that mean "slow down", not "you may not". */
+const QUOTA_REASONS: ReadonlySet<string> = new Set([
+  'quotaExceeded',
+  'dailyLimitExceeded',
+  'rateLimitExceeded',
+  'userRateLimitExceeded',
+  'RATE_LIMIT_EXCEEDED',
+]);
+
+function isQuotaReply(res: GoogleHttpResponse): boolean {
+  return googleErrorReasons(res.json).some((r) => QUOTA_REASONS.has(r));
+}
+
 /** Throw the shared error class for a non-2xx read reply (see header). */
 export function mapGoogleReadError(res: GoogleHttpResponse): void {
+  if (res.status === 403 && isQuotaReply(res)) {
+    throw new RateLimitError(
+      Math.max(MIN_READ_RETRY_MS, googleHttp.parseRetryAfterMs(res.retryAfter)),
+      'http_403',
+    );
+  }
   try {
     assertWriteOk(res);
   } catch (err) {
@@ -94,7 +119,7 @@ export function mapGoogleReadError(res: GoogleHttpResponse): void {
       throw new RateLimitError(wait, err.reason);
     }
     if (err instanceof ProviderAuthError && err.reason === 'http_403') {
-      throw new NotFoundError('http_403');
+      throw new TransientError('http_403');
     }
     throw err;
   }

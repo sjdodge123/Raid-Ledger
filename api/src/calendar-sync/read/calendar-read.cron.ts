@@ -1,7 +1,8 @@
 /**
  * ROK-1593 D7 (§3.4): every 15 minutes, queue a read sync for each due
- * connection — read on, `active` or `error` (the D5 backoff re-picks an
- * errored one once its `next_sync_at` passes), `next_sync_at` unset or past;
+ * connection — read on, `active`, `next_sync_at` unset or past (a failed
+ * sync stays `active` and backs `next_sync_at` off, D5, so it is re-picked
+ * once that passes);
  * oldest first, 200 per tick. Each picked row's `next_sync_at` is pushed out
  * 30 min ± 5 min (a lease: a lost job is re-picked later, never every tick;
  * a successful sync re-stamps it anyway). Also prunes ended busy blocks.
@@ -33,7 +34,7 @@ export const READ_CRON_LIMIT = 200;
 
 const c = schema.calendarConnections;
 
-/** D7 due filter (+ the Lead's `error` addition). */
+/** D7 due filter. */
 export function dueReadConnectionFilter(now: Date) {
   return and(
     eq(c.readEnabled, true),

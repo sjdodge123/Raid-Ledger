@@ -19,8 +19,9 @@
  * - R4 safety net: a block whose start AND end are each within ±60 s of an
  *   active sign-up's duration for the same user is our own copy — dropped.
  *
- * The admin kill switch is enforced by the purge on switch-off (D10), so a
- * purged table simply yields nothing here.
+ * The admin kill switch is enforced twice: the purge on switch-off (D10)
+ * empties the table, and `fetchCalendarBusyBlocks` itself returns nothing
+ * while the switch is off (a sync racing the purge can never leak hours).
  *
  * Read-only: no INSERT/UPDATE/DELETE anywhere in this file.
  */
@@ -32,7 +33,8 @@ import type {
 } from '@raid-ledger/contract';
 import { CalendarProviderSchema } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import { ACTIVE_SIGNUP_STATUSES } from '../../lineups/scheduling/scheduling-availability-busy.helpers';
+import { readCalendarSyncEnabled } from './calendar-sync-enabled.query';
+import { ACTIVE_SIGNUP_STATUSES } from '../../lineups/scheduling/active-signup-statuses.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -163,6 +165,7 @@ export async function fetchCalendarBusyBlocks(
   if (userIds.length === 0) return [];
   const rows = await queryBlocks(db, userIds, from, to);
   if (rows.length === 0) return [];
+  if (!(await readCalendarSyncEnabled(db))) return [];
   const [modes, signups] = await Promise.all([
     queryReadModes(db, userIds),
     querySignupBounds(db, userIds, from, to),

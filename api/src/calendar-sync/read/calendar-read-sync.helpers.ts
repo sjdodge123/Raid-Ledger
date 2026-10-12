@@ -10,15 +10,20 @@
  *   calendar is never fetched.
  * - One transaction replaces the connection's blocks from the window start
  *   on, runs the `afterBlocks` hook (PR-B derives away days; no-op here) and
- *   stamps the connection. A connection that went `disconnecting` or lost
- *   `read_enabled` meanwhile is left untouched (row lock + re-check).
- * - `missingCalendarIds` (404/410 calendars) are pruned from
- *   `read_calendar_ids`.
+ *   stamps the connection. A connection that left `active` (disconnecting,
+ *   or `needs_reconnect` set by the write queue) or lost `read_enabled`
+ *   meanwhile is left untouched (row lock + re-check). The kill switch is
+ *   re-checked AFTER the lock too: the switch-off purge locks the same rows
+ *   (`purgeAllBusyBlocks`), so a sync either commits before the purge
+ *   (which then deletes its blocks) or sees the switch off.
+ * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
+ *   row's `read_calendar_ids`, so a settings PUT racing the fetch survives.
+ * - A success never writes `status` (it is shared with the write side).
  *
  * PRIVACY (§6.4.2): only instants and dates are written; no calendar id,
  * title or provider message is logged or stored.
  */
-import { and, eq, gt, ne } from 'drizzle-orm';
+import { and, eq, gt } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { resolveUserTimezone } from '../../notifications/timezone.helpers';
@@ -125,15 +130,26 @@ function fetchWindow(
   });
 }
 
-/** Row lock: a disconnect / read-off since the fetch wins over the sync. */
-async function lockReadable(tx: ReadSyncTx, id: number): Promise<boolean> {
+/**
+ * Row lock: a disconnect / `needs_reconnect` / read-off since the fetch wins
+ * over the sync. Returns the locked row's CURRENT `read_calendar_ids`.
+ */
+async function lockReadable(
+  tx: ReadSyncTx,
+  id: number,
+): Promise<{ readCalendarIds: string[] } | null> {
   const c = schema.calendarConnections;
   const [row] = await tx
-    .select({ status: c.status, readEnabled: c.readEnabled })
+    .select({
+      status: c.status,
+      readEnabled: c.readEnabled,
+      readCalendarIds: c.readCalendarIds,
+    })
     .from(c)
     .where(eq(c.id, id))
     .for('update');
-  return !!row && row.status !== 'disconnecting' && row.readEnabled;
+  if (!row || row.status !== 'active' || !row.readEnabled) return null;
+  return { readCalendarIds: row.readCalendarIds };
 }
 
 async function replaceBlocks(
@@ -154,25 +170,30 @@ async function replaceBlocks(
 async function markSynced(
   tx: ReadSyncTx,
   conn: ReadSyncConnection,
+  locked: { readCalendarIds: string[] },
   missing: readonly string[],
   stamp: { now: Date; random: () => number },
 ): Promise<void> {
   const c = schema.calendarConnections;
   const pruned =
     missing.length > 0
-      ? { readCalendarIds: pruneReadCalendarIds(conn.readCalendarIds, missing) }
+      ? {
+          readCalendarIds: pruneReadCalendarIds(
+            locked.readCalendarIds,
+            missing,
+          ),
+        }
       : {};
   await tx
     .update(c)
     .set({
-      status: 'active',
       lastErrorCode: null,
       lastSyncedAt: stamp.now,
       nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
       updatedAt: stamp.now,
       ...pruned,
     })
-    .where(and(eq(c.id, conn.id), ne(c.status, 'disconnecting')));
+    .where(and(eq(c.id, conn.id), eq(c.status, 'active')));
 }
 
 /** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
@@ -194,11 +215,14 @@ export async function runCalendarReadSync(
     ? null
     : normalizeBusyBlocks(result.blocks, { instanceId, window });
   const stamp = { now, random: deps.random ?? Math.random };
+  const missing = result.missingCalendarIds ?? [];
   const written = await deps.db.transaction(async (tx) => {
-    if (!(await lockReadable(tx, conn.id))) return false;
+    const locked = await lockReadable(tx, conn.id);
+    if (!locked) return false;
+    if (deps.stillAllowed && !(await deps.stillAllowed())) return false;
     if (rows) await replaceBlocks(tx, conn, window, rows);
     if (deps.afterBlocks) await deps.afterBlocks(tx, conn.userId);
-    await markSynced(tx, conn, result.missingCalendarIds ?? [], stamp);
+    await markSynced(tx, conn, locked, missing, stamp);
     return true;
   });
   if (!written) return 'skipped';

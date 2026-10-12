@@ -114,7 +114,7 @@ describe('CalendarReadProcessor failures', () => {
     expect(sets).toEqual([]);
   });
 
-  it('transient on the final attempt → error + 1 h backoff', async () => {
+  it('transient on the final attempt → code + 1 h backoff, status untouched', async () => {
     const { processor, sets, invalidate } = setup();
     runSync.mockRejectedValue(new TransientError());
     const before = Date.now();
@@ -122,11 +122,10 @@ describe('CalendarReadProcessor failures', () => {
       TransientError,
     );
     expect(sets).toEqual([
-      expect.objectContaining({
-        status: 'error',
-        lastErrorCode: 'provider_error',
-      }),
+      expect.objectContaining({ lastErrorCode: 'provider_error' }),
     ]);
+    // Status is shared with the ROK-1596 write side (active-only selects).
+    expect(sets[0]).not.toHaveProperty('status');
     const at = sets[0]?.nextSyncAt;
     if (!(at instanceof Date)) throw new Error('nextSyncAt not written');
     const next = at.getTime();
