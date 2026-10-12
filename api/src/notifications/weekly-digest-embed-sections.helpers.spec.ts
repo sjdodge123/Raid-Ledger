@@ -16,6 +16,7 @@ import {
   weekArrow,
 } from './weekly-digest-embed-sections.helpers';
 import {
+  fitOrClip,
   spotlightField,
   spotlightFieldName,
 } from './weekly-digest-embed-spotlight.helpers';
@@ -34,7 +35,11 @@ import {
 } from './weekly-digest-embed-text.helpers';
 import type { DigestMilestones } from './weekly-digest-milestones.helpers';
 import type { SpotlightCandidate } from './weekly-digest-spotlight.helpers';
-import type { WeeklyUpcoming } from './weekly-digest-upcoming.helpers';
+import {
+  UPCOMING_EVENT_LIMIT,
+  UPCOMING_POLL_LIMIT,
+  type WeeklyUpcoming,
+} from './weekly-digest-upcoming.helpers';
 
 const ORIGIN = 'https://raid.example.test';
 const KINDS = [
@@ -323,6 +328,30 @@ describe('weekly digest v2 — section lines', () => {
     expect(lines.at(-1)).toBe('+5 more');
   });
 
+  it('says "+ more" without a number when the events read hit its LIMIT', () => {
+    const u = upcoming();
+    const [event] = u.events;
+    if (!event) throw new Error('fixture');
+    u.events = Array.from({ length: UPCOMING_EVENT_LIMIT }, (_, i) => ({
+      ...event,
+      eventId: i,
+    }));
+    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
+    expect(lines.at(-1)).toBe('+ more');
+  });
+
+  it('says "+ more" without a number when the polls read hit its LIMIT', () => {
+    const u = upcoming();
+    const [poll] = u.polls;
+    if (!poll) throw new Error('fixture');
+    u.polls = Array.from({ length: UPCOMING_POLL_LIMIT }, (_, i) => ({
+      ...poll,
+      matchId: i,
+    }));
+    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
+    expect(lines.at(-1)).toBe('+ more');
+  });
+
   it('renders a Best price line per the operator ruling', () => {
     expect(valueOf(build(full()), DIGEST_FIELD_NAMES.bestPrice)).toBe(
       `**[Deep Rock Galactic](${ORIGIN}/games/8)** −60% · $11.99 · all-time low · 5 wishlisted\n` +
@@ -369,6 +398,36 @@ describe('weekly digest v2 — week-over-week arrows', () => {
     expect(recapField(recap, prior, null)?.value).toBe(
       '**6** events · **14** players',
     );
+  });
+});
+
+describe('weekly digest v2 — recap cap and the clip path', () => {
+  /** The value with escape pairs removed must hold no markdown marker. */
+  const unescapedMarkers = (value: string): string =>
+    value.replace(/\\./g, '').replace(/[^*_`[]/g, '');
+
+  it('holds the recap to 200 chars, dropping a tail that does not fit', () => {
+    const links = digestLinks(`https://${'a'.repeat(190)}.test`);
+    const recap = { eventsRun: 6, playersAttended: 14, attendances: 1 };
+    const value = recapField(recap, null, links)?.value ?? '';
+    expect(value).toBe('**6** events · **14** players');
+    expect(value.length).toBeLessThanOrEqual(DIGEST_FIELD_CAPS.recap);
+  });
+
+  it('clips an over-long line as plain text with no unbalanced markdown', () => {
+    const line = `**[${'x'.repeat(500)}](${ORIGIN}/games/1)** · 9 players`;
+    const value = fitOrClip([line], 0, null, DIGEST_FIELD_CAPS.spotlight);
+    expect(value).toHaveLength(DIGEST_FIELD_CAPS.spotlight);
+    expect(value.endsWith('x…')).toBe(true);
+    expect(unescapedMarkers(value)).toBe('');
+  });
+
+  it('never splits an escape pair when clipping', () => {
+    const line = `**${'\\_'.repeat(300)}**`;
+    const value = fitOrClip([line], 0, null, DIGEST_FIELD_CAPS.spotlight);
+    expect(value.endsWith('\\_…')).toBe(true);
+    expect(value.length).toBeLessThanOrEqual(DIGEST_FIELD_CAPS.spotlight);
+    expect(unescapedMarkers(value)).toBe('');
   });
 });
 

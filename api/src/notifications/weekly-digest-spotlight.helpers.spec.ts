@@ -7,6 +7,7 @@ import {
   lastSpotlightKind,
   parseSpotlightHistory,
   pickSpotlight,
+  previousSpotlightWeek,
   serializeSpotlightHistory,
   spotlightScore,
   type SpotlightCandidate,
@@ -135,6 +136,31 @@ describe('pickSpotlight', () => {
   it("returns null when only last week's kind is eligible", () => {
     const history = [entry('2026-W40', 'marathon')];
     expect(pickSpotlight([marathon(900), duo(60)], history, WEEK)).toBeNull();
+  });
+
+  it('a kind last shown two weeks ago is eligible again (no spotlight last week)', () => {
+    const history = [entry('2026-W39', 'marathon')];
+    expect(lastSpotlightKind(history, WEEK)).toBeNull();
+    expect(pickSpotlight([marathon(900)], history, WEEK)?.kind).toBe(
+      'marathon',
+    );
+  });
+
+  it("excludes last week's kind, not an older week's", () => {
+    const history = [entry('2026-W40', 'duo'), entry('2026-W39', 'marathon')];
+    expect(lastSpotlightKind(history, WEEK)).toBe('duo');
+    const picked = pickSpotlight([marathon(900), duo(600)], history, WEEK);
+    expect(picked?.kind).toBe('marathon');
+  });
+
+  it.each([
+    ['2026-W41', '2026-W40'],
+    ['2026-W01', '2025-W52'],
+    ['2027-W01', '2026-W53'],
+    ['2021-W01', '2020-W53'],
+  ])('the ISO week before %s is %s', (week, previous) => {
+    expect(previousSpotlightWeek(week)).toBe(previous);
+    expect(lastSpotlightKind([entry(previous, 'duo')], week)).toBe('duo');
   });
 
   it('returns null when nothing is eligible or there are no candidates', () => {
