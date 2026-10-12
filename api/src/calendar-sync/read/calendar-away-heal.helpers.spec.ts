@@ -7,6 +7,7 @@ import {
   deriveIfNeedsReconnect,
   enqueueDerivesBestEffort,
   purgeStrayCalendarAbsences,
+  utcYesterday,
 } from './calendar-away-heal.helpers';
 
 function queueStub(failFor: number[] = []) {
@@ -72,5 +73,13 @@ describe('purgeStrayCalendarAbsences (MAJOR-1)', () => {
       }),
     } as never;
     await expect(purgeStrayCalendarAbsences(db)).resolves.toEqual([2, 6]);
+  });
+});
+
+describe('utcYesterday (review r2 N2 backstop floor)', () => {
+  it('is the UTC calendar day before now, whatever the hour', () => {
+    expect(utcYesterday(new Date('2026-10-12T00:30:00Z'))).toBe('2026-10-11');
+    expect(utcYesterday(new Date('2026-10-12T23:59:00Z'))).toBe('2026-10-11');
+    expect(utcYesterday(new Date('2026-03-01T12:00:00Z'))).toBe('2026-02-28');
   });
 });

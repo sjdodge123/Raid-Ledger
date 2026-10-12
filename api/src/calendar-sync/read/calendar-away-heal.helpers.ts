@@ -11,14 +11,16 @@
  *   has synced absences attributed to it: the cron queues a derive for its
  *   user (bounded per tick). The derive only reads blocks of
  *   `active AND read_enabled` connections, so it removes or re-attributes
- *   those rows and the user drops out of the next tick's query.
+ *   those rows and the user drops out of the next tick's query. Only rows
+ *   ending UTC-yesterday or later are matched (review r2 N2): the derive
+ *   never touches history, so a past row would re-match every tick forever.
  * - The write side flipped a connection to `needs_reconnect`: a derive is
  *   queued for its user right away (best effort; the cron is the backstop).
  *
  * Manual absences are never touched (every query filters `source`).
  */
 import { Logger } from '@nestjs/common';
-import { and, eq, isNotNull, ne, or } from 'drizzle-orm';
+import { and, eq, gte, isNotNull, ne, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -50,19 +52,34 @@ export async function purgeStrayCalendarAbsences(db: Db): Promise<number[]> {
   return [...new Set(rows.map((r) => r.userId))];
 }
 
-/** Users with synced absences attributed to a connection that stopped counting. */
+/**
+ * `YYYY-MM-DD` of the UTC day before `now`. No zone's local today is earlier
+ * than this, so every row the derive can still touch ends on or after it.
+ */
+export function utcYesterday(now: Date): string {
+  const day = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  return day.toISOString().slice(0, 10);
+}
+
+/**
+ * Users with synced absences attributed to a connection that stopped
+ * counting, among rows the derive can still touch (ending UTC-yesterday or
+ * later — N2). Past-only rows never re-trigger a derive.
+ */
 export async function findUsersWithStaleCalendarAbsences(
   db: Db,
+  now: Date = new Date(),
   limit: number = STALE_ABSENCE_DERIVE_LIMIT,
 ): Promise<number[]> {
   const a = schema.gameTimeAbsences;
   const c = schema.calendarConnections;
   const stopped = or(ne(c.status, 'active'), eq(c.readEnabled, false));
+  const current = gte(a.endDate, utcYesterday(now));
   const rows = await db
     .selectDistinct({ userId: a.userId })
     .from(a)
     .innerJoin(c, eq(c.id, a.calendarConnectionId))
-    .where(and(isSynced(), stopped))
+    .where(and(isSynced(), stopped, current))
     .orderBy(a.userId)
     .limit(limit);
   return rows.map((r) => r.userId);

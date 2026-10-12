@@ -112,7 +112,7 @@ export class CalendarReadCron {
       await this.purgeStrayAbsences();
       return [];
     }
-    const stale = await findUsersWithStaleCalendarAbsences(this.db);
+    const stale = await findUsersWithStaleCalendarAbsences(this.db, now);
     await enqueueDerivesBestEffort(this.queue, stale, 'stale connection');
     const ids = await findDueReadConnections(this.db, now);
     await leaseReadConnections(this.db, ids, now, random);

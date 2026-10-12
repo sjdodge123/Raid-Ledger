@@ -7,7 +7,9 @@
  * - read turned off on the user's only connection (PATCH) → a derive is
  *   queued → running it removes the synced days;
  * - a synced absence attributed to a `needs_reconnect` connection → the read
- *   cron queues a derive for its user → running it removes the day.
+ *   cron queues a derive for its user → running it removes the day;
+ * - past-only synced rows on a read-off connection are never matched by the
+ *   cron backstop, and a derive leaves them (review r2 N2).
  *
  * As in `calendar-away-sync.integration.spec.ts`, the app's read and write
  * WORKERS are closed for the file; queued jobs run in-test through
@@ -34,6 +36,7 @@ import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-sto
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
 import { CalendarWriteProcessor } from '../write/calendar-write.processor';
 import {
+  enqueueCalendarDerive,
   enqueueCalendarReadSync,
   type CalendarReadJobData,
 } from './calendar-read.enqueue.helpers';
@@ -206,6 +209,33 @@ describe('a connection that stops counting re-derives (MAJOR-2)', () => {
 
     await processDerive(m.userId);
     expect(await sourcesOf(m.userId)).toEqual([]);
+  });
+
+  it('past-only synced rows on a read-off connection never re-trigger a derive (r2 N2)', async () => {
+    const m = await member();
+    const past = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .slice(0, 10);
+    await testApp.db.insert(schema.gameTimeAbsences).values({
+      userId: m.userId,
+      startDate: past,
+      endDate: past,
+      source: 'calendar',
+      calendarConnectionId: m.connectionId,
+    });
+    // Read off WITHOUT the PATCH route (which queues a derive itself).
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ readEnabled: false })
+      .where(eq(schema.calendarConnections.id, m.connectionId));
+
+    await cron.run();
+
+    expect(await readQueue.getJob(deriveJobId(m.userId))).toBeUndefined();
+    // History is never touched: a derive run anyway leaves the past row.
+    await enqueueCalendarDerive(readQueue, m.userId);
+    await processDerive(m.userId);
+    expect(await sourcesOf(m.userId)).toEqual(['calendar']);
   });
 
   it('a healthy connection is not re-derived by the cron backstop', async () => {
