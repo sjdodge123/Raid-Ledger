@@ -248,6 +248,30 @@ describe('Weekly digest milestones — games (ROK-1771 L2, integration)', () => 
     ]);
   });
 
+  it('B4: a game crossing 100 community hours is listed; opted-out hours do not count', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
+    const drg = await seedGame(testApp, 'Deep Rock Galactic');
+    const padded = await seedGame(testApp, 'Padded');
+    await seedRollup(testApp, ann, drg, 90, 20);
+    await seedRollup(testApp, ann, drg, 20, 2);
+    await seedRollup(testApp, ann, padded, 90, 20);
+    await seedRollup(testApp, hidden, padded, 30, 2);
+
+    const { hourMilestones } = await fetchDigestMilestones(testApp.db);
+    expect(hourMilestones).toEqual([
+      { gameId: drg, name: 'Deep Rock Galactic', threshold: 100 },
+    ]);
+  });
+});
+
+describe('Weekly digest milestones — first games privacy (AC10, integration)', () => {
+  const ctx = useMilestonesApp();
+  let testApp: TestApp;
+  beforeEach(() => {
+    ({ testApp } = ctx);
+  });
+
   it('B2: activity only from opted-out or inactive members, by event or rollup, is no first', async () => {
     const ann = await seedUser(testApp, 'Ann');
     const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
@@ -273,21 +297,5 @@ describe('Weekly digest milestones — games (ROK-1771 L2, integration)', () => 
 
     const { firstGames } = await fetchDigestMilestones(testApp.db);
     expect(firstGames).toEqual([{ gameId: valheim, name: 'Valheim' }]);
-  });
-
-  it('B4: a game crossing 100 community hours is listed; opted-out hours do not count', async () => {
-    const ann = await seedUser(testApp, 'Ann');
-    const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
-    const drg = await seedGame(testApp, 'Deep Rock Galactic');
-    const padded = await seedGame(testApp, 'Padded');
-    await seedRollup(testApp, ann, drg, 90, 20);
-    await seedRollup(testApp, ann, drg, 20, 2);
-    await seedRollup(testApp, ann, padded, 90, 20);
-    await seedRollup(testApp, hidden, padded, 30, 2);
-
-    const { hourMilestones } = await fetchDigestMilestones(testApp.db);
-    expect(hourMilestones).toEqual([
-      { gameId: drg, name: 'Deep Rock Galactic', threshold: 100 },
-    ]);
   });
 });

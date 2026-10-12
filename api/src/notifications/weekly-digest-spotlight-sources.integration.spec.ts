@@ -4,6 +4,7 @@
  * null; an opted-out member (`show_activity = false`) is never counted or
  * named. Seed helpers mirror `weekly-digest.integration.spec.ts`.
  */
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
 import { nonEmpty } from '../common/testing/narrow';
@@ -31,7 +32,21 @@ function dateAgo(days: number): string {
     .slice(0, 10);
 }
 
-async function seedUser(t: TestApp, tag: string, optOut = false) {
+/** Per-user overrides: guild-seen (default now), inactive stamps, name. */
+type UserRow = {
+  guildMemberSeenAt?: Date | null;
+  deactivatedAt?: Date;
+  bannedAt?: Date;
+  kickedAt?: Date;
+  displayName?: string;
+};
+
+async function seedUser(
+  t: TestApp,
+  tag: string,
+  optOut = false,
+  row: UserRow = {},
+) {
   seq += 1;
   const [u] = nonEmpty(
     await t.db
@@ -40,6 +55,8 @@ async function seedUser(t: TestApp, tag: string, optOut = false) {
         discordId: `d:sp-${tag}-${seq}`,
         username: tag,
         role: 'member',
+        guildMemberSeenAt: new Date(),
+        ...row,
       })
       .returning(),
     'user',
@@ -50,6 +67,16 @@ async function seedUser(t: TestApp, tag: string, optOut = false) {
       .values({ userId: u.id, key: 'show_activity', value: false });
   }
   return u.id;
+}
+
+/** One deactivated, one banned and one kicked member (AC10). */
+async function seedGone(t: TestApp): Promise<number[]> {
+  const at = new Date();
+  return [
+    await seedUser(t, 'gone-deactivated', false, { deactivatedAt: at }),
+    await seedUser(t, 'gone-banned', false, { bannedAt: at }),
+    await seedUser(t, 'gone-kicked', false, { kickedAt: at }),
+  ];
 }
 
 async function seedGame(t: TestApp, name: string): Promise<number> {
@@ -291,6 +318,26 @@ describe('A4 Common Ground result (ROK-1771 L3, integration)', () => {
     await expect(fetchCommonGroundCandidate(ctx.t.db)).resolves.toBeNull();
   });
 
+  it('returns null when the decided game is hidden or banned', async () => {
+    const { win } = await seedScenario({ decidedAgo: DAY });
+    await ctx.t.db
+      .update(schema.games)
+      .set({ banned: true })
+      .where(eq(schema.games.id, win));
+    await expect(fetchCommonGroundCandidate(ctx.t.db)).resolves.toBeNull();
+  });
+
+  it('drops a hidden runner-up instead of naming it', async () => {
+    const { second } = await seedScenario({ decidedAgo: DAY });
+    await ctx.t.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(eq(schema.games.id, second));
+    const c = await fetchCommonGroundCandidate(ctx.t.db);
+    expect(c?.runnerUp).toBeNull();
+    expect(JSON.stringify(c)).not.toContain('Valheim');
+  });
+
   it('ignores private lineups and standalone polls', async () => {
     await seedScenario({ decidedAgo: DAY, visibility: 'private' });
     await seedScenario({ decidedAgo: DAY, standalone: true });
@@ -408,5 +455,55 @@ describe('A2 duo (ROK-1771 L3, integration)', () => {
       eventTitles: ['Raid night', 'Dungeon run'],
     });
     expect(JSON.stringify(c)).not.toContain('hidden');
+  });
+});
+
+describe('AC10 — inactive members and guests contribute to nothing (integration)', () => {
+  const ctx = useApp();
+
+  it('A1: rollups of inactive members raise no game', async () => {
+    const { t } = ctx;
+    const game = await seedGame(t, 'Gone Game');
+    for (const id of await seedGone(t)) await seedRollup(t, id, game, 1, 10);
+    await expect(fetchRisingGameCandidate(t.db)).resolves.toBeNull();
+  });
+
+  it('A5: an event attended only by inactive members is no marathon', async () => {
+    const { t, creatorId } = ctx;
+    const end = ago(DAY);
+    const event = await seedEvent(t, creatorId, 'Gone marathon', [
+      new Date(end.getTime() - 8 * HOUR),
+      end,
+    ]);
+    for (const id of await seedGone(t)) await seedAttended(t, event, id);
+    await expect(fetchMarathonCandidate(t.db)).resolves.toBeNull();
+  });
+
+  it('A2: never pairs an inactive member or a never-guild-seen guest', async () => {
+    const { t, creatorId } = ctx;
+    const a = await seedUser(t, 'alice', false, { displayName: '' });
+    const b = await seedUser(t, 'bob');
+    const guest = await seedUser(t, 'guest', false, {
+      guildMemberSeenAt: null,
+    });
+    const e1 = await seedEvent(t, creatorId, 'Raid night', [
+      ago(3 * DAY),
+      ago(2 * DAY),
+    ]);
+    await seedVoice(t, e1, a, 3 * DAY, 300);
+    await seedVoice(t, e1, b, 3 * DAY, 90);
+    await seedVoice(t, e1, guest, 3 * DAY, 300);
+    for (const id of await seedGone(t))
+      await seedVoice(t, e1, id, 3 * DAY, 300);
+    await expect(fetchDuoCandidate(t.db)).resolves.toEqual({
+      kind: 'duo',
+      members: [
+        { userId: a, name: 'alice' },
+        { userId: b, name: 'bob' },
+      ],
+      minutesTogether: 90,
+      eventCount: 1,
+      eventTitles: ['Raid night'],
+    });
   });
 });
