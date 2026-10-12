@@ -566,7 +566,7 @@ function describeSchedulingAvailability() {
     const res = await getAvailability(fixture, WEEK_START);
 
     expect(cellAt(res.body, 21)?.busyCount).toBe(1);
-    expect(cellAt(res.body, 22)?.busyCount ?? 0).toBe(busyAt22);
+    expect(cellAt(res.body, 22)?.busyCount).toBe(busyAt22);
   });
 
   it('ignores calendar blocks when the read mode is days', async () => {
