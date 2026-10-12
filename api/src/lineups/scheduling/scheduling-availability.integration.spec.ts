@@ -26,6 +26,11 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { nonEmpty } from '../../common/testing/narrow';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { CALENDAR_READ_QUEUE } from '../../calendar-sync/calendar-sync.constants';
+import { applyKillSwitchEffects } from '../../calendar-sync/services/calendar-sync-admin.helpers';
+import { GameTimeService } from '../../users/game-time.service';
 
 /** Sunday 00:00 UTC — grid day 0. */
 const WEEK_START = '2026-03-01T00:00:00.000Z';
@@ -627,16 +632,23 @@ function describeSchedulingAvailability() {
     expect(cellAt(res.body, 21)?.busyCount).toBe(0);
   });
 
-  // D10: kill switch off purges every block (two bounded DELETEs). A6 owns the
-  // purge in `applyAdminCalendarSyncUpdate`; until it lands this applies the
-  // same DELETE, proving the read path holds no cached/derived copy.
+  // D10: kill switch off purges every block in the request — the real
+  // `applyKillSwitchEffects` (A6), proving the read path holds no cached copy.
   it('ignores blocks after the kill-switch purge', async () => {
     const fixture = await seedCalendarFixture('cal-purge');
     await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
     const before = await getAvailability(fixture, WEEK_START);
     expect(cellAt(before.body, 21)?.busyCount).toBe(1);
 
-    await testApp.db.delete(schema.calendarBusyBlocks);
+    const gameTime = testApp.app.get(GameTimeService);
+    await applyKillSwitchEffects(
+      {
+        db: testApp.db,
+        readQueue: testApp.app.get<Queue>(getQueueToken(CALENDAR_READ_QUEUE)),
+        invalidateUser: (userId) => gameTime.invalidateUserCache(userId),
+      },
+      false,
+    );
     const res = await getAvailability(fixture, WEEK_START);
 
     expect(cellAt(res.body, 21)?.busyCount).toBe(0);
