@@ -138,6 +138,13 @@ describe('pickSpotlight', () => {
     expect(pickSpotlight([marathon(900), duo(60)], history, WEEK)).toBeNull();
   });
 
+  it('returns null when nothing is eligible or there are no candidates', () => {
+    expect(pickSpotlight([], [], WEEK)).toBeNull();
+    expect(pickSpotlight([marathon(120), lineup(2)], [], WEEK)).toBeNull();
+  });
+});
+
+describe('spotlight rotation — last ISO week only (AC3, ruling Q1)', () => {
   it('a kind last shown two weeks ago is eligible again (no spotlight last week)', () => {
     const history = [entry('2026-W39', 'marathon')];
     expect(lastSpotlightKind(history, WEEK)).toBeNull();
@@ -161,11 +168,6 @@ describe('pickSpotlight', () => {
   ])('the ISO week before %s is %s', (week, previous) => {
     expect(previousSpotlightWeek(week)).toBe(previous);
     expect(lastSpotlightKind([entry(previous, 'duo')], week)).toBe('duo');
-  });
-
-  it('returns null when nothing is eligible or there are no candidates', () => {
-    expect(pickSpotlight([], [], WEEK)).toBeNull();
-    expect(pickSpotlight([marathon(120), lineup(2)], [], WEEK)).toBeNull();
   });
 });
 

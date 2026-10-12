@@ -328,30 +328,6 @@ describe('weekly digest v2 — section lines', () => {
     expect(lines.at(-1)).toBe('+5 more');
   });
 
-  it('says "+ more" without a number when the events read hit its LIMIT', () => {
-    const u = upcoming();
-    const [event] = u.events;
-    if (!event) throw new Error('fixture');
-    u.events = Array.from({ length: UPCOMING_EVENT_LIMIT }, (_, i) => ({
-      ...event,
-      eventId: i,
-    }));
-    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
-    expect(lines.at(-1)).toBe('+ more');
-  });
-
-  it('says "+ more" without a number when the polls read hit its LIMIT', () => {
-    const u = upcoming();
-    const [poll] = u.polls;
-    if (!poll) throw new Error('fixture');
-    u.polls = Array.from({ length: UPCOMING_POLL_LIMIT }, (_, i) => ({
-      ...poll,
-      matchId: i,
-    }));
-    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
-    expect(lines.at(-1)).toBe('+ more');
-  });
-
   it('renders a Best price line per the operator ruling', () => {
     expect(valueOf(build(full()), DIGEST_FIELD_NAMES.bestPrice)).toBe(
       `**[Deep Rock Galactic](${ORIGIN}/games/8)** −60% · $11.99 · all-time low · 5 wishlisted\n` +
@@ -398,6 +374,32 @@ describe('weekly digest v2 — week-over-week arrows', () => {
     expect(recapField(recap, prior, null)?.value).toBe(
       '**6** events · **14** players',
     );
+  });
+});
+
+describe('weekly digest v2 — Coming up overflow', () => {
+  it('says "+ more" without a number when the events read hit its LIMIT', () => {
+    const u = upcoming();
+    const [event] = u.events;
+    if (!event) throw new Error('fixture');
+    u.events = Array.from({ length: UPCOMING_EVENT_LIMIT }, (_, i) => ({
+      ...event,
+      eventId: i,
+    }));
+    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
+    expect(lines.at(-1)).toBe('+ more');
+  });
+
+  it('says "+ more" without a number when the polls read hit its LIMIT', () => {
+    const u = upcoming();
+    const [poll] = u.polls;
+    if (!poll) throw new Error('fixture');
+    u.polls = Array.from({ length: UPCOMING_POLL_LIMIT }, (_, i) => ({
+      ...poll,
+      matchId: i,
+    }));
+    const lines = upcomingField(u, null)?.value.split('\n') ?? [];
+    expect(lines.at(-1)).toBe('+ more');
   });
 });
 
