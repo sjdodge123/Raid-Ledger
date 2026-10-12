@@ -92,8 +92,7 @@ export interface DigestSpotlightContext {
 
 /** A section, or one spotlight kind, whose read failed. */
 export type DigestSectionKey =
-  | keyof DigestSectionsV2
-  | `spotlight:${SpotlightKind}`;
+  keyof DigestSectionsV2 | `spotlight:${SpotlightKind}`;
 
 /** Called once per failed read; that section (or kind) is then empty. */
 export type DigestSectionErrorHandler = (
@@ -164,34 +163,60 @@ async function gatherSpotlight(
       settle(`spotlight:${kind}`, sources[kind], keep, null, onError),
     ),
   );
-  const candidates = found.filter(
-    (c): c is SpotlightCandidate => c !== null,
-  );
+  const candidates = found.filter((c): c is SpotlightCandidate => c !== null);
   return pickSpotlight(candidates, context.history, context.week);
 }
 
+type Activity = Pick<
+  DigestSectionsV2,
+  'playing' | 'recap' | 'priorRecap' | 'milestones'
+>;
+type Outlook = Pick<DigestSectionsV2, 'upcoming' | 'lfg' | 'bestPrice'>;
+
+/** Looking back: Been playing, both recaps, Firsts & milestones. */
+async function gatherActivity(
+  s: DigestSources,
+  onError?: DigestSectionErrorHandler,
+): Promise<Activity> {
+  const noPlaying = emptySection<DigestPlayingLine>();
+  const [playing, recap, priorRecap, milestones] = await Promise.all([
+    settle('playing', s.communityPlaying, shapePlaying, noPlaying, onError),
+    settle('recap', s.recap, shapeRecap, null, onError),
+    settle('priorRecap', s.priorRecap, keep, null, onError),
+    settle('milestones', s.milestones, keep, null, onError),
+  ]);
+  return { playing, recap, priorRecap, milestones };
+}
+
+/** Looking ahead: Coming up, Looking for group, Best price. */
+async function gatherOutlook(
+  s: DigestSources,
+  onError?: DigestSectionErrorHandler,
+): Promise<Outlook> {
+  const noLfg = emptySection<DigestLfgLine>();
+  const [upcoming, lfg, bestPrice] = await Promise.all([
+    settle('upcoming', s.upcoming, keep, null, onError),
+    settle('lfg', s.lfgGroups, shapeLfg, noLfg, onError),
+    settle('bestPrice', s.bestPrice, keep, null, onError),
+  ]);
+  return { upcoming, lfg, bestPrice };
+}
+
 /**
- * Assemble every v2 section concurrently. `newGameIds` stays `[]`: the v1
- * playing read cannot be re-run over a prior window without redefining
- * "played" (see HANDOVER-1771-L6), and `[]` renders no 🆕 tags (AC8).
+ * Assemble every v2 section concurrently (all three groups start at once).
+ * `newGameIds` stays `[]`: the v1 playing read cannot be re-run over a prior
+ * window without redefining "played" (see HANDOVER-1771-L6), and `[]`
+ * renders no 🆕 tags (AC8).
  */
 export async function assembleDigestSections(
   sources: DigestSources,
   context: DigestSpotlightContext,
   onError?: DigestSectionErrorHandler,
 ): Promise<DigestSectionsV2> {
-  const s = sources;
-  const [spotlight, playing, recap, priorRecap, milestones, upcoming, lfg, bestPrice] =
-    await Promise.all([
-      gatherSpotlight(s.spotlight, context, onError),
-      settle('playing', s.communityPlaying, shapePlaying, emptySection<DigestPlayingLine>(), onError),
-      settle('recap', s.recap, shapeRecap, null, onError),
-      settle('priorRecap', s.priorRecap, keep, null, onError),
-      settle('milestones', s.milestones, keep, null, onError),
-      settle('upcoming', s.upcoming, keep, null, onError),
-      settle('lfg', s.lfgGroups, shapeLfg, emptySection<DigestLfgLine>(), onError),
-      settle('bestPrice', s.bestPrice, keep, null, onError),
-    ]);
-  const newGameIds: readonly number[] = [];
-  return { spotlight, playing, newGameIds, recap, priorRecap, milestones, upcoming, lfg, bestPrice };
+  const [spotlight, activity, outlook] = await Promise.all([
+    gatherSpotlight(sources.spotlight, context, onError),
+    gatherActivity(sources, onError),
+    gatherOutlook(sources, onError),
+  ]);
+  return { spotlight, newGameIds: [], ...activity, ...outlook };
 }

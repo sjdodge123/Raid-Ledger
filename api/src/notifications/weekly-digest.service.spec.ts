@@ -1,17 +1,16 @@
 import { Logger } from '@nestjs/common';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { WeeklyDigestService } from './weekly-digest.service';
-import {
-  assembleDigestSections,
-  type DigestSections,
-} from './weekly-digest-data.helpers';
+import { assembleDigestSections } from './weekly-digest-assembly.helpers';
+import type { DigestSectionsV2 } from './weekly-digest-embed.helpers';
+import type { MarathonCandidate } from './weekly-digest-spotlight.helpers';
 import {
   DIGEST_DEDUP_TTL_SECONDS,
   DIGEST_JOB_NAME,
 } from './weekly-digest-schedule.helpers';
 
-jest.mock('./weekly-digest-data.helpers', () => ({
-  ...jest.requireActual('./weekly-digest-data.helpers'),
+jest.mock('./weekly-digest-assembly.helpers', () => ({
+  ...jest.requireActual('./weekly-digest-assembly.helpers'),
   buildDigestSources: jest.fn(() => ({})),
   assembleDigestSections: jest.fn(),
 }));
@@ -23,7 +22,18 @@ const assemble = assembleDigestSections as jest.MockedFunction<
 const MONDAY_0905Z = new Date('2026-09-21T09:05:00Z');
 const WEEK_KEY = 'weekly-digest:2026-W39';
 
-function sections(withLfg: boolean): DigestSections {
+const MARATHON: MarathonCandidate = {
+  kind: 'marathon',
+  eventId: 4,
+  eventTitle: 'Molten Core',
+  durationMinutes: 300,
+  attendeeCount: 6,
+};
+
+function sections(
+  withLfg: boolean,
+  spotlight: MarathonCandidate | null = null,
+): DigestSectionsV2 {
   const empty = { items: [], total: 0 };
   const lfg = {
     items: [
@@ -39,10 +49,15 @@ function sections(withLfg: boolean): DigestSections {
     total: 1,
   };
   return {
+    spotlight,
     playing: empty,
+    newGameIds: [],
     recap: null,
-    deals: empty,
+    priorRecap: null,
+    milestones: null,
+    upcoming: null,
     lfg: withLfg ? lfg : empty,
+    bestPrice: null,
   };
 }
 
@@ -56,6 +71,7 @@ function setup(settings: Record<string, string | null> = {}) {
   };
   const settingsService = {
     get: jest.fn((key: string) => Promise.resolve(values[key] ?? null)),
+    set: jest.fn().mockResolvedValue(undefined),
     getDefaultTimezone: jest.fn().mockResolvedValue('UTC'),
     getDiscordBotDefaultChannel: jest.fn().mockResolvedValue('default-chan'),
     getTrustedClientUrl: jest.fn().mockResolvedValue('https://raid.example'),
@@ -284,5 +300,85 @@ describe('WeeklyDigestService — channel resolution', () => {
       status: 'no-channel',
     });
     expect(dedup.checkAndMarkSent).not.toHaveBeenCalled();
+  });
+});
+
+function historyWrites(
+  settingsService: ReturnType<typeof setup>['settingsService'],
+): unknown[][] {
+  return settingsService.set.mock.calls.filter(
+    (call: unknown[]) =>
+      call[0] === SETTING_KEYS.WEEKLY_DIGEST_SPOTLIGHT_HISTORY,
+  );
+}
+
+describe('WeeklyDigestService — spotlight history (AC4)', () => {
+  const KEY = SETTING_KEYS.WEEKLY_DIGEST_SPOTLIGHT_HISTORY;
+  const STORED = JSON.stringify([{ week: '2026-W38', kind: 'duo' }]);
+
+  beforeEach(() => assemble.mockResolvedValue(sections(true, MARATHON)));
+
+  it('picks with the stored history and this ISO week', async () => {
+    const { service } = setup({ [KEY]: STORED });
+    await service.postDigest(MONDAY_0905Z);
+    expect(assemble.mock.calls[0]?.[1]).toEqual({
+      history: [{ week: '2026-W38', kind: 'duo' }],
+      week: '2026-W39',
+    });
+  });
+
+  it('writes the posted kind, newest first, after a successful post', async () => {
+    const { service, settingsService } = setup({ [KEY]: STORED });
+    expect((await service.postDigest(MONDAY_0905Z)).status).toBe('posted');
+    const writes = historyWrites(settingsService);
+    expect(writes).toHaveLength(1);
+    expect(JSON.parse(String(writes[0]?.[1]))).toEqual([
+      { week: '2026-W39', kind: 'marathon' },
+      { week: '2026-W38', kind: 'duo' },
+    ]);
+  });
+});
+
+describe('WeeklyDigestService — spotlight history is not written (AC4)', () => {
+  const KEY = SETTING_KEYS.WEEKLY_DIGEST_SPOTLIGHT_HISTORY;
+  const STORED = JSON.stringify([{ week: '2026-W38', kind: 'duo' }]);
+
+  beforeEach(() => assemble.mockResolvedValue(sections(true, MARATHON)));
+
+  it('does not write on a duplicate', async () => {
+    const { service, settingsService, dedup } = setup({ [KEY]: STORED });
+    dedup.checkAndMarkSent.mockResolvedValue(true);
+    expect((await service.postDigest(MONDAY_0905Z)).status).toBe('duplicate');
+    expect(historyWrites(settingsService)).toEqual([]);
+  });
+
+  it('does not write when the send fails', async () => {
+    const { service, settingsService, client } = setup({ [KEY]: STORED });
+    client.sendEmbed.mockRejectedValue(new Error('Missing Access'));
+    await expect(service.postDigest(MONDAY_0905Z)).rejects.toThrow(
+      'Missing Access',
+    );
+    expect(historyWrites(settingsService)).toEqual([]);
+  });
+
+  it('does not write when no spotlight was picked', async () => {
+    assemble.mockResolvedValue(sections(true, null));
+    const { service, settingsService } = setup({ [KEY]: STORED });
+    expect((await service.postDigest(MONDAY_0905Z)).status).toBe('posted');
+    expect(historyWrites(settingsService)).toEqual([]);
+  });
+
+  it('still reports posted when the history write fails, and logs it', async () => {
+    const logError = jest
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => undefined);
+    const { service, settingsService } = setup();
+    settingsService.set.mockRejectedValue(new Error('db down'));
+    try {
+      expect((await service.postDigest(MONDAY_0905Z)).status).toBe('posted');
+      expect(logError).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    } finally {
+      logError.mockRestore();
+    }
   });
 });
