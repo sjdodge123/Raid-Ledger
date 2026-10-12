@@ -615,9 +615,13 @@ describe('review fixes', () => {
     const m = await member();
     const created = await api(m.token).createAbsence(TOMORROW(), '9999-12-31');
     expect(created.status).toBe(201);
-    expect(created.body).toEqual(
-      expect.objectContaining({ endDate: '9999-12-31', source: 'manual' }),
-    );
+    // POST wraps the row: `{ data: { id, startDate, endDate, reason, source } }`.
+    expect(created.body).toEqual({
+      data: expect.objectContaining({
+        endDate: '9999-12-31',
+        source: 'manual',
+      }),
+    });
     expect(await processDerive(m.userId)).toBe('derived');
     fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, [allDay(TOMORROW(), DAY_AFTER())]);
 
