@@ -22,6 +22,7 @@ import {
   createFutureEvent,
   getSignupAssignment,
 } from '../events/signups.integration.spec-helpers';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { NotificationService } from './notification.service';
 import { VoiceAccessLostListener } from './voice-access-lost.listener';
@@ -37,6 +38,7 @@ let seq = 0;
 let voiceEmits: VoiceAccessLostPayload[] = [];
 let dispatchSpy: jest.SpyInstance;
 let emitSpy: jest.SpyInstance;
+let connectedSpy: jest.SpyInstance;
 
 beforeAll(async () => {
   testApp = await getTestApp();
@@ -55,6 +57,11 @@ beforeEach(() => {
       voiceEmits.push(args[0] as VoiceAccessLostPayload);
       return true;
     });
+  // dispatch() skips when the bot is offline; claim it is connected so its
+  // resolved value reflects the preference/deactivation gates under test.
+  connectedSpy = jest
+    .spyOn(testApp.app.get(DiscordBotClientService), 'isConnected')
+    .mockReturnValue(true);
   dispatchSpy = jest.spyOn(
     testApp.app.get(DiscordNotificationService),
     'dispatch',
@@ -64,6 +71,7 @@ beforeEach(() => {
 afterEach(async () => {
   emitSpy.mockRestore();
   dispatchSpy.mockRestore();
+  connectedSpy.mockRestore();
   testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });

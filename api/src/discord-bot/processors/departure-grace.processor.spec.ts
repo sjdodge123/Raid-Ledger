@@ -893,11 +893,14 @@ describe('DepartureGraceProcessor — MMO relevance filter (ROK-919)', () => {
 
 describe('DepartureGraceProcessor — voice-access.lost (ROK-1769)', () => {
   const departed = { eventId: 1, userId: 5, reason: 'departed' };
-  it.each([['dps'], ['bench']])('vacated role %s', async (role) => {
+  it.each([
+    ['unassigned', []],
+    ['bench', [{ id: 3, role: 'bench', position: 1 }]],
+  ])('vacated role %s', async (role, assignment) => {
     mockDb.limit
       .mockResolvedValueOnce([liveEvent])
       .mockResolvedValueOnce([activeSignup])
-      .mockResolvedValueOnce([{ id: 3, role, position: 1 }])
+      .mockResolvedValueOnce(assignment)
       .mockResolvedValueOnce([]);
     await processor.process(makeJob(jobData));
     const sent = mockEventEmitter.emit.mock.calls.filter(
