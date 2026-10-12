@@ -764,7 +764,7 @@ function describeGameTimeService() {
       expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
     });
 
-    it("returns the created absence with source 'manual' (ROK-1593 NIT-1)", async () => {
+    it("returns the created absence with source 'manual'", async () => {
       const created = await service.createAbsence(42, {
         startDate: '2026-02-12',
         endDate: '2026-02-14',

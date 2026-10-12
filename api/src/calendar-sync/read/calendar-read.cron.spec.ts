@@ -131,12 +131,12 @@ describe('CalendarReadCron.run', () => {
     await expect(cron.run(NOW)).resolves.toEqual([]);
     expect(calls.limit).toEqual([]);
     expect(added).toEqual([]);
-    // Ended busy blocks + stale ignored days + (MAJOR-1) synced absences.
+    // Ended busy blocks + stale ignored days + synced absences.
     expect(calls.deletes).toBe(3);
     expect(invalidated).toEqual([9, 11]);
   });
 
-  it('kill switch on → a derive per user with stale synced absences (MAJOR-2)', async () => {
+  it('kill switch on → a derive per user with stale synced absences', async () => {
     const { cron, added, calls, invalidated } = makeCron([4], true, [5, 8]);
     await cron.run(NOW, () => 0.5);
     expect(added).toEqual(['cal-derive-5', 'cal-derive-8', 'cal-read-4']);
@@ -144,7 +144,7 @@ describe('CalendarReadCron.run', () => {
     expect(invalidated).toEqual([]);
   });
 
-  it('a failing backstop query still queues the due syncs (review r2 N4)', async () => {
+  it('a failing backstop query still queues the due syncs', async () => {
     const { cron, added } = makeCron([4], true, new Error('statement timeout'));
     await expect(cron.run(NOW, () => 0.5)).resolves.toEqual([4]);
     expect(added).toEqual(['cal-read-4']);

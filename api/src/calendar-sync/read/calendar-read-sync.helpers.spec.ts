@@ -208,7 +208,7 @@ function lockRecordingTx(row: unknown) {
   return { tx, calls };
 }
 
-describe('lockForSync (review r2 N1 — lock order)', () => {
+describe('lockForSync (lock order)', () => {
   const ACTIVE = { status: 'active', readEnabled: true, readCalendarIds: [] };
 
   it('a deriving sync takes the per-user advisory lock BEFORE its row lock', async () => {

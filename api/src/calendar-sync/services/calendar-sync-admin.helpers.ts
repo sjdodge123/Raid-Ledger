@@ -142,7 +142,7 @@ const logger = new Logger('CalendarSyncAdmin');
  * failure (e.g. Redis down) must not turn the admin's save into a 500 for a
  * setting that DID change. Logged at error level + sent to Sentry instead.
  * Recovery: while off, the busy query ignores blocks and the read cron
- * deletes any synced absence still stored every tick (PR-B review MAJOR-1);
+ * deletes any synced absence still stored every tick;
  * the next enable (or the read cron) re-enqueues the syncs.
  */
 async function applyKillSwitchEffectsSafely(

@@ -9,7 +9,7 @@
  * PR-B: a `derive` job rebuilds one user's synced away days
  * (`runCalendarDerive`) in its own transaction; a successful sync derives in
  * the sync's transaction (`afterBlocks`). A derive failure there (a DB error
- * or a lock-order deadlock) is NOT a provider failure (review MINOR-2): it is
+ * or a lock-order deadlock) is NOT a provider failure: it is
  * tagged `CalendarDeriveError`, never recorded on the connection (no
  * `provider_error` in the UI), logged, and rethrown for a BullMQ retry.
  */
@@ -52,7 +52,7 @@ export type ReadJobOutcome = ReadSyncOutcome | 'derived';
 
 const logger = new Logger('CalendarReadProcessor');
 
-/** A throw from the in-sync derive — ours, not the provider's (MINOR-2). */
+/** A throw from the in-sync derive — ours, not the provider's. */
 export class CalendarDeriveError extends Error {
   constructor(readonly inner: unknown) {
     super('calendar away-day derive failed');

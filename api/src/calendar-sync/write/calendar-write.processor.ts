@@ -4,7 +4,7 @@
  * rethrows only retryable ones (BullMQ then backs off: attempts 6, 30s exp).
  * `write-off` runs `runCalendarWriteOff` (A5); `disconnect` runs
  * `runCalendarDisconnect` (A7, D7 — cleanup kinds run with the kill switch off).
- * ROK-1593 review MAJOR-2 (b): a `failed` reconcile / write-off that left the
+ * ROK-1593 — a `failed` reconcile / write-off that left the
  * connection `needs_reconnect` queues a read `derive` for its user, so its
  * synced away days stop counting (Q12).
  */
@@ -90,7 +90,7 @@ export class CalendarWriteProcessor extends WorkerHost implements OnModuleInit {
     return this.afterFailure(data.connectionId, outcome);
   }
 
-  /** MAJOR-2 (b): see the file header. Never masks the job's outcome. */
+  /** See the file header. Never masks the job's outcome. */
   private async afterFailure<T extends { result: string }>(
     connectionId: number,
     outcome: T,

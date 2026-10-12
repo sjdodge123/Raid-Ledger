@@ -1,7 +1,7 @@
 /**
  * ROK-1593 §3.4 / D5: what the read worker does with a failed sync — the
  * connection write (via the real `recordReadSyncFailure`) and whether BullMQ
- * may retry. The runner is mocked to throw. Also (ROK-1593 B3b) the `derive`
+ * may retry. The runner is mocked to throw. Also the `derive`
  * job kind and the sync's `afterBlocks` hook, with `runCalendarDerive` mocked.
  */
 import { UnrecoverableError, type Job, type Queue } from 'bullmq';
@@ -161,7 +161,7 @@ describe('CalendarReadProcessor failures', () => {
   });
 });
 
-describe('CalendarReadProcessor derive (ROK-1593 B3b)', () => {
+describe('CalendarReadProcessor derive', () => {
   beforeEach(() => {
     runSync.mockReset();
     runDerive.mockReset();
@@ -191,7 +191,7 @@ describe('CalendarReadProcessor derive (ROK-1593 B3b)', () => {
   });
 });
 
-describe('CalendarReadProcessor in-sync derive failure (review MINOR-2)', () => {
+describe('CalendarReadProcessor in-sync derive failure', () => {
   beforeEach(() => {
     runSync.mockReset();
     runDerive.mockReset();

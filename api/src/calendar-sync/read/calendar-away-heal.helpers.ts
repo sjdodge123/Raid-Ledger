@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B review (MAJOR-1 / MAJOR-2): the self-heal paths that keep
+ * ROK-1593 — the self-heal paths that keep
  * synced away days (`game_time_absences.source = 'calendar'`) in line with
  * the connections they came from (operator Q12: kill switch off or a
  * connection that stops counting → its away days stop counting).
@@ -12,7 +12,7 @@
  *   user (bounded per tick). The derive only reads blocks of
  *   `active AND read_enabled` connections, so it removes or re-attributes
  *   those rows and the user drops out of the next tick's query. Only rows
- *   ending UTC-yesterday or later are matched (review r2 N2): the derive
+ *   ending UTC-yesterday or later are matched: the derive
  *   never touches history, so a past row would re-match every tick forever.
  * - The write side flipped a connection to `needs_reconnect`: a derive is
  *   queued for its user right away (best effort; the cron is the backstop).
@@ -64,7 +64,7 @@ export function utcYesterday(now: Date): string {
 /**
  * Users with synced absences attributed to a connection that stopped
  * counting, among rows the derive can still touch (ending UTC-yesterday or
- * later — N2). Past-only rows never re-trigger a derive.
+ * later). Past-only rows never re-trigger a derive.
  */
 export async function findUsersWithStaleCalendarAbsences(
   db: Db,
@@ -102,7 +102,7 @@ export async function enqueueDerivesBestEffort(
 }
 
 /**
- * MAJOR-2 (b): after a write job reports `failed`, queue a derive when the
+ * Write-job failure: after a write job reports `failed`, queue a derive when the
  * connection is now `needs_reconnect` (its blocks stopped counting). Never
  * throws.
  */

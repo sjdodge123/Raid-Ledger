@@ -1,7 +1,7 @@
 /**
- * ROK-1593 B2 — pure away-day derivation (epic ROK-669 §4.6). One case per
+ * ROK-1593 — pure away-day derivation (epic ROK-669 §4.6). One case per
  * §4.6 edge plus the mode, template, coverage, Q16 and Q-D rules. Persistence
- * (diff-upsert, stable ids) is B3's; the pipeline proof is B5's.
+ * (diff-upsert, stable ids) lives in the persist helpers; the pipeline proof is the sync integration spec.
  *
  * Calendar used (2026): Mon 19 Oct … Sun 25 Oct (EDT, UTC-4). DST: US spring
  * forward Sun 8 Mar (02:00 → 03:00), fall back Sun 1 Nov (02:00 → 01:00).
@@ -324,7 +324,7 @@ describe('expandDateRange', () => {
     expect(expandDateRange('2026-11-02', '2026-10-30')).toEqual([]);
   });
 
-  it('terminates at 9999-12-31 (BLOCKER-1: the string loop never ended)', () => {
+  it('terminates at 9999-12-31 (a string loop used to never end)', () => {
     expect(expandDateRange('9999-12-29', '9999-12-31')).toEqual([
       '9999-12-29',
       '9999-12-30',
@@ -341,7 +341,7 @@ describe('expandDateRange', () => {
   });
 });
 
-describe('expandWithinWindow (BLOCKER-1 clip)', () => {
+describe('expandWithinWindow (clip to the window)', () => {
   const window = { firstDate: '2026-10-12', lastDate: '2026-11-08' };
 
   it('clips an "away indefinitely" range ending 9999-12-31 to the window', () => {

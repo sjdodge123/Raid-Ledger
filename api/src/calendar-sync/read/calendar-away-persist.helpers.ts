@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B (B3a, epic ROK-669 §4.6): persist synced away days.
+ * ROK-1593 (epic ROK-669 §4.6): persist synced away days.
  *
  * `runCalendarDerive(tx, userId, opts)` loads the derivation inputs, calls the
  * pure `deriveAwayRanges` and diff-writes the user's `source = 'calendar'`
@@ -13,9 +13,9 @@
  * - **History:** calendar rows that ended before today are never touched. A
  *   row straddling today is compared on its window-clipped range, so it keeps
  *   its id while it still matches; once it stops matching it is TRIMMED to
- *   end yesterday (its past part stays), never deleted (review MINOR-1).
+ *   end yesterday (its past part stays), never deleted.
  * - **Kill switch:** re-read after the advisory + connection locks; off →
- *   the user's calendar rows are purged and nothing is inserted (MAJOR-1,
+ *   the user's calendar rows are purged and nothing is inserted (see
  *   `calendar-away-guard.helpers.ts`).
  * - **R4 safety net:** a block within ±60 s of one of the user's active
  *   sign-ups is our own copy (`matchesSignupBounds`) and never makes a day.
@@ -62,7 +62,7 @@ export interface ExistingAwayRow {
   calendarConnectionId: number | null;
   /**
    * The stored start when it is before today: `startDate` is then clipped to
-   * today and the row straddles it (MINOR-1 trims instead of deleting).
+   * today and the row straddles it (it is trimmed instead of deleted).
    */
   storedStartDate?: string;
 }
@@ -97,7 +97,7 @@ const rangeKey = (r: { startDate: string; endDate: string }): string =>
  * is not `'calendar'` are ignored — never updated, never deleted. A duplicate
  * calendar row for an already-matched range is deleted. A row that straddles
  * today (`storedStartDate` set) is trimmed to end yesterday instead of being
- * deleted, so its past days survive (MINOR-1).
+ * deleted, so its past days survive.
  */
 function dropRow(plan: CalendarAbsenceWritePlan, row: ExistingAwayRow): void {
   if (row.storedStartDate === undefined) {
@@ -232,7 +232,7 @@ async function loadSkipDates(
   ]);
   return {
     ignoredDates: ignored.map((r) => r.date),
-    // Clipped to the window BEFORE expanding (BLOCKER-1): an absence ending
+    // Clipped to the window BEFORE expanding: an absence ending
     // 9999-12-31 contributes at most LOOK_AHEAD_DAYS dates.
     manualDates: manual.flatMap((r) => expandWithinWindow(r, window)),
   };

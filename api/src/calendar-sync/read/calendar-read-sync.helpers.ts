@@ -16,7 +16,7 @@
  *   re-checked AFTER the lock too: the switch-off purge locks the same rows
  *   (`purgeAllCalendarReadData`), so a sync either commits before the purge
  *   (which then deletes its blocks) or sees the switch off.
- * - **Lock order (review r2 N1):** when `afterBlocks` derives, the per-user
+ * - **Lock order:** when `afterBlocks` derives, the per-user
  *   advisory lock is taken BEFORE the row lock (`lockForSync`), the same
  *   order as `runCalendarDerive` — see `calendar-away-guard.helpers.ts`.
  * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
@@ -160,7 +160,7 @@ async function lockReadable(
 }
 
 /**
- * LOCK ORDER RULE (review r2 N1): advisory(user) → own row `FOR UPDATE` →
+ * LOCK ORDER RULE: advisory(user) → own row `FOR UPDATE` →
  * (inside the derive) `FOR KEY SHARE` on all of the user's rows. A derive
  * job takes advisory → rows; if the sync took its row first and then waited
  * on the advisory lock, the two would deadlock (40P01). So when this sync

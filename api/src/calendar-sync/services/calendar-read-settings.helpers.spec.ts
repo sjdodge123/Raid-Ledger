@@ -84,7 +84,7 @@ describe('isManualSyncThrottled', () => {
   });
 });
 
-describe('applyReadUpdate — queued jobs (review MAJOR-2 a)', () => {
+describe('applyReadUpdate — queued jobs', () => {
   function setup() {
     const added: string[] = [];
     const queue = {

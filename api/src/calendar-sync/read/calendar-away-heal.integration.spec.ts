@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B review MAJOR-1 / MAJOR-2 — synced away days self-heal
+ * ROK-1593 — synced away days self-heal
  * (`calendar-away-heal.helpers.ts`), against the real DB + Fake provider:
  *
  * - kill switch off + a synced absence the admin purge missed → the read
@@ -9,7 +9,7 @@
  * - a synced absence attributed to a `needs_reconnect` connection → the read
  *   cron queues a derive for its user → running it removes the day;
  * - past-only synced rows on a read-off connection are never matched by the
- *   cron backstop, and a derive leaves them (review r2 N2).
+ *   cron backstop, and a derive leaves them.
  *
  * As in `calendar-away-sync.integration.spec.ts`, the app's read and write
  * WORKERS are closed for the file; queued jobs run in-test through
@@ -164,7 +164,7 @@ async function addManualAbsence(userId: number): Promise<void> {
     .values({ userId, startDate: day, endDate: day, source: 'manual' });
 }
 
-describe('kill switch off — cron self-heal (MAJOR-1)', () => {
+describe('kill switch off — cron self-heal', () => {
   it('a synced absence left behind is deleted on the next tick; manual kept', async () => {
     const m = await member();
     await syncedDay(m);
@@ -179,7 +179,7 @@ describe('kill switch off — cron self-heal (MAJOR-1)', () => {
   });
 });
 
-describe('a connection that stops counting re-derives (MAJOR-2)', () => {
+describe('a connection that stops counting re-derives', () => {
   it('PATCH read off on the only connection → derive queued → synced days gone', async () => {
     const m = await member();
     await syncedDay(m);
@@ -211,7 +211,7 @@ describe('a connection that stops counting re-derives (MAJOR-2)', () => {
     expect(await sourcesOf(m.userId)).toEqual([]);
   });
 
-  it('past-only synced rows on a read-off connection never re-trigger a derive (r2 N2)', async () => {
+  it('past-only synced rows on a read-off connection never re-trigger a derive', async () => {
     const m = await member();
     const past = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000)
       .toISOString()

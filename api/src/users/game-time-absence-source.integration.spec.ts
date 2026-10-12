@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B (lane B1) — migration 0209 integrity.
+ * ROK-1593 — migration 0209 integrity.
  *
  * `game_time_absences.source` / `calendar_connection_id` CHECKs, the
  * connection → calendar-absence cascade, and `calendar_ignored_days` being

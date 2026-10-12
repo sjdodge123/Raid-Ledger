@@ -1,5 +1,5 @@
 /**
- * ROK-1593 B5 — synced away days end to end against the Fake provider:
+ * ROK-1593 — synced away days end to end against the Fake provider:
  * read sync (`CalendarReadProcessor` → `afterBlocks` → `runCalendarDerive`)
  * and the queued `derive` job, triggered by the real routes (Ignore,
  * disconnect, kill switch, template PUT, read-mode PUT, manual absences).
@@ -601,7 +601,7 @@ describe('settings that re-derive', () => {
   });
 });
 
-// ── Review fixes (ROK-1593 PR-B Fix-A) ──────────────────────────
+// ── Regression cases ──────────────────────────
 
 /** Run the derive directly on a fresh tx (the queued job skips while off). */
 function deriveNow(userId: number) {
@@ -611,7 +611,7 @@ function deriveNow(userId: number) {
 }
 
 describe('review fixes', () => {
-  it('BLOCKER-1: a manual absence ending 9999-12-31 derives normally and hides synced days', async () => {
+  it('a manual absence ending 9999-12-31 derives normally and hides synced days', async () => {
     const m = await member();
     const created = await api(m.token).createAbsence(TOMORROW(), '9999-12-31');
     expect(created.status).toBe(201);
@@ -630,7 +630,7 @@ describe('review fixes', () => {
     expect(await calendarRangesOf(m.userId)).toEqual([]);
   });
 
-  it('MAJOR-1: a derive that runs after the switch went off purges instead of inserting', async () => {
+  it('a derive that runs after the switch went off purges instead of inserting', async () => {
     const m = await member();
     const far = dateOf(tomorrowAt(24 * 5));
     expect((await api(m.token).createAbsence(far, far)).status).toBe(201);
@@ -649,7 +649,7 @@ describe('review fixes', () => {
     ]);
   });
 
-  it('MINOR-1: a row straddling today that stops matching keeps its past part', async () => {
+  it('a row straddling today that stops matching keeps its past part', async () => {
     const m = await member();
     const yesterday = dateOf(tomorrowAt(-48));
     await testApp.db.insert(schema.gameTimeAbsences).values({

@@ -9,7 +9,7 @@
  * (PR-B) ignored days older than UTC yesterday — both run even while the
  * kill switch is off.
  *
- * PR-B self-heal (review MAJOR-1/2, `calendar-away-heal.helpers.ts`): while
+ * Self-heal (`calendar-away-heal.helpers.ts`): while
  * the switch is off each tick deletes any synced absence still stored (a
  * failed or raced admin purge); while it is on each tick queues a derive for
  * users whose synced absences point at a connection that stopped counting.
@@ -126,7 +126,7 @@ export class CalendarReadCron {
   }
 
   /**
-   * MAJOR-2 backstop, best effort (review r2 N4): a failure here is logged
+   * Backstop, best effort: a failure here is logged
    * and must not skip this tick's regular sync enqueues.
    */
   private async enqueueStaleDerives(now: Date): Promise<void> {

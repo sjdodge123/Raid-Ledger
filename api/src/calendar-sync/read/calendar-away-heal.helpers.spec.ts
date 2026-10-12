@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B review MAJOR-1/2: the self-heal helpers against a recording
+ * ROK-1593 — the self-heal helpers against a recording
  * db stub (the SQL itself is proven in `calendar-away-heal.integration.spec.ts`).
  */
 import type { CalendarReadQueue } from './calendar-read.enqueue.helpers';
@@ -42,7 +42,7 @@ describe('enqueueDerivesBestEffort', () => {
   });
 });
 
-describe('deriveIfNeedsReconnect (MAJOR-2 b)', () => {
+describe('deriveIfNeedsReconnect — failed write job', () => {
   it('connection now needs_reconnect → a derive for its owner', async () => {
     const { queue, added } = queueStub();
     await deriveIfNeedsReconnect(selectDb([{ userId: 4 }]), queue, 10);
@@ -64,7 +64,7 @@ describe('deriveIfNeedsReconnect (MAJOR-2 b)', () => {
   });
 });
 
-describe('purgeStrayCalendarAbsences (MAJOR-1)', () => {
+describe('purgeStrayCalendarAbsences — kill-switch self-heal', () => {
   it('returns each touched user once', async () => {
     const rows = [{ userId: 2 }, { userId: 2 }, { userId: 6 }];
     const db = {
@@ -76,7 +76,7 @@ describe('purgeStrayCalendarAbsences (MAJOR-1)', () => {
   });
 });
 
-describe('utcYesterday (review r2 N2 backstop floor)', () => {
+describe('utcYesterday (backstop floor)', () => {
   it('is the UTC calendar day before now, whatever the hour', () => {
     expect(utcYesterday(new Date('2026-10-12T00:30:00Z'))).toBe('2026-10-11');
     expect(utcYesterday(new Date('2026-10-12T23:59:00Z'))).toBe('2026-10-11');

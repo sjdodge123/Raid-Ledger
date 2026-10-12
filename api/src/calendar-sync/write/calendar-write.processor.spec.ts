@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B review MAJOR-2 (b): a `failed` write job checks whether the
+ * ROK-1593 — a `failed` write job checks whether the
  * connection went `needs_reconnect` and, if so, queues a read derive. The
  * job bodies and the check itself are mocked (the check is unit-tested in
  * `calendar-away-heal.helpers.spec.ts`).

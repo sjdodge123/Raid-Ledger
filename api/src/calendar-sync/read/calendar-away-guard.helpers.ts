@@ -1,10 +1,10 @@
 /**
- * ROK-1593 PR-B review MAJOR-1 (derive half): what `runCalendarDerive` does
+ * ROK-1593 — kill-switch self-heal (derive half): what `runCalendarDerive` does
  * so a derive can never re-create synced away days behind the kill-switch
  * purge.
  *
- * 0. `lockUserDerive` — the per-user advisory xact lock. LOCK ORDER RULE
- *    (review r2 N1): every path that takes it does so BEFORE any connection
+ * 0. `lockUserDerive` — the per-user advisory xact lock. LOCK ORDER RULE:
+ *    every path that takes it does so BEFORE any connection
  *    row lock — advisory(user) → own row `FOR UPDATE` → `FOR KEY SHARE` on
  *    all of the user's rows. The read sync takes it ahead of `lockReadable`
  *    (`lockForSync`), so a second sync or a derive job of the same user waits

@@ -1,7 +1,7 @@
 /**
- * ROK-1593 B3a — the PURE diff behind synced away days
+ * ROK-1593 — the PURE diff behind synced away days
  * (`planCalendarAbsenceWrites`). The DB half of `runCalendarDerive` is proven
- * by the B5 integration spec.
+ * by the sync integration spec.
  *
  * Decision pinned here: a non-calendar (manual) row handed in by mistake is
  * IGNORED — never updated, never deleted — and does not stop the derived
@@ -183,7 +183,7 @@ describe('planCalendarAbsenceWrites', () => {
   });
 });
 
-describe('planCalendarAbsenceWrites — rows straddling today (MINOR-1)', () => {
+describe('planCalendarAbsenceWrites — rows straddling today', () => {
   /** A stored 10-10..10-14 row, loaded with its start clipped to today 10-12. */
   const straddling = (id: number, endDate = '2026-10-14'): ExistingAwayRow => ({
     ...existingRow(id, '2026-10-12', endDate),

@@ -1,5 +1,5 @@
 /**
- * ROK-1593 PR-B (lane B4) — Ignore vs delete for synced absences, and the
+ * ROK-1593 — Ignore vs delete for synced absences, and the
  * `source` / `provider` read model.
  *
  * - `POST /users/me/game-time/absences/:id/ignore`: calendar row → 204, the
@@ -11,7 +11,7 @@
  *   the connection's `provider`.
  *
  * Calendar rows are seeded straight into the DB (the derive that writes them
- * is lane B3's); the routes are driven over HTTP.
+ * is covered elsewhere); the routes are driven over HTTP.
  */
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';

@@ -1,6 +1,6 @@
 /**
  * ROK-1593 PR-B (epic ROK-669 §4.6) — whole-day "away" derivation. PURE: no
- * DB, no clock. `calendar-away-persist.helpers.ts` (B3) loads the inputs and
+ * DB, no clock. `calendar-away-persist.helpers.ts` loads the inputs and
  * diff-upserts the returned ranges as `source = 'calendar'` absences.
  *
  * For each local date D in the window (user's IANA zone, DST-correct via the
@@ -62,7 +62,7 @@ export interface AwayDeriveInput {
 }
 
 /**
- * One synced away range. Field names match `gameTimeAbsences` so B3 can
+ * One synced away range. Field names match `gameTimeAbsences` so the persist helpers can
  * spread it into an insert and diff existing rows by `startDate`/`endDate`.
  */
 export interface DerivedAwayRange {
@@ -102,7 +102,7 @@ const fromDayMs = (ms: number): string =>
  * Every date from `startDate` to `endDate` inclusive (`YYYY-MM-DD`); empty
  * when `start > end` or either date is unparseable. Counts epoch days, not
  * string steps: a string loop never ended at `9999-12-31` (its next day,
- * `'+010000-01'`, sorts before `'9999-12-31'` — ROK-1593 BLOCKER-1).
+ * `'+010000-01'`, sorts before `'9999-12-31'`).
  *
  * @throws RangeError when the span exceeds `MAX_EXPANDED_DAYS`.
  */
@@ -125,7 +125,7 @@ export function expandDateRange(startDate: string, endDate: string): string[] {
 /**
  * The dates of an inclusive range that fall inside the inclusive window
  * `[firstDate, lastDate]` — a range entirely outside it yields nothing.
- * Manual absences are clipped this way before expanding (BLOCKER-1): only
+ * Manual absences are clipped this way before expanding: only
  * window dates can be derived, so nothing is lost.
  */
 export function expandWithinWindow(

@@ -121,7 +121,7 @@ export function planReadUpdate(
 
 /**
  * Persist a validated plan; a connection left reading gets a sync. Turning
- * read off queues a derive (review MAJOR-2): the connection's blocks stop
+ * read off queues a derive: the connection's blocks stop
  * counting, so its synced away days must go too (Q12).
  */
 export async function applyReadUpdate(
