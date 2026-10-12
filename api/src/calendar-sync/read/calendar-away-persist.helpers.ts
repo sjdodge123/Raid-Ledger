@@ -25,7 +25,7 @@
  * - **Manual rows** are never loaded into the diff; `planCalendarAbsenceWrites`
  *   also ignores any non-calendar row it is handed.
  */
-import { and, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, lt, lte } from 'drizzle-orm';
 import { CalendarReadModeSchema } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -48,9 +48,10 @@ import {
 import type { ReadSyncTx } from './calendar-read-sync.helpers';
 import {
   lockUserConnections,
+  lockUserDerive,
   purgeCalendarAbsences,
-  readCalendarSyncEnabledOn,
 } from './calendar-away-guard.helpers';
+import { readCalendarSyncEnabled } from './calendar-sync-enabled.query';
 
 /** One existing absence row as the diff needs it. */
 export interface ExistingAwayRow {
@@ -342,11 +343,9 @@ export async function runCalendarDerive(
   userId: number,
   opts: CalendarDeriveOptions,
 ): Promise<CalendarDeriveResult> {
-  await tx.execute(
-    sql`select pg_advisory_xact_lock(hashtext('calendar-derive'), ${userId})`,
-  );
+  await lockUserDerive(tx, userId);
   await lockUserConnections(tx, userId);
-  if (!(await readCalendarSyncEnabledOn(tx))) {
+  if (!(await readCalendarSyncEnabled(tx))) {
     const deleted = await purgeCalendarAbsences(tx, userId);
     return { inserted: 0, updated: 0, deleted };
   }

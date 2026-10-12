@@ -1,25 +1,43 @@
 /**
  * ROK-1593 PR-B review MAJOR-1 (derive half): what `runCalendarDerive` does
- * right after taking the per-user advisory lock, so a derive can never
- * re-create synced away days behind the kill-switch purge.
+ * so a derive can never re-create synced away days behind the kill-switch
+ * purge.
  *
+ * 0. `lockUserDerive` — the per-user advisory xact lock. LOCK ORDER RULE
+ *    (review r2 N1): every path that takes it does so BEFORE any connection
+ *    row lock — advisory(user) → own row `FOR UPDATE` → `FOR KEY SHARE` on
+ *    all of the user's rows. The read sync takes it ahead of `lockReadable`
+ *    (`lockForSync`), so a second sync or a derive job of the same user waits
+ *    on the advisory lock before it holds any row and no cycle can form.
+ *    `pg_advisory_xact_lock` is re-entrant per session, so the derive taking
+ *    it again inside the sync's `afterBlocks` (same tx) is a no-op.
  * 1. `lockUserConnections` — `FOR KEY SHARE` on ALL of the user's connection
  *    rows in id order (the purge locks them `FOR UPDATE` in the same order).
  *    A purge in flight therefore makes the derive wait until it commits; a
  *    derive that got there first makes the purge wait until the derive
  *    commits, and the purge then deletes what the derive wrote.
- * 2. `readCalendarSyncEnabledOn(tx)` — the kill switch read AFTER those locks
+ * 2. `readCalendarSyncEnabled(tx)` — the kill switch read AFTER those locks
  *    (READ COMMITTED: a fresh snapshot per statement, so a committed purge
  *    is visible). Off → `purgeCalendarAbsences` and no insert at all.
  *
  * Every statement runs on the caller's `tx`. Manual rows are never touched.
  */
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, sql } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
-import type { SettingKey } from '../../drizzle/schema';
-import { decrypt } from '../../settings/encryption.util';
-import { getCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 import type { ReadSyncTx } from './calendar-read-sync.helpers';
+
+/**
+ * The per-user derive lock (transaction-scoped). Take it before any
+ * `calendar_connections` row lock — see the lock order rule above.
+ */
+export async function lockUserDerive(
+  tx: ReadSyncTx,
+  userId: number,
+): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext('calendar-derive'), ${userId})`,
+  );
+}
 
 /** `FOR KEY SHARE` on every connection row of `userId`, lowest id first. */
 export async function lockUserConnections(
@@ -33,33 +51,6 @@ export async function lockUserConnections(
     .where(eq(c.userId, userId))
     .orderBy(asc(c.id))
     .for('key share');
-}
-
-async function readSettingOn(
-  tx: ReadSyncTx,
-  key: SettingKey,
-): Promise<string | null> {
-  const t = schema.appSettings;
-  const [row] = await tx
-    .select({ value: t.encryptedValue })
-    .from(t)
-    .where(eq(t.key, key))
-    .limit(1);
-  if (!row) return null;
-  try {
-    return decrypt(row.value);
-  } catch {
-    return null;
-  }
-}
-
-/**
- * The kill switch read on `tx` — same decision as `readCalendarSyncEnabled`
- * (`calendar-sync-enabled.query.ts`), which only accepts a top-level db.
- * A missing or undecryptable row reads as OFF.
- */
-export function readCalendarSyncEnabledOn(tx: ReadSyncTx): Promise<boolean> {
-  return getCalendarSyncEnabled({ get: (key) => readSettingOn(tx, key) });
 }
 
 /** Delete every synced (`source='calendar'`) absence of `userId`; returns the count. */
