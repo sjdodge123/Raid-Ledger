@@ -213,18 +213,26 @@ async function markSynced(
     .where(and(eq(c.id, conn.id), eq(c.status, 'active')));
 }
 
+async function windowFor(
+  deps: ReadSyncDeps,
+  conn: ReadSyncConnection,
+  now: Date,
+): Promise<ReadWindow> {
+  const tz = await resolveUserTimezone(
+    deps.db,
+    conn.userId,
+    deps.defaultTimezone,
+  );
+  return safeReadWindow(now, tz);
+}
+
 /** §4.4.2 steps 3–8 for one connection. Provider errors propagate. */
 export async function runCalendarReadSync(
   deps: ReadSyncDeps,
   conn: ReadSyncConnection,
 ): Promise<ReadSyncOutcome> {
   const now = deps.now ? deps.now() : new Date();
-  const tz = await resolveUserTimezone(
-    deps.db,
-    conn.userId,
-    deps.defaultTimezone,
-  );
-  const window = safeReadWindow(now, tz);
+  const window = await windowFor(deps, conn, now);
   const result = await fetchWindow(deps, conn, window);
   if (deps.stillAllowed && !(await deps.stillAllowed())) return 'skipped';
   const instanceId = deriveInstanceId(new URL(deps.clientUrl).host);

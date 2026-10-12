@@ -16,6 +16,7 @@ import {
   readErrorBackoffMs,
 } from './calendar-read-failure.helpers';
 import {
+  buildSyncedFields,
   nextReadSyncAt,
   pruneReadCalendarIds,
   safeReadWindow,
@@ -154,5 +155,33 @@ describe('readErrorBackoffMs (1 h doubling, cap 6 h)', () => {
       6 * HOUR,
       6 * HOUR,
     ]);
+  });
+});
+
+describe('buildSyncedFields (the success UPDATE)', () => {
+  const stamp = { now: NOW, random: () => 0.5 };
+  const locked = { readCalendarIds: ['a', 'gone', 'policy'] };
+
+  it('never writes status (shared with the write side)', () => {
+    const fields = buildSyncedFields(locked, {}, stamp);
+    expect(Object.keys(fields).sort()).toEqual([
+      'lastErrorCode',
+      'lastSyncedAt',
+      'nextSyncAt',
+      'updatedAt',
+    ]);
+    expect(fields.lastErrorCode).toBeNull();
+  });
+
+  it('a policy-refused calendar records provider_error and is not pruned', () => {
+    const fields = buildSyncedFields(
+      locked,
+      { missingCalendarIds: ['gone'], unreadableCalendarIds: ['policy'] },
+      stamp,
+    );
+    expect(fields).not.toHaveProperty('status');
+    expect(fields.lastErrorCode).toBe('provider_error');
+    expect(fields.readCalendarIds).toEqual(['a', 'policy']);
+    expect(fields.lastSyncedAt).toBe(NOW);
   });
 });

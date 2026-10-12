@@ -397,6 +397,18 @@ describe('GoogleCalendarAdapter read (ROK-1593 A3)', () => {
     expect(out.missingCalendarIds).toEqual([SECRET_CAL]);
   });
 
+  it('a policy-403 calendar is skipped into unreadableCalendarIds — not pruned, the rest still read', async () => {
+    ok(fixture('events-403-domain-policy'), 403);
+    ok(fixture('events-page2'));
+    const out = await configured().fetchBusy(READ_CREDS, RANGE, [
+      SECRET_CAL,
+      'primary',
+    ]);
+    expect(out.blocks).toHaveLength(1);
+    expect(out.unreadableCalendarIds).toEqual([SECRET_CAL]);
+    expect(out.missingCalendarIds).toBeUndefined();
+  });
+
   it('keeps our copy with ourId — the runner drops it by instance (R2)', async () => {
     ok(fixture('events-mixed'));
     const out = await configured().fetchBusy(READ_CREDS, RANGE, ['primary']);
@@ -411,9 +423,8 @@ describe('GoogleCalendarAdapter read (ROK-1593 A3)', () => {
     [401, 'events-401', ProviderAuthError],
     [403, 'events-403-scope', ProviderAuthError],
     [403, 'events-403-rate', RateLimitError],
-    // A quota 403 is a rate limit; a policy 403 fails the run (no prune).
+    // A quota 403 is a rate limit (a policy 403 is a per-calendar skip).
     [403, 'events-403-quota', RateLimitError],
-    [403, 'events-403-domain-policy', TransientError],
     [500, 'error-404', TransientError],
   ])(
     '%i %s → %p; String(err) carries no token or calendar id',

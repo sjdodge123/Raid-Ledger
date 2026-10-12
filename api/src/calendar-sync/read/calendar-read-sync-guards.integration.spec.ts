@@ -12,13 +12,21 @@
  * 5. A connection the write side moved to `needs_reconnect` mid-fetch is not
  *    flipped back to `active` (nor its `auth` code cleared).
  *
+ * Lane F2: a policy-403 calendar is skipped (others commit, no prune,
+ * `provider_error` recorded); the kill-switch purge waits behind a running
+ * sync's row lock and then removes its blocks; a transient failure never
+ * overwrites a write-side `needs_reconnect`'s `auth` code.
+ *
  * The app's read/write workers are closed so no queued job races the test.
  */
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
-import { truncateAllTables } from '../../common/testing/integration-helpers';
+import {
+  truncateAllTables,
+  waitFor,
+} from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import { createMemberAndLogin } from '../../events/signups.integration.spec-helpers';
 import * as schema from '../../drizzle/schema';
@@ -27,7 +35,7 @@ import { setCalendarSyncEnabled } from '../../settings/settings-calendar-sync.he
 import { CALENDAR_READ_QUEUE, readSyncJobId } from '../calendar-sync.constants';
 import { TransientError } from '../providers/calendar-provider.errors';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
-import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
+import { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-store';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
 import { findUserWriteConnectionIds } from '../write/calendar-write-fanout.helpers';
@@ -39,7 +47,12 @@ import {
   type CalendarReadJobData,
 } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
-import { runCalendarReadSync } from './calendar-read-sync.helpers';
+import { recordReadSyncFailure } from './calendar-read-failure.helpers';
+import { purgeAllBusyBlocks } from './calendar-read-purge.helpers';
+import {
+  runCalendarReadSync,
+  type ReadSyncDeps,
+} from './calendar-read-sync.helpers';
 
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
@@ -127,7 +140,11 @@ function blocksOf(connectionId: number) {
     .where(eq(t.connectionId, connectionId));
 }
 
-async function sync(id: number, stillAllowed?: () => Promise<boolean>) {
+async function sync(
+  id: number,
+  stillAllowed?: () => Promise<boolean>,
+  extra: Pick<ReadSyncDeps, 'afterBlocks'> = {},
+) {
   return runCalendarReadSync(
     {
       db: testApp.db,
@@ -135,6 +152,7 @@ async function sync(id: number, stillAllowed?: () => Promise<boolean>) {
       clientUrl: await settings.getClientUrl(),
       defaultTimezone: 'UTC',
       ...(stillAllowed ? { stillAllowed } : {}),
+      ...extra,
     },
     await row(id),
   );
@@ -239,7 +257,13 @@ describe('fix 5 — success never overwrites a needs_reconnect', () => {
   it('a write-side needs_reconnect set during the fetch is kept (status + auth code)', async () => {
     const m = await member();
     seedOneBlock();
+    // Only the pre-transaction check (no row lock held yet) flips the row.
+    // A second call happens inside the locked tx only when the guard has
+    // failed; it must not write the locked row or the test deadlocks.
+    let calls = 0;
     const outcome = await sync(m.connectionId, async () => {
+      calls += 1;
+      if (calls > 1) return true;
       await testApp.db
         .update(c)
         .set({ status: 'needs_reconnect', lastErrorCode: 'auth' })
@@ -251,6 +275,93 @@ describe('fix 5 — success never overwrites a needs_reconnect', () => {
       'skipped',
       'needs_reconnect',
       'auth',
+    ]);
+  });
+});
+
+describe('F2 — a policy-403 calendar is skipped, not fatal', () => {
+  it('the other calendar commits; no prune; provider_error recorded; still active', async () => {
+    const primary = FAKE_PRIMARY_CALENDAR_ID;
+    fake.seedCalendars([{ id: 'policy-cal', name: 'Locked down' }]);
+    const m = await member({ readCalendarIds: [primary, 'policy-cal'] });
+    seedOneBlock();
+    jest
+      .spyOn(fake, 'fetchBusy')
+      .mockImplementationOnce(async (creds, range, ids) => {
+        const readable = ids.filter((id) => id !== 'policy-cal');
+        const base = FakeCalendarProvider.prototype.fetchBusy;
+        const out = await base.call(fake, creds, range, readable);
+        return { ...out, unreadableCalendarIds: ['policy-cal'] };
+      });
+    expect(await sync(m.connectionId)).toBe('synced');
+    const after = await row(m.connectionId);
+    expect(await blocksOf(m.connectionId)).toHaveLength(1);
+    expect([after.status, after.lastErrorCode, after.readCalendarIds]).toEqual([
+      'active',
+      'provider_error',
+      [primary, 'policy-cal'],
+    ]);
+  });
+});
+
+/** Sessions parked behind `pid`'s locks. */
+async function parkedBehind(pid: number): Promise<number> {
+  const rows = await testApp.db.execute<{ n: number }>(sql`
+    SELECT count(*)::int AS n FROM pg_stat_activity a
+    WHERE ${pid} = ANY(pg_blocking_pids(a.pid))`);
+  return Number(rows[0]?.n ?? 0);
+}
+
+describe('F2 — the kill-switch purge serialises with a running sync', () => {
+  it('purge waits behind the sync row lock, then deletes the blocks it committed', async () => {
+    const m = await member();
+    seedOneBlock();
+    let purge: Promise<number[]> | null = null;
+    const outcome = await sync(m.connectionId, undefined, {
+      afterBlocks: async (tx) => {
+        const [me] = await tx.execute<{ pid: number }>(
+          sql`SELECT pg_backend_pid()::int AS pid`,
+        );
+        const pid = Number(me?.pid);
+        const started = purgeAllBusyBlocks(testApp.db);
+        purge = started;
+        const parked = waitFor(
+          async () => {
+            expect(await parkedBehind(pid)).toBeGreaterThan(0);
+          },
+          5000,
+          25,
+        );
+        // Without the lock the purge finishes first; the block check below
+        // then fails with the blocks the sync committed after it.
+        await Promise.race([started.then(() => undefined), parked]);
+      },
+    });
+    expect(outcome).toBe('synced');
+    const purged = await (purge ?? Promise.resolve([]));
+    expect(await blocksOf(m.connectionId)).toEqual([]);
+    expect(purged).toContain(m.userId);
+  });
+});
+
+describe('F2 — a transient failure never overwrites a needs_reconnect', () => {
+  it('auth code and next_sync_at kept when the write side flipped the row', async () => {
+    const m = await member({
+      status: 'needs_reconnect',
+      lastErrorCode: 'auth',
+      nextSyncAt: null,
+    });
+    await recordReadSyncFailure(
+      testApp.db,
+      await row(m.connectionId),
+      new TransientError('http_503'),
+      { finalAttempt: true },
+    );
+    const after = await row(m.connectionId);
+    expect([after.status, after.lastErrorCode, after.nextSyncAt]).toEqual([
+      'needs_reconnect',
+      'auth',
+      null,
     ]);
   });
 });
