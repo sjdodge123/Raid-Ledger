@@ -128,8 +128,11 @@ export async function awaitPrivateChannel(
  * Discord 50001 Missing Access: the companion bot can no longer see the
  * channel. Its member overwrite is the only grant on the channel that names
  * it (`ViewChannel` + `Connect`), so once revocation runs, a lost view is
- * evidence that overwrite is gone — counted as absent ONLY while waiting for
- * absence; anywhere else it is rethrown. 10003 Unknown Channel is deliberately NOT treated as
+ * evidence that overwrite is gone — counted as ABSENT in both directions:
+ * while waiting for absence it ends the poll, while waiting for presence
+ * (re-sign-up) the poll keeps going until the reconcile restores the grant,
+ * so a real failure still ends in "stayed ABSENT". Every other error is
+ * rethrown. 10003 Unknown Channel is deliberately NOT treated as
  * absent: the event is still upcoming/live and undeleted, so the product must
  * not have destroyed the channel; a vanished channel is a real failure.
  */
@@ -139,13 +142,12 @@ const MISSING_ACCESS = 50001;
 async function hasMemberOverwrite(
   channelId: string,
   discordId: string,
-  want: boolean,
 ): Promise<boolean> {
   let channel;
   try {
     channel = await getGuild().channels.fetch(channelId, { force: true });
   } catch (err) {
-    if (!want && err instanceof DiscordAPIError && err.code === MISSING_ACCESS) return false;
+    if (err instanceof DiscordAPIError && err.code === MISSING_ACCESS) return false;
     throw err;
   }
   if (!channel || !('permissionOverwrites' in channel)) {
@@ -171,7 +173,7 @@ export async function awaitOverwrite(
   const discordId = ctx.testBotDiscordId;
   const target = `member overwrite for ${discordId} on ${channelId}`;
   await pollForCondition(
-    async () => ((await hasMemberOverwrite(channelId, discordId, want)) === want ? true : null),
+    async () => ((await hasMemberOverwrite(channelId, discordId)) === want ? true : null),
     ctx.config.timeoutMs,
     { intervalMs: 2000 },
   ).catch((err: unknown) => {
