@@ -12,7 +12,10 @@ import {
   dueReadConnectionFilter,
   leaseReadConnections,
 } from './calendar-read.cron';
-import { busyBlockPruneCutoff } from './calendar-read-purge.helpers';
+import {
+  busyBlockPruneCutoff,
+  ignoredDayPruneCutoff,
+} from './calendar-read-purge.helpers';
 
 const NOW = new Date('2026-10-11T12:00:00Z');
 const MIN = 60_000;
@@ -100,12 +103,13 @@ describe('CalendarReadCron.run', () => {
     expect(added).toEqual(['cal-read-4', 'cal-read-7']);
   });
 
-  it('kill switch off → nothing selected or queued; the prune still runs', async () => {
+  it('kill switch off → nothing selected or queued; both prunes still run', async () => {
     const { cron, calls, added } = makeCron([4], false);
     await expect(cron.run(NOW)).resolves.toEqual([]);
     expect(calls.limit).toEqual([]);
     expect(added).toEqual([]);
-    expect(calls.deletes).toBe(1);
+    // Ended busy blocks + (PR-B) stale ignored days.
+    expect(calls.deletes).toBe(2);
   });
 
   it('prunes blocks ended more than 24 h ago (before any window start)', () => {
@@ -126,5 +130,12 @@ describe('leaseReadConnections (D7 jitter)', () => {
     expect(calls.sets).toEqual([
       { nextSyncAt: new Date(NOW.getTime() + minutes * MIN) },
     ]);
+  });
+
+  it('keeps ignored days from UTC yesterday on (no zone can still need older)', () => {
+    expect(ignoredDayPruneCutoff(NOW)).toBe('2026-10-10');
+    expect(ignoredDayPruneCutoff(new Date('2026-10-11T00:30:00Z'))).toBe(
+      '2026-10-10',
+    );
   });
 });

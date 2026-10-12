@@ -5,8 +5,9 @@
  * once that passes);
  * oldest first, 200 per tick. Each picked row's `next_sync_at` is pushed out
  * 30 min ± 5 min (a lease: a lost job is re-picked later, never every tick;
- * a successful sync re-stamps it anyway). Also prunes ended busy blocks.
- * The ignored-day prune lands with PR-B (B3).
+ * a successful sync re-stamps it anyway). Also prunes ended busy blocks and
+ * (PR-B) ignored days older than UTC yesterday — both run even while the
+ * kill switch is off.
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -24,7 +25,10 @@ import {
   READ_SYNCABLE_STATUSES,
   enqueueCalendarReadSyncs,
 } from './calendar-read.enqueue.helpers';
-import { pruneEndedBusyBlocks } from './calendar-read-purge.helpers';
+import {
+  pruneEndedBusyBlocks,
+  pruneStaleIgnoredDays,
+} from './calendar-read-purge.helpers';
 import { nextReadSyncAt } from './calendar-read-sync.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -91,6 +95,7 @@ export class CalendarReadCron {
   /** Kill switch first (no reads while off); returns the ids queued. */
   async run(now = new Date(), random = Math.random): Promise<number[]> {
     await pruneEndedBusyBlocks(this.db, now);
+    await pruneStaleIgnoredDays(this.db, now);
     if (!(await getCalendarSyncEnabled(this.settings))) return [];
     const ids = await findDueReadConnections(this.db, now);
     await leaseReadConnections(this.db, ids, now, random);

@@ -29,7 +29,7 @@ import {
   enqueueAllReadSyncs,
   type CalendarReadQueue,
 } from '../read/calendar-read.enqueue.helpers';
-import { purgeAllBusyBlocks } from '../read/calendar-read-purge.helpers';
+import { purgeAllCalendarReadData } from '../read/calendar-read-purge.helpers';
 import {
   CALENDAR_OAUTH_PROVIDERS,
   oauthCallbackPath,
@@ -114,9 +114,10 @@ export interface KillSwitchEffects {
 }
 
 /**
- * Off → every busy block is deleted in the request (busy hours stop counting
- * at once; PR-B adds the calendar absences). On → a sync is queued for every
- * read connection, which rebuilds them. Runs after the setting is written, so
+ * Off → every busy block and every synced (`source='calendar'`) absence is
+ * deleted in the request (busy hours and away days stop counting at once;
+ * manual absences stay). On → a sync is queued for every read connection,
+ * which rebuilds both — each sync derives in its own transaction. Runs after the setting is written, so
  * the processor's own kill-switch re-check already sees the new value.
  */
 export async function applyKillSwitchEffects(
@@ -124,7 +125,7 @@ export async function applyKillSwitchEffects(
   enabled: boolean,
 ): Promise<void> {
   if (!enabled) {
-    const users = await purgeAllBusyBlocks(effects.db);
+    const users = await purgeAllCalendarReadData(effects.db);
     users.forEach((u) => effects.invalidateUser(u));
     return;
   }

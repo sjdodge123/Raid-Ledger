@@ -14,7 +14,7 @@
  *   or `needs_reconnect` set by the write queue) or lost `read_enabled`
  *   meanwhile is left untouched (row lock + re-check). The kill switch is
  *   re-checked AFTER the lock too: the switch-off purge locks the same rows
- *   (`purgeAllBusyBlocks`), so a sync either commits before the purge
+ *   (`purgeAllCalendarReadData`), so a sync either commits before the purge
  *   (which then deletes its blocks) or sees the switch off.
  * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
  *   row's `read_calendar_ids`, so a settings PUT racing the fetch survives.

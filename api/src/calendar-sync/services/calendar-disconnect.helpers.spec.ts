@@ -9,7 +9,7 @@ import type {
   CalendarAccountProvider,
   OAuthCredentials,
 } from '../providers/calendar-provider.interface';
-import { calendarBusyBlocks } from '../../drizzle/schema';
+import { calendarBusyBlocks, gameTimeAbsences } from '../../drizzle/schema';
 import { encryptCalendarCredentials } from './calendar-credentials.helpers';
 import {
   markCalendarDisconnecting,
@@ -74,6 +74,7 @@ describe('markCalendarDisconnecting (the request half, D7)', () => {
     const db = createDrizzleMock();
     db.returning
       .mockResolvedValueOnce([{ id: 5 }])
+      .mockResolvedValueOnce([{ userId: 3 }])
       .mockResolvedValueOnce([{ userId: 3 }]);
     await expect(
       markCalendarDisconnecting(db as never, { userId: 3, connectionId: 5 }),
@@ -85,9 +86,10 @@ describe('markCalendarDisconnecting (the request half, D7)', () => {
       }),
     );
     // ROK-1593 D-R7: the request also deletes this connection's busy
-    // blocks (only them — the row itself goes in the job).
-    expect(db.delete).toHaveBeenCalledTimes(1);
-    expect(db.delete).toHaveBeenCalledWith(calendarBusyBlocks);
+    // blocks and (PR-B) its synced absences — the row itself goes in the job.
+    expect(db.delete).toHaveBeenCalledTimes(2);
+    expect(db.delete).toHaveBeenNthCalledWith(1, calendarBusyBlocks);
+    expect(db.delete).toHaveBeenNthCalledWith(2, gameTimeAbsences);
   });
 
   it("another user's connection id → false (404), nothing deleted", async () => {
