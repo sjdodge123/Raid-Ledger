@@ -16,6 +16,8 @@ import {
 } from '../../components/features/game-time/phone/week-strip.fills';
 import type { GroupBandKind } from '../../components/features/game-time/phone/group-day.utils';
 import type { BandKind } from '../../components/features/game-time/phone/phone-week.utils';
+import { WeekStrip } from '../../components/features/game-time/phone/WeekStrip';
+import type { AwaySource } from '../../components/features/game-time/away/away-row.types';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
 
 const GROUP_KINDS: GroupBandKind[] = ['all', 'most', 'few', 'none'];
@@ -83,6 +85,21 @@ function SplitAndBusy(): JSX.Element {
     );
 }
 
+const AWAY_DEMO = new Map<number, AwaySource>([[4, 'calendar'], [6, 'manual']]);
+const noop = (): void => {};
+
+/** ROK-1595 S2: the real strip — Sat a manual away tile, Thu the quiet synced (calendar) one. */
+function AwayTiles(): JSX.Element {
+    return (
+        <StateFrame label="Away tiles · manual (Sat) · calendar (Thu)"
+            note="Manual: dashed edge-strong on overlay/40. Calendar (synced): the same dashed border on no fill, plus a calendar glyph.">
+            <div className="w-72" data-testid="ds-strip-away">
+                <WeekStrip slots={[]} hours={[19, 20, 21]} day={2} onPick={noop} awayDays={AWAY_DEMO} />
+            </div>
+        </StateFrame>
+    );
+}
+
 /** The strip's colour language, painted from the maps the strip itself uses. */
 export function WeekStripSection(): JSX.Element {
     return (
@@ -95,6 +112,7 @@ export function WeekStripSection(): JSX.Element {
                 <GroupRamp />
                 <SelfRamp />
                 <SplitAndBusy />
+                <AwayTiles />
             </StateGrid>
         </Section>
     );

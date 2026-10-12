@@ -886,8 +886,20 @@ seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day
   (`absolute inset-y-0 right-0 w-[30%]`, `:217-220`), on solid and two-tone bars alike — not a
   full-height overlay, not a dot.
 
+- **Away tile (ROK-1585, ROK-1595).** An away day replaces its bars with the 19px "away" word on a
+  dashed `border-edge-strong` tile (`bg-overlay/40`). A day away only because of a **synced calendar** is
+  the quiet variant — the same dashed border on **no fill** (`bg-transparent`) with an 8px calendar glyph
+  stacked over the word, `data-away-source="calendar"`, aria "…, away from calendar". Feed it
+  `awaySourcesOfWeek` (`phone/away-days.ts`); a plain `Set` still means manual. Manual wins when both cover a day.
+
 **DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
 exported for reuse), or change one map without the other.
+
+**Synced away rows (ROK-1595 S1).** In the "I'm away" list (`away/AwayUpcomingList.tsx`), calendar-derived
+rows sit under a `border-edge-subtle` hairline reading "From your calendars" (left, `text-muted`) ·
+"Synced N min ago" (right, `text-dim`), and are **quiet**: `border-edge-subtle bg-transparent` with a
+`font-medium text-muted` title, versus the manual row's `border-edge bg-panel` + `font-semibold
+text-foreground`. Their action is **Ignore** (`text-muted`), never Remove.
 
 Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
 
