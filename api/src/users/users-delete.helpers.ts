@@ -128,6 +128,12 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.calendarEventLinks,
     column: schema.calendarEventLinks.userId,
   },
+  // ROK-1593: busy blocks also cascade from their connection; wiped first so
+  // the connection delete finds no children.
+  {
+    table: schema.calendarBusyBlocks,
+    column: schema.calendarBusyBlocks.userId,
+  },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,
