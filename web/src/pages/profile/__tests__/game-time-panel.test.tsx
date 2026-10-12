@@ -52,6 +52,7 @@ vi.mock('../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useGameTimeAbsences: () => ({ data: gameTime.absences }),
+    useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The real editor only enables Save after a pointer-painted draft (jsdom has no
