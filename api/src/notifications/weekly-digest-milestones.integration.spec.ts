@@ -16,10 +16,23 @@ import {
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
+type Inactive = 'deactivated' | 'banned' | 'kicked';
+
 interface UserOpts {
   createdDaysAgo?: number;
   seenInGuild?: boolean;
   optedOut?: boolean;
+  inactive?: Inactive;
+}
+
+const INACTIVE: readonly Inactive[] = ['deactivated', 'banned', 'kicked'];
+
+/** The users-row stamp for one way of no longer being an active member. */
+function inactiveStamp(kind: Inactive | undefined) {
+  const at = new Date();
+  if (kind === 'deactivated') return { deactivatedAt: at };
+  if (kind === 'banned') return { bannedAt: at };
+  return kind === 'kicked' ? { kickedAt: at } : {};
 }
 
 let seq = 0;
@@ -40,6 +53,7 @@ async function seedUser(
         role: 'member',
         createdAt: new Date(Date.now() - (opts.createdDaysAgo ?? 30) * DAY),
         guildMemberSeenAt: opts.seenInGuild === false ? null : new Date(),
+        ...inactiveStamp(opts.inactive),
       })
       .returning(),
     'user',
@@ -86,6 +100,12 @@ async function seedAttended(
   await testApp.db
     .insert(schema.eventSignups)
     .values({ eventId: e.id, userId, attendanceStatus: 'attended' });
+}
+
+/** Nine attended events before the window and one in it: the 10th. */
+async function seedTenthEvent(testApp: TestApp, userId: number): Promise<void> {
+  for (let i = 0; i < 9; i += 1) await seedAttended(testApp, userId, 20 + i);
+  await seedAttended(testApp, userId, 2);
 }
 
 function dateDaysAgo(days: number): string {
@@ -163,6 +183,44 @@ describe('Weekly digest milestones — members (ROK-1771 L2, integration)', () =
   });
 });
 
+describe('Weekly digest milestones — who may be named (AC10, integration)', () => {
+  const ctx = useMilestonesApp();
+  let testApp: TestApp;
+  beforeEach(() => {
+    ({ testApp } = ctx);
+  });
+
+  it('B1 and B3 skip deactivated, banned and kicked members', async () => {
+    const kael = await seedUser(testApp, 'Kael');
+    await seedTenthEvent(testApp, kael);
+    for (const kind of INACTIVE) {
+      const id = await seedUser(testApp, `Gone ${kind}`, {
+        createdDaysAgo: 1,
+        inactive: kind,
+      });
+      await seedTenthEvent(testApp, id);
+    }
+
+    const m = await fetchDigestMilestones(testApp.db);
+    expect(m.newMembers).toEqual({ names: [], total: 0 });
+    expect(m.eventMilestones).toEqual([
+      { userId: kael, name: 'Kael', threshold: 10 },
+    ]);
+  });
+
+  it('B3 never names an OAuth guest never seen in the guild', async () => {
+    const kael = await seedUser(testApp, 'Kael');
+    const guest = await seedUser(testApp, 'Guest', { seenInGuild: false });
+    await seedTenthEvent(testApp, kael);
+    await seedTenthEvent(testApp, guest);
+
+    const { eventMilestones } = await fetchDigestMilestones(testApp.db);
+    expect(eventMilestones).toEqual([
+      { userId: kael, name: 'Kael', threshold: 10 },
+    ]);
+  });
+});
+
 describe('Weekly digest milestones — games (ROK-1771 L2, integration)', () => {
   const ctx = useMilestonesApp();
   let testApp: TestApp;
@@ -188,6 +246,33 @@ describe('Weekly digest milestones — games (ROK-1771 L2, integration)', () => 
       { gameId: lethal, name: 'Lethal Company' },
       { gameId: valheim, name: 'Valheim' },
     ]);
+  });
+
+  it('B2: activity only from opted-out or inactive members, by event or rollup, is no first', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    const hidden = await seedUser(testApp, 'Hidden', { optedOut: true });
+    const valheim = await seedGame(testApp, 'Valheim');
+    await seedAttended(testApp, ann, 2, valheim);
+    await seedAttended(testApp, hidden, 1, await seedGame(testApp, 'Opt Ev'));
+    for (const kind of INACTIVE) {
+      const gone = await seedUser(testApp, `Gone ${kind}`, { inactive: kind });
+      await seedAttended(
+        testApp,
+        gone,
+        1,
+        await seedGame(testApp, `Ev ${kind}`),
+      );
+      await seedRollup(
+        testApp,
+        gone,
+        await seedGame(testApp, `Ro ${kind}`),
+        3,
+        1,
+      );
+    }
+
+    const { firstGames } = await fetchDigestMilestones(testApp.db);
+    expect(firstGames).toEqual([{ gameId: valheim, name: 'Valheim' }]);
   });
 
   it('B4: a game crossing 100 community hours is listed; opted-out hours do not count', async () => {

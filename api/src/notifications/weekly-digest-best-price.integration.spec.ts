@@ -25,7 +25,10 @@ const AT_LOW: Pricing = { cut: 60, price: '11.99', lowest: '11.99' };
 let testApp: TestApp;
 let seq = 0;
 
-async function seedUser(): Promise<number> {
+/** Stamps that make a user no longer an active member (AC10). */
+type InactiveStamp = { deactivatedAt?: Date; bannedAt?: Date; kickedAt?: Date };
+
+async function seedUser(stamp: InactiveStamp = {}): Promise<number> {
   seq += 1;
   const [u] = nonEmpty(
     await testApp.db
@@ -34,6 +37,7 @@ async function seedUser(): Promise<number> {
         discordId: `d:bp-${seq}`,
         username: `bp-${seq}`,
         role: 'member',
+        ...stamp,
       })
       .returning(),
     'user',
@@ -136,6 +140,39 @@ describe('fetchWishlistedBestPrice — eligibility (ROK-1771 §11)', () => {
       items: [],
       total: 0,
     });
+  });
+});
+
+/** One opted-out user plus one deactivated, one banned and one kicked. */
+async function seedUncountedUsers(): Promise<number[]> {
+  const optedOut = await seedUser();
+  await testApp.db
+    .insert(schema.userPreferences)
+    .values({ userId: optedOut, key: 'show_activity', value: false });
+  const at = new Date();
+  return [
+    optedOut,
+    await seedUser({ deactivatedAt: at }),
+    await seedUser({ bannedAt: at }),
+    await seedUser({ kickedAt: at }),
+  ];
+}
+
+describe('fetchWishlistedBestPrice — who counts (AC10)', () => {
+  it('opted-out and inactive members neither count nor qualify a game', async () => {
+    const active = await seedUsers(2);
+    const uncounted = await seedUncountedUsers();
+    const counted = await seedGame('Counted', AT_LOW);
+    const onlyGone = await seedGame('Only Gone', AT_LOW);
+    await wishlist(counted, [...active, ...uncounted]);
+    await wishlist(onlyGone, uncounted);
+
+    const section = await fetchWishlistedBestPrice(testApp.db);
+
+    expect(section.items.map((l) => [l.name, l.wishlisters])).toEqual([
+      ['Counted', 2],
+    ]);
+    expect(section.total).toBe(1);
   });
 });
 
