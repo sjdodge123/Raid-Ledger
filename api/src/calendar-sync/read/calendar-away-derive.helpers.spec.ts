@@ -10,6 +10,9 @@
 import {
   deriveAwayRanges,
   expandDateRange,
+  expandWithinWindow,
+  MAX_EXPANDED_DAYS,
+  previousCalendarDay,
   type AwayDeriveBlock,
   type AwayDeriveInput,
   type AwayTemplateHour,
@@ -315,5 +318,79 @@ describe('expandDateRange', () => {
       '2026-11-01',
       '2026-11-02',
     ]);
+  });
+
+  it('is empty when the range is reversed', () => {
+    expect(expandDateRange('2026-11-02', '2026-10-30')).toEqual([]);
+  });
+
+  it('terminates at 9999-12-31 (BLOCKER-1: the string loop never ended)', () => {
+    expect(expandDateRange('9999-12-29', '9999-12-31')).toEqual([
+      '9999-12-29',
+      '9999-12-30',
+      '9999-12-31',
+    ]);
+  });
+
+  it('throws past MAX_EXPANDED_DAYS instead of listing millions of dates', () => {
+    expect(() => expandDateRange('2026-10-12', '9999-12-31')).toThrow(
+      RangeError,
+    );
+    const atCap = expandDateRange('2026-01-01', '2036-01-08');
+    expect(atCap).toHaveLength(MAX_EXPANDED_DAYS);
+  });
+});
+
+describe('expandWithinWindow (BLOCKER-1 clip)', () => {
+  const window = { firstDate: '2026-10-12', lastDate: '2026-11-08' };
+
+  it('clips an "away indefinitely" range ending 9999-12-31 to the window', () => {
+    const dates = expandWithinWindow(
+      { startDate: '2026-10-20', endDate: '9999-12-31' },
+      window,
+    );
+    expect(dates[0]).toBe('2026-10-20');
+    expect(dates[dates.length - 1]).toBe('2026-11-08');
+    expect(dates).toHaveLength(20);
+  });
+
+  it('a 3000-year range yields exactly the window dates', () => {
+    const dates = expandWithinWindow(
+      { startDate: '1000-01-01', endDate: '4000-12-31' },
+      window,
+    );
+    expect(dates).toEqual(expandDateRange('2026-10-12', '2026-11-08'));
+    expect(dates).toHaveLength(28);
+  });
+
+  it('a range entirely outside the window contributes nothing', () => {
+    expect(
+      expandWithinWindow(
+        { startDate: '2026-12-01', endDate: '9999-12-31' },
+        window,
+      ),
+    ).toEqual([]);
+    expect(
+      expandWithinWindow(
+        { startDate: '2020-01-01', endDate: '2026-10-11' },
+        window,
+      ),
+    ).toEqual([]);
+  });
+
+  it('leaves a range inside the window unchanged', () => {
+    expect(
+      expandWithinWindow(
+        { startDate: '2026-10-30', endDate: '2026-11-02' },
+        window,
+      ),
+    ).toEqual(expandDateRange('2026-10-30', '2026-11-02'));
+  });
+});
+
+describe('previousCalendarDay', () => {
+  it('steps back across a month and a year boundary', () => {
+    expect(previousCalendarDay('2026-11-01')).toBe('2026-10-31');
+    expect(previousCalendarDay('2027-01-01')).toBe('2026-12-31');
   });
 });

@@ -84,11 +84,63 @@ interface AwayDay {
   connectionId: number;
 }
 
-/** Every date from `startDate` to `endDate` inclusive (`YYYY-MM-DD`). */
+const DAY_MS = 24 * HOUR_MS;
+
+/**
+ * Hard cap on the span `expandDateRange` will list (~10 years) — far above
+ * any derive window. Callers expanding user-supplied ranges clip them first
+ * (`expandWithinWindow`), so hitting it is a caller bug: it throws rather
+ * than silently truncating.
+ */
+export const MAX_EXPANDED_DAYS = 3660;
+
+const toDayMs = (date: string): number => Date.parse(`${date}T00:00:00Z`);
+const fromDayMs = (ms: number): string =>
+  new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * Every date from `startDate` to `endDate` inclusive (`YYYY-MM-DD`); empty
+ * when `start > end` or either date is unparseable. Counts epoch days, not
+ * string steps: a string loop never ended at `9999-12-31` (its next day,
+ * `'+010000-01'`, sorts before `'9999-12-31'` — ROK-1593 BLOCKER-1).
+ *
+ * @throws RangeError when the span exceeds `MAX_EXPANDED_DAYS`.
+ */
 export function expandDateRange(startDate: string, endDate: string): string[] {
-  const dates: string[] = [];
-  for (let d = startDate; d <= endDate; d = nextCalendarDay(d)) dates.push(d);
-  return dates;
+  const startMs = toDayMs(startDate);
+  const endMs = toDayMs(endDate);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return [];
+  if (startMs > endMs) return [];
+  const count = Math.round((endMs - startMs) / DAY_MS) + 1;
+  if (count > MAX_EXPANDED_DAYS) {
+    throw new RangeError(
+      `expandDateRange ${startDate}..${endDate} spans ${count} days (max ${MAX_EXPANDED_DAYS}); clip it first`,
+    );
+  }
+  return Array.from({ length: count }, (_, i) =>
+    fromDayMs(startMs + i * DAY_MS),
+  );
+}
+
+/**
+ * The dates of an inclusive range that fall inside the inclusive window
+ * `[firstDate, lastDate]` — a range entirely outside it yields nothing.
+ * Manual absences are clipped this way before expanding (BLOCKER-1): only
+ * window dates can be derived, so nothing is lost.
+ */
+export function expandWithinWindow(
+  range: { startDate: string; endDate: string },
+  window: { firstDate: string; lastDate: string },
+): string[] {
+  const start =
+    range.startDate > window.firstDate ? range.startDate : window.firstDate;
+  const end = range.endDate < window.lastDate ? range.endDate : window.lastDate;
+  return expandDateRange(start, end);
+}
+
+/** The calendar day before `date` (`YYYY-MM-DD`). */
+export function previousCalendarDay(date: string): string {
+  return fromDayMs(toDayMs(date) - DAY_MS);
 }
 
 /** Sorted union of intervals; touching intervals join (Q16 adjacency). */

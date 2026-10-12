@@ -21,12 +21,12 @@
  * - **Manual rows** are never loaded into the diff; `planCalendarAbsenceWrites`
  *   also ignores any non-calendar row it is handed.
  */
-import { and, eq, gt, gte, inArray, lt, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, lt, lte, sql } from 'drizzle-orm';
 import { CalendarReadModeSchema } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
   deriveAwayRanges,
-  expandDateRange,
+  expandWithinWindow,
   type AwayDeriveInput,
   type DerivedAwayRange,
 } from './calendar-away-derive.helpers';
@@ -199,12 +199,15 @@ async function loadSkipDates(
           eq(a.userId, userId),
           eq(a.source, 'manual'),
           gte(a.endDate, window.firstDate),
+          lte(a.startDate, window.lastDate),
         ),
       ),
   ]);
   return {
     ignoredDates: ignored.map((r) => r.date),
-    manualDates: manual.flatMap((r) => expandDateRange(r.startDate, r.endDate)),
+    // Clipped to the window BEFORE expanding (BLOCKER-1): an absence ending
+    // 9999-12-31 contributes at most LOOK_AHEAD_DAYS dates.
+    manualDates: manual.flatMap((r) => expandWithinWindow(r, window)),
   };
 }
 
