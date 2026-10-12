@@ -17,6 +17,7 @@ import {
   NotFoundError,
   ProviderAuthError,
   ProviderNotConfiguredError,
+  TransientError,
 } from '../calendar-provider.errors';
 import type {
   AuthUrlInput,
@@ -37,6 +38,7 @@ import type {
 import {
   buildCalendarListUrl,
   buildEventsListUrl,
+  GOOGLE_POLICY_403,
   normalizeGoogleEvent,
   readAllGooglePages,
   readCalendarOrSkip,
@@ -138,8 +140,10 @@ export class GoogleCalendarAdapter
    * Busy blocks across `calendarIds` (full window, no sync token — plan D4).
    * A gone calendar (404/410) is skipped into `missingCalendarIds` (pruned
    * by the caller); one refused by a policy 403 is skipped into
-   * `unreadableCalendarIds` (kept, recorded as `provider_error`). Every
-   * other error fails the whole fetch.
+   * `unreadableCalendarIds` (kept, recorded as `provider_error`). When
+   * EVERY requested calendar is refused the fetch fails instead (a zero-block
+   * success would wipe the user's busy blocks every run). Every other error
+   * fails the whole fetch.
    */
   async fetchBusy(
     credentials: CalendarCredentials,
@@ -167,6 +171,7 @@ export class GoogleCalendarAdapter
         `Google read hit the page cap on ${truncated} calendar(s)`,
       );
     }
+    assertSomeReadable(calendarIds, refused);
     return busyResult(blocks, missing, refused);
   }
 
@@ -262,7 +267,16 @@ function accessTokenOf(credentials: CalendarCredentials): string {
   return credentials.accessToken;
 }
 
-/** Resolve to null on NotFoundError; every other error propagates. */
+/**
+ * Every requested calendar refused by a policy 403 → the policy error, so
+ * the caller's fail-and-backoff path runs and the last good blocks stay.
+ */
+function assertSomeReadable(requested: string[], refused: string[]): void {
+  if (requested.length > 0 && refused.length === requested.length) {
+    throw new TransientError(GOOGLE_POLICY_403);
+  }
+}
+
 /** Only the skip lists that are non-empty are set (exact optional props). */
 function busyResult(
   blocks: BusyBlock[],
@@ -280,6 +294,7 @@ function normalizeItems(items: readonly unknown[]): BusyBlock[] {
   return items.flatMap((item) => normalizeGoogleEvent(item, null) ?? []);
 }
 
+/** Resolve to null on NotFoundError; every other error propagates. */
 async function ignoreNotFound<T>(work: Promise<T>): Promise<T | null> {
   try {
     return await work;

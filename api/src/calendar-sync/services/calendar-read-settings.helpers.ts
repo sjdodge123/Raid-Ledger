@@ -34,6 +34,10 @@ import {
 import * as schema from '../../drizzle/schema';
 import { CALENDAR_READ_MODE_KEY } from '../read/calendar-busy-query.helpers';
 import {
+  READ_SYNC_INTERVAL_MS,
+  READ_SYNC_JITTER_MS,
+} from '../read/calendar-read-sync.helpers';
+import {
   enqueueCalendarReadSync,
   type CalendarReadEnqueueDeps,
 } from '../read/calendar-read.enqueue.helpers';
@@ -161,6 +165,10 @@ export async function listConnectionCalendars(
  *   grant is not hammered. A failing sync never moves `last_synced_at`, so
  *   the 5-min rule alone would never throttle it. Once the backoff has
  *   passed the user may try again; that attempt sets the next backoff.
+ * - A partial success (a calendar refused by a policy 403) also leaves a
+ *   `last_error_code`, but its `next_sync_at` is the regular cadence from
+ *   the `last_synced_at` it just moved — not a backoff — so only the 5-min
+ *   rule applies and a user who fixes their sharing can resync.
  */
 export function isManualSyncThrottled(
   row: Pick<
@@ -170,13 +178,27 @@ export function isManualSyncThrottled(
   nowMs: number,
 ): boolean {
   if (row.status === 'needs_reconnect') return true;
-  const failing = row.lastErrorCode !== null;
+  const failing = row.lastErrorCode !== null && !scheduledBySuccess(row);
   const backoffUntil = row.nextSyncAt?.getTime();
   if (failing && backoffUntil !== undefined && backoffUntil > nowMs) {
     return true;
   }
   const last = row.lastSyncedAt?.getTime();
   return last !== undefined && nowMs - last < MANUAL_SYNC_THROTTLE_MS;
+}
+
+/**
+ * `next_sync_at` was set by the success that moved `last_synced_at` (the
+ * regular cadence). A failure never moves `last_synced_at` and backs off
+ * at least 1 h from the failure, so its gap is always longer.
+ */
+function scheduledBySuccess(
+  row: Pick<ConnectionRow, 'nextSyncAt' | 'lastSyncedAt'>,
+): boolean {
+  const last = row.lastSyncedAt?.getTime();
+  const next = row.nextSyncAt?.getTime();
+  if (last === undefined || next === undefined) return false;
+  return next - last <= READ_SYNC_INTERVAL_MS + READ_SYNC_JITTER_MS;
 }
 
 /** `POST :id/sync`: 409 when not reading, 429 while throttled (above). */

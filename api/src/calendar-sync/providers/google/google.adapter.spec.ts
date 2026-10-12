@@ -409,6 +409,16 @@ describe('GoogleCalendarAdapter read (ROK-1593 A3)', () => {
     expect(out.missingCalendarIds).toBeUndefined();
   });
 
+  it('every calendar refused by a policy 403 → the policy TransientError, not a zero-block success', async () => {
+    ok(fixture('events-403-domain-policy'), 403);
+    ok(fixture('events-403-domain-policy'), 403);
+    const err = await failure(
+      configured().fetchBusy(READ_CREDS, RANGE, [SECRET_CAL, 'primary']),
+    );
+    expect(err).toBeInstanceOf(TransientError);
+    expect(err).toMatchObject({ reason: 'http_403' });
+  });
+
   it('keeps our copy with ourId — the runner drops it by instance (R2)', async () => {
     ok(fixture('events-mixed'));
     const out = await configured().fetchBusy(READ_CREDS, RANGE, ['primary']);

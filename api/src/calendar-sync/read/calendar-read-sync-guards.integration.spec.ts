@@ -12,6 +12,9 @@
  * 5. A connection the write side moved to `needs_reconnect` mid-fetch is not
  *    flipped back to `active` (nor its `auth` code cleared).
  *
+ * Lane F3: when EVERY calendar is refused (the real Google adapter's
+ * fetch), the sync fails and the last good blocks stay.
+ *
  * Lane F2: a policy-403 calendar is skipped (others commit, no prune,
  * `provider_error` recorded); the kill-switch purge waits behind a running
  * sync's row lock and then removes its blocks; a transient failure never
@@ -21,6 +24,8 @@
  */
 import { getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -37,6 +42,8 @@ import { TransientError } from '../providers/calendar-provider.errors';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-store';
+import * as googleHttp from '../providers/google/google-http';
+import { GoogleCalendarAdapter } from '../providers/google/google.adapter';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
 import { findUserWriteConnectionIds } from '../write/calendar-write-fanout.helpers';
 import { CalendarWriteProcessor } from '../write/calendar-write.processor';
@@ -301,6 +308,48 @@ describe('F2 — a policy-403 calendar is skipped, not fatal', () => {
       'provider_error',
       [primary, 'policy-cal'],
     ]);
+  });
+});
+
+describe('F3 — every calendar refused keeps the last good blocks', () => {
+  const policy403 = JSON.parse(
+    readFileSync(
+      join(
+        __dirname,
+        '../providers/google/__fixtures__/events-403-domain-policy.json',
+      ),
+      'utf8',
+    ),
+  ) as unknown;
+
+  it('the Google fetch fails on an all-refused run; replaceBlocks never runs', async () => {
+    const m = await member({ readCalendarIds: [FAKE_PRIMARY_CALENDAR_ID] });
+    seedOneBlock();
+    expect(await sync(m.connectionId)).toBe('synced');
+    const synced = (await row(m.connectionId)).lastSyncedAt;
+    jest
+      .spyOn(googleHttp, 'googleJsonRequest')
+      .mockResolvedValue({ status: 403, json: policy403, retryAfter: null });
+    const google = testApp.app.get(GoogleCalendarAdapter);
+    const creds = {
+      kind: 'oauth' as const,
+      accessToken: 'ya29.f3-fixture',
+      refreshToken: 'rt',
+      expiresAt: '2099-01-01T00:00:00.000Z',
+      scopes: [],
+    };
+    jest
+      .spyOn(fake, 'fetchBusy')
+      .mockImplementationOnce((_c, range, ids) =>
+        google.fetchBusy(creds, range, ids),
+      );
+    const err = await sync(m.connectionId).then(
+      (outcome) => outcome,
+      (e: unknown) => e,
+    );
+    expect(err).toBeInstanceOf(TransientError);
+    expect(await blocksOf(m.connectionId)).toHaveLength(1);
+    expect((await row(m.connectionId)).lastSyncedAt).toEqual(synced);
   });
 });
 
