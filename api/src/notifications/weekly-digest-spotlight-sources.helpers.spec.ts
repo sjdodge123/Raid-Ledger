@@ -114,6 +114,24 @@ describe('Common Ground shaping', () => {
     });
   });
 
+  it('falls through in descending vote order, not ascending', () => {
+    const ranked = [
+      { gameId: 1, voteCount: 5 },
+      { gameId: 2, voteCount: 4 },
+      { gameId: 3, voteCount: 2 },
+      { gameId: 4, voteCount: 1 },
+    ];
+    const names = new Map([
+      [3, 'Satisfactory'],
+      [4, 'Terraria'],
+    ]);
+    expect(pickNamedRunnerUp(ranked, 1, names)).toEqual({
+      gameId: 3,
+      name: 'Satisfactory',
+      votes: 2,
+    });
+  });
+
   it('names no runner-up when every other game is hidden', () => {
     expect(pickNamedRunnerUp(votes, 1, new Map())).toBeNull();
     expect(pickNamedRunnerUp(votes, 1, new Map([[1, 'Deep Rock']]))).toBeNull();

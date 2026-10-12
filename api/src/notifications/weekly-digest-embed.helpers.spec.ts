@@ -351,3 +351,13 @@ describe('buildWeeklyDigestEmbed — privacy and mentions', () => {
     ).toThrow('personalized field on channel embed');
   });
 });
+
+describe('sanitizeName — length cap', () => {
+  it('never cuts an emoji in half at the cap', () => {
+    // 98 ASCII + a surrogate-pair emoji straddling the 99-unit cut point.
+    const name = `${'a'.repeat(98)}🎮tail`;
+    const out = sanitizeName(name);
+    expect(out).toBe(`${'a'.repeat(98)}…`);
+    expect(out).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
+  });
+});

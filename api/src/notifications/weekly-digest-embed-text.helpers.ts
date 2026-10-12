@@ -107,10 +107,23 @@ export function lfgLink(
  * masked-link brackets, and break any `<@…>` / `@everyone` token so the digest
  * can never carry a mention (AC6, ledger :37-39).
  */
+/**
+ * The longest prefix of `text` at most `max` UTF-16 units long that ends on a
+ * code-point boundary, so a surrogate pair (an emoji in a name) is never cut.
+ */
+export function sliceCodePoints(text: string, max: number): string {
+  let out = '';
+  for (const cp of text) {
+    if (out.length + cp.length > max) break;
+    out += cp;
+  }
+  return out;
+}
+
 export function sanitizeName(name: string): string {
   const capped =
     name.length > DIGEST_NAME_MAX
-      ? `${name.slice(0, DIGEST_NAME_MAX - 1)}…`
+      ? `${sliceCodePoints(name, DIGEST_NAME_MAX - 1)}…`
       : name;
   return capped
     .replace(/[\\*_~`|[\]()]/g, '\\$&')

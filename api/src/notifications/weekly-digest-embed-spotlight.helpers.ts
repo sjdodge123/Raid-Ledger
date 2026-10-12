@@ -22,6 +22,7 @@ import {
   fitSectionLines,
   gameLink,
   sanitizeName,
+  sliceCodePoints,
   type DigestLinks,
 } from './weekly-digest-embed-text.helpers';
 
@@ -171,19 +172,6 @@ export function plainMarkdown(line: string): string {
     } else if (!MARKDOWN_SYNTAX.has(ch)) {
       out += ch;
     }
-  }
-  return out;
-}
-
-/**
- * The longest prefix of `text` at most `max` UTF-16 units long that ends on a
- * code-point boundary, so a surrogate pair (an emoji in a name) is never cut.
- */
-function sliceCodePoints(text: string, max: number): string {
-  let out = '';
-  for (const cp of text) {
-    if (out.length + cp.length > max) break;
-    out += cp;
   }
   return out;
 }

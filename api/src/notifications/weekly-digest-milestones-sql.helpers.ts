@@ -108,6 +108,10 @@ const RECENT_GAMES_CTE = sql`recent AS (
  * B2 — games with visible activity this week (presence rollups OR an attended
  * event) and NO activity of any kind before the window. With no rollups the
  * presence half contributes nothing and the event half still works.
+ * The NOT EXISTS history checks deliberately count ANY earlier play, guests'
+ * and opted-out members' included: a game someone already played is not a
+ * community first, even if that someone can't be named (AC10 governs who is
+ * shown, not what history exists).
  */
 export function buildFirstGamesQuery(): SQL {
   return sql`
