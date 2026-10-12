@@ -72,6 +72,15 @@ function windowOffset(endOffsetDays: number | undefined): number {
  * Members who left the guild (deactivated), were banned or were kicked drop
  * out via `ACTIVE_MEMBER_SQL_AND` on the `users` join.
  */
+/**
+ * The one definition of "attended an event" for the digest: an `attended`
+ * signup by a linked user on an event that was not cancelled. Aliases:
+ * `s` = event_signups, `e` = events. Window bounds are the caller's.
+ */
+export const ATTENDED_SIGNUP_SQL = sql`s.attendance_status = 'attended'
+      AND s.user_id IS NOT NULL
+      AND e.cancelled_at IS NULL`;
+
 function attendedCte(endOffsetDays: number): SQL {
   const end = nowMinusDays(endOffsetDays);
   const start = nowMinusDays(endOffsetDays + RECAP_WINDOW_DAYS);
@@ -81,9 +90,7 @@ function attendedCte(endOffsetDays: number): SQL {
     FROM event_signups s
     INNER JOIN events e ON e.id = s.event_id
     INNER JOIN users u ON u.id = s.user_id
-    WHERE s.attendance_status = 'attended'
-      AND s.user_id IS NOT NULL
-      AND e.cancelled_at IS NULL
+    WHERE ${ATTENDED_SIGNUP_SQL}
       AND e.duration && tsrange(${start}::timestamp, ${end}::timestamp, '[]')
       AND upper(e.duration) >= ${start}
       AND upper(e.duration) <= ${end}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}

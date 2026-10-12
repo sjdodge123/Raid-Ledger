@@ -16,6 +16,7 @@
 import { sql, type SQL } from 'drizzle-orm';
 import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
 import {
+  ATTENDED_SIGNUP_SQL,
   RECAP_WINDOW_DAYS,
   SHOWS_ACTIVITY_SQL,
 } from './weekly-digest-recap.helpers';
@@ -29,13 +30,10 @@ const WINDOW_START_DATE = sql.raw(
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
 
 /**
- * The recap's "attended" predicate (`weekly-digest-recap.helpers.ts`
- * `attendedCte`) minus its window bounds: attended status, linked user, event
- * not cancelled, event already ended. Alias `s` = event_signups, `e` = events.
+ * The shared "attended" rule (`ATTENDED_SIGNUP_SQL`, the same one the recap
+ * uses) plus "event already ended"; no window bounds. Alias `s` = event_signups, `e` = events.
  */
-const ATTENDED_ENDED = sql`s.attendance_status = 'attended'
-      AND s.user_id IS NOT NULL
-      AND e.cancelled_at IS NULL
+const ATTENDED_ENDED = sql`${ATTENDED_SIGNUP_SQL}
       AND upper(e.duration) <= NOW()`;
 
 /** B1 — accounts created in the window by members actually seen in the guild. */
