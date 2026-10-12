@@ -31,6 +31,8 @@ import type { Queue } from 'bullmq';
 import { CALENDAR_READ_QUEUE } from '../../calendar-sync/calendar-sync.constants';
 import { applyKillSwitchEffects } from '../../calendar-sync/services/calendar-sync-admin.helpers';
 import { GameTimeService } from '../../users/game-time.service';
+import { SettingsService } from '../../settings/settings.service';
+import { setCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 
 /** Sunday 00:00 UTC — grid day 0. */
 const WEEK_START = '2026-03-01T00:00:00.000Z';
@@ -458,6 +460,8 @@ function describeSchedulingAvailability() {
     end: string,
     opts: BlockOpts = {},
   ): Promise<void> {
+    // The busy query ignores blocks while the admin kill switch is off.
+    await setCalendarSyncEnabled(testApp.app.get(SettingsService), true);
     const [conn] = nonEmpty(
       await testApp.db
         .insert(schema.calendarConnections)
