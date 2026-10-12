@@ -14,7 +14,11 @@ import {
   loginAsAdmin,
   truncateAllTables,
 } from '../common/testing/integration-helpers';
-import { createMemberAndLogin } from '../events/signups.integration.spec-helpers';
+import {
+  createFutureEvent,
+  createMemberAndLogin,
+  signupViaDb,
+} from '../events/signups.integration.spec-helpers';
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { setCalendarSyncEnabled } from '../settings/settings-calendar-sync.helpers';
@@ -436,5 +440,140 @@ describe('POST /admin/test/calendar/seed-busy', () => {
     expect(after.body.data.calendarBusy).toEqual([
       expect.objectContaining({ dayOfWeek: 1, startHour: 18, endHour: 20 }),
     ]);
+  });
+
+  // ROK-1595 G-2: the fleet plan / Playwright seed synced away days.
+  describe('derive flag (ROK-1595 G-2)', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const isoDate = (offsetDays: number) =>
+      new Date(Date.now() + offsetDays * DAY_MS).toISOString().slice(0, 10);
+
+    function allDayBody(id: number, derive?: boolean) {
+      const [first, last, end] = [isoDate(5), isoDate(6), isoDate(7)];
+      const allDay = {
+        start: `${first}T00:00:00.000Z`,
+        end: `${end}T00:00:00.000Z`,
+        allDay: true,
+        firstDate: first,
+        lastDate: last,
+      };
+      const body = {
+        connectionId: id,
+        blocks: [allDay],
+        readAccess: 'granted',
+      };
+      return {
+        body: derive === undefined ? body : { ...body, derive },
+        first,
+        last,
+      };
+    }
+
+    function absencesOf(userId: number) {
+      const t = schema.gameTimeAbsences;
+      return testApp.db.select().from(t).where(eq(t.userId, userId));
+    }
+
+    it("derive:true turns an all-day block into a source='calendar' absence", async () => {
+      const id = await seedConnection();
+      const { body, first, last } = allDayBody(id, true);
+      const res = await seedBusy(body);
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({
+        inserted: 1,
+        derived: { inserted: 1, updated: 0, deleted: 0 },
+      });
+      expect(await absencesOf(user.userId)).toEqual([
+        expect.objectContaining({
+          source: 'calendar',
+          calendarConnectionId: id,
+          startDate: first,
+          endDate: last,
+        }),
+      ]);
+    });
+
+    it('without derive the blocks land but no away day is written', async () => {
+      const id = await seedConnection();
+      const res = await seedBusy(allDayBody(id).body);
+      expect(res.status).toBe(201);
+      expect(res.body).toEqual({ inserted: 1 });
+      expect(await absencesOf(user.userId)).toEqual([]);
+    });
+
+    it('still 403s with derive when env DEMO_MODE is off', async () => {
+      const id = await seedConnection();
+      delete process.env.DEMO_MODE;
+      const res = await seedBusy(allDayBody(id, true).body);
+      expect(res.status).toBe(403);
+      expect(await absencesOf(user.userId)).toEqual([]);
+    });
+  });
+});
+
+// ─── GET /users/me/game-time → events[].calendarCopy (ROK-1595 G-1) ─────────
+
+describe('GET /users/me/game-time calendarCopy (ROK-1595 G-1)', () => {
+  /** A sign-up of the viewer 3 days out, 20–22 UTC, inside `week`. */
+  async function signedUpEvent() {
+    const admin = await loginAsAdmin(testApp.request, testApp.seed);
+    const start = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    start.setUTCHours(20, 0, 0, 0);
+    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+    const eventId = await createFutureEvent(testApp, admin, {
+      startTime: start.toISOString(),
+      endTime: end.toISOString(),
+    });
+    await signupViaDb(testApp, eventId, user.userId);
+    const week = new Date(start);
+    week.setUTCHours(0, 0, 0, 0);
+    return { eventId, week: week.toISOString() };
+  }
+
+  function linkCopy(connectionId: number, eventId: number, state = 'synced') {
+    return testApp.db.insert(schema.calendarEventLinks).values({
+      connectionId,
+      userId: user.userId,
+      eventId,
+      calendarId: 'rl-dedicated',
+      providerEventId: `copy-${eventId}`,
+      state,
+    });
+  }
+
+  async function eventsOf(week: string): Promise<Record<string, unknown>[]> {
+    const res = await testApp.request
+      .get('/users/me/game-time')
+      .query({ week, tzOffset: '0' })
+      .set(auth(user.token));
+    expect(res.status).toBe(200);
+    return (res.body as { data: { events: Record<string, unknown>[] } }).data
+      .events;
+  }
+
+  it('names the provider on a block we hold a synced copy of', async () => {
+    const id = await seedConnection();
+    const { eventId, week } = await signedUpEvent();
+    await linkCopy(id, eventId);
+    expect(await eventsOf(week)).toEqual([
+      expect.objectContaining({ eventId, calendarCopy: 'google' }),
+    ]);
+  });
+
+  it('carries no calendarCopy without a link', async () => {
+    await seedConnection();
+    const { eventId, week } = await signedUpEvent();
+    const events = await eventsOf(week);
+    expect(events).toEqual([expect.objectContaining({ eventId })]);
+    expect(events[0]).not.toHaveProperty('calendarCopy');
+  });
+
+  it('carries no calendarCopy for a failed link', async () => {
+    const id = await seedConnection();
+    const { eventId, week } = await signedUpEvent();
+    await linkCopy(id, eventId, 'failed');
+    const events = await eventsOf(week);
+    expect(events).toEqual([expect.objectContaining({ eventId })]);
+    expect(events[0]).not.toHaveProperty('calendarCopy');
   });
 });
