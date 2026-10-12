@@ -70,6 +70,8 @@ export const OAUTH_ERROR_COPY: Record<CalendarOAuthErrorCode, string> = {
     scopes: 'Raid Ledger needs permission to manage its own calendar. Connect again and leave that box ticked.',
     disabled: 'Calendar sync is turned off for this community.',
     unavailable: 'Google Calendar is not set up on this server yet. Ask an admin.',
+    // ROK-1593 contract code; ROK-1595 owns the final read-consent copy.
+    read_scopes: 'Raid Ledger needs permission to see when you are busy. Allow access again and leave those boxes ticked.',
 };
 
 /** Copy for a code this build does not know. */
