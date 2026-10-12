@@ -298,4 +298,22 @@ describe('Weekly digest milestones — first games privacy (AC10, integration)',
     const { firstGames } = await fetchDigestMilestones(testApp.db);
     expect(firstGames).toEqual([{ gameId: valheim, name: 'Valheim' }]);
   });
+
+  it('B2 and B4: an OAuth guest never seen in the guild contributes nothing', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    const guest = await seedUser(testApp, 'Guest', { seenInGuild: false });
+    const valheim = await seedGame(testApp, 'Valheim');
+    const drg = await seedGame(testApp, 'Deep Rock Galactic');
+    await seedAttended(testApp, ann, 2, valheim);
+    // B2: a game only the guest played this week, by event and by rollup.
+    await seedAttended(testApp, guest, 1, await seedGame(testApp, 'Guest Ev'));
+    await seedRollup(testApp, guest, await seedGame(testApp, 'Guest Ro'), 3, 1);
+    // B4: 90 member hours; the guest's 20 this week would cross 100.
+    await seedRollup(testApp, ann, drg, 90, 20);
+    await seedRollup(testApp, guest, drg, 20, 2);
+
+    const m = await fetchDigestMilestones(testApp.db);
+    expect(m.firstGames).toEqual([{ gameId: valheim, name: 'Valheim' }]);
+    expect(m.hourMilestones).toEqual([]);
+  });
 });

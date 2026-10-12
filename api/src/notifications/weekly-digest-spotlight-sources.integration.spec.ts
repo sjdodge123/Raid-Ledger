@@ -69,13 +69,15 @@ async function seedUser(
   return u.id;
 }
 
-/** One deactivated, one banned and one kicked member (AC10). */
+/** One deactivated, one banned and one kicked member, plus a guest (AC10). */
 async function seedGone(t: TestApp): Promise<number[]> {
   const at = new Date();
   return [
     await seedUser(t, 'gone-deactivated', false, { deactivatedAt: at }),
     await seedUser(t, 'gone-banned', false, { bannedAt: at }),
     await seedUser(t, 'gone-kicked', false, { kickedAt: at }),
+    // An OAuth guest (poll link / PUG invite) never seen in the guild.
+    await seedUser(t, 'gone-guest', false, { guildMemberSeenAt: null }),
   ];
 }
 
@@ -494,16 +496,16 @@ describe('A2 duo (ROK-1771 L3, integration)', () => {
 describe('AC10 — inactive members and guests contribute to nothing (integration)', () => {
   const ctx = useApp();
 
-  it('A1: rollups of inactive members raise no game', async () => {
+  it('A1: rollups of inactive members or guests raise no game', async () => {
     const { t } = ctx;
     const game = await seedGame(t, 'Gone Game');
-    // One active player: any single inactive one would make the 2-player bar.
+    // One active player: any single uncounted one would make the 2-player bar.
     await seedRollup(t, await seedUser(t, 'alice'), game, 1, 10);
     for (const id of await seedGone(t)) await seedRollup(t, id, game, 1, 10);
     await expect(fetchRisingGameCandidate(t.db)).resolves.toBeNull();
   });
 
-  it('A5: an event attended only by inactive members is no marathon', async () => {
+  it('A5: an event attended only by inactive members or guests is no marathon', async () => {
     const { t, creatorId } = ctx;
     const end = ago(DAY);
     const event = await seedEvent(t, creatorId, 'Gone marathon', [

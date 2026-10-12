@@ -25,8 +25,13 @@ const AT_LOW: Pricing = { cut: 60, price: '11.99', lowest: '11.99' };
 let testApp: TestApp;
 let seq = 0;
 
-/** Stamps that make a user no longer an active member (AC10). */
-type InactiveStamp = { deactivatedAt?: Date; bannedAt?: Date; kickedAt?: Date };
+/** Stamps that make a user not count (AC10); guild-seen defaults to now. */
+type InactiveStamp = {
+  deactivatedAt?: Date;
+  bannedAt?: Date;
+  kickedAt?: Date;
+  guildMemberSeenAt?: Date | null;
+};
 
 async function seedUser(stamp: InactiveStamp = {}): Promise<number> {
   seq += 1;
@@ -37,6 +42,7 @@ async function seedUser(stamp: InactiveStamp = {}): Promise<number> {
         discordId: `d:bp-${seq}`,
         username: `bp-${seq}`,
         role: 'member',
+        guildMemberSeenAt: new Date(),
         ...stamp,
       })
       .returning(),
@@ -143,7 +149,10 @@ describe('fetchWishlistedBestPrice — eligibility (ROK-1771 §11)', () => {
   });
 });
 
-/** One opted-out user plus one deactivated, one banned and one kicked. */
+/**
+ * One opted-out user, one deactivated, one banned, one kicked and one OAuth
+ * guest never seen in the guild.
+ */
 async function seedUncountedUsers(): Promise<number[]> {
   const optedOut = await seedUser();
   await testApp.db
@@ -155,11 +164,12 @@ async function seedUncountedUsers(): Promise<number[]> {
     await seedUser({ deactivatedAt: at }),
     await seedUser({ bannedAt: at }),
     await seedUser({ kickedAt: at }),
+    await seedUser({ guildMemberSeenAt: null }),
   ];
 }
 
 describe('fetchWishlistedBestPrice — who counts (AC10)', () => {
-  it('opted-out and inactive members neither count nor qualify a game', async () => {
+  it('opted-out, inactive and guest users neither count nor qualify a game', async () => {
     const active = await seedUsers(2);
     const uncounted = await seedUncountedUsers();
     const counted = await seedGame('Counted', AT_LOW);
