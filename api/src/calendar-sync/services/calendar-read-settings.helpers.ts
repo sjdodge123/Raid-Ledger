@@ -140,7 +140,11 @@ export async function applyReadUpdate(
   deps.invalidateUser(row.userId);
   if (plan.readEnabled) await enqueueCalendarReadSync(deps.readQueue, row.id);
   else if (row.readEnabled) {
-    await enqueueDerivesBestEffort(deps.readQueue.queue, [row.userId], 'read off');
+    await enqueueDerivesBestEffort(
+      deps.readQueue.queue,
+      [row.userId],
+      'read off',
+    );
   }
 }
 
