@@ -8,6 +8,7 @@ import {
 import type { NotificationType } from '../drizzle/schema/notification-preferences';
 import { toStr } from './notification-embed.helpers';
 import { buildLfgPlayerInviteRow } from './notification-embed.lfg-player-invite';
+import { VOICE_ACCESS_LOST_SUBTYPE } from './voice-access-lost.helpers';
 
 /** Build extra action rows for specific notification types (ROK-378, ROK-536). */
 export function buildExtraRows(
@@ -155,12 +156,14 @@ export function buildPrimaryButton(
     type !== 'missed_event_nudge'
   )
     return null;
-  const label =
-    type === 'new_event'
-      ? 'Sign Up'
-      : ROSTER_BUTTON_TYPES.has(type)
-        ? 'View Roster'
-        : 'View Event';
+  // ROK-1769: the lost-voice-access DM's button is the way back in.
+  const isSignUp =
+    type === 'new_event' || payload?.subtype === VOICE_ACCESS_LOST_SUBTYPE;
+  const label = isSignUp
+    ? 'Sign Up'
+    : ROSTER_BUTTON_TYPES.has(type)
+      ? 'View Roster'
+      : 'View Event';
   return new ButtonBuilder()
     .setLabel(label)
     .setStyle(ButtonStyle.Link)

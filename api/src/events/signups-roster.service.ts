@@ -21,7 +21,9 @@ import type {
 import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
 import * as rosterOpsH from './signups-roster-ops.helpers';
+import * as voiceH from '../notifications/voice-access-lost.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class SignupsRosterService {
@@ -35,6 +37,7 @@ export class SignupsRosterService {
     private allocationService: SignupsAllocationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly activityLog: ActivityLogService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async cancel(eventId: number, userId: number): Promise<void> {
@@ -137,14 +140,22 @@ export class SignupsRosterService {
       signupId: signup.id,
       action: 'admin_removed',
     });
-    if (signup.userId)
+    if (signup.userId) {
+      // ROK-1769 one-DM rule: lost private voice rides on the removal DM.
+      const lost = voiceH.hadVoiceAccess(signup.status, assignment?.role)
+        ? await voiceH.voiceLossUserIds(this.voiceGate, eventId, [
+            signup.userId,
+          ])
+        : new Set<number>();
       await rosterOpsH.notifyRemovedUser(
         this.notificationService,
         signup.userId,
         eventId,
         event.title,
         (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
+        lost.has(signup.userId),
       );
+    }
     if (assignment?.role && assignment.role !== 'bench') {
       await this.scheduleBackfill(
         eventId,
@@ -173,22 +184,45 @@ export class SignupsRosterService {
     const { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds } =
       await this.executeRosterUpdate(eventId, userId, isAdmin, dto);
     this.emit(SIGNUP_EVENTS.UPDATED, { eventId, action: 'roster_updated' });
-    rosterOpsH.fireRosterNotifications(
-      this.notificationService,
-      eventId,
-      event.title,
-      dto.assignments,
-      signupByUserId,
-      oldRoleBySignupId,
-      (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
-      this.logger,
-    );
+    // Fire-and-forget (as before ROK-1769): the voice gate never rejects.
+    void voiceH
+      .benchedVoiceLossUserIds(
+        this.voiceGate,
+        eventId,
+        dto.assignments,
+        signupByUserId,
+        oldRoleBySignupId,
+      )
+      .then((voiceLost) =>
+        rosterOpsH.fireRosterNotifications(
+          this.notificationService,
+          eventId,
+          event.title,
+          dto.assignments,
+          signupByUserId,
+          oldRoleBySignupId,
+          (eId) =>
+            notifH.fetchNotificationContext(this.notificationService, eId),
+          this.logger,
+          voiceLost,
+        ),
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-1769: Failed roster notifications for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
     return getRosterWithAssignments(eventId).then(async (roster) => {
       // ROK-1269: emit signup_reconfirmed per attendee whose pending status
       // got flipped to confirmed by this roster update. Done after tx commit.
       await this.logReconfirms(eventId, reconfirmedUserIds);
       return roster;
     });
+  }
+
+  /** ROK-1769: db + the ephemeral-voice switches for the voice-line gate. */
+  private get voiceGate(): voiceH.VoiceGateDeps {
+    return { db: this.db, settings: this.settingsService };
   }
 
   /** Run roster replacement inside a transaction for atomicity (ROK-824). */

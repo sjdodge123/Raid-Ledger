@@ -201,19 +201,25 @@ export function buildReactivationFields(
   };
 }
 
+/**
+ * Flip a departed/declined/roached-out signup back to signed_up (mutating
+ * `existing` in place). Returns true iff the row was reactivated, so callers
+ * can re-slot the member and emit SIGNUP_EVENTS.UPDATED (ROK-1769).
+ */
 export async function reactivateIfCancelled(
   tx: Tx,
   existing: SignupRow,
   dto: CreateSignupDto | undefined,
   hasCharacter: boolean,
-) {
-  if (!isCancelledStatus(existing.status)) return;
+): Promise<boolean> {
+  if (!isCancelledStatus(existing.status)) return false;
   const fields = buildReactivationFields(existing, dto, hasCharacter);
   await tx
     .update(schema.eventSignups)
     .set(fields)
     .where(eq(schema.eventSignups.id, existing.id));
   Object.assign(existing, fields);
+  return true;
 }
 
 export async function updatePreferredRolesIfNeeded(

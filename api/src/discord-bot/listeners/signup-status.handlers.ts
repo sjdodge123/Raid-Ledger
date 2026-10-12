@@ -4,6 +4,8 @@ import * as schema from '../../drizzle/schema';
 import { SIGNUP_BUTTON_IDS } from '../discord-bot.constants';
 import { findLinkedUser, fetchEvent } from './signup-interaction.helpers';
 import { showRoleSelect } from './signup-signup.handlers';
+import { resignupIfDeparted } from './signup-reactivation.helpers';
+import { isCancelledStatus } from '../../events/signups-signup.helpers';
 import type { SignupInteractionDeps } from './signup-interaction.types';
 import {
   handleLinkedTentative,
@@ -33,12 +35,7 @@ export async function handleTentative(
   );
 
   if (existingSignup) {
-    await markExistingTentative(eventId, existingSignup, deps);
-    await interaction.editReply({
-      content: "You're marked as **tentative**.",
-      embeds: [],
-    });
-    void deps.updateEmbedSignupCount(eventId);
+    await replyExistingTentative(interaction, eventId, existingSignup, deps);
     return;
   }
 
@@ -51,18 +48,53 @@ export async function handleTentative(
   await handleUnlinkedTentative(interaction, eventId, discordUserId, deps);
 }
 
-async function markExistingTentative(
+async function replyExistingTentative(
+  interaction: ButtonInteraction,
   eventId: number,
   existingSignup: ExistingSignup,
   deps: SignupInteractionDeps,
 ): Promise<void> {
+  const slot = await markExistingTentative(
+    interaction,
+    eventId,
+    existingSignup,
+    deps,
+  );
+  await interaction.editReply({
+    content: `You're marked as **tentative**.${benchSuffix(slot)}`,
+    embeds: [],
+  });
+  void deps.updateEmbedSignupCount(eventId);
+}
+
+/** Returns the re-placed slot when a departed/declined row was re-signed. */
+async function markExistingTentative(
+  interaction: ButtonInteraction,
+  eventId: number,
+  existingSignup: ExistingSignup,
+  deps: SignupInteractionDeps,
+): Promise<string | undefined> {
+  // ROK-1769: a departed/declined linked member re-signs first (re-slot +
+  // signup_reactivated), then goes tentative — same as signupAsTentative.
+  const linkedUser = isCancelledStatus(existingSignup.status)
+    ? await findLinkedUser(interaction.user.id, deps)
+    : null;
+  const resignup = await resignupIfDeparted(
+    eventId,
+    existingSignup,
+    linkedUser,
+    deps,
+  );
   await deps.signupsService.updateStatus(
     eventId,
-    existingSignup.discordUserId
-      ? { discordUserId: existingSignup.discordUserId }
-      : { userId: existingSignup.user.id },
+    linkedUser
+      ? { userId: linkedUser.id }
+      : existingSignup.discordUserId
+        ? { discordUserId: existingSignup.discordUserId }
+        : { userId: existingSignup.user.id },
     { status: 'tentative' },
   );
+  return resignup?.assignedSlot;
 }
 
 /**

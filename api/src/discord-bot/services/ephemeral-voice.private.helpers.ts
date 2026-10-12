@@ -1,4 +1,8 @@
-import { PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
+import {
+  OverwriteType,
+  PermissionFlagsBits,
+  type OverwriteResolvable,
+} from 'discord.js';
 
 /**
  * Pure helpers for private (roster-only) ephemeral voice channels (ROK-1386).
@@ -21,19 +25,34 @@ export interface RosterSignupRow {
 }
 
 /**
+ * Placeholder ids a local-only account carries in `users.discord_id` (e.g.
+ * `local:admin@local` from bootstrap-admin). Discord rejects them as overwrite
+ * ids, and one in the list fails the WHOLE `channels.create` (ROK-1769).
+ */
+const PLACEHOLDER_ID_PREFIXES = ['local:', 'unlinked:'];
+
+function realDiscordId(id: string | null): string | null {
+  if (!id || PLACEHOLDER_ID_PREFIXES.some((p) => id.startsWith(p))) return null;
+  return id;
+}
+
+/**
  * Resolve the rostered-only allow-list of Discord ids from signup rows.
  *
  * Rules: exclude benched players; include only `signed_up` / `tentative`
  * (tentative included only when not benched); resolve `users.discordId` then
- * `signup.discordUserId`; drop rows whose resolved id is null (unlinked members
- * are silently blocked).
+ * `signup.discordUserId`, treating `local:` / `unlinked:` placeholders as
+ * absent; drop rows whose resolved id is null (unlinked members are silently
+ * blocked).
  */
 export function computeAllowedDiscordIds(rows: RosterSignupRow[]): Set<string> {
   const allowed = new Set<string>();
   for (const row of rows) {
     if (row.assignedSlot === 'bench') continue;
     if (row.status !== 'signed_up' && row.status !== 'tentative') continue;
-    const id = row.userDiscordId ?? row.signupDiscordUserId;
+    const id =
+      realDiscordId(row.userDiscordId) ??
+      realDiscordId(row.signupDiscordUserId);
     if (id) allowed.add(id);
   }
   return allowed;
@@ -43,7 +62,9 @@ export function computeAllowedDiscordIds(rows: RosterSignupRow[]): Set<string> {
  * Build the permission-overwrite list for a private channel: deny Connect for
  * `@everyone` (id = guildId) while keeping it visible (ViewChannel allowed), an
  * explicit allow for the bot so the deny can't lock it out, and Connect +
- * ViewChannel for each allow-listed member.
+ * ViewChannel for each allow-listed member. Every entry carries an explicit
+ * `type`: without it discord.js resolves the id from its cache and throws for
+ * any member the bot has not seen, so the channel is never created.
  */
 export function buildPrivateVoiceOverwrites(opts: {
   guildId: string;
@@ -53,11 +74,13 @@ export function buildPrivateVoiceOverwrites(opts: {
   const overwrites: OverwriteResolvable[] = [
     {
       id: opts.guildId,
+      type: OverwriteType.Role,
       deny: [PermissionFlagsBits.Connect],
       allow: [PermissionFlagsBits.ViewChannel],
     },
     {
       id: opts.botId,
+      type: OverwriteType.Member,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
     },
   ];
@@ -65,6 +88,7 @@ export function buildPrivateVoiceOverwrites(opts: {
     if (id === opts.botId || id === opts.guildId) continue;
     overwrites.push({
       id,
+      type: OverwriteType.Member,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
     });
   }

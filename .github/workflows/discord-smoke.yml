@@ -213,8 +213,10 @@ jobs:
       - name: Start API server
         # ROK-1522: record the PID so "Stop API server" can end it (and the
         # bot's gateway session) before the lease is released.
+        # ROK-1769: API output goes to api.log (uploaded + grepped on failure)
+        # so a swallowed error like createForEvent's captureError is readable.
         run: |
-          node api/dist/src/main.js &
+          node api/dist/src/main.js > api.log 2>&1 &
           echo "API_PID=$!" >> "$GITHUB_ENV"
         env:
           PORT: '3000'
@@ -381,6 +383,24 @@ jobs:
           stop KILL
           for _ in $(seq 1 10); do alive || exit 0; sleep 1; done
           echo "::warning::API did not exit; releasing the lease anyway"
+
+      # ROK-1769: the API's stdout/stderr, readable after a failed run.
+      - name: Show API errors
+        if: failure()
+        continue-on-error: true
+        run: |
+          [ -f api.log ] || { echo "no api.log"; exit 0; }
+          grep -iE "ephemeral|InvalidType|DiscordAPIError|Missing" api.log | tail -50 || true
+
+      - name: Upload API log
+        if: failure()
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: discord-smoke-api-log
+          path: api.log
+          if-no-files-found: ignore
+          retention-days: 7
 
       # ROK-1522: runs on success, failure, cancel and timeout. The script
       # deletes the ref only if this run still owns it, and never fails.
