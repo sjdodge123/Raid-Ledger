@@ -9,6 +9,7 @@ import type {
   CalendarAccountProvider,
   OAuthCredentials,
 } from '../providers/calendar-provider.interface';
+import { calendarBusyBlocks } from '../../drizzle/schema';
 import { encryptCalendarCredentials } from './calendar-credentials.helpers';
 import {
   markCalendarDisconnecting,
@@ -71,7 +72,9 @@ afterEach(() => jest.restoreAllMocks());
 describe('markCalendarDisconnecting (the request half, D7)', () => {
   it('own row → set status disconnecting, scoped to id AND user → true', async () => {
     const db = createDrizzleMock();
-    db.returning.mockResolvedValueOnce([{ id: 5 }]);
+    db.returning
+      .mockResolvedValueOnce([{ id: 5 }])
+      .mockResolvedValueOnce([{ userId: 3 }]);
     await expect(
       markCalendarDisconnecting(db as never, { userId: 3, connectionId: 5 }),
     ).resolves.toBe(true);
@@ -81,7 +84,10 @@ describe('markCalendarDisconnecting (the request half, D7)', () => {
         updatedAt: expect.any(Date),
       }),
     );
-    expect(db.delete).not.toHaveBeenCalled();
+    // ROK-1593 D-R7: the request also deletes this connection's busy
+    // blocks (only them — the row itself goes in the job).
+    expect(db.delete).toHaveBeenCalledTimes(1);
+    expect(db.delete).toHaveBeenCalledWith(calendarBusyBlocks);
   });
 
   it("another user's connection id → false (404), nothing deleted", async () => {
