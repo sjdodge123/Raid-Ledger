@@ -8,7 +8,7 @@
  * through the API's REAL DM builder (`/admin/test/render-dm-embed`) — the
  * companion bot cannot read a DM another bot sends (Discord 50007).
  */
-import { OverwriteType } from 'discord.js';
+import { DiscordAPIError, OverwriteType } from 'discord.js';
 import { getGuild } from '../client.js';
 import { pollForCondition } from '../helpers/polling.js';
 import { SmokeAssertionError } from './assert.js';
@@ -49,6 +49,32 @@ export async function setEphemeralVoiceConfig(
     ...cfg,
     ...(cfg.enabled ? { createBufferMinutes: 30, idleMinutes: 30 } : {}),
   });
+}
+
+/** The GLOBAL config fields these tests change (read before, restored after). */
+export interface PriorEphemeralConfig {
+  enabled: boolean;
+  categoryId: string | null;
+  createBufferMinutes: number;
+  idleMinutes: number;
+}
+
+export async function getEphemeralVoiceConfig(api: ApiClient): Promise<PriorEphemeralConfig> {
+  const c = await api.get<PriorEphemeralConfig>('/admin/settings/discord-bot/ephemeral-voice');
+  return {
+    enabled: c.enabled,
+    categoryId: c.categoryId,
+    createBufferMinutes: c.createBufferMinutes,
+    idleMinutes: c.idleMinutes,
+  };
+}
+
+/** Put back exactly what `getEphemeralVoiceConfig` read before the test. */
+export async function restoreEphemeralVoiceConfig(
+  api: ApiClient,
+  prior: PriorEphemeralConfig,
+): Promise<void> {
+  await api.put('/admin/settings/discord-bot/ephemeral-voice', prior);
 }
 
 /** A real GUILD_CATEGORY to parent the channel (prefers a voice category). */
@@ -96,14 +122,41 @@ export async function awaitPrivateChannel(
   ).catch(() => fail(`event ${eventId}: private ephemeral channel was never created`));
 }
 
+/**
+ * Discord 50001 Missing Access: the companion bot can no longer see the
+ * channel. Its member overwrite is the only grant on the channel that names
+ * it (`ViewChannel` + `Connect`), so once revocation runs, a lost view is
+ * evidence that overwrite is gone — counted as absent ONLY while waiting for
+ * absence; anywhere else it is rethrown. 10003 Unknown Channel is deliberately NOT treated as
+ * absent: the event is still upcoming/live and undeleted, so the product must
+ * not have destroyed the channel; a vanished channel is a real failure.
+ */
+const MISSING_ACCESS = 50001;
+
 /** True when `discordId` has a MEMBER overwrite on the channel (read from Discord). */
-async function hasMemberOverwrite(channelId: string, discordId: string): Promise<boolean> {
-  const channel = await getGuild().channels.fetch(channelId, { force: true });
+async function hasMemberOverwrite(
+  channelId: string,
+  discordId: string,
+  want: boolean,
+): Promise<boolean> {
+  let channel;
+  try {
+    channel = await getGuild().channels.fetch(channelId, { force: true });
+  } catch (err) {
+    if (!want && err instanceof DiscordAPIError && err.code === MISSING_ACCESS) return false;
+    throw err;
+  }
   if (!channel || !('permissionOverwrites' in channel)) {
     fail(`channel ${channelId} is gone or has no permission overwrites`);
   }
   const ow = channel.permissionOverwrites.cache.get(discordId);
   return ow !== undefined && ow.type === OverwriteType.Member;
+}
+
+function describeError(err: unknown): string {
+  const code = err instanceof DiscordAPIError ? ` code=${String(err.code)}` : '';
+  const msg = err instanceof Error ? err.message : String(err);
+  return `${err instanceof Error ? err.name : typeof err}${code}: ${msg}`;
 }
 
 /** Poll until the member overwrite is present (`want=true`) or gone. */
@@ -114,15 +167,19 @@ export async function awaitOverwrite(
   phase: string,
 ): Promise<void> {
   const discordId = ctx.testBotDiscordId;
+  const target = `member overwrite for ${discordId} on ${channelId}`;
   await pollForCondition(
-    async () => ((await hasMemberOverwrite(channelId, discordId)) === want ? true : null),
+    async () => ((await hasMemberOverwrite(channelId, discordId, want)) === want ? true : null),
     ctx.config.timeoutMs,
     { intervalMs: 2000 },
-  ).catch(() =>
-    fail(
-      `${phase}: expected member overwrite for ${discordId} on ${channelId} to be ${want ? 'PRESENT' : 'ABSENT'}, but it stayed ${want ? 'ABSENT' : 'PRESENT'}`,
-    ),
-  );
+  ).catch((err: unknown) => {
+    if (err instanceof Error && err.message.includes('pollForCondition timed out')) {
+      fail(
+        `${phase}: expected ${target} to be ${want ? 'PRESENT' : 'ABSENT'}, but it stayed ${want ? 'ABSENT' : 'PRESENT'} for ${ctx.config.timeoutMs}ms`,
+      );
+    }
+    fail(`${phase}: reading ${target} threw — ${describeError(err)}`);
+  });
 }
 
 export interface MirroredNotification {

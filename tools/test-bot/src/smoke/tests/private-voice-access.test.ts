@@ -41,16 +41,21 @@ import {
   departureMessage,
   eventNotifications,
   fail,
+  getEphemeralVoiceConfig,
   removalMessage,
   resolveCategoryId,
   resolveGameId,
+  restoreEphemeralVoiceConfig,
   setEphemeralVoiceConfig,
   type MirroredNotification,
+  type PriorEphemeralConfig,
 } from '../private-voice-access.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 /** Window in which a second (duplicate) DM for the same removal must NOT appear. */
 const ONE_DM_WINDOW_MS = 8_000;
+/** `assertConditionNeverMet` throws exactly this when a second DM shows up. */
+const DUPLICATE_DM = 'more than one DM for a single removal';
 
 interface Fixture {
   eventId: number;
@@ -93,10 +98,13 @@ async function awaitSingleDm(
       return seen.length > 1;
     },
     ONE_DM_WINDOW_MS,
-    'more than one DM for a single removal',
-  ).catch(() =>
-    fail(`expected ONE DM for this removal, got ${seen.length}: [${seen.map((n) => n.title).join(' | ')}]`),
-  );
+    DUPLICATE_DM,
+  ).catch((err: unknown) => {
+    if (err instanceof Error && err.message === DUPLICATE_DM) {
+      fail(`expected ONE DM for this removal, got ${seen.length}: [${seen.map((n) => n.title).join(' | ')}]`);
+    }
+    throw err;
+  });
   const only = seen[0];
   if (seen.length !== 1 || !only || only.title !== title) {
     fail(`expected exactly one "${title}" DM, got [${seen.map((n) => n.title).join(' | ')}]`);
@@ -121,7 +129,11 @@ async function reSignUp(ctx: TestContext, f: Fixture): Promise<void> {
 }
 
 /** Product teardown first (event delete destroys the channel), then sweep. */
-async function teardown(ctx: TestContext, eventId: number | null): Promise<void> {
+async function teardown(
+  ctx: TestContext,
+  eventId: number | null,
+  prior: PriorEphemeralConfig,
+): Promise<void> {
   let channelId: string | null = null;
   if (eventId !== null) {
     channelId = await ctx.api
@@ -131,7 +143,9 @@ async function teardown(ctx: TestContext, eventId: number | null): Promise<void>
     await deleteEvent(ctx.api, eventId);
   }
   if (channelId) await removeOrphan(channelId);
-  await setEphemeralVoiceConfig(ctx.api, { enabled: false, categoryId: null }).catch(() => undefined);
+  await restoreEphemeralVoiceConfig(ctx.api, prior).catch((err: unknown) => {
+    console.warn(`[ROK-1769] restoring ephemeral-voice config failed: ${String(err)}`);
+  });
 }
 
 async function removeOrphan(channelId: string): Promise<void> {
@@ -151,6 +165,7 @@ const removalRegainsAccess: SmokeTest = {
   category: 'voice',
   serial: true,
   async run(ctx) {
+    const prior = await getEphemeralVoiceConfig(ctx.api);
     let eventId: number | null = null;
     try {
       const f = await setUp(ctx, 'rok1769-remove', (id) => (eventId = id));
@@ -164,7 +179,7 @@ const removalRegainsAccess: SmokeTest = {
       await assertRenderedDm(ctx.api, dm, f.eventId, [`You were removed from ${f.title}`, VOICE_LINE]);
       await reSignUp(ctx, f);
     } finally {
-      await teardown(ctx, eventId);
+      await teardown(ctx, eventId, prior);
     }
   },
 };
@@ -174,6 +189,7 @@ const departureRegainsAccess: SmokeTest = {
   category: 'voice',
   serial: true,
   async run(ctx) {
+    const prior = await getEphemeralVoiceConfig(ctx.api);
     let eventId: number | null = null;
     try {
       const f = await setUp(ctx, 'rok1769-depart', (id) => (eventId = id));
@@ -194,7 +210,7 @@ const departureRegainsAccess: SmokeTest = {
       await assertRenderedDm(ctx.api, dm, f.eventId, [departureMessage(f.title)]);
       await reSignUp(ctx, f);
     } finally {
-      await teardown(ctx, eventId);
+      await teardown(ctx, eventId, prior);
     }
   },
 };
