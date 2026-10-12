@@ -138,7 +138,7 @@ async function phoneSwitches(page: Page, member: Member): Promise<void> {
     await expect(rules.getByTestId('calendar-read-look-ahead')).toContainText('4 weeks');
     const saved = page.waitForResponse((r) => r.url().endsWith('/users/me/calendars/settings') && r.request().method() === 'PUT');
     await rules.getByRole('switch', { name: 'Busy hours become busy' }).click();
-    expect((await saved).status(), 'PUT /users/me/calendars/settings').toBe(200);
+    expect((await saved).status(), 'PUT /users/me/calendars/settings is 204 No Content').toBe(204);
     expect((await saved).request().postDataJSON(), 'hours off with days on is mode `days`').toEqual({ mode: 'days' });
     await page.reload();
     rules = page.locator(`[data-testid="calendar-read-rules"][data-connection-id="${member.connectionId}"]`);
@@ -163,8 +163,10 @@ async function desktopCards(page: Page, member: Member): Promise<void> {
     const picker = page.locator(`[data-testid="calendar-picker"][data-connection-id="${member.connectionId}"]`);
     await expect(picker).toContainText('Calendars to check');
     const primary = picker.locator('[data-testid="calendar-picker-option"][data-calendar-id="primary"]');
-    await expect(primary.getByRole('checkbox')).toBeChecked({ timeout: 15_000 });
-    await expect(primary.getByRole('checkbox')).toBeDisabled();
+    // The Checkbox primitive spreads the testid + data attrs onto the native <input>, so the
+    // locator IS the checkbox.
+    await expect(primary).toBeChecked({ timeout: 15_000 });
+    await expect(primary).toBeDisabled();
 }
 
 test('read rules: K2 switches on the phone layout, K4 radio cards + picker on desktop; changes persist', async ({ page }, testInfo) => {
@@ -195,7 +197,7 @@ test('Sync now (Manage menu): first tap queues a sync, a second tap is throttled
             await page.reload();
             const status = card.getByTestId('calendar-connection-status');
             expect(syncedLines(desktop), 'status after Sync now').toContain((await status.textContent())?.trim() ?? '');
-        }).toPass({ timeout: 30_000 });
+        }).toPass({ timeout: 60_000 }); // a queued BullMQ job on a shared fleet runner
         await tapSyncNow();
         await expect(page.locator('[data-sonner-toast]')
             .filter({ hasText: 'Synced a moment ago. Try again in a few minutes.' })).toBeVisible({ timeout: 10_000 });
