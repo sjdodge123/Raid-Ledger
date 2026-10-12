@@ -59,6 +59,16 @@ describe('computeAllowedDiscordIds (ROK-1386)', () => {
     ]);
     expect(ids).toEqual(new Set(['ok']));
   });
+
+  it('drops local:/unlinked: placeholder ids, falling back to the signup id (ROK-1769)', () => {
+    const ids = computeAllowedDiscordIds([
+      row({ userDiscordId: 'local:admin@local' }),
+      row({ userDiscordId: 'unlinked:42' }),
+      row({ userDiscordId: 'local:x@y', signupDiscordUserId: 'anon2' }),
+      row({ userDiscordId: '111111111111111111' }),
+    ]);
+    expect(ids).toEqual(new Set(['anon2', '111111111111111111']));
+  });
 });
 
 describe('buildPrivateVoiceOverwrites (ROK-1386)', () => {

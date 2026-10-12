@@ -25,19 +25,34 @@ export interface RosterSignupRow {
 }
 
 /**
+ * Placeholder ids a local-only account carries in `users.discord_id` (e.g.
+ * `local:admin@local` from bootstrap-admin). Discord rejects them as overwrite
+ * ids, and one in the list fails the WHOLE `channels.create` (ROK-1769).
+ */
+const PLACEHOLDER_ID_PREFIXES = ['local:', 'unlinked:'];
+
+function realDiscordId(id: string | null): string | null {
+  if (!id || PLACEHOLDER_ID_PREFIXES.some((p) => id.startsWith(p))) return null;
+  return id;
+}
+
+/**
  * Resolve the rostered-only allow-list of Discord ids from signup rows.
  *
  * Rules: exclude benched players; include only `signed_up` / `tentative`
  * (tentative included only when not benched); resolve `users.discordId` then
- * `signup.discordUserId`; drop rows whose resolved id is null (unlinked members
- * are silently blocked).
+ * `signup.discordUserId`, treating `local:` / `unlinked:` placeholders as
+ * absent; drop rows whose resolved id is null (unlinked members are silently
+ * blocked).
  */
 export function computeAllowedDiscordIds(rows: RosterSignupRow[]): Set<string> {
   const allowed = new Set<string>();
   for (const row of rows) {
     if (row.assignedSlot === 'bench') continue;
     if (row.status !== 'signed_up' && row.status !== 'tentative') continue;
-    const id = row.userDiscordId ?? row.signupDiscordUserId;
+    const id =
+      realDiscordId(row.userDiscordId) ??
+      realDiscordId(row.signupDiscordUserId);
     if (id) allowed.add(id);
   }
   return allowed;
