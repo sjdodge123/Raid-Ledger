@@ -903,7 +903,8 @@ rows sit under a `border-edge-subtle` hairline reading "From your calendars" (le
 `font-medium text-muted` title, versus the manual row's `border-edge bg-panel` + `font-semibold
 text-foreground`. Their action is **Ignore** (`text-muted`), never Remove.
 
-Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`) — the
+*Away tiles* frame (strip) and the *Away rows* frame (the real `AwayUpcomingList`, one manual + one synced row).
 
 ### 4.16 Busy marker + label grammar
 

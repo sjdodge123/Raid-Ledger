@@ -84,6 +84,18 @@ export interface PhoneWeekEditorCoreProps {
 }
 
 /**
+ * The viewer's own busy hours for the day on screen. `own` is undefined in a
+ * group view (§4.16 narrowed: the own band never paints there). S2: busy hours
+ * inside a slot are not free time — 4h of slots with 1h busy reads "3h free · 1h busy".
+ */
+function ownBusy(
+    own: readonly GameTimeCalendarBusy[] | undefined, slots: readonly GameTimeSlot[], day: number, hours: readonly number[], freeHours: number,
+) {
+    const busyHours = busyHourCount(own ?? [], slots, day, hours);
+    return { own, counts: { freeHours: Math.max(0, freeHours - busyHours), busyHours } };
+}
+
+/**
  * The phone week editor, without any of the answers around it (ROK-1569).
  *
  * One day fills the sheet, paged by the header arrows, a horizontal swipe or a
@@ -104,17 +116,13 @@ export function PhoneWeekEditorCore({
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
     const strip = { groupBands: useGroupBands(group?.cells), groupVotes: useGroupVotes(group?.slotMarks) };
-    // §4.16 (narrowed): the viewer's own busy band never paints in a group view.
-    const ownBusy = group ? undefined : calendarBusy;
-    const editorProps = { slots, onChange, dims, inspectorPlacement, presets, calendarBusy: ownBusy };
-    // S2: "3h free · 1h busy" — busy hours inside a slot are not free time.
-    const busyHours = busyHourCount(ownBusy ?? [], slots, pager.day, hours);
+    const busy = ownBusy(group ? undefined : calendarBusy, slots, pager.day, hours, pager.freeHours);
+    const editorProps = { slots, onChange, dims, inspectorPlacement, presets, calendarBusy: busy.own };
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
-            <DayPager
-                day={pager.day} freeHours={Math.max(0, pager.freeHours - busyHours)} subtitle={group?.subtitle}
-                busyHours={busyHours} canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
+            <DayPager day={pager.day} {...busy.counts} subtitle={group?.subtitle}
+                canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
             {gridHeader}
             {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0` — see the
                 day slot's comment below. */}

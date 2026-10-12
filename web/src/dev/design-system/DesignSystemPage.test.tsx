@@ -603,3 +603,17 @@ describe('DesignSystemPage — ROK-1738 stacked BottomSheet (Overlays)', () => {
         expect(paintsAbove(overlayLayer(sheet), overlayLayer(host)), 'the stacked sheet must paint above its host modal').toBe(true);
     });
 });
+
+describe('DesignSystemPage — NP-3 synced away row (ROK-1595)', () => {
+    it('mounts the real away list with a manual row and the quiet synced row (NP-3)', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const frame = screen.getByTestId('ds-away-rows');
+        const rows = within(frame).getAllByTestId('away-row');
+        expect(rows.map((r) => r.dataset['source'])).toEqual(['manual', 'calendar']);
+        expect(within(frame).getByTestId('away-calendar-divider')).toHaveTextContent('From your calendars');
+        const synced = rows[1];
+        if (!synced) throw new Error('the synced away row is missing');
+        expect(within(synced).getByRole('button', { name: /ignore/i })).toBeInTheDocument();
+    });
+});
