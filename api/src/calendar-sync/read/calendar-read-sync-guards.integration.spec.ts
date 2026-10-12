@@ -64,7 +64,12 @@ beforeAll(async () => {
   await testApp.app.get(CalendarWriteProcessor).worker.close(true);
 });
 
+const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
+
 beforeEach(async () => {
+  // The Fake provider is only resolved by the registry in demo mode.
+  process.env.DEMO_MODE = 'true';
+  await settings.setDemoMode(true);
   await setCalendarSyncEnabled(settings, true);
   for (const cal of fake.store.listCalendars())
     fake.store.removeCalendar(cal.id);
@@ -77,6 +82,9 @@ afterEach(async () => {
   await readQueue.drain(true);
   await readQueue.clean(0, 1000, 'failed');
   await setCalendarSyncEnabled(settings, false);
+  await settings.setDemoMode(false);
+  if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
+  else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
   testApp.seed = await truncateAllTables(testApp.db);
 });
 
@@ -175,12 +183,12 @@ describe('fix 1 — a failed read never touches the shared status', () => {
 
 describe('fix 3 — the prune reads the locked row', () => {
   it('a calendar added by a settings PUT during the fetch survives the 404 prune', async () => {
-    const m = await member({ readCalendarIds: ['primary', 'gone-cal'] });
-    fake.seedCalendars([{ id: 'primary', name: 'Me' }]);
+    const primary = FAKE_PRIMARY_CALENDAR_ID;
+    const m = await member({ readCalendarIds: [primary, 'gone-cal'] });
     const stale = await row(m.connectionId);
     await testApp.db
       .update(c)
-      .set({ readCalendarIds: ['primary', 'gone-cal', 'new-cal'] })
+      .set({ readCalendarIds: [primary, 'gone-cal', 'new-cal'] })
       .where(eq(c.id, m.connectionId));
     await runCalendarReadSync(
       {
@@ -192,7 +200,7 @@ describe('fix 3 — the prune reads the locked row', () => {
       stale,
     );
     expect((await row(m.connectionId)).readCalendarIds).toEqual([
-      'primary',
+      primary,
       'new-cal',
     ]);
   });
