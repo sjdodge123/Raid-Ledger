@@ -121,6 +121,15 @@ describe('normalizeGoogleEvent — plan D3 drop rules', () => {
     ]);
   });
 
+  it('drops a self "Maybe" RSVP but keeps one where only a guest is tentative (Q3)', () => {
+    const withRsvp = (self: boolean): Json => ({
+      ...byId('mx01'),
+      attendees: [{ self, responseStatus: 'tentative' }],
+    });
+    expect(normalizeGoogleEvent(withRsvp(true), OURS)).toBeNull();
+    expect(normalizeGoogleEvent(withRsvp(false), OURS)).not.toBeNull();
+  });
+
   it('a timed event becomes exact UTC instants and nothing else', () => {
     expect(normalizeGoogleEvent(byId('mx01'), OURS)).toEqual({
       start: new Date('2026-10-20T22:00:00.000Z'),

@@ -139,7 +139,12 @@ function isDropped(event: Json): boolean {
   const attendees = Array.isArray(event.attendees) ? event.attendees : [];
   return attendees.some((a: unknown) => {
     const attendee = asRecord(a);
-    return attendee.self === true && attendee.responseStatus === 'declined';
+    if (attendee.self !== true) return false;
+    // Q3: a "Maybe" RSVP (tentative) is not busy, same as a decline.
+    return (
+      attendee.responseStatus === 'declined' ||
+      attendee.responseStatus === 'tentative'
+    );
   });
 }
 
