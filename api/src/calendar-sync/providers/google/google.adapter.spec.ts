@@ -26,7 +26,10 @@ import {
   DEMO_FAKE_SUBJECT_PREFIX,
   type DemoModeSource,
 } from '../calendar-provider.registry';
-import { describeCalendarWriteConformance } from '../testing/calendar-provider.conformance.spec-helpers';
+import {
+  describeCalendarReadConformance,
+  describeCalendarWriteConformance,
+} from '../testing/calendar-provider.conformance.spec-helpers';
 import { FakeGoogleCalendarApi } from './google-calendar-api.spec-helpers';
 import { GOOGLE_CALENDAR_API } from './google-write.helpers';
 
@@ -183,6 +186,16 @@ describeCalendarWriteConformance(() => {
           : null,
       );
     },
+  };
+}, 'GoogleCalendarAdapter');
+
+describeCalendarReadConformance(() => {
+  const { api, a } = fakeGoogle();
+  return {
+    provider: a,
+    credentials: CREDS,
+    seedEvent: (calendarId, event) => api.seedEvent(calendarId, event),
+    failNextRead: (kind) => api.failNext(kind),
   };
 }, 'GoogleCalendarAdapter');
 

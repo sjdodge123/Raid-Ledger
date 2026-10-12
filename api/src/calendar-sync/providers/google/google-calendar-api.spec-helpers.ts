@@ -39,7 +39,30 @@ export class FakeGoogleCalendarApi {
     ['primary', new Map()],
   ]);
   private seq = 0;
+  private readonly failures: GoogleHttpResponse[] = [];
   readonly requests: SeenRequest[] = [];
+
+  /** ROK-1593: the next request answers this instead. */
+  failNext(kind: 'auth' | 'rate' | 'transient'): void {
+    const byKind = {
+      auth: () => reply(401, fixture('events-401')),
+      rate: () => reply(429, fixture('error-429')),
+      transient: () => reply(503, { error: { code: 503 } }),
+    };
+    this.failures.push(byKind[kind]());
+  }
+
+  /** ROK-1593: a foreign event (no rlCopyId) on `calendarId`. */
+  seedEvent(calendarId: string, e: { start: Date; end: Date; busy: boolean }) {
+    const id = `foreign${++this.seq}`;
+    this.calendars.get(calendarId)?.set(id, {
+      id,
+      status: 'confirmed',
+      transparency: e.busy ? 'opaque' : 'transparent',
+      start: { dateTime: e.start.toISOString() },
+      end: { dateTime: e.end.toISOString() },
+    });
+  }
 
   /** Drop a calendar (and its events) as if the user deleted it. */
   removeCalendar(calendarId: string): void {
@@ -57,6 +80,11 @@ export class FakeGoogleCalendarApi {
     body?: unknown,
   ): Promise<GoogleHttpResponse> => {
     this.requests.push({ method, url, accessToken, body });
+    const failure = this.failures.shift();
+    if (failure) return Promise.resolve(failure);
+    if (url.startsWith(`${GOOGLE_CALENDAR_API}/users/me/calendarList`)) {
+      return Promise.resolve(this.calendarList());
+    }
     return Promise.resolve(this.route(method, url, body as Json));
   };
 
@@ -105,11 +133,38 @@ export class FakeGoogleCalendarApi {
     return reply(200, cal.get(id));
   }
 
+  /** ROK-1593: every calendar, as the owner (`calendarList.list`). */
+  private calendarList(): GoogleHttpResponse {
+    const items = [...this.calendars.keys()].map((id) => ({
+      id,
+      summary: id === 'primary' ? 'me@example.test' : 'Raid Ledger',
+      primary: id === 'primary',
+      accessRole: 'owner',
+    }));
+    return reply(200, { items });
+  }
+
+  /** ROK-1593 read: live events overlapping `[timeMin, timeMax)`. */
+  private eventsInRange(cal: Map<string, Json>, params: URLSearchParams) {
+    const min = Date.parse(params.get('timeMin') ?? '');
+    const max = Date.parse(params.get('timeMax') ?? '');
+    const when = (e: Json, k: 'start' | 'end') =>
+      Date.parse(String((e[k] as Json | undefined)?.dateTime));
+    const items = [...cal.values()].filter(
+      (e) =>
+        e.status !== 'cancelled' &&
+        when(e, 'start') < max &&
+        when(e, 'end') > min,
+    );
+    return reply(200, { items });
+  }
+
   /** `privateExtendedProperty=rlCopyId=<id>`; cancelled events left out. */
   private listEvents(cal: Map<string, Json>, query: string) {
-    const filter = new URLSearchParams(query).get('privateExtendedProperty');
+    const params = new URLSearchParams(query);
+    const filter = params.get('privateExtendedProperty');
     const wanted = filter?.startsWith('rlCopyId=') ? filter.slice(9) : null;
-    if (!wanted) return bad();
+    if (!wanted) return this.eventsInRange(cal, params);
     const items = [...cal.values()].filter((e) => {
       const props = (e.extendedProperties as Json | undefined)?.private;
       const copyId = (props as Json | undefined)?.rlCopyId;

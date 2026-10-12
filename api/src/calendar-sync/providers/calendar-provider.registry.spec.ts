@@ -6,7 +6,9 @@ import type { CalendarAccountProvider } from './calendar-provider.interface';
 import {
   CalendarProviderRegistry,
   DEMO_FAKE_SUBJECT_PREFIX,
+  hasReadCapability,
   hasWriteCapability,
+  type CalendarReadProvider,
   type CalendarWriteProvider,
   type DemoModeSource,
 } from './calendar-provider.registry';
@@ -164,5 +166,58 @@ describe('CalendarProviderRegistry.getWriteProviderForConnection', () => {
     expect(hasWriteCapability(partial as never)).toBe(false);
     expect(hasWriteCapability(google)).toBe(false);
     expect(hasWriteCapability(null)).toBe(false);
+  });
+});
+
+describe('CalendarProviderRegistry.getReadProviderForConnection (ROK-1593)', () => {
+  const withRead = (p: CalendarAccountProvider): CalendarReadProvider => ({
+    ...p,
+    listCalendars: jest.fn(),
+    fetchBusy: jest.fn(),
+  });
+  const readFake = withRead(fake);
+
+  it('null for an adapter without read; the adapter once it reads', async () => {
+    const plain = registry({ setting: false, withFake: false });
+    await expect(
+      plain.getReadProviderForConnection(REAL_ROW),
+    ).resolves.toBeNull();
+    const readGoogle = withRead(google);
+    const reg = registry({
+      setting: false,
+      withFake: false,
+      google: readGoogle,
+    });
+    await expect(reg.getReadProviderForConnection(REAL_ROW)).resolves.toBe(
+      readGoogle,
+    );
+  });
+
+  it('routes a demo-fake row to the read fake only under the double gate', async () => {
+    process.env.DEMO_MODE = 'true';
+    const open = registry({ setting: true, withFake: true, fake: readFake });
+    await expect(open.getReadProviderForConnection(FAKE_ROW)).resolves.toBe(
+      readFake,
+    );
+  });
+
+  it.each([
+    { env: 'false', setting: true, withFake: true, gate: 'env off' },
+    { env: 'true', setting: false, withFake: true, gate: 'setting off' },
+    { env: 'true', setting: true, withFake: false, gate: 'no fake' },
+  ])('a demo-fake row → null ($gate), never a reading Google', async (c) => {
+    process.env.DEMO_MODE = c.env;
+    const readGoogle = withRead(google);
+    const reg = registry({ ...c, google: readGoogle, fake: readFake });
+    const resolved = await reg.getReadProviderForConnection(FAKE_ROW);
+    expect(resolved).toBeNull();
+  });
+
+  it('hasReadCapability needs both read methods', () => {
+    expect(hasReadCapability(withRead(google))).toBe(true);
+    const partial = { ...withRead(google), fetchBusy: undefined };
+    expect(hasReadCapability(partial as never)).toBe(false);
+    expect(hasReadCapability(google)).toBe(false);
+    expect(hasReadCapability(null)).toBe(false);
   });
 });

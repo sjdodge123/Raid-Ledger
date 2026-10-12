@@ -17,7 +17,10 @@ import type {
 } from '../calendar-provider.interface';
 import { ProviderAuthError } from '../calendar-provider.errors';
 import { copyIsBusy, copySummary } from '../copy-presentation.helpers';
-import { FakeCalendarStore, type FakeCalendarSeed } from './fake-calendar-store';
+import {
+  FakeCalendarStore,
+  type FakeCalendarSeed,
+} from './fake-calendar-store';
 
 /**
  * ROK-1592: an in-memory, deterministic calendar provider. Every later
@@ -229,7 +232,8 @@ export class FakeCalendarProvider
     this.store.failNextFetch(err);
   }
 
-  listCalendars(_credentials: CalendarCredentials): Promise<ProviderCalendar[]> {
+  /** Credentials are not checked: any fake grant reads the store. */
+  listCalendars(): Promise<ProviderCalendar[]> {
     return Promise.resolve(this.store.listCalendars());
   }
 
