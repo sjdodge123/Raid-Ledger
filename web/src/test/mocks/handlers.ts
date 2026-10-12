@@ -11,6 +11,7 @@ import { lfgHandlers } from './lfg-handlers';
 import { discordThreadHandlers } from './discord-thread-handlers';
 import { communityInsightsHandlers } from './community-insights-handlers';
 import { calendarSyncHandlers } from './calendar-sync-handlers';
+import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
 const API_BASE = 'http://localhost:3000';
 
@@ -80,6 +81,8 @@ export const handlers = [
     http.get(`${API_BASE}/users/me/game-time`, () =>
         HttpResponse.json({ slots: [], events: [], weekStart: null }),
     ),
+    // ROK-1595: Ignore a synced absence → 204 (list fixtures are opt-in).
+    absenceIgnoreHandler,
 
     // System — branding (public, ROK-877)
     http.get(`${API_BASE}/system/branding`, () =>
