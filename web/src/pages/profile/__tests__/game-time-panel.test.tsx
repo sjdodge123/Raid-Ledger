@@ -36,6 +36,9 @@ vi.mock('../../../hooks/use-media-query', () => ({
 }));
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ isAuthenticated: true }),
+    // ROK-1595: the away card's synced-ago line reads the real `useCalendarsOverview`, gated on
+    // `getAuthToken()`. No token → the query stays disabled, i.e. no calendar connected.
+    getAuthToken: () => null,
 }));
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
