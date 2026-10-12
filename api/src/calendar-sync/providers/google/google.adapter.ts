@@ -167,11 +167,7 @@ export class GoogleCalendarAdapter
         `Google read hit the page cap on ${truncated} calendar(s)`,
       );
     }
-    return {
-      blocks,
-      ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
-      ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
-    };
+    return busyResult(blocks, missing, refused);
   }
 
   /** Known id still there → it; gone (404/410) or none → a new calendar. */
@@ -267,6 +263,19 @@ function accessTokenOf(credentials: CalendarCredentials): string {
 }
 
 /** Resolve to null on NotFoundError; every other error propagates. */
+/** Only the skip lists that are non-empty are set (exact optional props). */
+function busyResult(
+  blocks: BusyBlock[],
+  missing: string[],
+  refused: string[],
+): FetchBusyResult {
+  return {
+    blocks,
+    ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
+    ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
+  };
+}
+
 function normalizeItems(items: readonly unknown[]): BusyBlock[] {
   return items.flatMap((item) => normalizeGoogleEvent(item, null) ?? []);
 }
