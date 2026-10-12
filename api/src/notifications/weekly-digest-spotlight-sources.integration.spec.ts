@@ -38,7 +38,7 @@ type UserRow = {
   deactivatedAt?: Date;
   bannedAt?: Date;
   kickedAt?: Date;
-  displayName?: string;
+  displayName?: string | null;
 };
 
 async function seedUser(
@@ -518,7 +518,9 @@ describe('AC10 — inactive members and guests contribute to nothing (integratio
 
   it('A2: never pairs an inactive member or a never-guild-seen guest', async () => {
     const { t, creatorId } = ctx;
-    const a = await seedUser(t, 'alice', false, { displayName: '' });
+    // display_name NULL (the column default; '' is barred by the
+    // display_name_length check) → the duo falls back to the username.
+    const a = await seedUser(t, 'alice', false, { displayName: null });
     const b = await seedUser(t, 'bob');
     const guest = await seedUser(t, 'guest', false, {
       guildMemberSeenAt: null,
