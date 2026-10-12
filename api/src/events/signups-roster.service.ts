@@ -21,6 +21,7 @@ import type {
 import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
 import * as rosterOpsH from './signups-roster-ops.helpers';
+import * as voiceH from '../notifications/voice-access-lost.helpers';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 
 @Injectable()
@@ -138,6 +139,14 @@ export class SignupsRosterService {
       action: 'admin_removed',
     });
     if (signup.userId)
+      voiceH.emitIfVoiceAccessLost(this.eventEmitter, {
+        eventId,
+        userId: signup.userId,
+        reason: 'admin_removed',
+        status: signup.status,
+        role: assignment?.role ?? null,
+      });
+    if (signup.userId)
       await rosterOpsH.notifyRemovedUser(
         this.notificationService,
         signup.userId,
@@ -183,12 +192,33 @@ export class SignupsRosterService {
       (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
       this.logger,
     );
+    this.emitBenchedVoiceLoss(eventId, dto, signupByUserId, oldRoleBySignupId);
     return getRosterWithAssignments(eventId).then(async (roster) => {
       // ROK-1269: emit signup_reconfirmed per attendee whose pending status
       // got flipped to confirmed by this roster update. Done after tx commit.
       await this.logReconfirms(eventId, reconfirmedUserIds);
       return roster;
     });
+  }
+
+  /** ROK-1769: members a roster edit benched lose private voice access. */
+  private emitBenchedVoiceLoss(
+    eventId: number,
+    dto: UpdateRosterDto,
+    signupByUserId: Parameters<typeof voiceH.findNewlyBenchedUserIds>[1],
+    oldRoleBySignupId: Map<number, string | null>,
+  ): void {
+    const benched = voiceH.findNewlyBenchedUserIds(
+      dto.assignments,
+      signupByUserId,
+      oldRoleBySignupId,
+    );
+    for (const userId of benched)
+      this.eventEmitter.emit(voiceH.VOICE_ACCESS_LOST_EVENT, {
+        eventId,
+        userId,
+        reason: 'benched',
+      } satisfies voiceH.VoiceAccessLostPayload);
   }
 
   /** Run roster replacement inside a transaction for atomicity (ROK-824). */

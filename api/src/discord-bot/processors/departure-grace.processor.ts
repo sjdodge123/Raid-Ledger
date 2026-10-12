@@ -12,6 +12,7 @@ import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { SIGNUP_EVENTS } from '../discord-bot.constants';
 import type { SignupEventPayload } from '../discord-bot.constants';
+import { emitIfVoiceAccessLost } from '../../notifications/voice-access-lost.helpers';
 import {
   DEPARTURE_GRACE_QUEUE,
   type DepartureGraceJobData,
@@ -121,6 +122,14 @@ export class DepartureGraceProcessor
 
     const assignment = await moveToBench(d.db, signup.id, eventId, d.logger);
     const vacatedRole = assignment?.role ?? null;
+    if (signup.userId)
+      emitIfVoiceAccessLost(this.eventEmitter, {
+        eventId,
+        userId: signup.userId,
+        reason: 'departed',
+        status: signup.status,
+        role: vacatedRole,
+      });
     const relevant = await isDepartureRelevant(d.db, event, vacatedRole);
 
     if (relevant) {
