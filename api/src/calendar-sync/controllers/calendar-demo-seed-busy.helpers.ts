@@ -7,6 +7,9 @@
  * sync of a `demo-fake:` row (cron, kill switch back on, `POST …/sync`) reads
  * the same blocks instead of erasing them. `readAccess` optionally flips the
  * row's read grant: `granted` → read on, `active`; `missing` → read off.
+ * ROK-1595 G-2: `derive: true` then runs the PR-B away-day derive for the
+ * owner inline (the function the `derive` job calls), so all-day blocks
+ * become `source='calendar'` absences before the response.
  */
 import { NotFoundException } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
@@ -16,6 +19,10 @@ import * as schema from '../../drizzle/schema';
 import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-store';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import type { BusyBlock } from '../providers/calendar-provider.interface';
+import {
+  runCalendarDerive,
+  type CalendarDeriveResult,
+} from '../read/calendar-away-persist.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -41,6 +48,7 @@ export const SeedBusySchema = z
     connectionId: z.number().int().positive(),
     blocks: z.array(SeedBusyBlockSchema).min(1).max(100),
     readAccess: z.enum(['granted', 'missing']).optional(),
+    derive: z.boolean().optional(),
   })
   .strict();
 export type SeedBusyInput = z.infer<typeof SeedBusySchema>;
@@ -75,17 +83,41 @@ function toBlockRow(conn: { id: number; userId: number }, b: BusyBlock) {
   };
 }
 
+export interface SeedBusyDeps {
+  invalidateUser: (userId: number) => void;
+  /** `app_settings.default_timezone` (or 'UTC'), read only for `derive`. */
+  defaultTimezone: () => Promise<string>;
+}
+
+export interface SeedBusyResult {
+  inserted: number;
+  /** Set iff `derive: true` — the derive's write counts. */
+  derived?: CalendarDeriveResult;
+}
+
+/** G-2: the PR-B derive for the owner, on its own transaction. */
+async function deriveFor(
+  db: Db,
+  userId: number,
+  deps: SeedBusyDeps,
+): Promise<CalendarDeriveResult> {
+  const defaultTimezone = await deps.defaultTimezone();
+  return db.transaction((tx) =>
+    runCalendarDerive(tx, userId, { defaultTimezone }),
+  );
+}
+
 /**
  * Insert the blocks for the connection's owner; 404 on an unknown id. The
  * owner's cached game-time is dropped (as the sync processor does) so a
- * test-plan step sees the busy hours at once.
+ * test-plan step sees the busy hours (and derived away days) at once.
  */
 export async function seedDemoBusy(
   db: Db,
   fake: FakeCalendarProvider,
   input: SeedBusyInput,
-  invalidateUser: (userId: number) => void,
-): Promise<{ inserted: number }> {
+  deps: SeedBusyDeps,
+): Promise<SeedBusyResult> {
   const conns = schema.calendarConnections;
   const [conn] = await db
     .select({ id: conns.id, userId: conns.userId })
@@ -102,6 +134,11 @@ export async function seedDemoBusy(
     .insert(schema.calendarBusyBlocks)
     .values(blocks.map((b) => toBlockRow(conn, b)));
   fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, blocks);
-  invalidateUser(conn.userId);
-  return { inserted: blocks.length };
+  const derived = input.derive
+    ? await deriveFor(db, conn.userId, deps)
+    : undefined;
+  deps.invalidateUser(conn.userId);
+  return derived
+    ? { inserted: blocks.length, derived }
+    : { inserted: blocks.length };
 }
