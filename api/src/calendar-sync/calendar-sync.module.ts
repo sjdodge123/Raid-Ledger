@@ -4,8 +4,12 @@ import { CronJobModule } from '../cron-jobs/cron-job.module';
 import { DrizzleModule } from '../drizzle/drizzle.module';
 import { EventsModule } from '../events/events.module';
 import { SettingsModule } from '../settings/settings.module';
+import { UsersModule } from '../users/users.module';
 import { CalendarSyncEnabledGuard } from './calendar-sync-enabled.guard';
-import { CALENDAR_WRITE_QUEUE } from './calendar-sync.constants';
+import {
+  CALENDAR_READ_QUEUE,
+  CALENDAR_WRITE_QUEUE,
+} from './calendar-sync.constants';
 import { CalendarConnectionsController } from './controllers/calendar-connections.controller';
 import { CalendarDemoSeedController } from './controllers/calendar-demo-seed.controller';
 import { CalendarOAuthController } from './controllers/calendar-oauth.controller';
@@ -17,6 +21,8 @@ import {
 } from './providers/calendar-provider.registry';
 import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
+import { CalendarReadCron } from './read/calendar-read.cron';
+import { CalendarReadProcessor } from './read/calendar-read.processor';
 import { CalendarAccountDeleteListener } from './write/calendar-account-delete.listener';
 import { CalendarDisconnectSweepCron } from './write/calendar-disconnect-sweep.cron';
 import { CalendarWriteListener } from './write/calendar-write.listener';
@@ -41,7 +47,8 @@ const fakeProvider = {
 /**
  * Calendar Sync (epic ROK-669). ROK-1591: overview, admin settings, kill
  * switch. ROK-1592: Google OAuth connect/disconnect, provider registry and
- * the DEMO_MODE seed endpoint. ROK-1596: the write queue.
+ * the DEMO_MODE seed endpoint. ROK-1596: the write queue. ROK-1593: the
+ * read queue + cron (`UsersModule` for `GameTimeService` cache invalidation).
  */
 @Module({
   imports: [
@@ -49,7 +56,9 @@ const fakeProvider = {
     SettingsModule,
     EventsModule,
     CronJobModule,
+    UsersModule,
     BullModule.registerQueue({ name: CALENDAR_WRITE_QUEUE }),
+    BullModule.registerQueue({ name: CALENDAR_READ_QUEUE }),
   ],
   controllers: [
     CalendarConnectionsController,
@@ -68,6 +77,8 @@ const fakeProvider = {
     CalendarWriteReconcileCron,
     CalendarDisconnectSweepCron,
     CalendarAccountDeleteListener,
+    CalendarReadProcessor,
+    CalendarReadCron,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })

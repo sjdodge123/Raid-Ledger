@@ -45,7 +45,7 @@ const PROVIDER_KEYS: Record<
 
 /** Calendar Sync master kill switch (default off). */
 export async function getCalendarSyncEnabled(
-  svc: SettingsCore,
+  svc: Pick<SettingsCore, 'get'>,
 ): Promise<boolean> {
   return (await svc.get(SETTING_KEYS.CALENDAR_SYNC_ENABLED)) === 'true';
 }

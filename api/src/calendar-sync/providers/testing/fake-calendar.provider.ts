@@ -1,18 +1,26 @@
 import type {
   AuthUrlInput,
+  BusyBlock,
   CalendarAccountProvider,
   CalendarCredentials,
   CalendarProviderKey,
+  CalendarReadCapability,
   CalendarWriteCapability,
   ConnectResult,
   CopyEventInput,
   CopyRef,
+  FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
+  ProviderCalendar,
+  TimeRange,
 } from '../calendar-provider.interface';
 import { ProviderAuthError } from '../calendar-provider.errors';
 import { copyIsBusy, copySummary } from '../copy-presentation.helpers';
-import { FakeCalendarStore } from './fake-calendar-store';
+import {
+  FakeCalendarStore,
+  type FakeCalendarSeed,
+} from './fake-calendar-store';
 
 /**
  * ROK-1592: an in-memory, deterministic calendar provider. Every later
@@ -20,8 +28,9 @@ import { FakeCalendarStore } from './fake-calendar-store';
  * `demo-fake:` connections to it (plan L15) — so it is shipped code, not a
  * spec helper, and holds no secrets: every token is a counter-derived string.
  *
- * Account + write (ROK-1596; remote state in `fake-calendar-store`). The
- * read body lands with ROK-1593.
+ * Account + write (ROK-1596) + read (ROK-1593); remote state in
+ * `fake-calendar-store`. Read returns the store's own written copies, so a
+ * write → read spec is a real round-trip.
  */
 
 /** `account_subject` prefix of a fake connection (L15; real subs are numeric). */
@@ -63,14 +72,25 @@ export function isFakeSubject(subject: string): boolean {
   return subject.startsWith(FAKE_SUBJECT_PREFIX);
 }
 
+/** One `fetchBusy` call as the fake saw it (ROK-1593). */
+export interface FakeFetchBusyCall {
+  range: TimeRange;
+  calendarIds: string[];
+}
+
 export class FakeCalendarProvider
-  implements CalendarAccountProvider, CalendarWriteCapability
+  implements
+    CalendarAccountProvider,
+    CalendarReadCapability,
+    CalendarWriteCapability
 {
   readonly key: CalendarProviderKey;
   /** Refresh tokens passed to `disconnect`, in call order. */
   readonly revoked: string[] = [];
   /** The fake user's calendars and copies (write capability). */
   readonly store = new FakeCalendarStore();
+  /** `fetchBusy` calls, in order (ROK-1593). */
+  readonly fetchBusyCalls: FakeFetchBusyCall[] = [];
   private readonly codes = new Map<string, FakeAccount>();
   private readonly now: () => number;
   private configured: boolean;
@@ -197,6 +217,44 @@ export class FakeCalendarProvider
     calendarId: string,
   ): Promise<void> {
     return this.run(() => this.store.removeCalendar(calendarId));
+  }
+
+  seedCalendars(seeds: readonly FakeCalendarSeed[]): void {
+    this.store.seedCalendars(seeds);
+  }
+
+  seedBusy(calendarId: string, blocks: readonly BusyBlock[]): void {
+    this.store.seedBusy(calendarId, blocks);
+  }
+
+  /** The next `fetchBusy` rejects with `err`. */
+  failNextFetch(err: Error): void {
+    this.store.failNextFetch(err);
+  }
+
+  /** Credentials are not checked: any fake grant reads the store. */
+  listCalendars(): Promise<ProviderCalendar[]> {
+    return Promise.resolve(this.store.listCalendars());
+  }
+
+  /** An unknown calendar is skipped into `missingCalendarIds` (as Google). */
+  fetchBusy(
+    _credentials: CalendarCredentials,
+    range: TimeRange,
+    calendarIds: string[],
+  ): Promise<FetchBusyResult> {
+    this.fetchBusyCalls.push({ range, calendarIds: [...calendarIds] });
+    try {
+      this.store.takeReadFailure();
+    } catch (err) {
+      return Promise.reject(err as Error);
+    }
+    const known = calendarIds.filter((id) => this.store.hasCalendar(id));
+    const missing = calendarIds.filter((id) => !this.store.hasCalendar(id));
+    const blocks = known.flatMap((id) => this.store.busyIn(id, range));
+    return Promise.resolve(
+      missing.length > 0 ? { blocks, missingCalendarIds: missing } : { blocks },
+    );
   }
 
   /** Every write op: consume a scripted failure, then act. */

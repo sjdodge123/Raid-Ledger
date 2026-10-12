@@ -40,6 +40,7 @@ import {
 } from '../providers/calendar-provider.errors';
 import type { CalendarCredentials } from '../providers/calendar-provider.interface';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
+import { purgeConnectionBusyBlocks } from '../read/calendar-read-purge.helpers';
 import {
   CalendarCredentialsUnreadableError,
   decryptCalendarCredentials,
@@ -84,18 +85,27 @@ export type CalendarDisconnectResult =
 
 const logger = new Logger('CalendarDisconnect');
 
-/** The request half: flag the caller's own row. False → 404. */
+/**
+ * The request half: flag the caller's own row and (ROK-1593 D-R7, §6.4.4)
+ * delete its busy blocks in the same transaction, so busy hours stop counting
+ * before the response. PR-B also deletes its synced absences here and
+ * enqueues a `derive` for the user (Q16). False → 404.
+ */
 export async function markCalendarDisconnecting(
   db: Db,
   input: { userId: number; connectionId: number },
 ): Promise<boolean> {
   const t = calendarConnections;
-  const rows = await db
-    .update(t)
-    .set({ status: 'disconnecting', updatedAt: new Date() })
-    .where(and(eq(t.id, input.connectionId), eq(t.userId, input.userId)))
-    .returning({ id: t.id });
-  return rows.length > 0;
+  return db.transaction(async (tx) => {
+    const rows = await tx
+      .update(t)
+      .set({ status: 'disconnecting', updatedAt: new Date() })
+      .where(and(eq(t.id, input.connectionId), eq(t.userId, input.userId)))
+      .returning({ id: t.id });
+    if (rows.length === 0) return false;
+    await purgeConnectionBusyBlocks(tx, input.connectionId);
+    return true;
+  });
 }
 
 async function loadRow(db: Db, id: number): Promise<ConnectionRow | null> {

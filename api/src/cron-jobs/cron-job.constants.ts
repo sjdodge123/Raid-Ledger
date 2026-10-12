@@ -152,6 +152,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Every 15 minutes, re-queues calendar disconnects stuck for over 15 minutes so stored calendar credentials are always removed',
     category: 'Data Sync',
   },
+  CalendarReadCron_sync: {
+    description:
+      'Every 15 minutes, queues a busy-time sync for each calendar connection that is due (30 minutes after its last sync, or after an error backoff) and prunes busy blocks that have ended',
+    category: 'Data Sync',
+  },
   SteamSyncProcessor_scheduledSync: {
     description: 'Syncs Steam library data for all linked users daily at 4 AM',
     category: 'Data Sync',

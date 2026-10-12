@@ -70,3 +70,4 @@ export * from './schema/wow-item-meta';
 export * from './schema/guilds';
 export * from './schema/guild-members';
 export * from './schema/calendar-connections';
+export * from './schema/calendar-busy-blocks';

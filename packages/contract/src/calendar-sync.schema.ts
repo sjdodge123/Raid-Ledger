@@ -37,6 +37,28 @@ export type CalendarWriteTarget = z.infer<typeof CalendarWriteTargetSchema>;
  */
 export const CALENDAR_LOOK_AHEAD_WEEKS = 4;
 
+/**
+ * Whether the stored grant covers the read scopes (ROK-1593 §3.6). Lives
+ * outside the `read` sub-object, which the PATCH input reuses. Optional so
+ * a pre-1593 payload still parses.
+ */
+export const CalendarReadAccessSchema = z.enum(['granted', 'missing']);
+export type CalendarReadAccess = z.infer<typeof CalendarReadAccessSchema>;
+
+/**
+ * The codes the server emits in `CalendarConnection.errorCode` (ROK-1593
+ * §3.6). The wire field stays `z.string()` so an older or newer code never
+ * fails the client parse; the page maps known codes to copy.
+ */
+export const CalendarSyncErrorCodeSchema = z.enum([
+  'auth',
+  'read_scopes',
+  'rate_limited',
+  'provider_error',
+  'read_disabled',
+]);
+export type CalendarSyncErrorCode = z.infer<typeof CalendarSyncErrorCodeSchema>;
+
 /** Bounds shared with the PATCH input, which derives from these shapes. */
 const CalendarIdsSchema = z.array(z.string().min(1).max(1024)).max(200);
 
@@ -59,6 +81,7 @@ export const CalendarConnectionSchema = z
     errorCode: z.string().nullable(),
     read: CalendarConnectionReadSchema,
     write: CalendarConnectionWriteSchema,
+    readAccess: CalendarReadAccessSchema.optional(),
   })
   .strict();
 export type CalendarConnection = z.infer<typeof CalendarConnectionSchema>;
@@ -81,6 +104,13 @@ export const CalendarReadSettingsSchema = z
   })
   .strict();
 export type CalendarReadSettings = z.infer<typeof CalendarReadSettingsSchema>;
+
+/** `PUT /users/me/calendars/settings` body: look-ahead is derived server-side. */
+export const UpdateCalendarReadSettingsSchema =
+  CalendarReadSettingsSchema.partial({ lookAheadWeeks: true });
+export type UpdateCalendarReadSettings = z.infer<
+  typeof UpdateCalendarReadSettingsSchema
+>;
 
 /** The subscribe-by-URL ICS feed. Tentative sign-ups are always included. */
 export const CalendarFeedSchema = z.object({ url: z.string() }).strict();
@@ -138,9 +168,10 @@ export type OAuthStartResponse = z.infer<typeof OAuthStartResponseSchema>;
 /**
  * `?intent=` on the OAuth start route (ROK-1596 D8). `primary` also asks for
  * the sensitive `calendar.events` scope, only when the user picks their main
- * calendar as the send target. ROK-1593 appends `'read'`.
+ * calendar as the send target. `read` (ROK-1593 §3.2) asks for the read
+ * scopes on an existing connection and never changes its write target.
  */
-export const CalendarOAuthIntentSchema = z.enum(['connect', 'primary']);
+export const CalendarOAuthIntentSchema = z.enum(['connect', 'primary', 'read']);
 export type CalendarOAuthIntent = z.infer<typeof CalendarOAuthIntentSchema>;
 
 /**
@@ -155,6 +186,8 @@ export const CalendarOAuthErrorCodeSchema = z.enum([
   'scopes',
   'disabled',
   'unavailable',
+  /** `intent=read` came back without the read scopes (ROK-1593 §3.2). */
+  'read_scopes',
 ]);
 export type CalendarOAuthErrorCode = z.infer<
   typeof CalendarOAuthErrorCodeSchema

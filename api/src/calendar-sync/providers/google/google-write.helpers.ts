@@ -219,7 +219,7 @@ export function assertWriteOk(res: GoogleHttpResponse): void {
 }
 
 /** `error.errors[].reason` + `error.details[].reason`; never the message. */
-function googleErrorReasons(json: unknown): string[] {
+export function googleErrorReasons(json: unknown): string[] {
   const error = asRecord(asRecord(json).error);
   const items = [error.errors, error.details].flatMap((list) =>
     Array.isArray(list) ? (list as unknown[]) : [],

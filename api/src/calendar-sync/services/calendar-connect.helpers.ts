@@ -15,6 +15,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
+import { grantAllowsRead } from './calendar-read-consent.helpers';
 import type {
   CalendarAccountProvider,
   CalendarCredentials,
@@ -100,6 +101,19 @@ const CONNECTION_KEY = [
   calendarConnections.accountSubject,
 ];
 
+/** ROK-1593 D-R3: every grant recomputes read access; `write_*` untouched. */
+function grantFields(
+  input: UpsertCalendarConnectionInput,
+  credentialsEncrypted: string,
+) {
+  const { scopes } = input.result.credentials;
+  return {
+    credentialsEncrypted,
+    status: 'active' as const,
+    readAccessGranted: grantAllowsRead(input.provider, scopes),
+  };
+}
+
 /** The single statement that cannot duplicate: insert, or update on the key. */
 async function writeConnection(
   db: Db,
@@ -107,6 +121,7 @@ async function writeConnection(
   credentialsEncrypted: string,
 ): Promise<number> {
   const accountLabel = input.result.accountLabel;
+  const both = grantFields(input, credentialsEncrypted);
   const [row] = await db
     .insert(calendarConnections)
     .values({
@@ -114,16 +129,14 @@ async function writeConnection(
       provider: input.provider,
       accountSubject: input.result.accountSubject,
       accountLabel,
-      credentialsEncrypted,
-      status: 'active',
+      ...both,
     })
     .onConflictDoUpdate({
       target: CONNECTION_KEY,
       set: {
-        credentialsEncrypted,
+        ...both,
         // A grant without an email keeps the stored label (undefined = skip).
         accountLabel: accountLabel ?? undefined,
-        status: 'active',
         lastErrorCode: null,
         updatedAt: new Date(),
       },

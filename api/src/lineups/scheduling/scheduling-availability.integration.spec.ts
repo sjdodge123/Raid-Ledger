@@ -26,6 +26,13 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import * as schema from '../../drizzle/schema';
 import { generatePublicSlug } from '../public-lineup-slug.helpers';
 import { nonEmpty } from '../../common/testing/narrow';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import { CALENDAR_READ_QUEUE } from '../../calendar-sync/calendar-sync.constants';
+import { applyKillSwitchEffects } from '../../calendar-sync/services/calendar-sync-admin.helpers';
+import { GameTimeService } from '../../users/game-time.service';
+import { SettingsService } from '../../settings/settings.service';
+import { setCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 
 /** Sunday 00:00 UTC — grid day 0. */
 const WEEK_START = '2026-03-01T00:00:00.000Z';
@@ -436,6 +443,255 @@ function describeSchedulingAvailability() {
     expect(res.status).toBe(200);
     expect(res.body.weekStart).toBe(currentWeekStartIso());
     expect(cellAt(res.body, 21)?.availableCount).toBe(2);
+  });
+
+  // ── ROK-1593: synced-calendar busy blocks (third busy source) ──
+
+  type BlockOpts = {
+    status?: 'active' | 'needs_reconnect' | 'error' | 'disconnecting';
+    readEnabled?: boolean;
+    allDay?: boolean;
+  };
+
+  /** One calendar connection for `userId` holding one busy block. */
+  async function seedBusyBlock(
+    userId: number,
+    start: string,
+    end: string,
+    opts: BlockOpts = {},
+  ): Promise<void> {
+    // The busy query ignores blocks while the admin kill switch is off.
+    await setCalendarSyncEnabled(testApp.app.get(SettingsService), true);
+    const [conn] = nonEmpty(
+      await testApp.db
+        .insert(schema.calendarConnections)
+        .values({
+          userId,
+          provider: 'google',
+          accountSubject: `sub-${userId}-${generatePublicSlug()}`,
+          credentialsEncrypted: 'not-a-real-credential',
+          status: opts.status ?? 'active',
+          readEnabled: opts.readEnabled ?? true,
+          readAccessGranted: true,
+        })
+        .returning(),
+      'connection',
+    );
+    const day = start.slice(0, 10);
+    await testApp.db.insert(schema.calendarBusyBlocks).values({
+      connectionId: conn.id,
+      userId,
+      startsAt: new Date(start),
+      endsAt: new Date(end),
+      allDay: opts.allDay ?? false,
+      ...(opts.allDay ? { firstDate: day, lastDate: day } : {}),
+    });
+  }
+
+  async function setReadMode(userId: number, mode: string): Promise<void> {
+    await testApp.db
+      .insert(schema.userPreferences)
+      .values({ userId, key: 'calendar_read_mode', value: mode });
+  }
+
+  /** A + B templated on Tuesday 20:00 + 21:00, NO sign-up. */
+  async function seedCalendarFixture(
+    suffix: string,
+  ): Promise<Fixture & { memberBToken: string; memberAId: number }> {
+    const memberA = await createUser(`${suffix}-a`);
+    const memberB = await createUser(`${suffix}-b`);
+    const { lineupId, matchId } = await seedPoll(memberA.id);
+    await testApp.db
+      .insert(schema.communityLineupMatchMembers)
+      .values({ matchId, userId: memberB.id, source: 'added' });
+    await setTuesdayEveningTemplate(memberA.id);
+    await setTuesdayEveningTemplate(memberB.id);
+    return {
+      lineupId,
+      matchId,
+      token: memberA.token,
+      memberBId: memberB.id,
+      memberBToken: memberB.token,
+      memberAId: memberA.id,
+    };
+  }
+
+  const BLOCK_21_START = '2026-03-03T21:00:00.000Z';
+  const BLOCK_21_END = '2026-03-03T22:00:00.000Z';
+
+  it('counts a foreign calendar block as busy (busyCount 1)', async () => {
+    const fixture = await seedCalendarFixture('cal-foreign');
+    await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(res.status).toBe(200);
+    expect(cellAt(res.body, 21)?.busyCount).toBe(1);
+    expect(cellAt(res.body, 21)?.availableCount).toBe(1);
+    expect(cellAt(res.body, 20)?.busyCount).toBe(0);
+  });
+
+  // §5 test 3: block 20:00–21:30 vs raid 20:30–22:15 — the block adds hour 20,
+  // and hour 21 (busy from BOTH sources) is still one busy member, not two.
+  it('a partially overlapping block busies the other hour and counts the raid hour once', async () => {
+    const fixture = await seedTwoTemplatedMembers('cal-partial');
+    await seedBusyBlock(
+      fixture.memberBId,
+      '2026-03-03T20:00:00.000Z',
+      '2026-03-03T21:30:00.000Z',
+    );
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(res.body, 20)?.busyCount).toBe(1);
+    expect(cellAt(res.body, 20)?.availableCount).toBe(1);
+    expect(cellAt(res.body, 21)?.busyCount).toBe(1);
+    expect(cellAt(res.body, 21)?.availableCount).toBe(1);
+  });
+
+  /** The caller's own composite week (`GET /users/me/game-time`). */
+  function getOwnGameTime(token: string) {
+    return testApp.request
+      .get('/users/me/game-time')
+      .query({ week: WEEK_START, tzOffset: '0' })
+      .set('Authorization', `Bearer ${token}`);
+  }
+
+  // §5 test 4 (R4): raid 21:00–22:00. An exact-bounds block yields the same
+  // heatmap keys as the sign-up (R5 absorbs it), so the owner's composite
+  // `calendarBusy` is the observable; a shifted block's end spills into hour
+  // 22, so hour 22 shows whether it survived. ±30 s is inside the net.
+  it.each([
+    ['exact raid bounds → dropped', 0, 0, undefined],
+    ['bounds ±30 s → dropped', 30, 0, undefined],
+    ['bounds ±2 min → kept', 120, 1, [{ startHour: 21, endHour: 23 }]],
+  ])('safety net: %s', async (_label, shiftSec, busyAt22, ranges) => {
+    const raid = { start: BLOCK_21_START, end: BLOCK_21_END };
+    const fixture = await seedCalendarFixture(`cal-r4-${shiftSec}`);
+    await signUpForTuesdayEvent(fixture.memberBId, 'signed_up', raid);
+    await testApp.db.insert(schema.gameTimeTemplates).values({
+      userId: fixture.memberBId,
+      dayOfWeek: TUESDAY_TEMPLATE_DAY,
+      startHour: 22,
+    });
+    const shift = shiftSec * 1000;
+    const blockStart = new Date(Date.parse(raid.start) - shift).toISOString();
+    const blockEnd = new Date(Date.parse(raid.end) + shift).toISOString();
+    await seedBusyBlock(fixture.memberBId, blockStart, blockEnd);
+
+    const res = await getAvailability(fixture, WEEK_START);
+    const own = await getOwnGameTime(fixture.memberBToken);
+
+    expect(cellAt(res.body, 21)?.busyCount).toBe(1);
+    expect(cellAt(res.body, 22)?.busyCount).toBe(busyAt22);
+    expect(own.status).toBe(200);
+    expect(own.body.data.calendarBusy).toEqual(
+      ranges?.map((r) => ({
+        ...r,
+        dayOfWeek: TUESDAY_GRID_DAY,
+        provider: 'google',
+      })),
+    );
+  });
+
+  it('ignores calendar blocks when the read mode is days', async () => {
+    const fixture = await seedCalendarFixture('cal-days');
+    await setReadMode(fixture.memberBId, 'days');
+    await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(res.body, 21)?.busyCount).toBe(0);
+    expect(cellAt(res.body, 21)?.availableCount).toBe(2);
+  });
+
+  it.each([
+    ['both', 0],
+    ['hours', 1],
+  ])('an all-day block under mode %s → busyCount %i', async (mode, busy) => {
+    const fixture = await seedCalendarFixture(`cal-allday-${mode}`);
+    await setReadMode(fixture.memberBId, mode);
+    await seedBusyBlock(
+      fixture.memberBId,
+      '2026-03-03T00:00:00.000Z',
+      '2026-03-04T00:00:00.000Z',
+      { allDay: true },
+    );
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(res.body, 21)?.busyCount).toBe(busy);
+  });
+
+  it.each([
+    ['needs_reconnect', { status: 'needs_reconnect' }],
+    ['disconnecting', { status: 'disconnecting' }],
+    ['error', { status: 'error' }],
+    ['read disabled', { readEnabled: false }],
+  ] as const)('ignores a block from a %s connection', async (label, opts) => {
+    const fixture = await seedCalendarFixture(`cal-${label.replace(' ', '-')}`);
+    await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END, opts);
+
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(res.body, 21)?.busyCount).toBe(0);
+  });
+
+  // D10: kill switch off purges every block in the request — the real
+  // `applyKillSwitchEffects` (A6), proving the read path holds no cached copy.
+  it('ignores blocks after the kill-switch purge', async () => {
+    const fixture = await seedCalendarFixture('cal-purge');
+    await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
+    const before = await getAvailability(fixture, WEEK_START);
+    expect(cellAt(before.body, 21)?.busyCount).toBe(1);
+
+    const gameTime = testApp.app.get(GameTimeService);
+    await applyKillSwitchEffects(
+      {
+        db: testApp.db,
+        readQueue: testApp.app.get<Queue>(getQueueToken(CALENDAR_READ_QUEUE)),
+        invalidateUser: (userId) => gameTime.invalidateUserCache(userId),
+      },
+      false,
+    );
+    const res = await getAvailability(fixture, WEEK_START);
+
+    expect(cellAt(res.body, 21)?.busyCount).toBe(0);
+  });
+
+  // §6.4.3: busy blocks are shown only to their owner. A (who shares the
+  // lineup with B) has a block of their own at 20:00, so A's calendarBusy is
+  // populated — B's 21:00 block must not be in it. B is read first, so a
+  // composite cache not keyed per user would also hand B's hours to A.
+  it('carries calendarBusy on the owner composite only', async () => {
+    const fixture = await seedCalendarFixture('cal-visibility');
+    await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
+    await seedBusyBlock(
+      fixture.memberAId,
+      '2026-03-03T20:00:00.000Z',
+      '2026-03-03T21:00:00.000Z',
+    );
+    const ownerRes = await getOwnGameTime(fixture.memberBToken);
+    const otherRes = await getOwnGameTime(fixture.token);
+
+    expect(ownerRes.status).toBe(200);
+    expect(ownerRes.body.data.calendarBusy).toEqual([
+      {
+        dayOfWeek: TUESDAY_GRID_DAY,
+        startHour: 21,
+        endHour: 22,
+        provider: 'google',
+      },
+    ]);
+    expect(otherRes.status).toBe(200);
+    expect(otherRes.body.data.calendarBusy).toEqual([
+      {
+        dayOfWeek: TUESDAY_GRID_DAY,
+        startHour: 20,
+        endHour: 21,
+        provider: 'google',
+      },
+    ]);
   });
 }
 

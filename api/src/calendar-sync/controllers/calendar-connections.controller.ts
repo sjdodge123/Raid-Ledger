@@ -11,7 +11,11 @@
  *   If the queue is unreachable (Redis down) the cleanup runs inline as a
  *   final attempt, so the row never stays `disconnecting` (review M1).
  * - `PATCH /users/me/calendars/:id` — send-my-events settings (ROK-1596 D6),
- *   behind the guard. 204; the remote work is queued.
+ *   behind the guard. 204; the remote work is queued. ROK-1593: its `read`
+ *   block too (`calendar-read-settings.helpers.ts`).
+ * - ROK-1593 §3.6, all behind the guard (switch off → 404), another user's
+ *   id → 404: `GET :id/calendars` (read picker), `POST :id/sync` (202, 429
+ *   `sync_throttled`), `PUT settings` (read mode, 204).
  */
 import {
   Body,
@@ -26,6 +30,8 @@ import {
   Param,
   ParseIntPipe,
   Patch,
+  Post,
+  Put,
   Request,
   UseGuards,
 } from '@nestjs/common';
@@ -33,11 +39,15 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { AuthGuard } from '@nestjs/passport';
 import type { Queue } from 'bullmq';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { CalendarsOverview } from '@raid-ledger/contract';
+import type {
+  CalendarsOverview,
+  ProviderCalendar,
+} from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { SettingsService } from '../../settings/settings.service';
+import { GameTimeService } from '../../users/game-time.service';
 import { buildCalendarsOverview } from '../services/calendar-overview.helpers';
 import {
   markCalendarDisconnecting,
@@ -46,7 +56,15 @@ import {
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { updateCalendarWriteSettings } from '../services/calendar-write-settings.helpers';
 import { getCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
-import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
+import {
+  CALENDAR_READ_QUEUE,
+  CALENDAR_WRITE_QUEUE,
+} from '../calendar-sync.constants';
+import {
+  listConnectionCalendars,
+  requestManualReadSync,
+  updateUserReadSettings,
+} from '../services/calendar-read-settings.helpers';
 import { enqueueCalendarWriteJob } from '../write/calendar-write.enqueue.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
 
@@ -60,7 +78,9 @@ export class CalendarConnectionsController {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly settings: SettingsService,
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly queue: Queue,
+    @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
     private readonly registry: CalendarProviderRegistry,
+    private readonly gameTime: GameTimeService,
   ) {}
 
   @Get()
@@ -80,6 +100,8 @@ export class CalendarConnectionsController {
     if (!(await markCalendarDisconnecting(this.db, input))) {
       throw new NotFoundException();
     }
+    // D-R7: its busy blocks went in that request; drop the cached hours.
+    this.gameTime.invalidateUserCache(req.user.id);
     try {
       await enqueueCalendarWriteJob(this.enqueueDeps(), {
         kind: 'disconnect',
@@ -102,11 +124,51 @@ export class CalendarConnectionsController {
     );
   }
 
-  private enqueueDeps() {
+  private enqueueDeps(queue: Queue = this.queue) {
     return {
-      queue: this.queue,
+      queue,
       isSyncEnabled: () => getCalendarSyncEnabled(this.settings),
     };
+  }
+
+  private readDeps() {
+    return {
+      db: this.db,
+      readQueue: this.enqueueDeps(this.readQueue),
+      invalidateUser: (userId: number) =>
+        this.gameTime.invalidateUserCache(userId),
+    };
+  }
+
+  @Put('settings')
+  @UseGuards(CalendarSyncEnabledGuard)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateReadSettings(
+    @Request() req: AuthenticatedRequest,
+    @Body() body: unknown,
+  ): Promise<void> {
+    await updateUserReadSettings(this.readDeps(), req.user.id, body);
+  }
+
+  @Get(':id/calendars')
+  @UseGuards(CalendarSyncEnabledGuard)
+  listCalendars(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<ProviderCalendar[]> {
+    const ref = { userId: req.user.id, connectionId: id };
+    return listConnectionCalendars(this.db, this.registry, ref);
+  }
+
+  @Post(':id/sync')
+  @UseGuards(CalendarSyncEnabledGuard)
+  @HttpCode(HttpStatus.ACCEPTED)
+  async syncNow(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<void> {
+    const ref = { userId: req.user.id, connectionId: id };
+    await requestManualReadSync(this.readDeps(), ref);
   }
 
   @Patch(':id')
@@ -117,7 +179,7 @@ export class CalendarConnectionsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: unknown,
   ): Promise<void> {
-    const deps = { db: this.db, ...this.enqueueDeps() };
+    const deps = { db: this.db, ...this.enqueueDeps(), read: this.readDeps() };
     await updateCalendarWriteSettings(deps, {
       userId: req.user.id,
       connectionId: id,

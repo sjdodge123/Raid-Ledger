@@ -1,11 +1,13 @@
 import {
   NotFoundError,
   ProviderAuthError,
+  RateLimitError,
   TransientError,
 } from '../calendar-provider.errors';
 import type { CopyEventInput } from '../calendar-provider.interface';
 import {
   describeCalendarProviderConformance,
+  describeCalendarReadConformance,
   describeCalendarWriteConformance,
 } from './calendar-provider.conformance.spec-helpers';
 import { FAKE_PRIMARY_CALENDAR_ID } from './fake-calendar-store';
@@ -207,5 +209,59 @@ describe('FakeCalendarProvider write failures', () => {
     await expect(p.ensureRaidLedgerCalendar(CREDS, null)).resolves.toBe(
       'fake-cal-1',
     );
+  });
+});
+
+describeCalendarReadConformance(() => {
+  const provider = new FakeCalendarProvider();
+  const errors = {
+    auth: () => new ProviderAuthError('http_401'),
+    rate: () => new RateLimitError(60_000, 'rate'),
+    transient: () => new TransientError('http_503'),
+  };
+  return {
+    provider,
+    credentials: { kind: 'caldav', username: 'u', appPassword: 'p' },
+    seedEvent: (calendarId, e) =>
+      provider.seedBusy(
+        calendarId,
+        e.busy ? [{ start: e.start, end: e.end, allDay: false }] : [],
+      ),
+    failNextRead: (kind) => provider.failNextFetch(errors[kind]()),
+  };
+}, 'FakeCalendarProvider');
+
+describe('FakeCalendarProvider read specifics (ROK-1593)', () => {
+  const range = {
+    start: new Date('2026-11-01T00:00:00.000Z'),
+    end: new Date('2026-11-08T00:00:00.000Z'),
+  };
+  const creds = { kind: 'caldav' as const, username: 'u', appPassword: 'p' };
+
+  it('seeded calendars list with writable; fetchBusy calls are logged', async () => {
+    const p = new FakeCalendarProvider();
+    p.seedCalendars([{ id: 'team', name: 'Team', writable: false }]);
+    await expect(p.listCalendars()).resolves.toContainEqual({
+      id: 'team',
+      name: 'Team',
+      primary: false,
+      writable: false,
+      isRaidLedger: false,
+    });
+    await p.fetchBusy(creds, range, ['team', FAKE_PRIMARY_CALENDAR_ID]);
+    expect(p.fetchBusyCalls).toEqual([
+      { range, calendarIds: ['team', FAKE_PRIMARY_CALENDAR_ID] },
+    ]);
+  });
+
+  it('failNextFetch fails exactly one fetch', async () => {
+    const p = new FakeCalendarProvider();
+    p.failNextFetch(new TransientError('x'));
+    await expect(p.fetchBusy(creds, range, [])).rejects.toBeInstanceOf(
+      TransientError,
+    );
+    await expect(p.fetchBusy(creds, range, [])).resolves.toEqual({
+      blocks: [],
+    });
   });
 });

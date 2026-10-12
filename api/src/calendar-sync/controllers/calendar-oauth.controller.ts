@@ -51,7 +51,11 @@ import {
   type CalendarOAuthProvider,
 } from '../../settings/settings-calendar-sync.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
-import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
+import {
+  CALENDAR_READ_QUEUE,
+  CALENDAR_WRITE_QUEUE,
+} from '../calendar-sync.constants';
+import { enqueueCalendarReadSync } from '../read/calendar-read.enqueue.helpers';
 import type { CalendarAccountProvider } from '../providers/calendar-provider.interface';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import {
@@ -113,6 +117,7 @@ export class CalendarOAuthController {
     private readonly settings: SettingsService,
     private readonly registry: CalendarProviderRegistry,
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly writeQueue: Queue,
+    @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
   ) {}
 
   @Get('users/me/calendars/oauth/:provider/start')
@@ -193,7 +198,7 @@ export class CalendarOAuthController {
     target: OAuthTarget,
     verified: VerifiedCalendarOAuthState,
     code: string,
-  ): Promise<'connected' | 'scopes' | 'unavailable'> {
+  ): Promise<'connected' | 'scopes' | 'read_scopes' | 'unavailable'> {
     const { uid: userId, codeVerifier, intent } = verified;
     const redirectUri = await this.redirectUri(target.key);
     const result = await target.provider.connect({
@@ -202,8 +207,10 @@ export class CalendarOAuthController {
       redirectUri,
     });
     const scopes = result.credentials.scopes;
-    // D8: the stored grant stays valid, so no revoke and no write.
-    if (!intents.grantCoversIntent(intent, target.key, scopes)) return 'scopes';
+    // D8 / ROK-1593 D-R3: the stored grant stays valid — no revoke, no write.
+    if (!intents.grantCoversIntent(intent, target.key, scopes)) {
+      return intent === 'read' ? 'read_scopes' : 'scopes';
+    }
     const { id } = await upsertCalendarConnection(this.db, {
       userId,
       provider: target.key,
@@ -250,6 +257,8 @@ export class CalendarOAuthController {
         // Pipe review m3: a write-off an auth error interrupted resumes now.
         const deps = this.enqueueDeps();
         await enqueuePendingWriteOff(this.db, deps, input.connectionId);
+        // ROK-1593 §3.2: a fresh read grant syncs at once.
+        if (outcome === 'read') await this.enqueueReadSync(input.connectionId);
         return outcome;
       })
       .catch((err: unknown) => {
@@ -287,6 +296,16 @@ export class CalendarOAuthController {
       queue: this.writeQueue,
       isSyncEnabled: () => Promise.resolve(true),
     };
+  }
+
+  private enqueueReadSync(connectionId: number) {
+    return enqueueCalendarReadSync(
+      {
+        queue: this.readQueue,
+        isSyncEnabled: () => getCalendarSyncEnabled(this.settings),
+      },
+      connectionId,
+    );
   }
 
   private async redirectUri(key: CalendarOAuthProvider): Promise<string> {

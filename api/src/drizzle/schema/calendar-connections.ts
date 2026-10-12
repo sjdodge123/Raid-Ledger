@@ -47,6 +47,11 @@ export const calendarConnections = pgTable(
     nextSyncAt: timestamp('next_sync_at', { withTimezone: true }),
     syncCursor: jsonb('sync_cursor'),
     readEnabled: boolean('read_enabled').notNull().default(false),
+    /**
+     * ROK-1593: true once the grant covers the Google read scopes. Default
+     * false keeps existing write-only connections out of the read pipeline.
+     */
+    readAccessGranted: boolean('read_access_granted').notNull().default(false),
     readCalendarIds: text('read_calendar_ids')
       .array()
       .notNull()

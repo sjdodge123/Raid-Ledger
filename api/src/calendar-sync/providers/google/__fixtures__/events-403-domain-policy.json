@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Forbidden",
+    "errors": [{ "domain": "global", "reason": "domainPolicy", "message": "Forbidden" }]
+  }
+}

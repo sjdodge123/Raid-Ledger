@@ -37,8 +37,12 @@ import { and, eq, gte, inArray, isNull, lte, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
-import type { SignupStatus } from '../../drizzle/schema/event-signups';
 import { templateDayToGridDay } from '../../users/game-time-heatmap.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from './active-signup-statuses.constants';
+import {
+  fetchCalendarBusyBlocks,
+  type CalendarBusyBlock,
+} from '../../calendar-sync/read/calendar-busy-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Cell = AggregateGameTimeResponse['cells'][number];
@@ -46,16 +50,6 @@ type Cell = AggregateGameTimeResponse['cells'][number];
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const MINUTE_MS = 60 * 1000;
-
-/**
- * Signup statuses that still occupy the member's evening. The complement —
- * `declined`, `roached_out`, `departed` — has released the slot, so those hours
- * are free again. One constant so the heatmap cannot drift from the roster.
- */
-export const ACTIVE_SIGNUP_STATUSES: readonly SignupStatus[] = [
-  'signed_up',
-  'tentative',
-];
 
 /** `${gridDayOfWeek}:${localHour}` — the key both templates and busy rows share. */
 export function busyKey(gridDayOfWeek: number, hour: number): string {
@@ -320,8 +314,17 @@ export function applyBusyCounts(
   }));
 }
 
+/** Calendar busy blocks as duration rows, so they expand like sign-ups. */
+function asDurationRows(blocks: CalendarBusyBlock[]): BusySignupRow[] {
+  return blocks.map<BusySignupRow>((b) => ({
+    userId: b.userId,
+    duration: [b.startsAt, b.endsAt],
+  }));
+}
+
 /**
- * Hours the given members are already committed during the viewer's local week.
+ * Hours the given members are already committed during the viewer's local week:
+ * active sign-ups, absences and synced-calendar busy blocks (ROK-1593).
  *
  * @param db - Drizzle handle.
  * @param userIds - Roster to look up. Empty short-circuits without querying.
@@ -341,11 +344,13 @@ export async function fetchBusyKeys(
   const busy = new Map<number, Set<string>>();
   if (userIds.length === 0) return busy;
   const [localStart, localEnd] = localWeekBounds(weekStart, weekEnd, tzOffset);
-  const [signups, absences] = await Promise.all([
+  const [signups, absences, calendarBlocks] = await Promise.all([
     fetchSignups(db, userIds, localStart, localEnd),
     fetchAbsences(db, userIds, weekStart, weekEnd),
+    // ROK-1593: synced-calendar blocks, R4-filtered; same Set, so R5 holds.
+    fetchCalendarBusyBlocks(db, userIds, localStart, localEnd),
   ]);
-  for (const row of signups) {
+  for (const row of [...signups, ...asDurationRows(calendarBlocks)]) {
     addKeys(
       busy,
       row.userId,

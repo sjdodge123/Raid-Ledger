@@ -45,11 +45,15 @@ function collectCallsiteIdentifiers(): Set<string> {
 function collectRegistryImportedIdentifiers(): Set<string> {
   const contents = stripComments(fs.readFileSync(REGISTRY_FILE, 'utf8'));
   const identifiers = new Set<string>();
-  const importRegex =
-    /import\s*\{\s*([A-Z_][A-Z0-9_]*)\s*\}\s*from\s*['"][^'"]+['"]/g;
+  // Multi-name imports (`import { A, B } from …`) count too.
+  const importRegex = /import\s*\{([^}]*)\}\s*from\s*['"][^'"]+['"]/g;
   let match: RegExpExecArray | null;
   while ((match = importRegex.exec(contents)) !== null) {
-    identifiers.add(defined(match[1], 'registry import capture'));
+    const names = defined(match[1], 'registry import capture').split(',');
+    for (const raw of names) {
+      const name = raw.trim();
+      if (/^[A-Z_][A-Z0-9_]*$/.test(name)) identifiers.add(name);
+    }
   }
   return identifiers;
 }

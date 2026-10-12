@@ -128,9 +128,20 @@ export interface FetchBusyResult {
   cursor?: Record<string, string>;
   /** Apple ctag hit: the caller keeps the previous blocks. */
   unchanged?: boolean;
+  /**
+   * ROK-1593 (plan D5): requested calendars the provider reports gone or
+   * unreadable (404/410). Skipped, not fatal; the caller prunes them.
+   */
+  missingCalendarIds?: string[];
+  /**
+   * ROK-1593: requested calendars the provider refused this run (Google: a
+   * non-scope, non-quota 403 such as `domainPolicy`). Skipped and NOT
+   * pruned; the caller records `provider_error` while the others sync.
+   */
+  unreadableCalendarIds?: string[];
 }
 
-/** Read capability (ROK-1593). Declared now; no adapter implements it yet. */
+/** Read capability (ROK-1593). Google implements it; others follow. */
 export interface CalendarReadCapability {
   listCalendars(credentials: CalendarCredentials): Promise<ProviderCalendar[]>;
   fetchBusy(

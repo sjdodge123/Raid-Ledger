@@ -6,6 +6,7 @@ import type {
 import { ProviderAuthError } from '../calendar-provider.errors';
 
 export * from './calendar-write.conformance.spec-helpers';
+export * from './calendar-read.conformance.spec-helpers';
 
 /**
  * ROK-1592 (spec §5 "Required tests"): the shared suite every calendar
@@ -15,8 +16,8 @@ export * from './calendar-write.conformance.spec-helpers';
  * `invalid_grant` for `invalidCode`, a refresh grant, and a 200 revoke).
  *
  * Account cases run here; write cases in `describeCalendarWriteConformance`
- * (ROK-1596, `calendar-write.conformance.spec-helpers`, re-exported below).
- * The read block is skipped until ROK-1593.
+ * (ROK-1596) and read cases in `describeCalendarReadConformance` (ROK-1593),
+ * both re-exported below.
  */
 export interface AccountConformanceHarness {
   provider: CalendarAccountProvider;
@@ -127,18 +128,6 @@ function describeTokenLifecycle(get: Harness): void {
   });
 }
 
-function describeDeferredCapabilities(): void {
-  // TODO(ROK-1593): un-skip with the read bodies + read fixtures.
-  describe.skip('read capability — TODO(ROK-1593)', () => {
-    it.todo('listCalendars flags the dedicated calendar as isRaidLedger');
-    it.todo('fetchBusy returns [start, end) blocks and drops free events');
-    it.todo('fetchBusy parses our copy id into ourId');
-    it.todo(
-      '401 → ProviderAuthError, 429 → RateLimitError, 5xx → TransientError',
-    );
-  });
-}
-
 /** Register the conformance suite for one adapter. */
 export function describeCalendarProviderConformance(
   name: string,
@@ -155,6 +144,5 @@ export function describeCalendarProviderConformance(
       describeCodeExchange(get);
       describeTokenLifecycle(get);
     });
-    describeDeferredCapabilities();
   });
 }

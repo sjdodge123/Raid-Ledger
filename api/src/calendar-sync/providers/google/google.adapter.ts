@@ -1,8 +1,9 @@
 /**
  * ROK-1592: Google's account capability (connect / refresh / revoke), plan
  * L1 + §3 2b. ROK-1596 G2: the write capability (dedicated "Raid Ledger"
- * calendar + per-sign-up copies) delegates to `google-write.helpers`. Read
- * lands with ROK-1593.
+ * calendar + per-sign-up copies) delegates to `google-write.helpers`.
+ * ROK-1593 A3: the read capability (picker + busy time) delegates to
+ * `google-calendar-read.helpers`; it never reads titles (§6.4.1).
  *
  * The client id + secret are read per call from app settings, so an admin
  * edit applies without a restart. Nothing here logs a token, code or secret.
@@ -16,18 +17,33 @@ import {
   NotFoundError,
   ProviderAuthError,
   ProviderNotConfiguredError,
+  TransientError,
 } from '../calendar-provider.errors';
 import type {
   AuthUrlInput,
+  BusyBlock,
   CalendarAccountProvider,
   CalendarCredentials,
+  CalendarReadCapability,
   CalendarWriteCapability,
   ConnectResult,
   CopyEventInput,
   CopyRef,
+  FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
+  ProviderCalendar,
+  TimeRange,
 } from '../calendar-provider.interface';
+import {
+  buildCalendarListUrl,
+  buildEventsListUrl,
+  GOOGLE_POLICY_403,
+  normalizeGoogleEvent,
+  readAllGooglePages,
+  readCalendarOrSkip,
+  toProviderCalendar,
+} from './google-calendar-read.helpers';
 import {
   buildGoogleAuthUrl,
   googleScopesFor,
@@ -52,7 +68,10 @@ import {
 
 @Injectable()
 export class GoogleCalendarAdapter
-  implements CalendarAccountProvider, CalendarWriteCapability
+  implements
+    CalendarAccountProvider,
+    CalendarReadCapability,
+    CalendarWriteCapability
 {
   readonly key = 'google' as const;
   private readonly logger = new Logger(GoogleCalendarAdapter.name);
@@ -106,6 +125,54 @@ export class GoogleCalendarAdapter
     if (credentials.kind !== 'oauth') return;
     const token = credentials.refreshToken || credentials.accessToken;
     if (token) await revokeGoogleToken(token);
+  }
+
+  /** Calendars the user can at least see busy time of (picker, R1). */
+  async listCalendars(
+    credentials: CalendarCredentials,
+  ): Promise<ProviderCalendar[]> {
+    const token = accessTokenOf(credentials);
+    const { items } = await readAllGooglePages(token, buildCalendarListUrl);
+    return items.flatMap((item) => toProviderCalendar(item) ?? []);
+  }
+
+  /**
+   * Busy blocks across `calendarIds` (full window, no sync token — plan D4).
+   * A gone calendar (404/410) is skipped into `missingCalendarIds` (pruned
+   * by the caller); one refused by a policy 403 is skipped into
+   * `unreadableCalendarIds` (kept, recorded as `provider_error`). When
+   * EVERY requested calendar is refused the fetch fails instead (a zero-block
+   * success would wipe the user's busy blocks every run). Every other error
+   * fails the whole fetch.
+   */
+  async fetchBusy(
+    credentials: CalendarCredentials,
+    range: TimeRange,
+    calendarIds: string[],
+  ): Promise<FetchBusyResult> {
+    const token = accessTokenOf(credentials);
+    const blocks: BusyBlock[] = [];
+    const missing: string[] = [];
+    const refused: string[] = [];
+    let truncated = 0;
+    for (const calendarId of calendarIds) {
+      const url = (page?: string) =>
+        buildEventsListUrl(calendarId, range, page);
+      const read = await readCalendarOrSkip(readAllGooglePages(token, url));
+      if (read === 'missing') missing.push(calendarId);
+      else if (read === 'refused') refused.push(calendarId);
+      else {
+        if (read.truncated) truncated += 1;
+        blocks.push(...normalizeItems(read.items));
+      }
+    }
+    if (truncated > 0) {
+      this.logger.warn(
+        `Google read hit the page cap on ${truncated} calendar(s)`,
+      );
+    }
+    assertSomeReadable(calendarIds, refused, missing);
+    return busyResult(blocks, missing, refused);
   }
 
   /** Known id still there → it; gone (404/410) or none → a new calendar. */
@@ -198,6 +265,44 @@ function accessTokenOf(credentials: CalendarCredentials): string {
     throw new ProviderAuthError('credentials_kind');
   }
   return credentials.accessToken;
+}
+
+/**
+ * Every requested calendar refused by a policy 403 → the policy error, so
+ * the caller's fail-and-backoff path runs and the last good blocks stay.
+ */
+/**
+ * Every requested calendar refused (or refused + gone) → nothing was read, so
+ * fail transiently and keep the old blocks rather than commit an empty set.
+ */
+function assertSomeReadable(
+  requested: string[],
+  refused: string[],
+  missing: string[],
+): void {
+  if (
+    refused.length > 0 &&
+    refused.length + missing.length === requested.length
+  ) {
+    throw new TransientError(GOOGLE_POLICY_403);
+  }
+}
+
+/** Only the skip lists that are non-empty are set (exact optional props). */
+function busyResult(
+  blocks: BusyBlock[],
+  missing: string[],
+  refused: string[],
+): FetchBusyResult {
+  return {
+    blocks,
+    ...(missing.length > 0 ? { missingCalendarIds: missing } : {}),
+    ...(refused.length > 0 ? { unreadableCalendarIds: refused } : {}),
+  };
+}
+
+function normalizeItems(items: readonly unknown[]): BusyBlock[] {
+  return items.flatMap((item) => normalizeGoogleEvent(item, null) ?? []);
 }
 
 /** Resolve to null on NotFoundError; every other error propagates. */

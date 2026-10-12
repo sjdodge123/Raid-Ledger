@@ -6,7 +6,7 @@ import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
-import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/scheduling-availability-busy.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from '../lineups/scheduling/active-signup-statuses.constants';
 
 /** Character info for a user. */
 export interface UserCharacter {

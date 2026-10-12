@@ -5,6 +5,8 @@
  * `getCalendarProviderConfig` without `includeSecret`, field by field, so the
  * contract's `.strict()` schema matches exactly.
  */
+import { Logger } from '@nestjs/common';
+import * as Sentry from '@sentry/nestjs';
 import type {
   AdminCalendarSyncSettings,
   UpdateAdminCalendarSyncSettings,
@@ -21,11 +23,19 @@ import {
   type CalendarOAuthProvider,
   type CalendarProviderConfigUpdate,
 } from '../../settings/settings-calendar-sync.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../drizzle/schema';
+import {
+  enqueueAllReadSyncs,
+  type CalendarReadQueue,
+} from '../read/calendar-read.enqueue.helpers';
+import { purgeAllBusyBlocks } from '../read/calendar-read-purge.helpers';
 import {
   CALENDAR_OAUTH_PROVIDERS,
   oauthCallbackPath,
 } from '../calendar-sync.constants';
 
+type Db = PostgresJsDatabase<typeof schema>;
 type AdminProviderSettings = AdminCalendarSyncSettings['google'];
 
 async function readProvider(
@@ -77,6 +87,7 @@ function toProviderConfigUpdate(
 export async function applyAdminCalendarSyncUpdate(
   svc: SettingsCore,
   update: UpdateAdminCalendarSyncSettings,
+  effects?: KillSwitchEffects,
 ): Promise<void> {
   for (const provider of CALENDAR_OAUTH_PROVIDERS) {
     const providerUpdate = update[provider];
@@ -90,5 +101,59 @@ export async function applyAdminCalendarSyncUpdate(
   }
   if (update.enabled !== undefined) {
     await setCalendarSyncEnabled(svc, update.enabled);
+    if (effects) await applyKillSwitchEffectsSafely(effects, update.enabled);
+  }
+}
+
+/** ROK-1593 D10: what flipping the kill switch does to read data. */
+export interface KillSwitchEffects {
+  db: Db;
+  readQueue: CalendarReadQueue;
+  /** `GameTimeService.invalidateUserCache`. */
+  invalidateUser: (userId: number) => void;
+}
+
+/**
+ * Off → every busy block is deleted in the request (busy hours stop counting
+ * at once; PR-B adds the calendar absences). On → a sync is queued for every
+ * read connection, which rebuilds them. Runs after the setting is written, so
+ * the processor's own kill-switch re-check already sees the new value.
+ */
+export async function applyKillSwitchEffects(
+  effects: KillSwitchEffects,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled) {
+    const users = await purgeAllBusyBlocks(effects.db);
+    users.forEach((u) => effects.invalidateUser(u));
+    return;
+  }
+  await enqueueAllReadSyncs(effects.db, {
+    queue: effects.readQueue,
+    isSyncEnabled: () => Promise.resolve(true),
+  });
+}
+
+const logger = new Logger('CalendarSyncAdmin');
+
+/**
+ * The switch is already saved when the effects run, so a purge/enqueue
+ * failure (e.g. Redis down) must not turn the admin's save into a 500 for a
+ * setting that DID change. Logged + sent to Sentry instead: while off, the
+ * busy query ignores blocks anyway; the next enable (or the read cron)
+ * re-enqueues the syncs.
+ */
+async function applyKillSwitchEffectsSafely(
+  effects: KillSwitchEffects,
+  enabled: boolean,
+): Promise<void> {
+  try {
+    await applyKillSwitchEffects(effects, enabled);
+  } catch (err) {
+    const code = err instanceof Error ? err.name : 'unknown';
+    logger.error(
+      `calendar sync kill-switch effects failed (enabled=${enabled}): ${code}`,
+    );
+    Sentry.captureException(err);
   }
 }

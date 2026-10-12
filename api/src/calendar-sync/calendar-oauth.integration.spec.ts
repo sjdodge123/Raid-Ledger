@@ -33,8 +33,10 @@ import {
 import {
   GOOGLE_CONNECT_SCOPES,
   GOOGLE_EVENTS_SCOPE,
+  GOOGLE_READ_SCOPES,
   GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
+  googleScopesFor,
 } from './providers/google/google-oauth.helpers';
 import { buildRedirectUris } from './services/calendar-sync-admin.helpers';
 import * as connectHelpers from './services/calendar-connect.helpers';
@@ -419,7 +421,7 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
 
   it('400s on an unknown intent', async () => {
     const res = await testApp.request
-      .get(`${START}?intent=read`)
+      .get(`${START}?intent=bogus`)
       .set('Authorization', `Bearer ${user.token}`);
     expect(res.status).toBe(400);
   });
@@ -560,5 +562,120 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
     } finally {
       await writeQueue().remove(jobId);
     }
+  });
+});
+
+describe('OAuth with intent=read (ROK-1593 D-R3)', () => {
+  const okJson = fixture('token-ok');
+  const WITH_READ: GoogleStub = {
+    token: {
+      status: 200,
+      json: {
+        ...okJson,
+        scope: [String(okJson.scope), ...GOOGLE_READ_SCOPES].join(' '),
+      },
+    },
+  };
+
+  async function startRead() {
+    const res = await testApp.request
+      .get(`${START}?intent=read`)
+      .set('Authorization', `Bearer ${user.token}`);
+    expect(res.status).toBe(200);
+    const url = new URL((res.body as { url: string }).url);
+    const raw = ([] as string[]).concat(res.headers['set-cookie'] ?? []);
+    const set = raw.find((c) => c.startsWith(`${STATE_COOKIE}=`)) ?? '';
+    return {
+      url,
+      state: url.searchParams.get('state') ?? '',
+      cookie: set.split(';')[0] ?? '',
+    };
+  }
+
+  /** A connected row that sends to `primary` without calendar.events (§1.1). */
+  async function connectedPrimaryWriter() {
+    await connectWith(OK);
+    jest.restoreAllMocks();
+    const [row] = nonEmpty(await rowsOf(user.userId), 'connection');
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({
+        writeEnabled: true,
+        writeTarget: 'primary',
+        dedicatedCalendarId: 'rl-dedicated',
+      })
+      .where(eq(schema.calendarConnections.id, row.id));
+    return row.id;
+  }
+
+  function readAndWriteFields(
+    r: typeof schema.calendarConnections.$inferSelect | undefined,
+  ) {
+    return {
+      readAccessGranted: r?.readAccessGranted,
+      readEnabled: r?.readEnabled,
+      writeEnabled: r?.writeEnabled,
+      writeTarget: r?.writeTarget,
+      dedicatedCalendarId: r?.dedicatedCalendarId,
+    };
+  }
+
+  it('start asks exactly openid + email + the two read scopes', async () => {
+    const s = await startRead();
+    expect(s.url.searchParams.get('scope')).toBe(
+      googleScopesFor('read').join(' '),
+    );
+    expect(s.url.searchParams.get('scope')).toBe(
+      ['openid', 'email', ...GOOGLE_READ_SCOPES].join(' '),
+    );
+  });
+
+  it('grant with the read scopes → read flags on, write fields untouched even without calendar.events (§1.1)', async () => {
+    const id = await connectedPrimaryWriter();
+    const spy = stubGoogle(WITH_READ);
+    const s = await startRead();
+    expect(
+      await land({ code: 'auth-code-r1', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const rows = await rowsOf(user.userId);
+    expect(rows.map((r) => r.id)).toEqual([id]);
+    expect(readAndWriteFields(rows[0])).toEqual({
+      readAccessGranted: true,
+      readEnabled: true,
+      writeEnabled: true,
+      writeTarget: 'primary',
+      dedicatedCalendarId: 'rl-dedicated',
+    });
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
+  });
+
+  it('grant without the read scopes → ?error=read_scopes, row unchanged, no revoke', async () => {
+    await connectedPrimaryWriter();
+    const [before] = await rowsOf(user.userId);
+    const spy = stubGoogle(OK);
+    const s = await startRead();
+    expect(
+      await land({ code: 'auth-code-r2', state: s.state }, s.cookie),
+    ).toEqual({ connected: null, error: 'read_scopes' });
+    expect(formsSentTo(spy, GOOGLE_TOKEN_URL)).toHaveLength(1);
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
+    expect(await rowsOf(user.userId)).toEqual([before]);
+  });
+
+  it('a connect-intent grant that carries the read scopes records access but never turns read on', async () => {
+    const spy = stubGoogle(WITH_READ);
+    const s = await start();
+    expect(
+      await land({ code: 'auth-code-r3', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const [row] = nonEmpty(await rowsOf(user.userId), 'connection');
+    expect(readAndWriteFields(row)).toEqual({
+      readAccessGranted: true,
+      readEnabled: false,
+      writeEnabled: false,
+      writeTarget: 'dedicated',
+      dedicatedCalendarId: null,
+    });
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
   });
 });

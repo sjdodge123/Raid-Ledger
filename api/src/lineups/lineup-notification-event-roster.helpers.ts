@@ -17,7 +17,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { activeUsersFilter } from '../users/users-active.helpers';
-import { ACTIVE_SIGNUP_STATUSES } from './scheduling/scheduling-availability-busy.helpers';
+import { ACTIVE_SIGNUP_STATUSES } from './scheduling/active-signup-statuses.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
 

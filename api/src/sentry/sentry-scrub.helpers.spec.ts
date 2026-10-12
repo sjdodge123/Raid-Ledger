@@ -120,6 +120,32 @@ describe('scrubSecrets', () => {
       'Discord error code=50007',
     );
   });
+
+  it('ROK-1593: redacts a Google calendar id in a Calendar v3 path, keeps primary', () => {
+    const base = 'https://www.googleapis.com/calendar/v3/calendars';
+    const raw = `GET ${base}/fixture-owner%40example.test/events?timeMin=x`;
+    const plain = `${base}/team-fixture@group.calendar.google.com/events/e1`;
+    expect(scrubString(raw)).toBe(`GET ${base}/${REDACTED}/events?timeMin=x`);
+    expect(scrubString(plain)).toBe(`${base}/${REDACTED}/events/e1`);
+    expect(scrubString(`${base}/primary/events`)).toBe(
+      `${base}/primary/events`,
+    );
+    expect(scrubString(`${base}/primaryfixture@example.test`)).toBe(
+      `${base}/${REDACTED}`,
+    );
+  });
+
+  it('ROK-1593: a span description carrying a calendar id is scrubbed', () => {
+    const event = scrubSecrets({
+      spans: [
+        {
+          description:
+            'GET https://www.googleapis.com/calendar/v3/calendars/boss-fixture@example.test/events',
+        },
+      ],
+    });
+    expect(JSON.stringify(event)).not.toContain('boss-fixture');
+  });
 });
 
 describe('instrument.ts wiring', () => {

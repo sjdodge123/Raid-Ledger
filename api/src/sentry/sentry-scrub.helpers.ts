@@ -26,6 +26,10 @@ const JSON_SECRET =
 // ROK-1750: a private poll's share token rides the PATH, not the query.
 const PATH_SECRET =
   /(\/(?:scheduling-polls\/share|p\/poll)\/)[A-Za-z0-9_-]{16,}/g;
+// ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
+// every Calendar v3 call; `primary` names no one and stays for triage.
+const CALENDAR_PATH =
+  /(\/calendar\/v3\/calendars\/)(?!primary(?:[/?#\s"']|$))[^/?#\s"']+/g;
 const MAX_DEPTH = 12;
 
 export interface ScrubbableEvent {
@@ -44,6 +48,7 @@ export function scrubString(value: string): string {
   return value
     .replace(QUERY_SECRET, `$1$2${REDACTED}`)
     .replace(PATH_SECRET, `$1${REDACTED}`)
+    .replace(CALENDAR_PATH, `$1${REDACTED}`)
     .replace(JSON_SECRET, `$1${REDACTED}"`);
 }
 

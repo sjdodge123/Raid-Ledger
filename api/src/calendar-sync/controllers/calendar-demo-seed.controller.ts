@@ -2,6 +2,7 @@
  * ROK-1592 L15: `POST /admin/test/calendar/seed-connection` — DEMO_MODE only.
  * ROK-1596 W3: `writeEnabled?`/`writeTarget?` on it, and `POST seed-link`
  * (a link row + a Fake copy for one user × event, without the queue).
+ * ROK-1593 §3.6: `POST seed-busy` (busy blocks for one connection).
  *
  * Creates a `google` connection with a `demo-fake:` subject and Fake
  * credentials, owned by the caller (or `userId`), so smoke specs and UI test
@@ -32,6 +33,7 @@ import { DemoModeGuard } from '../../admin/demo-mode.guard';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { parseDemoBody } from '../../admin/demo-test.utils';
 import { SettingsService } from '../../settings/settings.service';
+import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import { upsertCalendarConnection } from '../services/calendar-connect.helpers';
@@ -39,6 +41,10 @@ import {
   SeedLinkSchema,
   seedDemoLink,
 } from './calendar-demo-seed-link.helpers';
+import {
+  SeedBusySchema,
+  seedDemoBusy,
+} from './calendar-demo-seed-busy.helpers';
 
 const SeedConnectionSchema = z
   .object({
@@ -61,6 +67,7 @@ export class CalendarDemoSeedController {
     private readonly settings: SettingsService,
     @Inject(CALENDAR_FAKE_PROVIDER)
     private readonly fake: FakeCalendarProvider,
+    private readonly gameTime: GameTimeService,
   ) {}
 
   @Post('seed-connection')
@@ -98,6 +105,16 @@ export class CalendarDemoSeedController {
     const input = parseDemoBody(SeedLinkSchema, body ?? {});
     const clientUrl = await this.settings.getClientUrl();
     return seedDemoLink(this.db, fake, clientUrl, input);
+  }
+
+  /** Foreign busy blocks for one connection (+ the Fake), no queue. */
+  @Post('seed-busy')
+  async seedBusy(@Body() body: unknown): Promise<{ inserted: number }> {
+    const fake = await this.assertDemoMode();
+    const input = parseDemoBody(SeedBusySchema, body ?? {});
+    return seedDemoBusy(this.db, fake, input, (u) =>
+      this.gameTime.invalidateUserCache(u),
+    );
   }
 
   /** Request-time gate, same checks as `DemoTestCoreController`. */

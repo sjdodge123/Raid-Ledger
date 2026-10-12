@@ -8,8 +8,10 @@ import * as googleHttp from './google-http';
 import {
   GOOGLE_CONNECT_SCOPES,
   GOOGLE_EVENTS_SCOPE,
+  GOOGLE_READ_SCOPES,
   googleScopesFor,
   hasGoogleEventsScope,
+  hasGoogleReadScopes,
   GOOGLE_REVOKE_URL,
   GOOGLE_TOKEN_URL,
   buildGoogleAuthUrl,
@@ -88,6 +90,38 @@ describe('GOOGLE_CONNECT_SCOPES', () => {
     expect(GOOGLE_CONNECT_SCOPES).toBe(
       'openid email https://www.googleapis.com/auth/calendar.app.created',
     );
+  });
+});
+
+describe('read scopes (ROK-1593 D-R3)', () => {
+  const G = 'https://www.googleapis.com/auth/';
+  it('authorize scope per intent is exact', () => {
+    const scopeOf = (intent: 'connect' | 'primary' | 'read') =>
+      new URL(
+        buildGoogleAuthUrl({
+          clientId: 'c',
+          redirectUri: 'r',
+          state: 's',
+          codeChallenge: 'x',
+          scopes: googleScopesFor(intent),
+        }),
+      ).searchParams.get('scope');
+    expect(scopeOf('connect')).toBe(`openid email ${G}calendar.app.created`);
+    expect(scopeOf('primary')).toBe(
+      `openid email ${G}calendar.app.created ${G}calendar.events`,
+    );
+    expect(scopeOf('read')).toBe(
+      `openid email ${G}calendar.events.readonly ${G}calendar.calendarlist.readonly`,
+    );
+  });
+
+  it('hasGoogleReadScopes needs events read (readonly or full) + calendarlist', () => {
+    const [eventsRo = '', list = ''] = GOOGLE_READ_SCOPES;
+    expect(hasGoogleReadScopes([eventsRo, list])).toBe(true);
+    expect(hasGoogleReadScopes([GOOGLE_EVENTS_SCOPE, list])).toBe(true);
+    expect(hasGoogleReadScopes([eventsRo])).toBe(false);
+    expect(hasGoogleReadScopes([list, GOOGLE_CONNECT_SCOPES])).toBe(false);
+    expect(hasGoogleReadScopes([GOOGLE_EVENTS_SCOPE])).toBe(false);
   });
 });
 
