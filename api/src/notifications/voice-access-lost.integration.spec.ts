@@ -63,8 +63,6 @@ async function setEphemeralSwitches(globalOn: boolean, forced: boolean) {
   await settings.setEphemeralVoiceForced(forced);
 }
 
-afterAll(() => setEphemeralSwitches(false, false));
-
 beforeEach(async () => {
   await setEphemeralSwitches(true, false);
   voiceEmits = [];
@@ -90,6 +88,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  await setEphemeralSwitches(false, false);
   emitSpy.mockRestore();
   dispatchSpy.mockRestore();
   connectedSpy.mockRestore();
