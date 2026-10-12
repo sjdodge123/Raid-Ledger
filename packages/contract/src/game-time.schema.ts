@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { CalendarProviderSchema } from './calendar-sync.schema.js';
 
 /**
  * Status states for game time slots (ROK-189).
@@ -133,6 +134,22 @@ export const GameTimeAbsenceInputSchema = z
 export type GameTimeAbsenceInput = z.infer<typeof GameTimeAbsenceInputSchema>;
 
 /**
+ * One busy hour range from a synced calendar on the viewer's own grid
+ * (ROK-1593 §3.6, S2). `dayOfWeek` follows the display convention of
+ * `GameTimeSlotSchema`, not the DB's 0=Monday. `.strict()` so no event
+ * detail (title, location) can ride along.
+ */
+export const GameTimeCalendarBusySchema = z
+  .object({
+    dayOfWeek: z.number().int().min(0).max(6),
+    startHour: z.number().int().min(0).max(23),
+    endHour: z.number().int().min(1).max(24), // exclusive, 24 = end of day
+    provider: CalendarProviderSchema,
+  })
+  .strict();
+export type GameTimeCalendarBusy = z.infer<typeof GameTimeCalendarBusySchema>;
+
+/**
  * Response: includes optional status for future week-view overlay (ROK-201).
  */
 export const GameTimeResponseSchema = z.object({
@@ -160,6 +177,8 @@ export const GameTimeResponseSchema = z.object({
    * was never confirmed (ROK-1564).
    */
   gameTimeAgeDays: z.number().int().min(0).nullable().optional(),
+  /** Synced-calendar busy hours, own view only (ROK-1593). */
+  calendarBusy: z.array(GameTimeCalendarBusySchema).optional(),
 });
 export type GameTimeResponse = z.infer<typeof GameTimeResponseSchema>;
 

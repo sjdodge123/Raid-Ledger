@@ -12,7 +12,9 @@ import {
     AppleConnectInputSchema,
     CalendarConnectionSchema,
     CalendarFeedSchema,
+    CalendarOAuthErrorCodeSchema,
     CalendarOAuthIntentSchema,
+    CalendarSyncErrorCodeSchema,
     CalendarsOverviewSchema,
     UpdateCalendarConnectionSchema,
 } from '../calendar-sync.schema.js';
@@ -191,14 +193,77 @@ describe('CalendarsOverviewSchema', () => {
     });
 });
 
-describe('CalendarOAuthIntentSchema (ROK-1596 D8)', () => {
-    it('accepts connect and primary', () => {
-        expect(CalendarOAuthIntentSchema.options).toEqual(['connect', 'primary']);
+describe('CalendarOAuthIntentSchema (ROK-1596 D8, ROK-1593 §3.2)', () => {
+    it('accepts connect, primary and read', () => {
+        expect(CalendarOAuthIntentSchema.options).toEqual(['connect', 'primary', 'read']);
+    });
+
+    it('parses intent=read', () => {
+        expect(CalendarOAuthIntentSchema.parse('read')).toBe('read');
     });
 
     it('rejects anything else', () => {
-        for (const v of ['read', '', 'PRIMARY', undefined]) {
+        for (const v of ['write', 'READ', '', 'PRIMARY', undefined]) {
             expect(CalendarOAuthIntentSchema.safeParse(v).success).toBe(false);
         }
+    });
+});
+
+describe('CalendarOAuthErrorCodeSchema (ROK-1593 §3.2)', () => {
+    it('accepts read_scopes', () => {
+        expect(CalendarOAuthErrorCodeSchema.parse('read_scopes')).toBe('read_scopes');
+    });
+
+    it('keeps every pre-1593 code', () => {
+        for (const code of ['state', 'denied', 'exchange', 'scopes', 'disabled', 'unavailable']) {
+            expect(CalendarOAuthErrorCodeSchema.parse(code)).toBe(code);
+        }
+    });
+});
+
+describe('CalendarSyncErrorCodeSchema (ROK-1593 §3.6)', () => {
+    it('is the closed set the server emits', () => {
+        expect(CalendarSyncErrorCodeSchema.options).toEqual([
+            'auth',
+            'read_scopes',
+            'rate_limited',
+            'provider_error',
+        ]);
+    });
+
+    it('rejects an unknown code', () => {
+        expect(CalendarSyncErrorCodeSchema.safeParse('scopes').success).toBe(false);
+    });
+});
+
+describe('CalendarConnectionSchema.readAccess (ROK-1593 §3.6)', () => {
+    it('still parses a pre-1593 connection without readAccess', () => {
+        expect(CalendarConnectionSchema.parse(connection)).toEqual(connection);
+    });
+
+    it.each(['granted', 'missing'])('accepts readAccess=%s', (readAccess) => {
+        const input = { ...connection, readAccess };
+        expect(CalendarConnectionSchema.parse(input)).toEqual(input);
+    });
+
+    it('rejects an unknown readAccess value', () => {
+        const input = { ...connection, readAccess: 'partial' };
+        expect(issuesOf(CalendarConnectionSchema, input)).toEqual([
+            { code: 'invalid_value', path: ['readAccess'] },
+        ]);
+    });
+
+    it('rejects readAccess inside the read block (PATCH reuses it)', () => {
+        const input = { read: { readAccess: 'granted' } };
+        expect(issuesOf(UpdateCalendarConnectionSchema, input)).toEqual([
+            { code: 'unrecognized_keys', path: ['read'], keys: ['readAccess'] },
+        ]);
+    });
+
+    it('still rejects a stray top-level key on the connection', () => {
+        const input = { ...connection, readAccess: 'granted', title: 'Dentist' };
+        expect(issuesOf(CalendarConnectionSchema, input)).toEqual([
+            { code: 'unrecognized_keys', path: [], keys: ['title'] },
+        ]);
     });
 });

@@ -7,7 +7,10 @@
  * value (or an inverted range) reached the database.
  */
 import { describe, it, expect } from 'vitest';
-import { GameTimeAbsenceInputSchema } from '../game-time.schema.js';
+import {
+    GameTimeAbsenceInputSchema,
+    GameTimeResponseSchema,
+} from '../game-time.schema.js';
 
 /** Issue paths + messages, or [] when the input parsed. */
 function issuesOf(input: Record<string, unknown>) {
@@ -127,4 +130,45 @@ describe('GameTimeAbsenceInputSchema — non-object input', () => {
             });
         },
     );
+});
+
+describe('GameTimeResponseSchema.calendarBusy (ROK-1593 §3.6)', () => {
+    const legacy = {
+        slots: [{ dayOfWeek: 1, hour: 20, status: 'available' }],
+        gameTimeStale: false,
+    };
+    const busy = { dayOfWeek: 2, startHour: 18, endHour: 21, provider: 'google' };
+
+    function busyIssues(block: Record<string, unknown>) {
+        const result = GameTimeResponseSchema.safeParse({ ...legacy, calendarBusy: [block] });
+        if (result.success) return [];
+        return result.error.issues.map(({ code, path }) => ({ code, path }));
+    }
+
+    it('still parses a pre-1593 payload without calendarBusy', () => {
+        expect(GameTimeResponseSchema.parse(legacy)).toEqual(legacy);
+    });
+
+    it('parses busy blocks', () => {
+        const input = { ...legacy, calendarBusy: [busy, { ...busy, endHour: 24 }] };
+        expect(GameTimeResponseSchema.parse(input)).toEqual(input);
+    });
+
+    it('rejects a stray key on a busy block (no event detail leaks)', () => {
+        expect(busyIssues({ ...busy, title: 'Dentist' })).toEqual([
+            { code: 'unrecognized_keys', path: ['calendarBusy', 0] },
+        ]);
+    });
+
+    it('rejects an unknown provider', () => {
+        expect(busyIssues({ ...busy, provider: 'outlook' })).toEqual([
+            { code: 'invalid_value', path: ['calendarBusy', 0, 'provider'] },
+        ]);
+    });
+
+    it('rejects an hour outside the grid', () => {
+        expect(busyIssues({ ...busy, endHour: 25 })).toEqual([
+            { code: 'too_big', path: ['calendarBusy', 0, 'endHour'] },
+        ]);
+    });
 });
