@@ -5,6 +5,7 @@
 import { CALENDAR_READ_QUEUE, readSyncJobId } from '../calendar-sync.constants';
 import {
   CALENDAR_READ_JOB_OPTIONS,
+  enqueueCalendarDerive,
   enqueueCalendarReadSync,
   type CalendarReadQueue,
 } from './calendar-read.enqueue.helpers';
@@ -122,5 +123,56 @@ describe('enqueueCalendarReadSync', () => {
     });
     expect(queue.added).toEqual([]);
     expect(queue.jobs.get(ID)).toBe('completed');
+  });
+});
+
+describe('enqueueCalendarDerive (ROK-1593 PR-B)', () => {
+  const USER = 4;
+  const DERIVE_ID = 'cal-derive-4';
+
+  function setupDerive() {
+    const queue = new FakeReadQueue();
+    const enqueue = () =>
+      enqueueCalendarDerive(queue as unknown as CalendarReadQueue, USER);
+    return { queue, enqueue };
+  }
+
+  it('adds a per-user derive with an ids-only payload', async () => {
+    const { queue, enqueue } = setupDerive();
+    await expect(enqueue()).resolves.toEqual({
+      outcome: 'added',
+      jobId: DERIVE_ID,
+    });
+    expect(queue.added).toEqual([
+      {
+        name: 'derive',
+        data: { kind: 'derive', userId: USER },
+        jobId: DERIVE_ID,
+      },
+    ]);
+  });
+
+  it('a pending derive collapses; a retained completed one is re-added', async () => {
+    const { queue, enqueue } = setupDerive();
+    queue.seed(DERIVE_ID, 'waiting');
+    await expect(enqueue()).resolves.toEqual({
+      outcome: 'collapsed',
+      jobId: DERIVE_ID,
+    });
+    queue.seed(DERIVE_ID, 'completed');
+    await expect(enqueue()).resolves.toEqual({
+      outcome: 'added',
+      jobId: DERIVE_ID,
+    });
+    expect(queue.added.map((a) => a.jobId)).toEqual([DERIVE_ID]);
+  });
+
+  it('an ACTIVE derive gets exactly one -rerun', async () => {
+    const { queue, enqueue } = setupDerive();
+    queue.seed(DERIVE_ID, 'active');
+    await expect(enqueue()).resolves.toEqual({
+      outcome: 'rerun',
+      jobId: `${DERIVE_ID}-rerun`,
+    });
   });
 });

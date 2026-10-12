@@ -17,7 +17,11 @@ import { and, eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { clearFinishedJob } from '../../queue/clear-finished-job.helpers';
-import { readSyncJobId, rerunJobId } from '../calendar-sync.constants';
+import {
+  deriveJobId,
+  readSyncJobId,
+  rerunJobId,
+} from '../calendar-sync.constants';
 import type { EnqueueResult } from '../write/calendar-write.enqueue.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -27,8 +31,14 @@ export interface ReadSyncJobData {
   connectionId: number;
 }
 
-/** Payloads carry ids only (epic §6.1). PR-B adds `derive`. */
-export type CalendarReadJobData = ReadSyncJobData;
+/** PR-B (D9): rebuild one user's synced away days from their blocks. */
+export interface ReadDeriveJobData {
+  kind: 'derive';
+  userId: number;
+}
+
+/** Payloads carry ids only (epic §6.1). */
+export type CalendarReadJobData = ReadSyncJobData | ReadDeriveJobData;
 
 export type CalendarReadQueue = Pick<Queue, 'add' | 'getJob' | 'remove'>;
 
@@ -92,6 +102,22 @@ async function addRerun(
   return { outcome: 'rerun', jobId: rerunId };
 }
 
+/** Dedup by fixed id (rules in the file header), shared by every kind. */
+async function enqueueDeduped(
+  queue: CalendarReadQueue,
+  data: CalendarReadJobData,
+  jobId: string,
+): Promise<EnqueueResult> {
+  const state = await clearFinishedJob(queue, jobId);
+  if (state === 'active') return addRerun(queue, data, jobId);
+  if (PENDING_STATES.has(state)) return { outcome: 'collapsed', jobId };
+  const rerunId = rerunJobId(jobId);
+  const rerunState = await clearFinishedJob(queue, rerunId);
+  if (isLive(rerunState)) return { outcome: 'collapsed', jobId: rerunId };
+  await addJob(queue, data, jobId);
+  return { outcome: 'added', jobId };
+}
+
 /** Enqueue one read sync for a connection (rules in the file header). */
 export async function enqueueCalendarReadSync(
   deps: CalendarReadEnqueueDeps,
@@ -99,15 +125,21 @@ export async function enqueueCalendarReadSync(
 ): Promise<EnqueueResult> {
   if (!(await deps.isSyncEnabled())) return { outcome: 'dropped', jobId: null };
   const data: ReadSyncJobData = { kind: 'sync', connectionId };
-  const jobId = readSyncJobId(connectionId);
-  const state = await clearFinishedJob(deps.queue, jobId);
-  if (state === 'active') return addRerun(deps.queue, data, jobId);
-  if (PENDING_STATES.has(state)) return { outcome: 'collapsed', jobId };
-  const rerunId = rerunJobId(jobId);
-  const rerunState = await clearFinishedJob(deps.queue, rerunId);
-  if (isLive(rerunState)) return { outcome: 'collapsed', jobId: rerunId };
-  await addJob(deps.queue, data, jobId);
-  return { outcome: 'added', jobId };
+  return enqueueDeduped(deps.queue, data, readSyncJobId(connectionId));
+}
+
+/**
+ * PR-B (D9): enqueue one away-day derive for a user (Ignore, template save,
+ * disconnect). Same dedup as a sync, keyed `cal-derive-<user>`. Not gated on
+ * the kill switch: a derive only reads stored blocks, and the purge (D10)
+ * has already removed them when the switch is off.
+ */
+export function enqueueCalendarDerive(
+  queue: CalendarReadQueue,
+  userId: number,
+): Promise<EnqueueResult> {
+  const data: ReadDeriveJobData = { kind: 'derive', userId };
+  return enqueueDeduped(queue, data, deriveJobId(userId));
 }
 
 /** Enqueue each id in turn; returns the outcomes in order. */

@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { getQueueToken } from '@nestjs/bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
 import { GameTimeService } from './game-time.service';
 import { GAME_TIME_FRESHNESS_DAYS } from './game-time-freshness.helpers';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
@@ -8,6 +11,7 @@ import { at } from '../common/testing/narrow';
 function describeGameTimeService() {
   let service: GameTimeService;
   let mockDb: MockDb;
+  let emit: jest.Mock;
 
   // Track which .where() call we're on to return different results
   let whereCallIndex: number;
@@ -31,6 +35,7 @@ function describeGameTimeService() {
       };
     });
 
+    emit = jest.fn();
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         GameTimeService,
@@ -38,6 +43,11 @@ function describeGameTimeService() {
           provide: DrizzleAsyncProvider,
           useValue: mockDb,
         },
+        {
+          provide: getQueueToken(CALENDAR_READ_QUEUE),
+          useValue: { add: jest.fn(), getJob: jest.fn(), remove: jest.fn() },
+        },
+        { provide: EventEmitter2, useValue: { emit } },
       ],
     }).compile();
 
@@ -118,6 +128,10 @@ function describeGameTimeService() {
       expect(mockTx.insert).toHaveBeenCalled();
       expect(mockTx.values).toHaveBeenCalled();
       expect(result.slots).toEqual(slots);
+      // ROK-1593 D16: the save committed → synced away days re-derive.
+      expect(emit).toHaveBeenCalledWith('game-time.template-saved', {
+        userId: 1,
+      });
     });
 
     // ROK-1569: "Save my week" is the phone check's other way out, so a saved
@@ -748,6 +762,21 @@ function describeGameTimeService() {
         gameTimeConfirmedAt?: Date;
       };
       expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
+    });
+
+    it("returns the created absence with source 'manual'", async () => {
+      const created = await service.createAbsence(42, {
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+      });
+
+      expect(created).toEqual({
+        id: 1,
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+        reason: null,
+        source: 'manual',
+      });
     });
 
     it('does not stamp the confirmation when an absence is deleted', async () => {

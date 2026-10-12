@@ -1457,6 +1457,13 @@
       "when": 1791769105616,
       "tag": "0208_calendar_busy_blocks",
       "breakpoints": true
+    },
+    {
+      "idx": 209,
+      "version": "7",
+      "when": 1791821818101,
+      "tag": "0209_synced_away_days",
+      "breakpoints": true
     }
   ]
 }

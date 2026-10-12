@@ -66,6 +66,7 @@ import {
   updateUserReadSettings,
 } from '../services/calendar-read-settings.helpers';
 import { enqueueCalendarWriteJob } from '../write/calendar-write.enqueue.helpers';
+import { enqueueCalendarDerive } from '../read/calendar-read.enqueue.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
 
 @Controller('users/me/calendars')
@@ -100,8 +101,10 @@ export class CalendarConnectionsController {
     if (!(await markCalendarDisconnecting(this.db, input))) {
       throw new NotFoundException();
     }
-    // D-R7: its busy blocks went in that request; drop the cached hours.
+    // D-R7: its busy blocks + synced days went in that request; drop the
+    // cached week, then rebuild any day another connection covers (Q16).
     this.gameTime.invalidateUserCache(req.user.id);
+    await this.enqueueDerive(req.user.id);
     try {
       await enqueueCalendarWriteJob(this.enqueueDeps(), {
         kind: 'disconnect',
@@ -109,6 +112,16 @@ export class CalendarConnectionsController {
       });
     } catch (err) {
       await this.disconnectInline(id, err);
+    }
+  }
+
+  /** Best effort: the disconnect already committed; the read cron recovers. */
+  private async enqueueDerive(userId: number): Promise<void> {
+    try {
+      await enqueueCalendarDerive(this.readQueue, userId);
+    } catch (err) {
+      const name = err instanceof Error ? err.name : 'unknown';
+      this.logger.warn(`derive enqueue after disconnect failed (${name})`);
     }
   }
 

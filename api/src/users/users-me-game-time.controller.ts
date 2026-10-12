@@ -113,7 +113,21 @@ export class UsersMeGameTimeController {
     return { data: result };
   }
 
-  /** Delete an absence. */
+  /**
+   * Ignore a synced calendar absence (ROK-1593): 204; a manual one → 409
+   * `not_calendar`; missing or another user's → 404.
+   */
+  @Post('me/game-time/absences/:id/ignore')
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(204)
+  async ignoreAbsence(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    await this.gameTimeService.ignoreAbsence(req.user.id, id);
+  }
+
+  /** Delete a manual absence; a synced one → 409 `use_ignore` (ROK-1593). */
   @Delete('me/game-time/absences/:id')
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(204)

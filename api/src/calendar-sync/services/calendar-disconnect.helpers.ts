@@ -40,7 +40,10 @@ import {
 } from '../providers/calendar-provider.errors';
 import type { CalendarCredentials } from '../providers/calendar-provider.interface';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
-import { purgeConnectionBusyBlocks } from '../read/calendar-read-purge.helpers';
+import {
+  purgeConnectionBusyBlocks,
+  purgeConnectionCalendarAbsences,
+} from '../read/calendar-read-purge.helpers';
 import {
   CalendarCredentialsUnreadableError,
   decryptCalendarCredentials,
@@ -88,8 +91,10 @@ const logger = new Logger('CalendarDisconnect');
 /**
  * The request half: flag the caller's own row and (ROK-1593 D-R7, §6.4.4)
  * delete its busy blocks in the same transaction, so busy hours stop counting
- * before the response. PR-B also deletes its synced absences here and
- * enqueues a `derive` for the user (Q16). False → 404.
+ * before the response. PR-B also deletes its synced (`source='calendar'`)
+ * absences here — the row survives as `disconnecting`, so the FK cascade
+ * only fires later. The CALLER enqueues a `derive` after commit, which
+ * rebuilds any day another connection still covers (Q16). False → 404.
  */
 export async function markCalendarDisconnecting(
   db: Db,
@@ -104,6 +109,7 @@ export async function markCalendarDisconnecting(
       .returning({ id: t.id });
     if (rows.length === 0) return false;
     await purgeConnectionBusyBlocks(tx, input.connectionId);
+    await purgeConnectionCalendarAbsences(tx, input.connectionId);
     return true;
   });
 }

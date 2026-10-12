@@ -3,7 +3,12 @@
  * refused) leaves `provider_error` but must not hold the user to the
  * failure backoff; a true failure still does.
  */
-import { isManualSyncThrottled } from './calendar-read-settings.helpers';
+import {
+  applyReadUpdate,
+  isManualSyncThrottled,
+  type CalendarReadSettingsDeps,
+  type ReadUpdatePlan,
+} from './calendar-read-settings.helpers';
 
 const MIN = 60_000;
 const NOW = Date.parse('2026-10-12T12:00:00Z');
@@ -76,5 +81,52 @@ describe('isManualSyncThrottled', () => {
       nextSyncAt: at(-1),
     });
     expect(isManualSyncThrottled(failed, NOW)).toBe(false);
+  });
+});
+
+describe('applyReadUpdate — queued jobs', () => {
+  function setup() {
+    const added: string[] = [];
+    const queue = {
+      getJob: () => Promise.resolve(undefined),
+      remove: () => Promise.resolve(0),
+      add: (_n: string, _d: unknown, o: { jobId: string }) => {
+        added.push(o.jobId);
+        return Promise.resolve({});
+      },
+    };
+    const db = {
+      update: () => ({ set: () => ({ where: () => Promise.resolve() }) }),
+    };
+    const deps = {
+      db,
+      readQueue: { queue, isSyncEnabled: () => Promise.resolve(true) },
+      invalidateUser: () => undefined,
+    } as unknown as CalendarReadSettingsDeps;
+    return { deps, added };
+  }
+  const plan = (was: boolean, now: boolean) =>
+    ({
+      row: { id: 3, userId: 7, readEnabled: was },
+      readEnabled: now,
+      readCalendarIds: [],
+    }) as unknown as ReadUpdatePlan;
+
+  it('read turned off → a derive for the owner, no sync', async () => {
+    const { deps, added } = setup();
+    await applyReadUpdate(deps, plan(true, false));
+    expect(added).toEqual(['cal-derive-7']);
+  });
+
+  it('read left on → a sync only', async () => {
+    const { deps, added } = setup();
+    await applyReadUpdate(deps, plan(true, true));
+    expect(added).toEqual(['cal-read-3']);
+  });
+
+  it('read already off and staying off → nothing queued', async () => {
+    const { deps, added } = setup();
+    await applyReadUpdate(deps, plan(false, false));
+    expect(added).toEqual([]);
   });
 });

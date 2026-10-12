@@ -21,6 +21,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
@@ -38,9 +39,11 @@ import {
   READ_SYNC_JITTER_MS,
 } from '../read/calendar-read-sync.helpers';
 import {
+  enqueueCalendarDerive,
   enqueueCalendarReadSync,
   type CalendarReadEnqueueDeps,
 } from '../read/calendar-read.enqueue.helpers';
+import { enqueueDerivesBestEffort } from '../read/calendar-away-heal.helpers';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { withFreshCredentials } from './calendar-credentials.helpers';
 
@@ -48,6 +51,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
 type ReadBody = NonNullable<UpdateCalendarConnection['read']>;
+
+const logger = new Logger('CalendarReadSettings');
 
 /** Manual sync: at most one per connection per 5 minutes (D-R6). */
 export const MANUAL_SYNC_THROTTLE_MS = 5 * 60 * 1000;
@@ -114,7 +119,11 @@ export function planReadUpdate(
   };
 }
 
-/** Persist a validated plan; a connection left reading gets a sync. */
+/**
+ * Persist a validated plan; a connection left reading gets a sync. Turning
+ * read off queues a derive: the connection's blocks stop
+ * counting, so its synced away days must go too (Q12).
+ */
 export async function applyReadUpdate(
   deps: CalendarReadSettingsDeps,
   plan: ReadUpdatePlan,
@@ -130,6 +139,13 @@ export async function applyReadUpdate(
     .where(eq(schema.calendarConnections.id, row.id));
   deps.invalidateUser(row.userId);
   if (plan.readEnabled) await enqueueCalendarReadSync(deps.readQueue, row.id);
+  else if (row.readEnabled) {
+    await enqueueDerivesBestEffort(
+      deps.readQueue.queue,
+      [row.userId],
+      'read off',
+    );
+  }
 }
 
 /** `GET :id/calendars`: the picker rows, dedicated flagged `isRaidLedger`. */
@@ -217,9 +233,13 @@ export async function requestManualReadSync(
   await enqueueCalendarReadSync(deps.readQueue, row.id);
 }
 
-/** `PUT settings`: validate, upsert the read mode, drop cached hours. */
+/**
+ * `PUT settings`: validate, upsert the read mode, drop cached hours, then
+ * re-derive synced away days (mode `hours` derives none, `days`/`both` do).
+ * The derive enqueue is best effort — the mode is already saved.
+ */
 export async function updateUserReadSettings(
-  deps: Pick<CalendarReadSettingsDeps, 'db' | 'invalidateUser'>,
+  deps: Pick<CalendarReadSettingsDeps, 'db' | 'invalidateUser' | 'readQueue'>,
   userId: number,
   body: unknown,
 ): Promise<void> {
@@ -234,5 +254,10 @@ export async function updateUserReadSettings(
       set: { value: sql`excluded.value`, updatedAt: new Date() },
     });
   deps.invalidateUser(userId);
-  // PR-B: enqueue `derive` for the user here (synced away days follow mode).
+  await enqueueCalendarDerive(deps.readQueue.queue, userId).catch(
+    (err: unknown) => {
+      const name = err instanceof Error ? err.name : 'unknown';
+      logger.warn(`derive enqueue after read-mode save failed (${name})`);
+    },
+  );
 }

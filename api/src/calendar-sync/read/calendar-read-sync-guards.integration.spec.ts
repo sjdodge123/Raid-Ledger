@@ -55,7 +55,7 @@ import {
 } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
 import { recordReadSyncFailure } from './calendar-read-failure.helpers';
-import { purgeAllBusyBlocks } from './calendar-read-purge.helpers';
+import { purgeAllCalendarReadData } from './calendar-read-purge.helpers';
 import {
   runCalendarReadSync,
   type ReadSyncDeps,
@@ -373,7 +373,7 @@ describe('F2 — the kill-switch purge serialises with a running sync', () => {
           sql`SELECT pg_backend_pid()::int AS pid`,
         );
         const pid = Number(me?.pid);
-        const started = purgeAllBusyBlocks(testApp.db);
+        const started = purgeAllCalendarReadData(testApp.db);
         purge = started;
         const parked = waitFor(
           async () => {

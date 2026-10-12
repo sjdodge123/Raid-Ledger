@@ -14,8 +14,11 @@
  *   or `needs_reconnect` set by the write queue) or lost `read_enabled`
  *   meanwhile is left untouched (row lock + re-check). The kill switch is
  *   re-checked AFTER the lock too: the switch-off purge locks the same rows
- *   (`purgeAllBusyBlocks`), so a sync either commits before the purge
+ *   (`purgeAllCalendarReadData`), so a sync either commits before the purge
  *   (which then deletes its blocks) or sees the switch off.
+ * - **Lock order:** when `afterBlocks` derives, the per-user
+ *   advisory lock is taken BEFORE the row lock (`lockForSync`), the same
+ *   order as `runCalendarDerive` — see `calendar-away-guard.helpers.ts`.
  * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
  *   row's `read_calendar_ids`, so a settings PUT racing the fetch survives.
  * - A calendar refused by a policy 403 (`unreadableCalendarIds`) is
@@ -37,6 +40,7 @@ import type {
 import type { CalendarReadProvider } from '../providers/calendar-provider.registry';
 import { deriveInstanceId } from '../providers/rl-copy-id.helpers';
 import { withFreshCredentials } from '../services/calendar-credentials.helpers';
+import { lockUserDerive } from './calendar-away-guard.helpers';
 import {
   buildReadWindow,
   normalizeBusyBlocks,
@@ -155,6 +159,24 @@ async function lockReadable(
   return { readCalendarIds: row.readCalendarIds };
 }
 
+/**
+ * LOCK ORDER RULE: advisory(user) → own row `FOR UPDATE` →
+ * (inside the derive) `FOR KEY SHARE` on all of the user's rows. A derive
+ * job takes advisory → rows; if the sync took its row first and then waited
+ * on the advisory lock, the two would deadlock (40P01). So when this sync
+ * will derive (`withDerive`), take the advisory lock FIRST. The derive's own
+ * `pg_advisory_xact_lock` inside `afterBlocks` runs on this same `tx`, and
+ * the lock is re-entrant per session, so it does not wait.
+ */
+export async function lockForSync(
+  tx: ReadSyncTx,
+  conn: Pick<ReadSyncConnection, 'id' | 'userId'>,
+  withDerive: boolean,
+): Promise<{ readCalendarIds: string[] } | null> {
+  if (withDerive) await lockUserDerive(tx, conn.userId);
+  return lockReadable(tx, conn.id);
+}
+
 async function replaceBlocks(
   tx: ReadSyncTx,
   conn: ReadSyncConnection,
@@ -241,7 +263,7 @@ export async function runCalendarReadSync(
     : normalizeBusyBlocks(result.blocks, { instanceId, window });
   const stamp = { now, random: deps.random ?? Math.random };
   const written = await deps.db.transaction(async (tx) => {
-    const locked = await lockReadable(tx, conn.id);
+    const locked = await lockForSync(tx, conn, deps.afterBlocks !== undefined);
     if (!locked) return false;
     if (deps.stillAllowed && !(await deps.stillAllowed())) return false;
     if (rows) await replaceBlocks(tx, conn, window, rows);

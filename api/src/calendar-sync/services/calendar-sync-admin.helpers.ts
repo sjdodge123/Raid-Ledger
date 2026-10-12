@@ -29,7 +29,7 @@ import {
   enqueueAllReadSyncs,
   type CalendarReadQueue,
 } from '../read/calendar-read.enqueue.helpers';
-import { purgeAllBusyBlocks } from '../read/calendar-read-purge.helpers';
+import { purgeAllCalendarReadData } from '../read/calendar-read-purge.helpers';
 import {
   CALENDAR_OAUTH_PROVIDERS,
   oauthCallbackPath,
@@ -114,9 +114,10 @@ export interface KillSwitchEffects {
 }
 
 /**
- * Off → every busy block is deleted in the request (busy hours stop counting
- * at once; PR-B adds the calendar absences). On → a sync is queued for every
- * read connection, which rebuilds them. Runs after the setting is written, so
+ * Off → every busy block and every synced (`source='calendar'`) absence is
+ * deleted in the request (busy hours and away days stop counting at once;
+ * manual absences stay). On → a sync is queued for every read connection,
+ * which rebuilds both — each sync derives in its own transaction. Runs after the setting is written, so
  * the processor's own kill-switch re-check already sees the new value.
  */
 export async function applyKillSwitchEffects(
@@ -124,7 +125,7 @@ export async function applyKillSwitchEffects(
   enabled: boolean,
 ): Promise<void> {
   if (!enabled) {
-    const users = await purgeAllBusyBlocks(effects.db);
+    const users = await purgeAllCalendarReadData(effects.db);
     users.forEach((u) => effects.invalidateUser(u));
     return;
   }
@@ -139,9 +140,10 @@ const logger = new Logger('CalendarSyncAdmin');
 /**
  * The switch is already saved when the effects run, so a purge/enqueue
  * failure (e.g. Redis down) must not turn the admin's save into a 500 for a
- * setting that DID change. Logged + sent to Sentry instead: while off, the
- * busy query ignores blocks anyway; the next enable (or the read cron)
- * re-enqueues the syncs.
+ * setting that DID change. Logged at error level + sent to Sentry instead.
+ * Recovery: while off, the busy query ignores blocks and the read cron
+ * deletes any synced absence still stored every tick;
+ * the next enable (or the read cron) re-enqueues the syncs.
  */
 async function applyKillSwitchEffectsSafely(
   effects: KillSwitchEffects,
@@ -151,9 +153,8 @@ async function applyKillSwitchEffectsSafely(
     await applyKillSwitchEffects(effects, enabled);
   } catch (err) {
     const code = err instanceof Error ? err.name : 'unknown';
-    logger.error(
-      `calendar sync kill-switch effects failed (enabled=${enabled}): ${code}`,
-    );
+    const step = enabled ? 'sync enqueue' : 'purge (cron self-heals)';
+    logger.error(`calendar sync kill-switch ${step} failed: ${code}`);
     Sentry.captureException(err);
   }
 }

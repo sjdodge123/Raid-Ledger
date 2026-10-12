@@ -134,6 +134,11 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.calendarBusyBlocks,
     column: schema.calendarBusyBlocks.userId,
   },
+  // ROK-1593: ignored away-days are personal (CASCADE) — no value once wiped.
+  {
+    table: schema.calendarIgnoredDays,
+    column: schema.calendarIgnoredDays.userId,
+  },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,

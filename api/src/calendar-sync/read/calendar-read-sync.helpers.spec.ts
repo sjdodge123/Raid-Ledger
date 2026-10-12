@@ -17,6 +17,7 @@ import {
 } from './calendar-read-failure.helpers';
 import {
   buildSyncedFields,
+  lockForSync,
   nextReadSyncAt,
   pruneReadCalendarIds,
   safeReadWindow,
@@ -183,5 +184,53 @@ describe('buildSyncedFields (the success UPDATE)', () => {
     expect(fields.lastErrorCode).toBe('provider_error');
     expect(fields.readCalendarIds).toEqual(['a', 'policy']);
     expect(fields.lastSyncedAt).toBe(NOW);
+  });
+});
+
+/** A tx stub that records each lock statement in the order it is issued. */
+function lockRecordingTx(row: unknown) {
+  const calls: string[] = [];
+  const chain = {
+    from: () => chain,
+    where: () => chain,
+    for: (strength: string) => {
+      calls.push(`row ${strength}`);
+      return Promise.resolve(row === undefined ? [] : [row]);
+    },
+  };
+  const tx = {
+    execute: () => {
+      calls.push('advisory');
+      return Promise.resolve([]);
+    },
+    select: () => chain,
+  } as never;
+  return { tx, calls };
+}
+
+describe('lockForSync (lock order)', () => {
+  const ACTIVE = { status: 'active', readEnabled: true, readCalendarIds: [] };
+
+  it('a deriving sync takes the per-user advisory lock BEFORE its row lock', async () => {
+    const { tx, calls } = lockRecordingTx(ACTIVE);
+    await lockForSync(tx, { id: 3, userId: 7 }, true);
+    expect(calls).toEqual(['advisory', 'row update']);
+  });
+
+  it('a sync with no derive takes only the row lock', async () => {
+    const { tx, calls } = lockRecordingTx(ACTIVE);
+    await lockForSync(tx, { id: 3, userId: 7 }, false);
+    expect(calls).toEqual(['row update']);
+  });
+
+  it('a row that left active still returns null after the advisory lock', async () => {
+    const { tx, calls } = lockRecordingTx({
+      ...ACTIVE,
+      status: 'disconnecting',
+    });
+    await expect(
+      lockForSync(tx, { id: 3, userId: 7 }, true),
+    ).resolves.toBeNull();
+    expect(calls).toEqual(['advisory', 'row update']);
   });
 });
