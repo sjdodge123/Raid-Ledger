@@ -242,7 +242,8 @@ export class GameTimeService {
     await this.updateGameTimeConfirmedAt(userId);
     this.invalidateUserCache(userId); // after the insert + stamp (review MINOR a)
     await this.enqueueDerive(userId); // Q-D: a manual day hides a synced one
-    return defined(row, 'inserted absence row');
+    // Same shape as the list read model (ROK-1593 NIT-1): a created row is manual.
+    return { ...defined(row, 'inserted absence row'), source: 'manual' };
   }
 
   /** Delete a manual absence; a synced one → 409 `use_ignore` (ROK-1593). */

@@ -764,6 +764,21 @@ function describeGameTimeService() {
       expect(stamped.gameTimeConfirmedAt).toBeInstanceOf(Date);
     });
 
+    it("returns the created absence with source 'manual' (ROK-1593 NIT-1)", async () => {
+      const created = await service.createAbsence(42, {
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+      });
+
+      expect(created).toEqual({
+        id: 1,
+        startDate: '2026-02-12',
+        endDate: '2026-02-14',
+        reason: null,
+        source: 'manual',
+      });
+    });
+
     it('does not stamp the confirmation when an absence is deleted', async () => {
       await service.deleteAbsence(42, 1);
 
