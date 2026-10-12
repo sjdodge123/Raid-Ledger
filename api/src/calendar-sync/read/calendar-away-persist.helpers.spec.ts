@@ -45,7 +45,7 @@ describe('planCalendarAbsenceWrites', () => {
       ],
     );
 
-    expect(plan).toEqual({ insert: [], update: [], deleteIds: [] });
+    expect(plan).toEqual({ insert: [], update: [], trim: [], deleteIds: [] });
   });
 
   it('deletes a range that is no longer derived and keeps the rest', () => {
@@ -57,7 +57,7 @@ describe('planCalendarAbsenceWrites', () => {
       [derived('2026-10-23', '2026-10-25')],
     );
 
-    expect(plan).toEqual({ insert: [], update: [], deleteIds: [11] });
+    expect(plan).toEqual({ insert: [], update: [], trim: [], deleteIds: [11] });
   });
 
   it('inserts a newly derived range with its attributed connection', () => {
@@ -72,6 +72,7 @@ describe('planCalendarAbsenceWrites', () => {
     expect(plan).toEqual({
       insert: [derived('2026-10-27', '2026-10-28', 9)],
       update: [],
+      trim: [],
       deleteIds: [],
     });
   });
@@ -85,6 +86,7 @@ describe('planCalendarAbsenceWrites', () => {
     expect(plan).toEqual({
       insert: [derived('2026-10-20', '2026-10-22')],
       update: [],
+      trim: [],
       deleteIds: [11],
     });
   });
@@ -98,6 +100,7 @@ describe('planCalendarAbsenceWrites', () => {
     expect(plan).toEqual({
       insert: [],
       update: [{ id: 11, calendarConnectionId: 8 }],
+      trim: [],
       deleteIds: [],
     });
   });
@@ -111,7 +114,12 @@ describe('planCalendarAbsenceWrites', () => {
       [],
     );
 
-    expect(plan).toEqual({ insert: [], update: [], deleteIds: [11, 12] });
+    expect(plan).toEqual({
+      insert: [],
+      update: [],
+      trim: [],
+      deleteIds: [11, 12],
+    });
   });
 
   it('never puts a manual row in the write set, even on an exact range match', () => {
@@ -135,6 +143,7 @@ describe('planCalendarAbsenceWrites', () => {
     expect(plan).toEqual({
       insert: [derived('2026-10-20', '2026-10-20')],
       update: [],
+      trim: [],
       deleteIds: [],
     });
   });
@@ -148,7 +157,7 @@ describe('planCalendarAbsenceWrites', () => {
       [derived('2026-10-20', '2026-10-20')],
     );
 
-    expect(plan).toEqual({ insert: [], update: [], deleteIds: [12] });
+    expect(plan).toEqual({ insert: [], update: [], trim: [], deleteIds: [12] });
   });
 
   it('combines insert, update and delete in one plan', () => {
@@ -168,8 +177,50 @@ describe('planCalendarAbsenceWrites', () => {
     expect(plan).toEqual({
       insert: [derived('2026-11-02', '2026-11-02', 5)],
       update: [{ id: 11, calendarConnectionId: 2 }],
+      trim: [],
       deleteIds: [13],
     });
+  });
+});
+
+describe('planCalendarAbsenceWrites — rows straddling today (MINOR-1)', () => {
+  /** A stored 10-10..10-14 row, loaded with its start clipped to today 10-12. */
+  const straddling = (id: number, endDate = '2026-10-14'): ExistingAwayRow => ({
+    ...existingRow(id, '2026-10-12', endDate),
+    storedStartDate: '2026-10-10',
+  });
+
+  it('keeps a straddling row that still matches, with no write', () => {
+    const plan = planCalendarAbsenceWrites(
+      [straddling(11)],
+      [derived('2026-10-12', '2026-10-14')],
+    );
+
+    expect(plan).toEqual({ insert: [], update: [], trim: [], deleteIds: [] });
+  });
+
+  it('trims a straddling row that stops matching to end yesterday, never deleting its past', () => {
+    const plan = planCalendarAbsenceWrites(
+      [straddling(11)],
+      [derived('2026-10-12', '2026-10-13')],
+    );
+
+    expect(plan).toEqual({
+      insert: [derived('2026-10-12', '2026-10-13')],
+      update: [],
+      trim: [{ id: 11, endDate: '2026-10-11' }],
+      deleteIds: [],
+    });
+  });
+
+  it('trims (not deletes) a straddling row when nothing is derived any more', () => {
+    const plan = planCalendarAbsenceWrites(
+      [straddling(11), existingRow(12, '2026-10-20', '2026-10-20')],
+      [],
+    );
+
+    expect(plan.trim).toEqual([{ id: 11, endDate: '2026-10-11' }]);
+    expect(plan.deleteIds).toEqual([12]);
   });
 });
 

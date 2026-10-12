@@ -12,7 +12,11 @@
  * - **Window:** local midnight today + `LOOK_AHEAD_DAYS` (`buildReadWindow`).
  * - **History:** calendar rows that ended before today are never touched. A
  *   row straddling today is compared on its window-clipped range, so it keeps
- *   its id while it still matches.
+ *   its id while it still matches; once it stops matching it is TRIMMED to
+ *   end yesterday (its past part stays), never deleted (review MINOR-1).
+ * - **Kill switch:** re-read after the advisory + connection locks; off →
+ *   the user's calendar rows are purged and nothing is inserted (MAJOR-1,
+ *   `calendar-away-guard.helpers.ts`).
  * - **R4 safety net:** a block within ±60 s of one of the user's active
  *   sign-ups is our own copy (`matchesSignupBounds`) and never makes a day.
  * - **Serialised per user:** a transaction-scoped advisory lock keyed on the
@@ -27,6 +31,7 @@ import * as schema from '../../drizzle/schema';
 import {
   deriveAwayRanges,
   expandWithinWindow,
+  previousCalendarDay,
   type AwayDeriveInput,
   type DerivedAwayRange,
 } from './calendar-away-derive.helpers';
@@ -41,6 +46,11 @@ import {
   type ReadWindow,
 } from './calendar-read-normalize.helpers';
 import type { ReadSyncTx } from './calendar-read-sync.helpers';
+import {
+  lockUserConnections,
+  purgeCalendarAbsences,
+  readCalendarSyncEnabledOn,
+} from './calendar-away-guard.helpers';
 
 /** One existing absence row as the diff needs it. */
 export interface ExistingAwayRow {
@@ -49,11 +59,18 @@ export interface ExistingAwayRow {
   startDate: string;
   endDate: string;
   calendarConnectionId: number | null;
+  /**
+   * The stored start when it is before today: `startDate` is then clipped to
+   * today and the row straddles it (MINOR-1 trims instead of deleting).
+   */
+  storedStartDate?: string;
 }
 
 export interface CalendarAbsenceWritePlan {
   insert: DerivedAwayRange[];
   update: { id: number; calendarConnectionId: number }[];
+  /** Straddling rows that stopped matching: keep the past, end yesterday. */
+  trim: { id: number; endDate: string }[];
   deleteIds: number[];
 }
 
@@ -77,8 +94,18 @@ const rangeKey = (r: { startDate: string; endDate: string }): string =>
  * write); a re-attributed range updates only `calendarConnectionId`; a range
  * no longer derived is deleted; a new range is inserted. Rows whose `source`
  * is not `'calendar'` are ignored — never updated, never deleted. A duplicate
- * calendar row for an already-matched range is deleted.
+ * calendar row for an already-matched range is deleted. A row that straddles
+ * today (`storedStartDate` set) is trimmed to end yesterday instead of being
+ * deleted, so its past days survive (MINOR-1).
  */
+function dropRow(plan: CalendarAbsenceWritePlan, row: ExistingAwayRow): void {
+  if (row.storedStartDate === undefined) {
+    plan.deleteIds.push(row.id);
+    return;
+  }
+  plan.trim.push({ id: row.id, endDate: previousCalendarDay(row.startDate) });
+}
+
 export function planCalendarAbsenceWrites(
   existing: readonly ExistingAwayRow[],
   derived: readonly DerivedAwayRange[],
@@ -88,6 +115,7 @@ export function planCalendarAbsenceWrites(
   const plan: CalendarAbsenceWritePlan = {
     insert: [],
     update: [],
+    trim: [],
     deleteIds: [],
   };
   for (const row of existing) {
@@ -95,15 +123,13 @@ export function planCalendarAbsenceWrites(
     const key = rangeKey(row);
     const target = wanted.get(key);
     if (target === undefined || matched.has(key)) {
-      plan.deleteIds.push(row.id);
+      dropRow(plan, row);
       continue;
     }
     matched.add(key);
-    if (row.calendarConnectionId !== target.calendarConnectionId) {
-      plan.update.push({
-        id: row.id,
-        calendarConnectionId: target.calendarConnectionId,
-      });
+    const { calendarConnectionId } = target;
+    if (row.calendarConnectionId !== calendarConnectionId) {
+      plan.update.push({ id: row.id, calendarConnectionId });
     }
   }
   plan.insert = derived.filter((r) => !matched.has(rangeKey(r)));
@@ -269,10 +295,11 @@ async function loadExistingCalendarRows(
         gte(a.endDate, window.firstDate),
       ),
     );
-  return rows.map((r) => ({
-    ...r,
-    startDate: r.startDate < window.firstDate ? window.firstDate : r.startDate,
-  }));
+  return rows.map((r) =>
+    r.startDate < window.firstDate
+      ? { ...r, startDate: window.firstDate, storedStartDate: r.startDate }
+      : r,
+  );
 }
 
 async function applyPlan(
@@ -284,6 +311,12 @@ async function applyPlan(
   const calendarOnly = and(eq(a.userId, userId), eq(a.source, 'calendar'));
   if (plan.deleteIds.length > 0) {
     await tx.delete(a).where(and(calendarOnly, inArray(a.id, plan.deleteIds)));
+  }
+  for (const t of plan.trim) {
+    await tx
+      .update(a)
+      .set({ endDate: t.endDate, updatedAt: new Date() })
+      .where(and(calendarOnly, eq(a.id, t.id)));
   }
   for (const u of plan.update) {
     await tx
@@ -312,6 +345,11 @@ export async function runCalendarDerive(
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtext('calendar-derive'), ${userId})`,
   );
+  await lockUserConnections(tx, userId);
+  if (!(await readCalendarSyncEnabledOn(tx))) {
+    const deleted = await purgeCalendarAbsences(tx, userId);
+    return { inserted: 0, updated: 0, deleted };
+  }
   const window = await loadWindow(tx, userId, opts);
   const [input, existing] = await Promise.all([
     loadDeriveInput(tx, userId, window),
@@ -321,7 +359,7 @@ export async function runCalendarDerive(
   await applyPlan(tx, userId, plan);
   return {
     inserted: plan.insert.length,
-    updated: plan.update.length,
+    updated: plan.update.length + plan.trim.length,
     deleted: plan.deleteIds.length,
   };
 }
