@@ -54,6 +54,11 @@ function useBlockEditing(
     return { blocks, editor, cellStatus };
 }
 
+/** Anything positioned over the cells needs the measured dims. */
+function hasOverlays(props: GameTimeGridProps): boolean {
+    return [props.events, props.previewBlocks, props.calendarBusy].some((list) => (list?.length ?? 0) > 0);
+}
+
 /**
  * Reusable 7-day x 24-hour grid for game time (ROK-189).
  * Interactive grids edit availability as blocks with drag handles (ROK-1426).
@@ -64,7 +69,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
     const [hoveredCell, setHoveredCell] = useState<string | null>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const gridRef = useRef<HTMLDivElement>(null);
-    const needsMeasure = (props.events?.length ?? 0) > 0 || (previewBlocks?.length ?? 0) > 0 || isInteractive;
+    const needsMeasure = hasOverlays(props) || isInteractive;
     const gridDims = useGridMeasurement(gridRef, wrapperRef, needsMeasure, vis.rangeStart, vis.rangeEnd);
     const view = useSlotView(maps.slotMap);
     const { blocks, editor, cellStatus } = useBlockEditing(slots, onChange, vis.HOURS, isInteractive, gridDims?.rowHeight, view.getSlotStatus);
@@ -92,7 +97,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                     isDayAllActive={isInteractive ? isDayAllActive : undefined}
                     awayDays={props.awayDays}
                 />
-                <GridOverlayLayer gridDims={gridDims} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} previewBlocks={previewBlocks} />
+                <GridOverlayLayer gridDims={gridDims} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} previewBlocks={previewBlocks} hours={vis.HOURS} calendarBusy={props.calendarBusy} />
                 {isInteractive && gridDims && (
                     <SlotBlockLayer
                         blocks={blocks} editor={editor} gridDims={gridDims} hours={vis.HOURS}

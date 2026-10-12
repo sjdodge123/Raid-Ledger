@@ -72,4 +72,6 @@ export interface GameTimeGridProps {
     noStickyOffset?: boolean;
     /** Days of the displayed week the viewer is away (ROK-1585) — "· away" header, muted column. */
     awayDays?: ReadonlySet<number>;
+    /** The viewer's synced-calendar busy hours (ROK-1595 S2) — the NP-1 band, drawn under nothing editable. */
+    calendarBusy?: readonly import('@raid-ledger/contract').GameTimeCalendarBusy[] | undefined;
 }

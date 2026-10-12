@@ -62,7 +62,7 @@ function ProfileWeek({ editor, isMobile }: { editor: Editor; isMobile: boolean }
             <ProfileHeader />
             <div className="mb-2"><PhoneWindowToggle direction="earlier" band={win.earlier} testIdPrefix="desktop-week" /></div>
             <GameTimeGrid slots={editor.slots} onChange={editor.handleChange} tzLabel={editor.tzLabel}
-                hourRange={win.hourRange} fullDayNames={!isMobile} noStickyOffset compact awayDays={awayDays} />
+                hourRange={win.hourRange} fullDayNames={!isMobile} noStickyOffset compact awayDays={awayDays} calendarBusy={editor.calendarBusy} />
             <div className="mt-2"><PhoneWindowToggle direction="later" band={win.later} testIdPrefix="desktop-week" /></div>
             <ProfileActions editor={editor} />
         </div>
