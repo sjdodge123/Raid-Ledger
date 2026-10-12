@@ -16,6 +16,7 @@ import { Inject, Injectable, Optional } from '@nestjs/common';
 import { SettingsService } from '../../settings/settings.service';
 import type {
   CalendarAccountProvider,
+  CalendarReadCapability,
   CalendarWriteCapability,
 } from './calendar-provider.interface';
 import { GoogleCalendarAdapter } from './google/google.adapter';
@@ -52,13 +53,33 @@ const WRITE_METHODS = [
   'deleteRaidLedgerCalendar',
 ] as const;
 
+/** An adapter that can read calendars + busy blocks (ROK-1593). */
+export type CalendarReadProvider = CalendarAccountProvider &
+  CalendarReadCapability;
+
+const READ_METHODS = ['listCalendars', 'fetchBusy'] as const;
+
+function hasMethods(
+  p: CalendarAccountProvider | null,
+  names: readonly string[],
+): boolean {
+  if (!p) return false;
+  const methods = p as unknown as Record<string, unknown>;
+  return names.every((m) => typeof methods[m] === 'function');
+}
+
 /** true when `p` implements every `CalendarWriteCapability` method. */
 export function hasWriteCapability(
   p: CalendarAccountProvider | null,
 ): p is CalendarWriteProvider {
-  if (!p) return false;
-  const methods = p as unknown as Record<string, unknown>;
-  return WRITE_METHODS.every((m) => typeof methods[m] === 'function');
+  return hasMethods(p, WRITE_METHODS);
+}
+
+/** true when `p` implements every `CalendarReadCapability` method. */
+export function hasReadCapability(
+  p: CalendarAccountProvider | null,
+): p is CalendarReadProvider {
+  return hasMethods(p, READ_METHODS);
 }
 
 export function isDemoFakeSubject(subject: string): boolean {
@@ -106,6 +127,17 @@ export class CalendarProviderRegistry {
   ): Promise<CalendarWriteProvider | null> {
     const provider = await this.getAccountProviderForConnection(conn);
     return hasWriteCapability(provider) ? provider : null;
+  }
+
+  /**
+   * The read adapter for an existing row (ROK-1593); null = the provider
+   * cannot read, or (demo-fake row) the double gate is closed — never Google.
+   */
+  async getReadProviderForConnection(
+    conn: ConnectionProviderRef,
+  ): Promise<CalendarReadProvider | null> {
+    const provider = await this.getAccountProviderForConnection(conn);
+    return hasReadCapability(provider) ? provider : null;
   }
 
   private async fakeAllowed(): Promise<boolean> {

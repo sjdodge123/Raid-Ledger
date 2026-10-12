@@ -1,4 +1,9 @@
 import { NotFoundError } from '../calendar-provider.errors';
+import type {
+  BusyBlock,
+  ProviderCalendar,
+  TimeRange,
+} from '../calendar-provider.interface';
 
 /**
  * ROK-1596: the remote state behind `FakeCalendarProvider`'s write
@@ -26,6 +31,14 @@ export interface FakeCopy {
   etag: string;
 }
 
+/** A calendar `seedCalendars` adds (ROK-1593 read). */
+export interface FakeCalendarSeed {
+  id: string;
+  name: string;
+  /** false = a calendar shared read-only with the user. Default true. */
+  writable?: boolean;
+}
+
 /** The fields an upsert writes; ids and etags are the store's. */
 export type FakeCopyFields = Omit<FakeCopy, 'id' | 'calendarId' | 'etag'>;
 
@@ -35,6 +48,9 @@ export class FakeCalendarStore {
   ]);
   private readonly copies = new Map<string, FakeCopy>();
   private readonly failures: Error[] = [];
+  private readonly readOnly = new Set<string>();
+  private readonly busy = new Map<string, BusyBlock[]>();
+  private readonly readFailures: Error[] = [];
   private calendarSerial = 0;
   private copySerial = 0;
   private etagSerial = 0;
@@ -70,9 +86,67 @@ export class FakeCalendarStore {
     return this.calendars.get(id) ?? null;
   }
 
+  /** Add foreign calendars the user can read (ROK-1593). */
+  seedCalendars(seeds: readonly FakeCalendarSeed[]): void {
+    for (const seed of seeds) {
+      this.calendars.set(seed.id, seed.name);
+      if (seed.writable === false) this.readOnly.add(seed.id);
+    }
+  }
+
+  /** Foreign busy blocks on a calendar (never carry `ourId`). */
+  seedBusy(calendarId: string, blocks: readonly BusyBlock[]): void {
+    if (!this.calendars.has(calendarId))
+      throw new NotFoundError('calendar_not_found');
+    const prior = this.busy.get(calendarId) ?? [];
+    this.busy.set(calendarId, [...prior, ...blocks]);
+  }
+
+  /** Queue `err` for the next `fetchBusy` (FIFO; one error per call). */
+  failNextFetch(err: Error): void {
+    this.readFailures.push(err);
+  }
+
+  takeReadFailure(): void {
+    const err = this.readFailures.shift();
+    if (err) throw err;
+  }
+
+  /** The picker rows; `isRaidLedger` is the caller's to set (as Google). */
+  listCalendars(): ProviderCalendar[] {
+    return [...this.calendars].map(([id, name]) => ({
+      id,
+      name,
+      primary: id === FAKE_PRIMARY_CALENDAR_ID,
+      writable: !this.readOnly.has(id),
+      isRaidLedger: false,
+    }));
+  }
+
+  /**
+   * Busy blocks overlapping `range`: seeded foreign blocks plus the store's
+   * OWN busy copies (`ourId` = copy id) — a real round-trip of what the
+   * write path stored. Free (tentative/bench) copies are not busy.
+   */
+  busyIn(calendarId: string, range: TimeRange): BusyBlock[] {
+    const overlaps = (b: { start: Date; end: Date }) =>
+      b.start < range.end && b.end > range.start;
+    const copies = this.copiesIn(calendarId)
+      .filter((c) => c.busy)
+      .map((c) => ({
+        start: c.start,
+        end: c.end,
+        allDay: false,
+        ourId: c.copyId,
+      }));
+    const seeded = this.busy.get(calendarId) ?? [];
+    return [...seeded, ...copies].filter(overlaps).map((b) => ({ ...b }));
+  }
+
   /** Drop a calendar and every copy in it (also "deleted remotely"). */
   removeCalendar(id: string): void {
     this.calendars.delete(id);
+    this.busy.delete(id);
     for (const copy of this.copiesIn(id)) this.copies.delete(copy.id);
   }
 
