@@ -18,8 +18,7 @@ import type {
 } from './signups.service.types';
 import * as signupH from './signups-signup.helpers';
 import * as discordH from './signups-discord.helpers';
-import { getCharacterById } from './signups-cancel.helpers';
-import { buildSignupResponseDto } from './signups-roster.helpers';
+import * as dupH from './signups-duplicate-flow.helpers';
 import * as rosterQH from './signups-roster-query.helpers';
 import { insertRosterSlotWithRetry } from './signups-roster-slot.helpers';
 import { reconfirmPendingWithSlot } from './signups-reconfirm.helpers';
@@ -80,19 +79,13 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
   const { tx, eventRow, eventId, userId, dto, user } = p;
   const row = await signupH.fetchExistingSignup(tx, eventId, userId);
   const existing = defined(row, 'existing signup');
-  // reactivateIfCancelled mutates `existing` in-place (including characterId).
-  // updateCharacterIfNeeded's equality guard relies on this — it's a no-op for
-  // the reactivation path because existing.characterId is already synced.
-  await signupH.reactivateIfCancelled(tx, existing, dto, p.hasCharacter);
-  await signupH.updateCharacterIfNeeded(tx, existing, dto);
-  // Opportunistic repair: back-fill discordUserId if user is linked (ROK-985)
-  await signupH.repairSignupDiscordId(tx, existing, user);
-  const rolesChanged = await signupH.updatePreferredRolesIfNeeded(
+  const reactivated = await dupH.applyDuplicateRowUpdates(
     tx,
     existing,
     dto,
+    user,
+    p.hasCharacter,
   );
-  if (rolesChanged) await clearExistingAssignment(tx, existing.id);
   const reconfirmed = await ensureAssignment(
     deps,
     tx,
@@ -102,21 +95,13 @@ async function handleDuplicateSignup(deps: FlowDeps, p: DuplicateSignupParams) {
     dto,
     p.autoBench,
   );
-  const character = existing.characterId
-    ? await getCharacterById(tx, existing.characterId)
-    : null;
   return {
     isDuplicate: true as const,
     reconfirmed,
+    reactivated,
     reconfirmedUserId: existing.userId,
-    response: buildSignupResponseDto(existing, user, character),
+    response: await dupH.buildDuplicateResponse(tx, existing, user),
   };
-}
-
-async function clearExistingAssignment(tx: Tx, signupId: number) {
-  await tx
-    .delete(schema.rosterAssignments)
-    .where(eq(schema.rosterAssignments.signupId, signupId));
 }
 
 async function ensureAssignment(

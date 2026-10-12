@@ -91,8 +91,18 @@ export class SignupsService {
       );
     });
     // ROK-1269 invariant: the reconfirm self-heal is audited post-commit.
-    if (result.isDuplicate)
+    if (result.isDuplicate) {
+      // ROK-1769: a re-signup that reactivated a departed/declined row changed
+      // the roster — re-sync the embed and private-voice access.
+      if (result.reactivated)
+        this.emit(SIGNUP_EVENTS.UPDATED, {
+          eventId,
+          userId,
+          signupId: result.response.id,
+          action: 'signup_reactivated',
+        });
       return reconfirmH.finalizeDuplicate(this.activityLog, eventId, result);
+    }
     this.emit(SIGNUP_EVENTS.CREATED, {
       eventId,
       userId,
