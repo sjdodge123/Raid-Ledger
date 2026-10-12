@@ -36,6 +36,13 @@ import type { SpotlightCandidate } from './weekly-digest-spotlight.helpers';
 import type { WeeklyUpcoming } from './weekly-digest-upcoming.helpers';
 
 const ORIGIN = 'https://raid.example.test';
+const KINDS = [
+  'rising_game',
+  'duo',
+  'boss_kills',
+  'common_ground',
+  'marathon',
+] as const;
 const LINKS = digestLinks(ORIGIN);
 const END = new Date('2026-10-12T12:00:00Z');
 const UNIX = 1790000000;
@@ -245,7 +252,7 @@ describe('weekly digest v2 — field order and empty sections', () => {
   });
 });
 
-describe('weekly digest v2 — line content', () => {
+describe('weekly digest v2 — spotlight lines', () => {
   it.each([
     [
       'rising_game',
@@ -274,7 +281,9 @@ describe('weekly digest v2 — line content', () => {
       });
     },
   );
+});
 
+describe('weekly digest v2 — section lines', () => {
   it('renders milestones in priority order', () => {
     expect(milestonesField(milestones())?.value).toBe(
       '👋 Welcome **Mira**, **Tobias** and **Quill** (3 new members)\n' +
@@ -443,7 +452,7 @@ function hostileDigest(kind: SpotlightCandidate['kind']): DigestSectionsV2 {
 }
 
 describe('weekly digest v2 — no mentions from hostile names (AC11)', () => {
-  it.each(Object.keys(SPOTLIGHTS) as Array<SpotlightCandidate['kind']>)(
+  it.each(KINDS)(
     'through every line builder, with the %s spotlight',
     (kind) => {
       const data = build(hostileDigest(kind));
@@ -457,64 +466,64 @@ describe('weekly digest v2 — no mentions from hostile names (AC11)', () => {
   );
 });
 
-describe('weekly digest v2 — per-field caps and the 6000 budget', () => {
-  const huge = '*'.repeat(400);
-  function maxDigest(): DigestSectionsV2 {
-    const base = hostileDigest('duo');
-    const many = <T>(n: number, make: (i: number) => T) =>
-      Array.from({ length: n }, (_, i) => make(i));
-    const ev = must(upcoming().events[0]);
-    const poll = must(upcoming().polls[0]);
-    return {
-      ...base,
-      spotlight: {
-        ...SPOTLIGHTS.duo,
-        members: [
-          { userId: 1, name: huge },
-          { userId: 2, name: huge },
-        ],
-        eventTitles: many(10, () => huge),
-      },
-      playing: {
-        items: many(5, (i) => ({
-          gameId: i,
-          name: huge,
-          slug: 's',
-          playerCount: 9,
-        })),
-        total: 80,
-      },
-      newGameIds: many(5, (i) => i),
-      milestones: {
-        newMembers: { names: many(5, () => huge), total: 40 },
-        eventMilestones: many(5, (i) => ({
-          userId: i,
-          name: huge,
-          threshold: 50,
-        })),
-        firstGames: many(5, (i) => ({ gameId: i, name: huge })),
-        hourMilestones: many(5, (i) => ({
-          gameId: i,
-          name: huge,
-          threshold: 1000,
-        })),
-      },
-      upcoming: {
-        events: many(10, (i) => ({ ...ev, eventId: i, title: huge })),
-        polls: many(5, (i) => ({ ...poll, matchId: i, gameName: huge })),
-      },
-      lfg: {
-        items: many(80, (i) => ({
-          ...must(base.lfg.items[0]),
-          gameName: huge,
-          gameSlug: `s${String(i)}`,
-        })),
-        total: 80,
-      },
-      bestPrice: { items: many(3, (i) => priceLine(i, huge)), total: 80 },
-    };
-  }
+const huge = '*'.repeat(400);
+function maxDigest(): DigestSectionsV2 {
+  const base = hostileDigest('duo');
+  const many = <T>(n: number, make: (i: number) => T) =>
+    Array.from({ length: n }, (_, i) => make(i));
+  const ev = must(upcoming().events[0]);
+  const poll = must(upcoming().polls[0]);
+  return {
+    ...base,
+    spotlight: {
+      ...SPOTLIGHTS.duo,
+      members: [
+        { userId: 1, name: huge },
+        { userId: 2, name: huge },
+      ],
+      eventTitles: many(10, () => huge),
+    },
+    playing: {
+      items: many(5, (i) => ({
+        gameId: i,
+        name: huge,
+        slug: 's',
+        playerCount: 9,
+      })),
+      total: 80,
+    },
+    newGameIds: many(5, (i) => i),
+    milestones: {
+      newMembers: { names: many(5, () => huge), total: 40 },
+      eventMilestones: many(5, (i) => ({
+        userId: i,
+        name: huge,
+        threshold: 50,
+      })),
+      firstGames: many(5, (i) => ({ gameId: i, name: huge })),
+      hourMilestones: many(5, (i) => ({
+        gameId: i,
+        name: huge,
+        threshold: 1000,
+      })),
+    },
+    upcoming: {
+      events: many(10, (i) => ({ ...ev, eventId: i, title: huge })),
+      polls: many(5, (i) => ({ ...poll, matchId: i, gameName: huge })),
+    },
+    lfg: {
+      items: many(80, (i) => ({
+        ...must(base.lfg.items[0]),
+        gameName: huge,
+        gameSlug: `s${String(i)}`,
+      })),
+      total: 80,
+    },
+    bestPrice: { items: many(3, (i) => priceLine(i, huge)), total: 80 },
+  };
+}
 
+describe('weekly digest v2 — per-field caps and the 6000 budget', () => {
   it('keeps every field under its §4.1 cap and the embed within 6000', () => {
     const data = build(maxDigest());
     const caps: Record<string, number> = {
@@ -533,7 +542,9 @@ describe('weekly digest v2 — per-field caps and the 6000 budget', () => {
     }
     expect(embedLength(data)).toBeLessThanOrEqual(DIGEST_EMBED_LIMITS.total);
   });
+});
 
+describe('weekly digest v2 — §4.2 trim order', () => {
   it('fitDigestTotal applies the §4.2 trims in order and stops once it fits', () => {
     const seen: string[][] = [];
     const fields = fitDigestTotal(
