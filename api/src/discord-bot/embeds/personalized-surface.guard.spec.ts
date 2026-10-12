@@ -110,6 +110,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'calendar-sync/calendar-oauth.integration.spec-helpers.ts',
   'calendar-sync/providers/google/google-calendar-api.spec-helpers.ts',
   'calendar-sync/providers/testing/calendar-provider.conformance.spec-helpers.ts',
+  'calendar-sync/providers/testing/calendar-read.conformance.spec-helpers.ts',
   'calendar-sync/providers/testing/calendar-write.conformance.spec-helpers.ts',
   'discord-bot/lfm/lfm-embed.service.spec-helpers.ts',
   'discord-bot/listeners/signup-handlers.spec-helpers.ts',

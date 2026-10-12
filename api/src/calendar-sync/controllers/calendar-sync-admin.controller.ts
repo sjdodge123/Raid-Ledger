@@ -9,6 +9,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Logger,
   Put,
   UseGuards,
@@ -18,7 +19,14 @@ import {
   UpdateAdminCalendarSyncSettingsSchema,
   type AdminCalendarSyncSettings,
 } from '@raid-ledger/contract';
+import { InjectQueue } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { AdminGuard } from '../../auth/admin.guard';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import type * as schema from '../../drizzle/schema';
+import { GameTimeService } from '../../users/game-time.service';
+import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
 import { SettingsService } from '../../settings/settings.service';
 import {
   applyAdminCalendarSyncUpdate,
@@ -30,7 +38,13 @@ import {
 export class CalendarSyncAdminController {
   private readonly logger = new Logger(CalendarSyncAdminController.name);
 
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    @Inject(DrizzleAsyncProvider)
+    private readonly db: PostgresJsDatabase<typeof schema>,
+    @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
+    private readonly gameTime: GameTimeService,
+  ) {}
 
   @Get()
   getSettings(): Promise<AdminCalendarSyncSettings> {
@@ -52,7 +66,11 @@ export class CalendarSyncAdminController {
         ),
       });
     }
-    await applyAdminCalendarSyncUpdate(this.settings, parsed.data);
+    await applyAdminCalendarSyncUpdate(this.settings, parsed.data, {
+      db: this.db,
+      readQueue: this.readQueue,
+      invalidateUser: (u) => this.gameTime.invalidateUserCache(u),
+    });
     this.logger.log(
       `Calendar sync settings updated via admin UI (fields: ${Object.keys(parsed.data).join(', ') || 'none'})`,
     );

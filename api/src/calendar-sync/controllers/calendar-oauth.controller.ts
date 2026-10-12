@@ -51,7 +51,11 @@ import {
   type CalendarOAuthProvider,
 } from '../../settings/settings-calendar-sync.helpers';
 import { CalendarSyncEnabledGuard } from '../calendar-sync-enabled.guard';
-import { CALENDAR_WRITE_QUEUE } from '../calendar-sync.constants';
+import {
+  CALENDAR_READ_QUEUE,
+  CALENDAR_WRITE_QUEUE,
+} from '../calendar-sync.constants';
+import { enqueueCalendarReadSync } from '../read/calendar-read.enqueue.helpers';
 import type { CalendarAccountProvider } from '../providers/calendar-provider.interface';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import {
@@ -113,6 +117,7 @@ export class CalendarOAuthController {
     private readonly settings: SettingsService,
     private readonly registry: CalendarProviderRegistry,
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly writeQueue: Queue,
+    @InjectQueue(CALENDAR_READ_QUEUE) private readonly readQueue: Queue,
   ) {}
 
   @Get('users/me/calendars/oauth/:provider/start')
@@ -252,6 +257,8 @@ export class CalendarOAuthController {
         // Pipe review m3: a write-off an auth error interrupted resumes now.
         const deps = this.enqueueDeps();
         await enqueuePendingWriteOff(this.db, deps, input.connectionId);
+        // ROK-1593 §3.2: a fresh read grant syncs at once.
+        if (outcome === 'read') await this.enqueueReadSync(input.connectionId);
         return outcome;
       })
       .catch((err: unknown) => {
@@ -289,6 +296,16 @@ export class CalendarOAuthController {
       queue: this.writeQueue,
       isSyncEnabled: () => Promise.resolve(true),
     };
+  }
+
+  private enqueueReadSync(connectionId: number) {
+    return enqueueCalendarReadSync(
+      {
+        queue: this.readQueue,
+        isSyncEnabled: () => getCalendarSyncEnabled(this.settings),
+      },
+      connectionId,
+    );
   }
 
   private async redirectUri(key: CalendarOAuthProvider): Promise<string> {

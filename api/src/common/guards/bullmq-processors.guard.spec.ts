@@ -39,6 +39,8 @@ const KNOWN_THROW_SAFE: string[] = [
   'game-taste-recompute.processor.ts',
   // CalendarWriteProcessor: process() delegates to reconcile / write-off / disconnect helpers that record terminal failures themselves and rethrow only retryable ones for BullMQ backoff (ROK-1596)
   'calendar-write.processor.ts',
+  // CalendarReadProcessor: process() delegates to runCalendarReadSync; failures go through recordReadSyncFailure, which records the terminal state; only retryable ones rethrow for BullMQ backoff, the rest become UnrecoverableError (ROK-1593)
+  'calendar-read.processor.ts',
 ];
 
 /** Recursively collect all `.ts` source files. */

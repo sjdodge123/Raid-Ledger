@@ -21,11 +21,19 @@ import {
   type CalendarOAuthProvider,
   type CalendarProviderConfigUpdate,
 } from '../../settings/settings-calendar-sync.helpers';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type * as schema from '../../drizzle/schema';
+import {
+  enqueueAllReadSyncs,
+  type CalendarReadQueue,
+} from '../read/calendar-read.enqueue.helpers';
+import { purgeAllBusyBlocks } from '../read/calendar-read-purge.helpers';
 import {
   CALENDAR_OAUTH_PROVIDERS,
   oauthCallbackPath,
 } from '../calendar-sync.constants';
 
+type Db = PostgresJsDatabase<typeof schema>;
 type AdminProviderSettings = AdminCalendarSyncSettings['google'];
 
 async function readProvider(
@@ -77,6 +85,7 @@ function toProviderConfigUpdate(
 export async function applyAdminCalendarSyncUpdate(
   svc: SettingsCore,
   update: UpdateAdminCalendarSyncSettings,
+  effects?: KillSwitchEffects,
 ): Promise<void> {
   for (const provider of CALENDAR_OAUTH_PROVIDERS) {
     const providerUpdate = update[provider];
@@ -90,5 +99,35 @@ export async function applyAdminCalendarSyncUpdate(
   }
   if (update.enabled !== undefined) {
     await setCalendarSyncEnabled(svc, update.enabled);
+    if (effects) await applyKillSwitchEffects(effects, update.enabled);
   }
+}
+
+/** ROK-1593 D10: what flipping the kill switch does to read data. */
+export interface KillSwitchEffects {
+  db: Db;
+  readQueue: CalendarReadQueue;
+  /** `GameTimeService.invalidateUserCache`. */
+  invalidateUser: (userId: number) => void;
+}
+
+/**
+ * Off → every busy block is deleted in the request (busy hours stop counting
+ * at once; PR-B adds the calendar absences). On → a sync is queued for every
+ * read connection, which rebuilds them. Runs after the setting is written, so
+ * the processor's own kill-switch re-check already sees the new value.
+ */
+export async function applyKillSwitchEffects(
+  effects: KillSwitchEffects,
+  enabled: boolean,
+): Promise<void> {
+  if (!enabled) {
+    const users = await purgeAllBusyBlocks(effects.db);
+    users.forEach((u) => effects.invalidateUser(u));
+    return;
+  }
+  await enqueueAllReadSyncs(effects.db, {
+    queue: effects.readQueue,
+    isSyncEnabled: () => Promise.resolve(true),
+  });
 }

@@ -38,6 +38,7 @@ import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import type { AuthenticatedRequest } from '../../auth/types';
 import { SettingsService } from '../../settings/settings.service';
+import { GameTimeService } from '../../users/game-time.service';
 import { buildCalendarsOverview } from '../services/calendar-overview.helpers';
 import {
   markCalendarDisconnecting,
@@ -61,6 +62,7 @@ export class CalendarConnectionsController {
     private readonly settings: SettingsService,
     @InjectQueue(CALENDAR_WRITE_QUEUE) private readonly queue: Queue,
     private readonly registry: CalendarProviderRegistry,
+    private readonly gameTime: GameTimeService,
   ) {}
 
   @Get()
@@ -80,6 +82,8 @@ export class CalendarConnectionsController {
     if (!(await markCalendarDisconnecting(this.db, input))) {
       throw new NotFoundException();
     }
+    // D-R7: its busy blocks went in that request; drop the cached hours.
+    this.gameTime.invalidateUserCache(req.user.id);
     try {
       await enqueueCalendarWriteJob(this.enqueueDeps(), {
         kind: 'disconnect',

@@ -47,3 +47,9 @@ export const writeOffJobId = (conn: number) => `cal-writeoff-${conn}`;
 export const disconnectJobId = (conn: number) => `cal-disconnect-${conn}`;
 /** The one follow-up queued while the plain-id job is ACTIVE (D3). */
 export const rerunJobId = (jobId: string) => `${jobId}-rerun`;
+
+/** ROK-1593 D-R5: the read queue (sync now; PR-B adds `derive`). */
+export const CALENDAR_READ_QUEUE = 'calendar-read';
+export const readSyncJobId = (conn: number) => `cal-read-${conn}`;
+/** PR-B (D9): one derive per user. Unused until the derive job lands. */
+export const deriveJobId = (user: number) => `cal-derive-${user}`;
