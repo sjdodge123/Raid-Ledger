@@ -23,14 +23,17 @@ const MIN = 60_000;
 
 const strayRows = [{ userId: 9 }, { userId: 9 }, { userId: 11 }];
 
-function recordingDb(dueIds: number[], staleUsers: number[] = []) {
+function recordingDb(dueIds: number[], staleUsers: number[] | Error = []) {
   const calls = { limit: [] as number[], sets: [] as unknown[], deletes: 0 };
   const distinct = {
     from: () => distinct,
     innerJoin: () => distinct,
     where: () => distinct,
     orderBy: () => distinct,
-    limit: () => Promise.resolve(staleUsers.map((userId) => ({ userId }))),
+    limit: () =>
+      staleUsers instanceof Error
+        ? Promise.reject(staleUsers)
+        : Promise.resolve(staleUsers.map((userId) => ({ userId }))),
   };
   const chain = {
     from: () => chain,
@@ -62,7 +65,11 @@ function recordingDb(dueIds: number[], staleUsers: number[] = []) {
   return { db, calls };
 }
 
-function makeCron(dueIds: number[], enabled = true, staleUsers: number[] = []) {
+function makeCron(
+  dueIds: number[],
+  enabled = true,
+  staleUsers: number[] | Error = [],
+) {
   const { db, calls } = recordingDb(dueIds, staleUsers);
   const invalidated: number[] = [];
   const gameTime = {
@@ -135,6 +142,12 @@ describe('CalendarReadCron.run', () => {
     expect(added).toEqual(['cal-derive-5', 'cal-derive-8', 'cal-read-4']);
     expect(calls.deletes).toBe(2);
     expect(invalidated).toEqual([]);
+  });
+
+  it('a failing backstop query still queues the due syncs (review r2 N4)', async () => {
+    const { cron, added } = makeCron([4], true, new Error('statement timeout'));
+    await expect(cron.run(NOW, () => 0.5)).resolves.toEqual([4]);
+    expect(added).toEqual(['cal-read-4']);
   });
 
   it('prunes blocks ended more than 24 h ago (before any window start)', () => {

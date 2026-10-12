@@ -14,7 +14,7 @@
  * failed or raced admin purge); while it is on each tick queues a derive for
  * users whose synced absences point at a connection that stopped counting.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
 import type { Queue } from 'bullmq';
@@ -89,6 +89,8 @@ export async function leaseReadConnections(
 
 @Injectable()
 export class CalendarReadCron {
+  private readonly logger = new Logger(CalendarReadCron.name);
+
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: Db,
     private readonly settings: SettingsService,
@@ -112,8 +114,7 @@ export class CalendarReadCron {
       await this.purgeStrayAbsences();
       return [];
     }
-    const stale = await findUsersWithStaleCalendarAbsences(this.db, now);
-    await enqueueDerivesBestEffort(this.queue, stale, 'stale connection');
+    await this.enqueueStaleDerives(now);
     const ids = await findDueReadConnections(this.db, now);
     await leaseReadConnections(this.db, ids, now, random);
     const deps = {
@@ -122,6 +123,20 @@ export class CalendarReadCron {
     };
     await enqueueCalendarReadSyncs(deps, ids);
     return ids;
+  }
+
+  /**
+   * MAJOR-2 backstop, best effort (review r2 N4): a failure here is logged
+   * and must not skip this tick's regular sync enqueues.
+   */
+  private async enqueueStaleDerives(now: Date): Promise<void> {
+    try {
+      const stale = await findUsersWithStaleCalendarAbsences(this.db, now);
+      await enqueueDerivesBestEffort(this.queue, stale, 'stale connection');
+    } catch (err) {
+      const name = err instanceof Error ? err.name : 'unknown';
+      this.logger.error(`stale-absence backstop failed (${name})`);
+    }
   }
 
   /** Switch off: synced away days must not count (D10 / Q12). */
