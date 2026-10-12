@@ -32,11 +32,7 @@ import {
   readSyncJobId,
 } from '../calendar-sync.constants';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
-import type {
-  BusyBlock,
-  ConnectResult,
-  OAuthCredentials,
-} from '../providers/calendar-provider.interface';
+import type { OAuthCredentials } from '../providers/calendar-provider.interface';
 import { CALENDAR_FAKE_PROVIDER } from '../providers/calendar-provider.registry';
 import { buildCopyId, deriveInstanceId } from '../providers/rl-copy-id.helpers';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
@@ -49,11 +45,16 @@ import {
   type CalendarReadJobData,
 } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
+import {
+  FOREIGN_INSTANCE,
+  allDay,
+  credsOf,
+  resetFake,
+  timed,
+  tomorrowAt,
+} from './calendar-read.integration.spec-helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
-const HOUR = 60 * 60 * 1000;
-const DAY = 24 * HOUR;
-const FOREIGN_INSTANCE = 'abcdefabcdef';
 
 let testApp: TestApp;
 let fake: FakeCalendarProvider;
@@ -76,29 +77,11 @@ beforeAll(async () => {
   await testApp.app.get(CalendarWriteProcessor).worker.close(true);
 });
 
-/** Empty the shared Fake: copies, calendars, seeded busy, recorded calls. */
-function resetFake(): void {
-  for (const c of fake.store.allCopies()) fake.store.deleteCopy(c.id);
-  for (const cal of fake.store.listCalendars())
-    fake.store.removeCalendar(cal.id);
-  fake.seedCalendars([{ id: FAKE_PRIMARY_CALENDAR_ID, name: 'Primary' }]);
-  fake.fetchBusyCalls.length = 0;
-  fake.store.clearFailures();
-  for (;;) {
-    try {
-      fake.store.takeReadFailure();
-      return;
-    } catch {
-      // drop a queued read failure left by a failed test
-    }
-  }
-}
-
 beforeEach(async () => {
   process.env.DEMO_MODE = 'true';
   await settings.setDemoMode(true);
   await setCalendarSyncEnabled(settings, true);
-  resetFake();
+  resetFake(fake);
   await readQueue.drain(true);
   await writeQueue.drain(true);
 });
@@ -124,12 +107,6 @@ interface Conn {
 interface Member extends Conn {
   userId: number;
   token: string;
-}
-
-/** The Fake ignores credentials on copy writes; any OAuth shape will do. */
-function credsOf(result: ConnectResult): OAuthCredentials {
-  const grant = result.credentials;
-  return { ...grant, refreshToken: grant.refreshToken ?? 'fake-refresh' };
 }
 
 /** Another Fake connection for `userId`, read granted + enabled. */
@@ -162,30 +139,16 @@ async function member(): Promise<Member> {
   return { userId, token, ...(await connect(userId)) };
 }
 
-function tomorrowAt(hour: number, minute = 0): Date {
-  const d = new Date();
-  d.setUTCHours(0, 0, 0, 0);
-  return new Date(d.getTime() + DAY + hour * HOUR + minute * 60 * 1000);
-}
-
 const dateOf = (d: Date): string => d.toISOString().slice(0, 10);
 const TOMORROW = () => dateOf(tomorrowAt(0));
 const DAY_AFTER = () => dateOf(tomorrowAt(24));
 
-function timed(start: Date, end: Date): BusyBlock {
-  return { start, end, allDay: false };
-}
-
-function allDay(first: string, lastInclusive: string): BusyBlock {
-  const start = new Date(`${first}T00:00:00.000Z`);
-  const last = new Date(`${lastInclusive}T00:00:00.000Z`);
-  return {
-    start,
-    end: new Date(last.getTime() + DAY),
-    allDay: true,
-    allDayDates: { first, lastInclusive },
-  };
-}
+/** One expected synced range (inclusive dates + attributed connection). */
+const away = (startDate: string, endDate: string, connectionId: number) => ({
+  startDate,
+  endDate,
+  calendarConnectionId: connectionId,
+});
 
 /** Template hours on tomorrow's weekday (DB convention: 0 = Monday). */
 async function templateTomorrow(userId: number, hours: number[]) {
@@ -281,10 +244,10 @@ async function calendarRangesOf(userId: number) {
   const rows = await absencesOf(userId);
   return rows
     .filter((r) => r.source === 'calendar')
-    .map((r) => ({
-      startDate: r.startDate,
-      endDate: r.endDate,
-      calendarConnectionId: r.calendarConnectionId,
+    .map(({ startDate, endDate, calendarConnectionId }) => ({
+      startDate,
+      endDate,
+      calendarConnectionId,
     }));
 }
 
@@ -338,11 +301,7 @@ describe('derivation through a sync', () => {
     await sync(m.connectionId);
 
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: DAY_AFTER(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), DAY_AFTER(), m.connectionId),
     ]);
     const res = await api(m.token).listAbsences();
     expect(res.status).toBe(200);
@@ -361,11 +320,7 @@ describe('derivation through a sync', () => {
     await sync(m.connectionId);
 
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), m.connectionId),
     ]);
   });
 
@@ -391,11 +346,7 @@ describe('derivation through a sync', () => {
     });
     await sync(m.connectionId);
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), m.connectionId),
     ]);
   });
 
@@ -533,11 +484,7 @@ describe('connection lifecycle', () => {
     await sync(m.connectionId);
     await sync(b.connectionId);
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), m.connectionId),
     ]);
 
     expect((await api(m.token).disconnect(m.connectionId)).status).toBe(202);
@@ -545,11 +492,7 @@ describe('connection lifecycle', () => {
     expect(await processDerive(m.userId)).toBe('derived');
 
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: b.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), b.connectionId),
     ]);
   });
 
@@ -611,11 +554,7 @@ describe('settings that re-derive', () => {
     await putKillSwitch(true);
     expect(await processSync(m.connectionId)).toBe('synced');
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), m.connectionId),
     ]);
     expect(
       (await absencesOf(m.userId)).filter((r) => r.source === 'manual'),
@@ -644,11 +583,7 @@ describe('settings that re-derive', () => {
     expect(await processDerive(m.userId)).toBe('derived');
 
     expect(await calendarRangesOf(m.userId)).toEqual([
-      {
-        startDate: TOMORROW(),
-        endDate: TOMORROW(),
-        calendarConnectionId: m.connectionId,
-      },
+      away(TOMORROW(), TOMORROW(), m.connectionId),
     ]);
   });
 
