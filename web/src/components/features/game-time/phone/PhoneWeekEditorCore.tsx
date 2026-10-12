@@ -109,7 +109,7 @@ export function PhoneWeekEditorCore({
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager
                 day={pager.day} freeHours={pager.freeHours} subtitle={group?.subtitle}
-                busyHours={group ? 0 : busyHourCount(calendarBusy ?? [], pager.day, hours)} canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
+                busyHours={group ? 0 : busyHourCount(calendarBusy ?? [], slots, pager.day, hours)} canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
             {gridHeader}
             {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0` — see the
                 day slot's comment below. */}

@@ -1,5 +1,6 @@
-import type { CalendarProvider, GameTimeCalendarBusy } from '@raid-ledger/contract';
+import type { CalendarProvider, GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import { PROVIDER_CALENDAR_NAME } from '../calendar-sync/calendar-sync.copy';
+import { isSlotActive } from './game-time-slot.utils';
 
 /**
  * Pure helpers for the viewer's own-calendar busy band (ROK-1595 S2, NP-1).
@@ -50,13 +51,20 @@ export function busyRunsForDays(
     });
 }
 
-/** Distinct visible hours of one day covered by any busy range. */
+/**
+ * "Nh busy" for the day header (spec S2: busy hours ∩ the day's slots): the
+ * distinct visible hours of one day that the viewer marked free AND a synced
+ * busy range covers. A busy hour outside every free slot is not counted —
+ * it costs the viewer no game time. Overlapping ranges count once.
+ */
 export function busyHourCount(
-    busy: readonly GameTimeCalendarBusy[], dayOfWeek: number, hours: readonly number[],
+    busy: readonly GameTimeCalendarBusy[], slots: readonly GameTimeSlot[],
+    dayOfWeek: number, hours: readonly number[],
 ): number {
     const visible = new Set(hours);
+    const free = new Set(slots.filter((s) => s.dayOfWeek === dayOfWeek && isSlotActive(s)).map((s) => s.hour));
     const covered = new Set(
-        busy.filter((b) => b.dayOfWeek === dayOfWeek).flatMap(rangeHours).filter((h) => visible.has(h)),
+        busy.filter((b) => b.dayOfWeek === dayOfWeek).flatMap(rangeHours).filter((h) => visible.has(h) && free.has(h)),
     );
     return covered.size;
 }

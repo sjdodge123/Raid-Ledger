@@ -6,7 +6,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from './game-time-grid.types';
 import { CalendarBusyLayer } from './CalendarBusyLayer';
 import { DayBlockEditor } from './phone/DayBlockEditor';
@@ -16,6 +16,8 @@ const DIMS: GridDims = { colWidth: 100, rowHeight: 40, headerHeight: 0, colStart
 const EVENING = [17, 18, 19, 20, 21, 22, 23];
 const busy = (dayOfWeek: number, startHour: number, endHour: number): GameTimeCalendarBusy =>
     ({ dayOfWeek, startHour, endHour, provider: 'google' });
+const free = (dayOfWeek: number, hours: number[]): GameTimeSlot[] =>
+    hours.map((hour) => ({ dayOfWeek, hour, status: 'available' }));
 
 describe('CalendarBusyLayer', () => {
     it('draws one band per calendarBusy entry on the days shown', () => {
@@ -93,8 +95,17 @@ describe('calendar-busy.utils', () => {
         ]);
     });
 
-    it('counts distinct visible busy hours on one day, overlaps once', () => {
-        expect(busyHourCount([busy(2, 18, 20), busy(2, 19, 21), busy(3, 18, 23)], 2, EVENING)).toBe(3);
-        expect(busyHourCount([busy(2, 9, 11)], 2, EVENING)).toBe(0);
+    it('counts distinct busy hours that fall on the day\'s free slots, overlaps once', () => {
+        const slots = free(2, [17, 18, 19, 20, 21, 22, 23]);
+        expect(busyHourCount([busy(2, 18, 20), busy(2, 19, 21), busy(3, 18, 23)], slots, 2, EVENING)).toBe(3);
+        expect(busyHourCount([busy(2, 9, 11)], free(2, [9, 10]), 2, EVENING)).toBe(0);
+    });
+
+    it('does not count a busy hour that falls outside every slot (busy ∩ slots)', () => {
+        // Free 19:00 and 20:00 on Tuesday: busy 17-19 touches neither; busy 20-22 overlaps at 20 only.
+        const slots = free(2, [19, 20]);
+        expect(busyHourCount([busy(2, 17, 19)], slots, 2, EVENING)).toBe(0);
+        expect(busyHourCount([busy(2, 20, 22)], slots, 2, EVENING)).toBe(1);
+        expect(busyHourCount([busy(2, 20, 22)], [...slots, { dayOfWeek: 2, hour: 21, status: 'blocked' }], 2, EVENING)).toBe(1);
     });
 });
