@@ -69,11 +69,6 @@ export function busyHourCount(
     return covered.size;
 }
 
-/** The S4 event-block sub-line — "You're in · also on Google Calendar" (desktop only, F-3). */
-export function calendarCopyLabel(provider: CalendarProvider): string {
-    return `You're in · also on ${PROVIDER_CALENDAR_NAME[provider]}`;
-}
-
 /** The band's label — "Busy · Google Calendar". */
 export function busyBandLabel(provider: CalendarProvider): string {
     return `Busy · ${PROVIDER_CALENDAR_NAME[provider]}`;

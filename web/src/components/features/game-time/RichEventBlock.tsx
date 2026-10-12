@@ -1,7 +1,5 @@
 import { getGameColors } from '../../../constants/game-colors';
-import type { CalendarProvider } from '@raid-ledger/contract';
 import { AttendeeAvatars } from '../../calendar/AttendeeAvatars';
-import { calendarCopyLabel } from './calendar-busy.utils';
 
 /** Duration badge (dark pill with hour count) */
 function DurationBadge({ hours }: { hours: number }) {
@@ -30,8 +28,6 @@ interface RichEventBlockProps {
             characters?: Array<{ gameId: number | string; avatarUrl: string | null }> | undefined;
         }> | undefined;
         signupCount?: number | undefined;
-        /** ROK-1595 S4 (G-1): the viewer's calendar holds our copy of this sign-up. */
-        calendarCopy?: CalendarProvider | undefined;
     };
     spanHours: number;
 }
@@ -44,7 +40,6 @@ function LargeTier({ event, spanHours, colors }: RichEventBlockProps & { colors:
                 <span className="text-[10px] font-semibold leading-tight truncate text-foreground">{event.title}</span>
             </div>
             {event.gameName && <span className="text-[9px] text-foreground/60 leading-tight truncate">{event.gameName}</span>}
-            <CalendarCopyLine provider={event.calendarCopy} />
             {event.creatorUsername && spanHours >= 4 && <span className="text-[8px] text-foreground/40 leading-tight truncate">by {event.creatorUsername}</span>}
             {event.description && spanHours >= 5 && <span className="text-[8px] text-foreground/40 leading-tight line-clamp-2">{event.description}</span>}
             {event.signupsPreview && event.signupsPreview.length > 0 && (
@@ -64,18 +59,7 @@ function MediumTier({ event, spanHours }: Pick<RichEventBlockProps, 'event' | 's
                 <span className="text-[10px] font-semibold leading-tight truncate text-foreground">{event.title}</span>
             </div>
             {event.gameName && <span className="text-[9px] text-foreground/60 leading-tight truncate">{event.gameName}</span>}
-            <CalendarCopyLine provider={event.calendarCopy} />
         </div>
-    );
-}
-
-/** "You're in · also on Google Calendar" — desktop only (F-3); nothing without a synced copy. */
-function CalendarCopyLine({ provider }: { provider?: CalendarProvider | undefined }) {
-    if (!provider) return null;
-    return (
-        <span className="text-[8px] text-foreground/60 leading-tight truncate" data-testid="event-block-calendar-copy">
-            {calendarCopyLabel(provider)}
-        </span>
     );
 }
 

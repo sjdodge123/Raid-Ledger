@@ -2,7 +2,6 @@ import type { JSX } from 'react';
 import type { GameTimeEventBlock } from '@raid-ledger/contract';
 import { getGameTimeBlockStyle } from '../../../constants/game-colors';
 import { RichEventBlock } from './RichEventBlock';
-import { calendarCopyLabel } from './calendar-busy.utils';
 import type { GridDims } from './game-time-grid.types';
 
 interface EventBlockOverlaysProps {
@@ -67,7 +66,7 @@ function EventBlock({ ev, pos }: {
             className="absolute z-20 rounded-sm overflow-hidden"
             style={{ top: pos.top, left: pos.left, width: pos.width, height: pos.height, ...getGameTimeBlockStyle(ev.gameSlug ?? undefined, ev.coverUrl) }}
             data-testid={`event-block-${ev.eventId}-${ev.dayOfWeek}`}
-            title={eventBlockTitle(ev)}
+            title={`${ev.title}${ev.gameName ? ` (${ev.gameName})` : ''}`}
         >
             <RichEventBlock
                 event={{
@@ -75,16 +74,10 @@ function EventBlock({ ev, pos }: {
                     gameId: ev.gameId, coverUrl: ev.coverUrl, startHour: ev.startHour,
                     endHour: ev.endHour, description: ev.description,
                     creatorUsername: ev.creatorUsername, signupsPreview: ev.signupsPreview,
-                    signupCount: ev.signupCount, calendarCopy: ev.calendarCopy,
+                    signupCount: ev.signupCount,
                 }}
                 spanHours={ev.endHour - ev.startHour}
             />
         </div>
     );
-}
-
-/** Hover text; names the synced copy so a one-hour block (no room for the sub-line) still says it. */
-function eventBlockTitle(ev: GameTimeEventBlock): string {
-    const base = `${ev.title}${ev.gameName ? ` (${ev.gameName})` : ''}`;
-    return ev.calendarCopy ? `${base} · ${calendarCopyLabel(ev.calendarCopy)}` : base;
 }

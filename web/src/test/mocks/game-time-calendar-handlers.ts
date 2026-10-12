@@ -1,15 +1,14 @@
 /**
  * MSW handlers + fixtures for the calendar side of Game Time (ROK-1595):
- * synced away days (S1, `source:'calendar'` absences + Ignore), the busy band
- * (S2, `calendarBusy`) and the "also on Google Calendar" marker (S4,
- * `calendarCopy` on an event block).
+ * synced away days (S1, `source:'calendar'` absences + Ignore) and the busy
+ * band (S2, `calendarBusy`).
  *
  * Only the Ignore route is registered globally (`absenceIgnoreHandler`, a
  * harmless 204). The list and composite fixtures change what other game-time
  * specs render, so specs opt in with `server.use(...gameTimeCalendarHandlers())`.
  */
 import { http, HttpResponse } from 'msw';
-import type { GameTimeAbsence, GameTimeEventBlock, GameTimeResponse } from '@raid-ledger/contract';
+import type { GameTimeAbsence, GameTimeResponse } from '@raid-ledger/contract';
 import { calendarErrorResponse } from './calendar-sync-handlers';
 
 const API_BASE = 'http://localhost:3000';
@@ -27,26 +26,11 @@ export const calendarAbsenceFixture: GameTimeAbsence = {
     id: 12, startDate: '2026-10-24', endDate: '2026-10-27', reason: null, source: 'calendar', provider: 'google',
 };
 
-/** Our own sign-up with a synced copy on the viewer's Google Calendar (G-1). */
-export const calendarCopyEventBlockFixture: GameTimeEventBlock = {
-    eventId: 501,
-    title: 'Raid Night',
-    gameSlug: null,
-    gameName: null,
-    coverUrl: null,
-    signupId: 9001,
-    confirmationStatus: 'confirmed',
-    dayOfWeek: 3,
-    startHour: 20,
-    endHour: 23,
-    calendarCopy: 'google',
-};
-
-/** Composite week with the S1/S2/S4 calendar data the read UI renders. */
+/** Composite week with the S1/S2 calendar data the read UI renders. */
 export function gameTimeWithCalendarFixture(over: Partial<GameTimeResponse> = {}): GameTimeResponse {
     return {
         slots: [{ dayOfWeek: 3, hour: 19, status: 'available' }],
-        events: [calendarCopyEventBlockFixture],
+        events: [],
         weekStart: '2026-10-11',
         absences: [calendarAbsenceFixture],
         calendarBusy: [{ dayOfWeek: 2, startHour: 18, endHour: 20, provider: 'google' }],
