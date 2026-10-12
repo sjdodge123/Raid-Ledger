@@ -193,7 +193,7 @@ export class CalendarOAuthController {
     target: OAuthTarget,
     verified: VerifiedCalendarOAuthState,
     code: string,
-  ): Promise<'connected' | 'scopes' | 'unavailable'> {
+  ): Promise<'connected' | 'scopes' | 'read_scopes' | 'unavailable'> {
     const { uid: userId, codeVerifier, intent } = verified;
     const redirectUri = await this.redirectUri(target.key);
     const result = await target.provider.connect({
@@ -202,8 +202,10 @@ export class CalendarOAuthController {
       redirectUri,
     });
     const scopes = result.credentials.scopes;
-    // D8: the stored grant stays valid, so no revoke and no write.
-    if (!intents.grantCoversIntent(intent, target.key, scopes)) return 'scopes';
+    // D8 / ROK-1593 D-R3: the stored grant stays valid — no revoke, no write.
+    if (!intents.grantCoversIntent(intent, target.key, scopes)) {
+      return intent === 'read' ? 'read_scopes' : 'scopes';
+    }
     const { id } = await upsertCalendarConnection(this.db, {
       userId,
       provider: target.key,

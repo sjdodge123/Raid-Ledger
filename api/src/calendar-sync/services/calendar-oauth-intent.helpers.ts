@@ -28,6 +28,10 @@ import * as schema from '../../drizzle/schema';
 import type { CalendarProviderKey } from '../providers/calendar-provider.interface';
 import { hasGoogleEventsScope } from '../providers/google/google-oauth.helpers';
 import {
+  applyReadConsent,
+  grantAllowsRead,
+} from './calendar-read-consent.helpers';
+import {
   enqueueCalendarWriteJob,
   type CalendarWriteQueue,
 } from '../write/calendar-write.enqueue.helpers';
@@ -50,6 +54,7 @@ export function grantCoversIntent(
   provider: CalendarProviderKey,
   grantedScopes: readonly string[],
 ): boolean {
+  if (intent === 'read') return grantAllowsRead(provider, grantedScopes);
   if (intent !== 'primary') return true;
   return provider === 'google' && hasGoogleEventsScope(grantedScopes);
 }
@@ -66,7 +71,7 @@ export interface ApplyConsentIntentInput {
 }
 
 export type ConsentIntentOutcome =
-  'none' | 'primary' | 'other_account' | 'fell_back';
+  'none' | 'primary' | 'other_account' | 'fell_back' | 'read';
 
 /**
  * After a stored grant: `primary` flips the target (m4 guard); `connect`
@@ -77,6 +82,8 @@ export async function applyConsentIntent(
   db: Db,
   input: ApplyConsentIntentInput,
 ): Promise<ConsentIntentOutcome> {
+  // ROK-1593 §1.1: read is its own branch — never the m1 write fall-back.
+  if (input.intent === 'read') return applyReadConsent(db, input.connectionId);
   const conn = schema.calendarConnections;
   const { connectionId, userId } = input;
   let target: CalendarWriteTargetValue;

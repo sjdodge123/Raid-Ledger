@@ -29,6 +29,16 @@ export const GOOGLE_CONNECT_SCOPES = `openid email ${GOOGLE_CALENDAR_APP_CREATED
  */
 export const GOOGLE_EVENTS_SCOPE =
   'https://www.googleapis.com/auth/calendar.events';
+/** ROK-1593 D-R3: read busy blocks. Sensitive — requested only by `intent=read`. */
+export const GOOGLE_EVENTS_READONLY_SCOPE =
+  'https://www.googleapis.com/auth/calendar.events.readonly';
+/** ROK-1593 D-R3: list the user's calendars (the read picker). */
+export const GOOGLE_CALENDARLIST_READONLY_SCOPE =
+  'https://www.googleapis.com/auth/calendar.calendarlist.readonly';
+export const GOOGLE_READ_SCOPES: readonly string[] = [
+  GOOGLE_EVENTS_READONLY_SCOPE,
+  GOOGLE_CALENDARLIST_READONLY_SCOPE,
+];
 /** Scopes a grant must hold to be stored (Q-F: partial grant → revoke). */
 export const GOOGLE_REQUIRED_SCOPES = [GOOGLE_CALENDAR_APP_CREATED_SCOPE];
 export const GOOGLE_REVOKE_TIMEOUT_MS = 5_000;
@@ -92,10 +102,28 @@ export function buildGoogleAuthUrl(p: GoogleAuthUrlParams): string {
   return `${GOOGLE_AUTH_URL}?${query.toString()}`;
 }
 
-/** The scope list for a consent intent (D8): `primary` adds events. */
+/**
+ * The scope list for a consent intent: `primary` adds events (D8); `read`
+ * is `openid email` + the read scopes (ROK-1593 D-R3) — the earlier grant
+ * rides along via `include_granted_scopes`.
+ */
 export function googleScopesFor(intent: CalendarOAuthIntent): string[] {
   const scopes = GOOGLE_CONNECT_SCOPES.split(' ');
-  return intent === 'primary' ? [...scopes, GOOGLE_EVENTS_SCOPE] : scopes;
+  if (intent === 'primary') return [...scopes, GOOGLE_EVENTS_SCOPE];
+  if (intent === 'read') return ['openid', 'email', ...GOOGLE_READ_SCOPES];
+  return scopes;
+}
+
+/**
+ * Whether a grant allows the read sync (ROK-1593 D-R3, U-R1): events read
+ * (`calendar.events.readonly`, or `calendar.events`, which includes it)
+ * plus `calendar.calendarlist.readonly` in both cases.
+ */
+export function hasGoogleReadScopes(granted: readonly string[]): boolean {
+  const eventsRead =
+    granted.includes(GOOGLE_EVENTS_READONLY_SCOPE) ||
+    granted.includes(GOOGLE_EVENTS_SCOPE);
+  return eventsRead && granted.includes(GOOGLE_CALENDARLIST_READONLY_SCOPE);
 }
 
 /** Whether a grant allows writing to the primary calendar. */

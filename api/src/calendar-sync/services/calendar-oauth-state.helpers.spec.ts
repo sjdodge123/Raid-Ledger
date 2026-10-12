@@ -149,6 +149,18 @@ describe('calendar OAuth state intent (ROK-1596 D8)', () => {
     expect(must(await verify(state)).intent).toBe('primary');
   });
 
+  it('round-trips i=read (ROK-1593 D-R3)', async () => {
+    const { state } = mintCalendarOAuthState({
+      uid: 42,
+      provider: 'google',
+      intent: 'read',
+      bindToBrowser: () => R,
+      nowMs: NOW,
+    });
+    expect(body(state)).toContain('"i":"read"');
+    expect(must(await verify(state)).intent).toBe('read');
+  });
+
   it('defaults to connect, signed into the payload', async () => {
     const { state } = mint();
     expect(body(state)).toContain('"i":"connect"');
@@ -168,7 +180,7 @@ describe('calendar OAuth state intent (ROK-1596 D8)', () => {
 
   it('a validly signed unknown intent → null, nonce not consumed', async () => {
     const state = signState(
-      { uid: 42, provider: 'google', n: 'nonce-1', r: R, i: 'read' },
+      { uid: 42, provider: 'google', n: 'nonce-1', r: R, i: 'bogus' },
       'calendar-oauth',
       { nowMs: NOW },
     );

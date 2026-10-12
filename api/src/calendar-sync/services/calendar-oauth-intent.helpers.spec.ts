@@ -1,6 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
-import { GOOGLE_EVENTS_SCOPE } from '../providers/google/google-oauth.helpers';
+import { createDrizzleMock } from '../../common/testing/drizzle-mock';
+import { at } from '../../common/testing/narrow';
 import {
+  GOOGLE_EVENTS_SCOPE,
+  GOOGLE_READ_SCOPES,
+} from '../providers/google/google-oauth.helpers';
+import {
+  applyConsentIntent,
   grantCoversIntent,
   parseOAuthIntentQuery,
 } from './calendar-oauth-intent.helpers';
@@ -10,12 +16,13 @@ describe('parseOAuthIntentQuery (ROK-1596 D8)', () => {
     expect(parseOAuthIntentQuery(undefined)).toBe('connect');
   });
 
-  it('passes connect and primary through', () => {
+  it('passes connect, primary and read through', () => {
     expect(parseOAuthIntentQuery('connect')).toBe('connect');
     expect(parseOAuthIntentQuery('primary')).toBe('primary');
+    expect(parseOAuthIntentQuery('read')).toBe('read');
   });
 
-  it.each(['read', '', ['primary']])('rejects %p with a 400', (raw) => {
+  it.each(['bogus', '', ['primary']])('rejects %p with a 400', (raw) => {
     expect(() => parseOAuthIntentQuery(raw)).toThrow(BadRequestException);
   });
 });
@@ -41,5 +48,45 @@ describe('grantCoversIntent (ROK-1596 D8)', () => {
     expect(
       grantCoversIntent('primary', 'microsoft', [GOOGLE_EVENTS_SCOPE]),
     ).toBe(false);
+  });
+});
+
+describe('read consent (ROK-1593 D-R3)', () => {
+  const connectSet = ['openid', 'email'];
+
+  it('grantCoversIntent(read) needs the read scopes, Google-only', () => {
+    expect(grantCoversIntent('read', 'google', connectSet)).toBe(false);
+    expect(
+      grantCoversIntent('read', 'google', [GOOGLE_EVENTS_SCOPE]),
+    ).toBe(false);
+    expect(grantCoversIntent('read', 'google', [...GOOGLE_READ_SCOPES])).toBe(
+      true,
+    );
+    expect(
+      grantCoversIntent('read', 'microsoft', [...GOOGLE_READ_SCOPES]),
+    ).toBe(false);
+  });
+
+  it('§1.1 regression: a read grant WITHOUT calendar.events writes only the read flags', async () => {
+    const db = createDrizzleMock();
+    const queue = { add: jest.fn(), getJob: jest.fn() };
+    const out = await applyConsentIntent(db as never, {
+      intent: 'read',
+      connectionId: 5,
+      userId: 3,
+      provider: 'google',
+      grantedScopes: [...connectSet, ...GOOGLE_READ_SCOPES],
+      queue: queue as never,
+    });
+    expect(out).toBe('read');
+    expect(db.update).toHaveBeenCalledTimes(1);
+    const set = at(db.set.mock.calls, 0)[0] as Record<string, unknown>;
+    expect(Object.keys(set).sort()).toEqual([
+      'readAccessGranted',
+      'readEnabled',
+      'updatedAt',
+    ]);
+    expect(set).toMatchObject({ readAccessGranted: true, readEnabled: true });
+    expect(queue.add).not.toHaveBeenCalled();
   });
 });

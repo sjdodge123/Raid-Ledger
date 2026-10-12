@@ -15,6 +15,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
+import { grantAllowsRead } from './calendar-read-consent.helpers';
 import type {
   CalendarAccountProvider,
   CalendarCredentials,
@@ -107,6 +108,11 @@ async function writeConnection(
   credentialsEncrypted: string,
 ): Promise<number> {
   const accountLabel = input.result.accountLabel;
+  // ROK-1593 D-R3: every grant recomputes read access; `write_*` untouched.
+  const readAccessGranted = grantAllowsRead(
+    input.provider,
+    input.result.credentials.scopes,
+  );
   const [row] = await db
     .insert(calendarConnections)
     .values({
@@ -116,6 +122,7 @@ async function writeConnection(
       accountLabel,
       credentialsEncrypted,
       status: 'active',
+      readAccessGranted,
     })
     .onConflictDoUpdate({
       target: CONNECTION_KEY,
@@ -124,6 +131,7 @@ async function writeConnection(
         // A grant without an email keeps the stored label (undefined = skip).
         accountLabel: accountLabel ?? undefined,
         status: 'active',
+        readAccessGranted,
         lastErrorCode: null,
         updatedAt: new Date(),
       },

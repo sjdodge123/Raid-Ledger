@@ -5,6 +5,7 @@ import {
 import { at } from '../../common/testing/narrow';
 import { _resetKeyCache } from '../../settings/encryption.util';
 import { ProviderAuthError } from '../providers/calendar-provider.errors';
+import { GOOGLE_READ_SCOPES } from '../providers/google/google-oauth.helpers';
 import type {
   ConnectResult,
   OAuthTokenGrant,
@@ -134,9 +135,27 @@ describe('upsertCalendarConnection', () => {
       lastErrorCode: null,
     });
     expect(set.updatedAt).toBeInstanceOf(Date);
+    // ROK-1593 D-R3: read ACCESS is recomputed; read/write settings never.
     expect(
       Object.keys(set).filter((k) => /^(read|write|dedicated)/.test(k)),
-    ).toEqual([]);
+    ).toEqual(['readAccessGranted']);
+    expect(set.readAccessGranted).toBe(false);
+  });
+
+  it('a grant carrying the read scopes sets read_access_granted on insert and update (ROK-1593)', async () => {
+    const db = dbWith([]);
+    const withRead = result('1//FRESH');
+    withRead.credentials.scopes = [...GOOGLE_READ_SCOPES];
+    await upsertCalendarConnection(db as never, {
+      userId: 3,
+      provider: 'google',
+      result: withRead,
+    });
+    const values = at(db.values.mock.calls, 0)[0] as Written;
+    expect(values.readAccessGranted).toBe(true);
+    expect(conflictSet(db).readAccessGranted).toBe(true);
+    expect(values).not.toHaveProperty('readEnabled');
+    expect(conflictSet(db)).not.toHaveProperty('readEnabled');
   });
 
   it('a grant without an email keeps the stored label (undefined is skipped)', async () => {
