@@ -33,6 +33,9 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { DiscordNotificationService } from './discord-notification.service';
 import { NotificationService } from './notification.service';
 import { VoiceAccessLostListener } from './voice-access-lost.listener';
+import { SettingsService } from '../settings/settings.service';
+import { moveToBench } from '../discord-bot/processors/departure-grace.helpers';
+import { Logger } from '@nestjs/common';
 import {
   VOICE_ACCESS_LOST_EVENT,
   VOICE_ACCESS_LOST_LINE,
@@ -53,7 +56,17 @@ beforeAll(async () => {
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
 });
 
-beforeEach(() => {
+/** The canonical ephemeral gate's two switches (global master, force). */
+async function setEphemeralSwitches(globalOn: boolean, forced: boolean) {
+  const settings = testApp.app.get(SettingsService);
+  await settings.setEphemeralVoiceEnabled(globalOn);
+  await settings.setEphemeralVoiceForced(forced);
+}
+
+afterAll(() => setEphemeralSwitches(false, false));
+
+beforeEach(async () => {
+  await setEphemeralSwitches(true, false);
   voiceEmits = [];
   const emitter = testApp.app.get(EventEmitter2);
   const original = emitter.emit.bind(emitter);
@@ -425,5 +438,122 @@ describe('ROK-1769 voice-access DM — listener skips', () => {
     await listener().handle(p);
     expect(voiceDmCalls(m.userId)).toHaveLength(1);
     await expect(dispatchSpy.mock.results[0]?.value).resolves.toBe(false);
+  });
+});
+
+async function setEventEphemeral(eventId: number, enabled: boolean | null) {
+  await testApp.db
+    .update(schema.events)
+    .set({ ephemeralVoiceEnabled: enabled })
+    .where(eq(schema.events.id, eventId));
+}
+
+const departedPayload = (m: { eventId: number; userId: number }) => ({
+  eventId: m.eventId,
+  userId: m.userId,
+  reason: 'departed' as const,
+});
+
+describe('ROK-1769 voice-access gate — canonical ephemeral gate', () => {
+  it('per-event null + global switch off: no voice DM, no voice line', async () => {
+    const m = await rosteredOnPrivateEvent();
+    await setEventEphemeral(m.eventId, null);
+    await setEphemeralSwitches(false, true);
+    expect(await listener().handle(departedPayload(m))).toBe(false);
+    const before = await snapshot(m.userId);
+    await signups().adminRemoveSignup(
+      m.eventId,
+      m.signupId,
+      testApp.seed.adminUser.id,
+      true,
+    );
+    expect(await newRows(m.userId, before)).toHaveLength(1);
+    const [removal] = await newRows(m.userId, before);
+    expect(removal?.message).not.toContain(VOICE_ACCESS_LOST_LINE);
+    expect(voiceDmCalls(m.userId)).toEqual([]);
+  });
+
+  it('per-event null + global on + forced: the voice DM goes out', async () => {
+    const m = await rosteredOnPrivateEvent();
+    await setEventEphemeral(m.eventId, null);
+    await setEphemeralSwitches(true, true);
+    expect(await listener().handle(departedPayload(m))).toBe(true);
+    expect(voiceDmCalls(m.userId)).toHaveLength(1);
+  });
+
+  it('per-event explicitly on but the global switch off: no voice DM', async () => {
+    const m = await rosteredOnPrivateEvent();
+    await setEphemeralSwitches(false, false);
+    expect(await listener().handle(departedPayload(m))).toBe(false);
+    expect(voiceDmCalls(m.userId)).toEqual([]);
+  });
+});
+
+describe('ROK-1769 voice-access DM — re-join releases the dedupe', () => {
+  it('a second departure after re-joining gets its own DM', async () => {
+    const m = await rosteredOnPrivateEvent();
+    await depart(m.eventId, m.signupId);
+    expect(await listener().handle(departedPayload(m))).toBe(true);
+    await signups().signup(m.eventId, m.userId);
+    await waitFor(async () => {
+      expect(await dedupRows(m.eventId, m.userId)).toBe(0);
+    });
+    await depart(m.eventId, m.signupId);
+    expect(await listener().handle(departedPayload(m))).toBe(true);
+    expect(voiceDmCalls(m.userId)).toHaveLength(2);
+  });
+});
+
+async function depart(eventId: number, signupId: number) {
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'departed' })
+    .where(eq(schema.eventSignups.id, signupId));
+  await moveToBench(testApp.db, signupId, eventId, new Logger('spec'));
+}
+
+async function dedupRows(eventId: number, userId: number): Promise<number> {
+  const rows = await testApp.db
+    .select({ key: schema.notificationDedup.dedupKey })
+    .from(schema.notificationDedup)
+    .where(
+      eq(
+        schema.notificationDedup.dedupKey,
+        `voice-access-lost:event:${eventId}:user:${userId}`,
+      ),
+    );
+  return rows.length;
+}
+
+describe('ROK-1769 one DM per removal — pool to bench', () => {
+  it('a pool member moved to the bench gets the voice line on the assignment DM', async () => {
+    const m = await rosteredOnPrivateEvent();
+    await testApp.db
+      .delete(schema.rosterAssignments)
+      .where(eq(schema.rosterAssignments.signupId, m.signupId));
+    const before = await snapshot(m.userId);
+    await signups().updateRoster(m.eventId, testApp.seed.adminUser.id, true, {
+      assignments: [
+        {
+          userId: m.userId,
+          signupId: m.signupId,
+          slot: 'bench',
+          position: 1,
+          isOverride: false,
+        },
+      ],
+    });
+    await waitFor(async () => {
+      expect(await newRows(m.userId, before)).toHaveLength(1);
+    });
+    const [row] = await newRows(m.userId, before);
+    expect(row).toEqual(
+      expect.objectContaining({
+        type: 'roster_reassigned',
+        title: 'Roster Assignment',
+        message: `You've been assigned to the ${formatRoleLabel('bench')} role for ${m.title}\n\n${VOICE_ACCESS_LOST_LINE}`,
+        payload: VOICE_PAYLOAD,
+      }),
+    );
   });
 });
