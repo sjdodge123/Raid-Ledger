@@ -37,6 +37,7 @@ import { readCalendarSyncEnabled } from './calendar-sync-enabled.query';
 import { ACTIVE_SIGNUP_STATUSES } from '../../lineups/scheduling/active-signup-statuses.constants';
 
 type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
 /** `user_preferences.key` for the per-user read mode (D12). */
 export const CALENDAR_READ_MODE_KEY = 'calendar_read_mode';
@@ -121,9 +122,13 @@ async function queryReadModes(
   return new Map(rows.map((r) => [r.userId, toReadMode(r.value)]));
 }
 
-/** Active sign-up durations near `[from, to)`, widened by the R4 tolerance. */
-async function querySignupBounds(
-  db: Db,
+/**
+ * Active sign-up durations near `[from, to)`, widened by the R4 tolerance.
+ * Shared with the away-day derive (`calendar-away-persist.helpers.ts`), which
+ * runs it on the sync transaction.
+ */
+export async function querySignupBounds(
+  db: Db | Tx,
   userIds: number[],
   from: Date,
   to: Date,

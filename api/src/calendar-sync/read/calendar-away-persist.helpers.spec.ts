@@ -8,6 +8,7 @@
  * range covering the same dates from being inserted as a calendar row.
  */
 import {
+  dropSignupCopies,
   planCalendarAbsenceWrites,
   type ExistingAwayRow,
 } from './calendar-away-persist.helpers';
@@ -169,5 +170,36 @@ describe('planCalendarAbsenceWrites', () => {
       update: [{ id: 11, calendarConnectionId: 2 }],
       deleteIds: [13],
     });
+  });
+});
+
+describe('dropSignupCopies (R4 for away days)', () => {
+  const at = (iso: string) => new Date(iso);
+  const signup: [Date, Date] = [
+    at('2026-10-20T00:00:00Z'),
+    at('2026-10-21T00:00:00Z'),
+  ];
+
+  it('drops a block whose bounds are each within 60 s of a sign-up', () => {
+    const copy = {
+      id: 'copy',
+      startsAt: at('2026-10-20T00:00:45Z'),
+      endsAt: at('2026-10-20T23:59:30Z'),
+    };
+    const foreign = {
+      id: 'foreign',
+      startsAt: at('2026-10-20T00:02:00Z'),
+      endsAt: at('2026-10-21T00:00:00Z'),
+    };
+    const kept = dropSignupCopies([copy, foreign], [signup]);
+    expect(kept.map((b) => b.id)).toEqual(['foreign']);
+  });
+
+  it('keeps every block when the user has no sign-ups', () => {
+    const block = {
+      startsAt: at('2026-10-20T00:00:00Z'),
+      endsAt: at('2026-10-21T00:00:00Z'),
+    };
+    expect(dropSignupCopies([block], [])).toEqual([block]);
   });
 });

@@ -13,10 +13,15 @@
  * - **History:** calendar rows that ended before today are never touched. A
  *   row straddling today is compared on its window-clipped range, so it keeps
  *   its id while it still matches.
+ * - **R4 safety net:** a block within ±60 s of one of the user's active
+ *   sign-ups is our own copy (`matchesSignupBounds`) and never makes a day.
+ * - **Serialised per user:** a transaction-scoped advisory lock keyed on the
+ *   user, so a sync's derive and a queued `derive` job never diff the same
+ *   rows at once (both would insert the same range).
  * - **Manual rows** are never loaded into the diff; `planCalendarAbsenceWrites`
  *   also ignores any non-calendar row it is handed.
  */
-import { and, eq, gt, gte, inArray, lt } from 'drizzle-orm';
+import { and, eq, gt, gte, inArray, lt, sql } from 'drizzle-orm';
 import { CalendarReadModeSchema } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import {
@@ -27,6 +32,8 @@ import {
 } from './calendar-away-derive.helpers';
 import {
   CALENDAR_READ_MODE_KEY,
+  matchesSignupBounds,
+  querySignupBounds,
   type CalendarReadMode,
 } from './calendar-busy-query.helpers';
 import {
@@ -201,14 +208,23 @@ async function loadSkipDates(
   };
 }
 
+/** R4: drop blocks that are our own copy of one of the user's sign-ups. */
+export function dropSignupCopies<T extends { startsAt: Date; endsAt: Date }>(
+  blocks: readonly T[],
+  signups: readonly [Date, Date][],
+): T[] {
+  return blocks.filter((b) => !matchesSignupBounds(b, signups));
+}
+
 async function loadDeriveInput(
   tx: ReadSyncTx,
   userId: number,
   window: ReadWindow,
 ): Promise<AwayDeriveInput> {
   const t = schema.gameTimeTemplates;
-  const [blocks, mode, templateHours, skip] = await Promise.all([
+  const [blocks, signups, mode, templateHours, skip] = await Promise.all([
     loadActiveBlocks(tx, userId, window),
+    querySignupBounds(tx, [userId], window.start, window.end),
     loadReadMode(tx, userId),
     tx
       .select({ dayOfWeek: t.dayOfWeek, startHour: t.startHour })
@@ -218,7 +234,7 @@ async function loadDeriveInput(
   ]);
   const range = { start: window.start, end: window.end };
   return {
-    blocks,
+    blocks: dropSignupCopies(blocks, signups.get(userId) ?? []),
     mode,
     templateHours,
     timeZone: window.timeZone,
@@ -290,6 +306,9 @@ export async function runCalendarDerive(
   userId: number,
   opts: CalendarDeriveOptions,
 ): Promise<CalendarDeriveResult> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtext('calendar-derive'), ${userId})`,
+  );
   const window = await loadWindow(tx, userId, opts);
   const [input, existing] = await Promise.all([
     loadDeriveInput(tx, userId, window),
