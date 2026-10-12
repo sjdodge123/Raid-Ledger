@@ -162,6 +162,8 @@ export const READ_COPY = {
     grant: 'Grant read access',
     granting: 'Opening Google…',
     saveFailed: 'Could not save. Try again.',
+    /** Per-account read on/off, shown on each card once two or more accounts can read (review r2). */
+    accountRead: { title: 'Read this account', sub: 'Its busy times count', aria: (label: string) => `Read busy times from ${label}` },
     pickerLabel: 'Calendars to check',
     pickerLoading: 'Loading calendars…',
     pickerError: 'Could not load your calendars. Try again.',

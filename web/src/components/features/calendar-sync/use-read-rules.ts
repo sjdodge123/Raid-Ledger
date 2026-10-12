@@ -1,10 +1,12 @@
 /**
- * Read rules for one connection (ROK-1595 K2/K4). The read MODE is per user
- * (`PUT settings`), read on/off is per connection (`PATCH :id`) — spec D1.
- * Phone shows the mode as two switches; both off turns reading off for the
- * connection (operator ruling F-2). Desktop picks one of three modes. Every
- * change saves at once; the hooks patch the overview optimistically and put
- * it back on an error (D3), and the section shows "Could not save".
+ * Read rules (ROK-1595 K2/K4). The read MODE is per user (`PUT settings`) and
+ * renders once on the page; read on/off and the picked calendars are per
+ * connection (`PATCH :id`) — spec D1. Phone shows the mode as two switches;
+ * both off turns reading off (operator ruling F-2) on every account that
+ * reads. Desktop picks one of three modes. With two or more readable accounts
+ * each card also carries its own on/off. Every change saves at once; the hooks
+ * patch the overview optimistically and put it back on an error (D3), and the
+ * section shows "Could not save".
  */
 import { useState } from 'react';
 import type { CalendarConnection, CalendarReadMode, ProviderCalendar } from '@raid-ledger/contract';
@@ -53,24 +55,49 @@ export function readChangeFor(next: CalendarReadMode | null, mode: CalendarReadM
     return change;
 }
 
-/** Applies a `ReadChange`: PATCH read on first (the mode only counts once it is on), then PUT the mode. */
-export function useReadRules(connection: CalendarConnection, mode: CalendarReadMode) {
+/** Connections whose read rules apply: not being disconnected, and granted read. */
+export function readableConnections(connections: readonly CalendarConnection[]): CalendarConnection[] {
+    return connections.filter((c) => c.status !== 'disconnecting' && readGranted(c));
+}
+
+/** The connections a page-level on/off touches: those not already in the target state. */
+export function enabledTargets(readable: readonly CalendarConnection[], enabled: boolean): CalendarConnection[] {
+    return readable.filter((c) => c.read.enabled !== enabled);
+}
+
+/**
+ * The page-level mode control. "On" = at least one readable account reads.
+ * Applies a `ReadChange`: PATCH read on/off on every account it touches first
+ * (the mode only counts once reading is on), then PUT the mode.
+ */
+export function useReadMode(readable: readonly CalendarConnection[], mode: CalendarReadMode) {
     const setEnabled = useSetReadEnabled();
     const setMode = useUpdateReadSettings();
     const [failed, setFailed] = useState(false);
     const onError = (): void => setFailed(true);
+    const enabled = readable.some((c) => c.read.enabled);
     const putMode = (next: CalendarReadMode | undefined): void => {
         if (next) setMode.mutate(next, { onError });
     };
     const choose = (next: CalendarReadMode | null): void => {
         setFailed(false);
-        const change = readChangeFor(next, mode, connection.read.enabled);
-        if (change.enabled === undefined) return putMode(change.mode);
-        setEnabled.mutate({ id: connection.id, enabled: change.enabled }, {
-            onError,
-            onSuccess: () => putMode(change.mode),
-        });
+        const change = readChangeFor(next, mode, enabled);
+        const on = change.enabled;
+        if (on === undefined) return putMode(change.mode);
+        const writes = enabledTargets(readable, on).map((c) => setEnabled.mutateAsync({ id: c.id, enabled: on }));
+        void Promise.all(writes).then(() => putMode(change.mode), onError);
     };
     const busy = setEnabled.isPending || setMode.isPending;
-    return { choose, failed, busy, enabled: connection.read.enabled };
+    return { choose, failed, busy, enabled };
+}
+
+/** One account's read on/off (the per-card switch); its error stays on its own card. */
+export function useConnectionRead(connection: CalendarConnection) {
+    const setEnabled = useSetReadEnabled();
+    const [failed, setFailed] = useState(false);
+    const toggle = (on: boolean): void => {
+        setFailed(false);
+        setEnabled.mutate({ id: connection.id, enabled: on }, { onError: () => setFailed(true) });
+    };
+    return { toggle, failed, busy: setEnabled.isPending };
 }

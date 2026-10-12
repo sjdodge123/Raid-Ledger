@@ -12,6 +12,7 @@ import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
 import { CalendarProviderRow } from './CalendarProviderRow';
 import { CalendarConnectionCard } from './CalendarConnectionCard';
 import { CalendarReadRules } from './CalendarReadRules';
+import { readableConnections } from './use-read-rules';
 import { SendEventsSettings } from './SendEventsSettings';
 import { SendEventsEntryRow } from './SendEventsEntryRow';
 import { useMediaQuery } from '../../../hooks/use-media-query';
@@ -74,15 +75,15 @@ function DesktopSendEvents({ connections }: { connections: CalendarConnection[] 
 /**
  * ROK-1595 read rules: K2 switches inside the phone column, K4 radio cards as a
  * full-width row on desktop. The mode is per USER (D1) and the mirror draws one
- * section (K2) / one card (K4), so it renders ONCE, bound to the first live
- * connection for its grant and on/off state; the per-connection calendar
- * picker stays on each connection card.
+ * section (K2) / one card (K4), so it renders ONCE for the page, over every
+ * live connection — never bound to the first one. Read on/off (2+ readable
+ * accounts) and the calendar picker are per connection, on each card.
  */
 function ReadRules({ connections, mode, desktopRow }: { connections: CalendarConnection[]; mode: CalendarReadMode; desktopRow: boolean }): JSX.Element | null {
     const desktop = useMediaQuery(DESKTOP_MQ);
-    const first = liveConnections(connections)[0];
-    if (desktop !== desktopRow || !first) return null;
-    return <CalendarReadRules connection={first} mode={mode} desktop={desktop} />;
+    const live = liveConnections(connections);
+    if (desktop !== desktopRow || live.length === 0) return null;
+    return <CalendarReadRules connections={live} mode={mode} desktop={desktop} />;
 }
 
 /** ROK-1596 K2 (phone): "Write · send my Raid Ledger events" under the connection, before "Add a calendar"; each row opens K5 (W1b). */
@@ -100,11 +101,12 @@ function PhoneWriteSection({ connections }: { connections: CalendarConnection[] 
 /** The K2 column / K4 two-card grid: Connected, (phone) Read + Write, Add a calendar. */
 function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
     const google = data.connections.filter((c) => c.provider === 'google');
+    const readSwitch = readableConnections(google).length > 1;
     return (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {google.length > 0 && (
                 <Section heading={C.connectedHeading}>
-                    {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} />)}
+                    {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch} />)}
                 </Section>
             )}
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow={false} />

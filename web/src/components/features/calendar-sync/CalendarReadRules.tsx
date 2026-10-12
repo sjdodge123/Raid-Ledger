@@ -1,9 +1,11 @@
 /**
  * "When a calendar says you are busy" (ROK-1595): K2's two switches + "Look
- * ahead" below 1024px, K4's three radio cards from 1024px (spec D2). Without
- * the read grant both are replaced by "Grant read access". A broken
- * connection (`needs_reconnect`) keeps the rows but disables them; the row's
- * "Fix" is the way out. Saving is immediate — see `use-read-rules.ts`.
+ * ahead" below 1024px, K4's three radio cards from 1024px (spec D2). The mode
+ * is per USER, so this renders once for the page, not for one connection.
+ * Without any account that reads it is "Grant read access". When every
+ * account that reads is broken (`needs_reconnect`) the rows stay but are
+ * disabled; the row's "Fix" is the way out. Saving is immediate — see
+ * `use-read-rules.ts`.
  */
 import { useId, type JSX } from 'react';
 import { CALENDAR_LOOK_AHEAD_WEEKS, type CalendarConnection, type CalendarReadMode } from '@raid-ledger/contract';
@@ -11,11 +13,11 @@ import { Button } from '../../ui/button';
 import { Switch } from '../../ui/switch';
 import { RadioGroup } from '../../ui/radio-group';
 import { useStartOAuth } from '../../../hooks/use-calendar-sync';
-import { readGranted, switchesOf, modeOf, useReadRules, type ReadSwitches } from './use-read-rules';
+import { readableConnections, switchesOf, modeOf, useReadMode, type ReadSwitches } from './use-read-rules';
 import { READ_COPY as R } from './calendar-sync.copy';
 import { RADIO_CARDS } from './radio-cards.classes';
 
-interface RulesProps { connection: CalendarConnection; mode: CalendarReadMode; desktop: boolean }
+interface RulesProps { connections: readonly CalendarConnection[]; mode: CalendarReadMode; desktop: boolean }
 
 interface SwitchRowProps { copy: { title: string; sub: string; aria: string }; checked: boolean; disabled: boolean; testId: string; onChange: (on: boolean) => void }
 
@@ -84,11 +86,13 @@ function GrantRead(): JSX.Element {
     );
 }
 
-function ReadControls({ connection, mode, desktop }: RulesProps): JSX.Element {
-    const { choose, failed, busy, enabled } = useReadRules(connection, mode);
+interface ControlsProps { readable: readonly CalendarConnection[]; mode: CalendarReadMode; desktop: boolean }
+
+function ReadControls({ readable, mode, desktop }: ControlsProps): JSX.Element {
+    const { choose, failed, busy, enabled } = useReadMode(readable, mode);
     const props: ControlProps = {
         switches: switchesOf(mode, enabled), mode, enabled, choose,
-        disabled: busy || connection.status === 'needs_reconnect',
+        disabled: busy || readable.every((c) => c.status === 'needs_reconnect'),
     };
     return (
         <>
@@ -98,14 +102,15 @@ function ReadControls({ connection, mode, desktop }: RulesProps): JSX.Element {
     );
 }
 
-/** One connection's read rules, as a page section card. */
-export function CalendarReadRules({ connection, mode, desktop }: RulesProps): JSX.Element {
+/** The user's read rules, as one page section card (`connections` = the live ones). */
+export function CalendarReadRules({ connections, mode, desktop }: RulesProps): JSX.Element {
+    const readable = readableConnections(connections);
     return (
         <section className="bg-surface border border-edge-subtle rounded-xl p-4 space-y-3"
-            data-testid="calendar-read-rules" data-connection-id={connection.id} data-layout={desktop ? 'cards' : 'switches'}>
+            data-testid="calendar-read-rules" data-layout={desktop ? 'cards' : 'switches'}>
             <h3 className="text-sm font-semibold text-foreground">{desktop ? R.desktopHeading : R.phoneHeading}</h3>
-            {readGranted(connection)
-                ? <ReadControls connection={connection} mode={mode} desktop={desktop} />
+            {readable.length > 0
+                ? <ReadControls readable={readable} mode={mode} desktop={desktop} />
                 : <GrantRead />}
         </section>
     );

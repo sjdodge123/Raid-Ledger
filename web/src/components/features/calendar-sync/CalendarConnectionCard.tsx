@@ -4,7 +4,9 @@
  * ago" (desktop) once a sync has run, else "Connected · <email>" (ROK-1594).
  * A revoked grant (`needs_reconnect`) turns the line red — "Access was
  * revoked · reconnect" — and adds "Fix", which re-runs the Google consent.
- * From 1024px the K4 "Calendars to check" picker sits under the row.
+ * From 1024px the K4 "Calendars to check" picker sits under the row. With two
+ * or more accounts that can read, the card also carries this account's read
+ * on/off (`readSwitch`); one account is switched by the page's read rules (F-2).
  */
 import type { JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
@@ -16,6 +18,7 @@ import { ProviderTile } from './CalendarProviderRow';
 import { CALENDAR_ROW } from './calendar-sync-row';
 import { CalendarManageMenu } from './CalendarManageMenu';
 import { CalendarPicker } from './CalendarPicker';
+import { CalendarConnectionRead } from './CalendarConnectionRead';
 import { readGranted } from './use-read-rules';
 import { CALENDARS_COPY as C, READ_COPY as R, readStatusLine } from './calendar-sync.copy';
 
@@ -33,7 +36,9 @@ function FixButton(): JSX.Element {
     );
 }
 
-export function CalendarConnectionCard({ connection }: { connection: CalendarConnection }): JSX.Element {
+interface CardProps { connection: CalendarConnection; readSwitch?: boolean }
+
+export function CalendarConnectionCard({ connection, readSwitch = false }: CardProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
@@ -50,6 +55,7 @@ export function CalendarConnectionCard({ connection }: { connection: CalendarCon
                 {broken && <FixButton />}
                 <CalendarManageMenu connection={connection} />
             </div>
+            {readSwitch && readGranted(connection) && <CalendarConnectionRead connection={connection} />}
             {showPicker && <CalendarPicker connection={connection} />}
         </div>
     );
