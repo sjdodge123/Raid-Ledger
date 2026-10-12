@@ -166,18 +166,30 @@ describe('applyPrivateVoiceOverwrites — full reconcile (ROK-1386)', () => {
       BOT,
     );
     // base lock re-asserted for @everyone + bot, plus the added member
-    expect(po.edit).toHaveBeenCalledWith(GUILD, {
-      Connect: false,
-      ViewChannel: true,
-    });
-    expect(po.edit).toHaveBeenCalledWith(BOT, {
-      Connect: true,
-      ViewChannel: true,
-    });
-    expect(po.edit).toHaveBeenCalledWith('new', {
-      Connect: true,
-      ViewChannel: true,
-    });
+    expect(po.edit).toHaveBeenCalledWith(
+      GUILD,
+      {
+        Connect: false,
+        ViewChannel: true,
+      },
+      { type: OverwriteType.Role },
+    );
+    expect(po.edit).toHaveBeenCalledWith(
+      BOT,
+      {
+        Connect: true,
+        ViewChannel: true,
+      },
+      { type: OverwriteType.Member },
+    );
+    expect(po.edit).toHaveBeenCalledWith(
+      'new',
+      {
+        Connect: true,
+        ViewChannel: true,
+      },
+      { type: OverwriteType.Member },
+    );
     // stale member removed; 'stay' left untouched
     expect(po.delete).toHaveBeenCalledTimes(1);
     expect(po.delete).toHaveBeenCalledWith('stale');

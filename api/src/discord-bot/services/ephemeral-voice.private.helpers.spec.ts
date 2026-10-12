@@ -1,4 +1,4 @@
-import { PermissionFlagsBits } from 'discord.js';
+import { OverwriteType, PermissionFlagsBits } from 'discord.js';
 import {
   computeAllowedDiscordIds,
   buildPrivateVoiceOverwrites,
@@ -62,6 +62,20 @@ describe('computeAllowedDiscordIds (ROK-1386)', () => {
 });
 
 describe('buildPrivateVoiceOverwrites (ROK-1386)', () => {
+  it('types every overwrite so discord.js never needs the id cached (ROK-1769)', () => {
+    const ow = buildPrivateVoiceOverwrites({
+      guildId: 'g',
+      botId: 'bot',
+      allowedDiscordIds: ['m1', 'm2'],
+    });
+    expect(ow.map((o) => [o.id, o.type])).toEqual([
+      ['g', OverwriteType.Role],
+      ['bot', OverwriteType.Member],
+      ['m1', OverwriteType.Member],
+      ['m2', OverwriteType.Member],
+    ]);
+  });
+
   it('denies Connect for @everyone but keeps it visible', () => {
     const ow = buildPrivateVoiceOverwrites({
       guildId: 'g',

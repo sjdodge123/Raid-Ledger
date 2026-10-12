@@ -1,4 +1,8 @@
-import { PermissionFlagsBits, type OverwriteResolvable } from 'discord.js';
+import {
+  OverwriteType,
+  PermissionFlagsBits,
+  type OverwriteResolvable,
+} from 'discord.js';
 
 /**
  * Pure helpers for private (roster-only) ephemeral voice channels (ROK-1386).
@@ -43,7 +47,9 @@ export function computeAllowedDiscordIds(rows: RosterSignupRow[]): Set<string> {
  * Build the permission-overwrite list for a private channel: deny Connect for
  * `@everyone` (id = guildId) while keeping it visible (ViewChannel allowed), an
  * explicit allow for the bot so the deny can't lock it out, and Connect +
- * ViewChannel for each allow-listed member.
+ * ViewChannel for each allow-listed member. Every entry carries an explicit
+ * `type`: without it discord.js resolves the id from its cache and throws for
+ * any member the bot has not seen, so the channel is never created.
  */
 export function buildPrivateVoiceOverwrites(opts: {
   guildId: string;
@@ -53,11 +59,13 @@ export function buildPrivateVoiceOverwrites(opts: {
   const overwrites: OverwriteResolvable[] = [
     {
       id: opts.guildId,
+      type: OverwriteType.Role,
       deny: [PermissionFlagsBits.Connect],
       allow: [PermissionFlagsBits.ViewChannel],
     },
     {
       id: opts.botId,
+      type: OverwriteType.Member,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
     },
   ];
@@ -65,6 +73,7 @@ export function buildPrivateVoiceOverwrites(opts: {
     if (id === opts.botId || id === opts.guildId) continue;
     overwrites.push({
       id,
+      type: OverwriteType.Member,
       allow: [PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel],
     });
   }

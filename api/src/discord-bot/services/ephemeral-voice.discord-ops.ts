@@ -1,6 +1,7 @@
 import {
   ChannelType,
   OverwriteType,
+  type PermissionOverwriteManager,
   type OverwriteResolvable,
 } from 'discord.js';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
@@ -42,6 +43,40 @@ export async function createVoiceChannel(
 }
 
 /**
+ * Re-assert the base lock (`@everyone` deny, bot allow) and add newly rostered
+ * members. Every edit passes an explicit overwrite `type` so discord.js never
+ * needs the id in its cache (ROK-1769: uncached members made the edit throw).
+ */
+async function writeMemberLocks(
+  po: PermissionOverwriteManager,
+  guildId: string,
+  botId: string,
+  toAdd: string[],
+): Promise<void> {
+  await timedDiscordCall('ephemeral.lock.base', async () => {
+    await po.edit(
+      guildId,
+      { Connect: false, ViewChannel: true },
+      { type: OverwriteType.Role },
+    );
+    await po.edit(
+      botId,
+      { Connect: true, ViewChannel: true },
+      { type: OverwriteType.Member },
+    );
+  });
+  for (const id of toAdd) {
+    await timedDiscordCall('ephemeral.lock.add', () =>
+      po.edit(
+        id,
+        { Connect: true, ViewChannel: true },
+        { type: OverwriteType.Member },
+      ),
+    );
+  }
+}
+
+/**
  * Full-reconcile a private channel's permission overwrites against the desired
  * allow-list (ROK-1386): re-assert the `@everyone` Connect-deny + bot allow,
  * add overwrites for newly rostered members, and remove stale ones. No-op when
@@ -69,15 +104,7 @@ export async function applyPrivateVoiceOverwrites(
     currentMemberIds,
     desiredDiscordIds,
   );
-  await timedDiscordCall('ephemeral.lock.base', async () => {
-    await po.edit(guild.id, { Connect: false, ViewChannel: true });
-    await po.edit(botId, { Connect: true, ViewChannel: true });
-  });
-  for (const id of toAdd) {
-    await timedDiscordCall('ephemeral.lock.add', () =>
-      po.edit(id, { Connect: true, ViewChannel: true }),
-    );
-  }
+  await writeMemberLocks(po, guild.id, botId, toAdd);
   for (const id of toRemove) {
     await timedDiscordCall('ephemeral.lock.remove', () => po.delete(id));
   }
