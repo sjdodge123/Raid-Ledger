@@ -24,6 +24,11 @@ export const RECAP_WINDOW_DAYS = 7;
 export interface WeeklyRecapOptions {
   /** Drop members whose `show_activity` preference is `false`. Default `true`. */
   respectActivityOptOut?: boolean;
+  /**
+   * Shift the window back this many whole days (ROK-1771 C1). `0` (default) is
+   * `[NOW()-7d, NOW()]`; `7` is the prior week `[NOW()-14d, NOW()-7d]`.
+   */
+  endOffsetDays?: number;
 }
 
 /**
@@ -45,7 +50,21 @@ export interface WeeklyRecap {
   attendances: number;
 }
 
-const WINDOW = sql.raw(`INTERVAL '${RECAP_WINDOW_DAYS} days'`);
+/** `NOW()` shifted back `days` whole days, as raw SQL (no bound params). */
+function nowMinusDays(days: number): SQL {
+  return days === 0
+    ? sql.raw('NOW()')
+    : sql.raw(`(NOW() - INTERVAL '${days} days')`);
+}
+
+/** Validate the offset: a non-negative whole number of days. */
+function windowOffset(endOffsetDays: number | undefined): number {
+  const offset = endOffsetDays ?? 0;
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error(`endOffsetDays must be a non-negative integer: ${offset}`);
+  }
+  return offset;
+}
 
 /**
  * `e.duration && tsrange(...)` lets the planner use `idx_events_duration_gist`;
@@ -53,7 +72,10 @@ const WINDOW = sql.raw(`INTERVAL '${RECAP_WINDOW_DAYS} days'`);
  * Members who left the guild (deactivated), were banned or were kicked drop
  * out via `ACTIVE_MEMBER_SQL_AND` on the `users` join.
  */
-const ATTENDED_CTE = sql`
+function attendedCte(endOffsetDays: number): SQL {
+  const end = nowMinusDays(endOffsetDays);
+  const start = nowMinusDays(endOffsetDays + RECAP_WINDOW_DAYS);
+  return sql`
   attended AS (
     SELECT s.user_id, e.id AS event_id
     FROM event_signups s
@@ -62,10 +84,11 @@ const ATTENDED_CTE = sql`
     WHERE s.attendance_status = 'attended'
       AND s.user_id IS NOT NULL
       AND e.cancelled_at IS NULL
-      AND e.duration && tsrange((NOW() - ${WINDOW})::timestamp, NOW()::timestamp, '[]')
-      AND upper(e.duration) >= (NOW() - ${WINDOW})
-      AND upper(e.duration) <= NOW()${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
+      AND e.duration && tsrange(${start}::timestamp, ${end}::timestamp, '[]')
+      AND upper(e.duration) >= ${start}
+      AND upper(e.duration) <= ${end}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
   )`;
+}
 
 /** A bare `alias.column` reference — `SHOWS_ACTIVITY_SQL` inlines it raw. */
 const USER_ID_REF = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
@@ -103,8 +126,9 @@ const UNFILTERED_CTE = sql`
 export function buildWeeklyRecapQuery(options: WeeklyRecapOptions = {}): SQL {
   const respect = options.respectActivityOptOut ?? true;
   const filtered = respect ? OPT_OUT_FILTERED_CTE : UNFILTERED_CTE;
+  const attended = attendedCte(windowOffset(options.endOffsetDays));
   return sql`
-    WITH ${ATTENDED_CTE},
+    WITH ${attended},
     ${filtered}
     SELECT COUNT(DISTINCT event_id)::int AS events_run,
            COUNT(DISTINCT user_id)::int  AS players_attended,
