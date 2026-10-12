@@ -690,6 +690,14 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `flex-nowrap` or a fixed width. Segments never shrink below their longest word, so when a wrapped row would
   read badly, switch to `appearance="list"` below `sm` with `useMediaQuery('(min-width: 640px)')` (FeedbackDialog's
   four categories need ~327px against ~287px) rather than a sideways-scrolling row.
+- **Radio cards are the list `RadioGroup` in a grid, not a new control** (ROK-1595 K4 read mode, NP-2). When a
+  2–4 option choice needs room for a sentence each on desktop, keep `appearance="list"` and style the group
+  from outside: `[&>div]:grid [&>div]:grid-cols-3 [&>div]:gap-3`, each option a card via
+  `[&_label]:rounded-lg [&_label]:border [&_label]:border-edge [&_label]:bg-panel [&_label]:px-3`, and the
+  chosen card marked `[&_label:has(:checked)]:border-success` (the same full-strength ON edge as the segmented
+  toggle). The native radio stays visible, so the card is never the only state cue. To show "none chosen"
+  (e.g. reading turned off), widen the value type with a sentinel that has no option (`'off'`). Reference:
+  `CalendarReadRules.tsx` `DesktopCards`; `SendEventsSettings` uses the same grid without the card edges.
 - **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
   44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
   `formatValue` doubles as `aria-valuetext`.
