@@ -173,8 +173,9 @@ describe('deriveAwayRanges — Rule B (fully booked game time)', () => {
       blocks: [
         // Wed 08:00–09:00 EDT: outside game time, so it does not contribute.
         timed(1, '2026-10-21T12:00:00Z', '2026-10-21T13:00:00Z'),
-        timed(7, '2026-10-21T23:00:00Z', '2026-10-22T00:00:00Z'),
-        timed(4, '2026-10-22T00:00:00Z', '2026-10-22T02:00:00Z'),
+        // Split at 20:30 EDT: the 20:00 hour needs both connections' blocks.
+        timed(7, '2026-10-21T23:00:00Z', '2026-10-22T00:30:00Z'),
+        timed(4, '2026-10-22T00:30:00Z', '2026-10-22T02:00:00Z'),
       ],
     });
     expect(result).toEqual([range('2026-10-21', '2026-10-21', 4)]);
@@ -204,11 +205,16 @@ describe('deriveAwayRanges — DST days', () => {
   });
 
   it('spring forward: the 01:00 hour is one real hour, not trivially covered', () => {
-    // 00:30–01:00 EST touches the hour's start but does not cover it.
+    // 00:30–01:00 EST and 03:00–04:00 EDT are booked; the 01:00 hour
+    // (06:00–07:00Z) is free. `zonedHourToUtc` maps 01:00 and the missing
+    // 02:00 to the same instant, so a naive `[h, h+1)` would be empty.
     const result = derive({
       window: MAR_8,
-      templateHours: hours(SUN, 1),
-      blocks: [timed(1, '2026-03-08T05:30:00Z', '2026-03-08T06:00:00Z')],
+      templateHours: hours(SUN, 1, 3),
+      blocks: [
+        timed(1, '2026-03-08T05:30:00Z', '2026-03-08T06:00:00Z'),
+        timed(1, '2026-03-08T07:00:00Z', '2026-03-08T08:00:00Z'),
+      ],
     });
     expect(result).toEqual([]);
   });
