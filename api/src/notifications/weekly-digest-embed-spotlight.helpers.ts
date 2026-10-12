@@ -149,10 +149,48 @@ export function spotlightLines(
   }
 }
 
+/** Markdown syntax characters; escaped (`\*`) occurrences are literal text. */
+const MARKDOWN_SYNTAX = new Set(['*', '_', '`', '~', '|', '[']);
+
 /**
- * Fit lines under `cap`; if even the first line alone is too long (only a
- * pathological name can do that), clip it rather than emit an empty value,
- * which Discord rejects.
+ * Drop every unescaped markdown token (bold/italic/code/strike/spoiler
+ * markers and masked-link syntax, keeping the link label) so a clipped line
+ * can never leave an unbalanced `**`, `_` or `` ` ``. Escape pairs are kept
+ * whole.
+ */
+export function plainMarkdown(line: string): string {
+  let out = '';
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line.charAt(i);
+    if (ch === '\\') {
+      out += line.slice(i, i + 2);
+      i += 1;
+    } else if (ch === ']' && line.charAt(i + 1) === '(') {
+      const close = line.indexOf(')', i);
+      i = close < 0 ? line.length : close;
+    } else if (!MARKDOWN_SYNTAX.has(ch)) {
+      out += ch;
+    }
+  }
+  return out;
+}
+
+/** Plain-text `line` cut to `cap` with `…`, never splitting an escape pair. */
+function clipLine(line: string, cap: number): string {
+  if (line.length <= cap) return line;
+  const plain = plainMarkdown(line);
+  if (plain.length <= cap) return plain;
+  let cut = plain.slice(0, cap - 1);
+  const trailing = /\\+$/.exec(cut)?.[0].length ?? 0;
+  if (trailing % 2 === 1) cut = cut.slice(0, -1);
+  return `${cut}…`;
+}
+
+/**
+ * Fit lines under `cap`; if even the first line alone does not fit with its
+ * tail (only a pathological name can do that), return that line alone —
+ * clipped as plain text when it is itself too long — rather than an empty
+ * value, which Discord rejects.
  */
 export function fitOrClip(
   lines: string[],
@@ -160,11 +198,12 @@ export function fitOrClip(
   seeAll: string | null,
   cap: number,
   label = 'see all',
+  exact = true,
 ): string {
-  const value = fitSectionLines(lines, total, seeAll, label, cap);
+  const value = fitSectionLines(lines, total, seeAll, label, cap, exact);
   if (value !== '') return value;
   const first = lines[0];
-  return first ? `${first.slice(0, cap - 1)}…` : '';
+  return first ? clipLine(first, cap) : '';
 }
 
 /** The spotlight field, or null when nothing was picked. */

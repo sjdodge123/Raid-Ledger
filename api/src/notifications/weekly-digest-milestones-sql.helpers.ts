@@ -30,6 +30,15 @@ const WINDOW_START_DATE = sql.raw(
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
 
 /**
+ * AC10: a read that NAMES a member also requires they were actually seen in
+ * the guild, so a Discord-OAuth guest (poll link / PUG invite) is never
+ * named. Alias `u` = users. The one definition — B1, B3 and the duo use it.
+ */
+export const GUILD_MEMBER_SEEN = sql.raw(
+  ' AND u.guild_member_seen_at IS NOT NULL',
+);
+
+/**
  * The shared "attended" rule (`ATTENDED_SIGNUP_SQL`, the same one the recap
  * uses) plus "event already ended"; no window bounds. Alias `s` = event_signups, `e` = events.
  */
@@ -43,7 +52,7 @@ export function buildNewMembersQuery(): SQL {
            COALESCE(NULLIF(u.display_name, ''), u.username) AS name
     FROM users u
     WHERE u.created_at >= ${WINDOW_START}
-      AND u.guild_member_seen_at IS NOT NULL${ACTIVE_MEMBER}
+      ${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
       AND ${SHOWS_ACTIVITY_SQL('u.id')}
     ORDER BY u.created_at ASC, u.id ASC
   `;
@@ -69,7 +78,7 @@ export function buildEventMilestonesQuery(minThreshold: number): SQL {
            COUNT(DISTINCT a.event_id)::int AS through_count
     FROM attended a
     INNER JOIN users u ON u.id = a.user_id
-    WHERE TRUE${ACTIVE_MEMBER}
+    WHERE TRUE${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
       AND ${SHOWS_ACTIVITY_SQL('u.id')}
     GROUP BY u.id, u.display_name, u.username
     HAVING COUNT(*) FILTER (WHERE a.ended_at >= ${WINDOW_START}) > 0

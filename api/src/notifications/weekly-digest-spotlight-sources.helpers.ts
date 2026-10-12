@@ -9,12 +9,16 @@
  * (`show_activity = false`) and members who left/were banned/kicked are
  * excluded at the row level, so they contribute to nothing.
  */
-import { eq, sql, type SQL } from 'drizzle-orm';
+import { and, eq, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
 import { countVotesPerGame } from '../lineups/lineups-query.helpers';
-import { SHOWS_ACTIVITY_SQL } from './weekly-digest-recap.helpers';
+import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import {
+  ATTENDED_SIGNUP_SQL,
+  SHOWS_ACTIVITY_SQL,
+} from './weekly-digest-recap.helpers';
 import { SPOTLIGHT_BARS } from './weekly-digest-spotlight.helpers';
 import type {
   BossKillsCandidate,
@@ -37,6 +41,8 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
+/** Raw-SQL twin of `VISIBILITY_FILTER` (hidden/banned games), alias `g`. */
+const VISIBLE_GAME = sql.raw('g.hidden = false AND g.banned = false');
 
 /**
  * A1 — per game, opted-out-filtered day-rollup seconds this week vs the
@@ -65,7 +71,7 @@ export function buildRisingGameQuery(): SQL {
       (COUNT(DISTINCT w.user_id) FILTER (WHERE w.this_s > 0))::int AS player_count
     FROM win w
     INNER JOIN games g ON g.id = w.game_id
-    WHERE g.hidden = false AND g.banned = false
+    WHERE ${VISIBLE_GAME}
     GROUP BY w.game_id, g.name
     HAVING SUM(w.this_s) >= ${bar.minHours * 3600}
       AND COUNT(DISTINCT w.user_id) FILTER (WHERE w.this_s > 0) >= ${bar.minPlayers}
@@ -118,6 +124,7 @@ export function buildDecidedLineupQuery(): SQL {
       ON d.dedup_key = 'lineup-decided:' || l.id::text
     INNER JOIN games g ON g.id = l.decided_game_id
     WHERE l.visibility = 'public'
+      AND ${VISIBLE_GAME}
       AND l.status IN ('decided', 'archived')
       AND COALESCE(l.phase_duration_override->>'standalone', 'false') <> 'true'
       AND d.created_at >= NOW() - INTERVAL '7 days'
@@ -140,9 +147,7 @@ export function buildMarathonQuery(): SQL {
       FROM event_signups s
       INNER JOIN events e ON e.id = s.event_id
       INNER JOIN users u ON u.id = s.user_id
-      WHERE s.attendance_status = 'attended'
-        AND s.user_id IS NOT NULL
-        AND e.cancelled_at IS NULL
+      WHERE ${ATTENDED_SIGNUP_SQL}
         AND upper(e.duration) >= NOW() - INTERVAL '7 days'
         AND upper(e.duration) <= NOW()${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('s.user_id')}
@@ -174,12 +179,12 @@ export async function fetchBossKillsCandidate(
   return shapeBossKills(Array.from(rows));
 }
 
-/** Name of one game, or null when it is gone. */
+/** Name of one game, or null when it is gone, hidden or banned. */
 async function gameName(db: Db, gameId: number): Promise<string | null> {
   const [row] = await db
     .select({ name: schema.games.name })
     .from(schema.games)
-    .where(eq(schema.games.id, gameId));
+    .where(and(eq(schema.games.id, gameId), VISIBILITY_FILTER()));
   return row?.name ?? null;
 }
 

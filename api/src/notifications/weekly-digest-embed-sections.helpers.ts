@@ -28,10 +28,12 @@ import {
 } from './weekly-digest-embed-text.helpers';
 import type { DigestMilestones } from './weekly-digest-milestones.helpers';
 import type { WeeklyRecap } from './weekly-digest-recap.helpers';
-import type {
-  UpcomingEvent,
-  UpcomingPoll,
-  WeeklyUpcoming,
+import {
+  UPCOMING_EVENT_LIMIT,
+  UPCOMING_POLL_LIMIT,
+  type UpcomingEvent,
+  type UpcomingPoll,
+  type WeeklyUpcoming,
 } from './weekly-digest-upcoming.helpers';
 
 /** Field names (spotlight's is per kind — `spotlightFieldName`). */
@@ -193,11 +195,17 @@ export function upcomingField(
       .map((p) => pollLine(p, links)),
   ];
   const total = upcoming.events.length + polls.length;
+  // A read that hit its LIMIT hides an unknown remainder: "+ more", no number.
+  const exact =
+    upcoming.events.length < UPCOMING_EVENT_LIMIT &&
+    polls.length < UPCOMING_POLL_LIMIT;
   const value = fitOrClip(
     lines,
     total,
     links?.upcoming ?? null,
     DIGEST_FIELD_CAPS.upcoming,
+    'see all',
+    exact,
   );
   return field(DIGEST_FIELD_NAMES.upcoming, value);
 }

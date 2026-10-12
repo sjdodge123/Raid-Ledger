@@ -129,14 +129,19 @@ export function plural(count: number, noun: string): string {
   return `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
 }
 
-/** The closing line: `+N more · [see all ↗](url)`, either part optional. */
+/**
+ * The closing line: `+N more · [see all ↗](url)`, either part optional.
+ * `exact = false` (the read hit its own LIMIT, so the true total is unknown)
+ * renders `+ more` instead of an under-counted number.
+ */
 function sectionTail(
   hidden: number,
   seeAll: string | null,
   label: string,
+  exact: boolean,
 ): string | null {
   const parts: string[] = [];
-  if (hidden > 0) parts.push(`+${String(hidden)} more`);
+  if (hidden > 0) parts.push(exact ? `+${String(hidden)} more` : '+ more');
   if (seeAll) parts.push(`[${label} ↗](${seeAll})`);
   return parts.length > 0 ? parts.join(' · ') : null;
 }
@@ -153,10 +158,12 @@ export function fitSectionLines(
   seeAll: string | null,
   label = 'see all',
   maxLength: number = DIGEST_EMBED_LIMITS.fieldValue,
+  exact = true,
 ): string {
   const cap = Math.min(maxLength, DIGEST_EMBED_LIMITS.fieldValue);
   for (let shown = lines.length; shown >= 0; shown -= 1) {
-    const tail = sectionTail(Math.max(total - shown, 0), seeAll, label);
+    const hidden = Math.max(total - shown, 0);
+    const tail = sectionTail(hidden, seeAll, label, exact);
     const value = [...lines.slice(0, shown), ...(tail ? [tail] : [])].join(
       '\n',
     );

@@ -222,13 +222,35 @@ export function serializeSpotlightHistory(
   return JSON.stringify(newestFirst([entry, ...others]));
 }
 
-/** Kind of the newest entry strictly before `week` (same week is ignored). */
+/** ISO-8601 years with 53 weeks: Jan 1 is a Thursday, or a leap-year Wednesday. */
+function isoWeeksInYear(year: number): number {
+  const jan1 = new Date(Date.UTC(year, 0, 1)).getUTCDay();
+  const leap = new Date(Date.UTC(year, 1, 29)).getUTCMonth() === 1;
+  return jan1 === 4 || (leap && jan1 === 3) ? 53 : 52;
+}
+
+/** The ISO week before `week` (`2026-W01` → `2025-W52`); malformed → null. */
+export function previousSpotlightWeek(week: string): string | null {
+  const match = /^(\d{4})-W(\d{2})$/.exec(week);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const num = Number(match[2]);
+  return num > 1
+    ? formatSpotlightWeek({ year, week: num - 1 })
+    : formatSpotlightWeek({ year: year - 1, week: isoWeeksInYear(year - 1) });
+}
+
+/**
+ * Kind posted in the ISO week right before `week`, or null (AC3 / ruling
+ * Q1). Only LAST week counts: nothing is recorded on a spotlight-less week,
+ * so a kind last shown two or more weeks ago is eligible again.
+ */
 export function lastSpotlightKind(
   history: readonly SpotlightHistoryEntry[],
   week: string,
 ): SpotlightKind | null {
-  const prior = newestFirst(history.filter((e) => e.week < week));
-  return prior[0]?.kind ?? null;
+  const previous = previousSpotlightWeek(week);
+  return history.find((e) => e.week === previous)?.kind ?? null;
 }
 
 function rarity(kind: SpotlightKind): number {

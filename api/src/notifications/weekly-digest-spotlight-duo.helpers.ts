@@ -4,8 +4,8 @@
  * `event_voice_sessions` through the existing co-play math
  * (`aggregateCoPlay` / `voiceOverlapMinutes`) — reused, not copied.
  *
- * Privacy: sessions of opted-out (`show_activity = false`) or inactive
- * members are dropped before pairing, so a pair with either member opted out
+ * Privacy: sessions of opted-out (`show_activity = false`), inactive or
+ * never-guild-seen (OAuth guest) members are dropped before pairing, so a pair with either member opted out
  * never forms — the pair is dropped, not just a name hidden.
  */
 import { sql, type SQL } from 'drizzle-orm';
@@ -18,6 +18,7 @@ import {
   type CoPlayAggregate,
   type VoiceSessionRow,
 } from '../taste-profile/co-play-graph.helpers';
+import { GUILD_MEMBER_SEEN } from './weekly-digest-milestones-sql.helpers';
 import { SHOWS_ACTIVITY_SQL } from './weekly-digest-recap.helpers';
 import type {
   DuoCandidate,
@@ -34,18 +35,18 @@ export type DuoSessionRow = {
   segments: VoiceSessionRow['segments'];
 };
 
-/** This week's voice sessions of active, not-opted-out linked members. */
+/** This week's voice sessions of active, guild-seen, not-opted-out members. */
 export function buildDuoSessionsQuery(): SQL {
   return sql`
     SELECT s.event_id, e.title AS event_title, e.game_id, s.user_id,
-           COALESCE(u.display_name, u.username) AS user_name, s.segments
+           COALESCE(NULLIF(u.display_name, ''), u.username) AS user_name, s.segments
     FROM event_voice_sessions s
     INNER JOIN events e ON e.id = s.event_id
     INNER JOIN users u ON u.id = s.user_id
     WHERE s.user_id IS NOT NULL
       AND e.cancelled_at IS NULL
       AND s.first_join_at >= NOW() - INTERVAL '7 days'
-      AND s.first_join_at < NOW()${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
+      AND s.first_join_at < NOW()${GUILD_MEMBER_SEEN}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
       AND ${SHOWS_ACTIVITY_SQL('s.user_id')}
     ORDER BY s.event_id, s.user_id
   `;

@@ -7,15 +7,18 @@
  * same predicate as the discover "Best Price" row and the web price badge.
  * There is no any-discount fallback; an empty result hides the section.
  *
- * Privacy: mirrors v1's deals source (`fetchWishlistedOnSaleRow`), which
- * counted wishlists with NO per-user `show_activity` predicate. The digest
- * shows only an aggregate count, never a name, so no opt-out is applied here.
+ * Privacy (AC10): only wishlists of active members (not deactivated, banned
+ * or kicked) who have not opted out (`show_activity = false`) count, so an
+ * opted-out or departed member contributes to neither the count nor whether
+ * a game qualifies at all.
  */
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { bestPriceCondition } from '../igdb/igdb-discover-deals.helpers';
 import { VISIBILITY_FILTER } from '../igdb/igdb-visibility.helpers';
+import { activeUsersFilter } from '../users/users-active.helpers';
+import { SHOWS_ACTIVITY_SQL } from './weekly-digest-recap.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -75,6 +78,15 @@ export function shapeBestPriceRows(
 const wishlisterCount = () =>
   sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
 
+/** Drizzle twin of `ACTIVE_MEMBER_SQL_AND` + the digest opt-out rule. */
+const countedWishlister = () =>
+  and(
+    activeUsersFilter(),
+    isNull(schema.users.bannedAt),
+    isNull(schema.users.kickedAt),
+    SHOWS_ACTIVITY_SQL('game_interests.user_id'),
+  );
+
 const bestPriceColumns = () => ({
   gameId: schema.games.id,
   name: schema.games.name,
@@ -98,9 +110,11 @@ export async function fetchWishlistedBestPrice(
     .select(bestPriceColumns())
     .from(schema.gameInterests)
     .innerJoin(schema.games, eq(schema.gameInterests.gameId, schema.games.id))
+    .innerJoin(schema.users, eq(schema.gameInterests.userId, schema.users.id))
     .where(
       and(
         eq(schema.gameInterests.source, 'steam_wishlist'),
+        countedWishlister(),
         bestPriceCondition(),
         VISIBILITY_FILTER(),
       ),
