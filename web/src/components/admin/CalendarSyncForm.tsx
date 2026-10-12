@@ -19,6 +19,7 @@ import { Switch } from '../ui/switch';
 import { CopyableInput, FormTextField, PasswordInput } from './admin-form-helpers';
 import { IntegrationFormActions } from './integration-form-actions';
 import { SavedSecretStatus } from './saved-secret-status';
+import { CalendarSyncInstructions } from './calendar-sync-instructions';
 import {
     CALENDAR_SYNC_FORM_PROVIDERS,
     buildCalendarSyncUpdate,
@@ -35,20 +36,6 @@ const PROVIDER_COPY: Record<CalendarSyncFormProvider, { name: string; console: s
 };
 
 const NO_TEST = () => undefined;
-
-function CalendarSyncInstructions() {
-    return (
-        <div className="bg-overlay/30 border border-edge rounded-lg p-4">
-            <p className="text-sm text-foreground"><strong>Setup Instructions:</strong></p>
-            <ol className="text-sm text-secondary mt-2 space-y-1 list-decimal list-inside">
-                <li>Create an OAuth client in {PROVIDER_COPY.google.console} and/or {PROVIDER_COPY.microsoft.console}</li>
-                <li>Add the provider&apos;s redirect URI below to that client exactly as shown</li>
-                <li>Paste the client ID and secret here and save</li>
-                <li>Turn Calendar Sync on and save so members can connect their calendars</li>
-            </ol>
-        </div>
-    );
-}
 
 function KillSwitch({ checked, saved, onChange }: { checked: boolean; saved: boolean; onChange: (next: boolean) => void }) {
     return (
