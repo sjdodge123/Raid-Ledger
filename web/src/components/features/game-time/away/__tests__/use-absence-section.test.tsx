@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { CalendarConnection, CalendarsOverview, GameTimeAbsence } from '@raid-ledger/contract';
 import { act, renderHook } from '@testing-library/react';
 import { UNDO_HIT_AREA_CLASS, useAbsenceSection } from '../use-absence-section';
 import type { AwayRowItem } from '../away-row.types';
 
 const m = vi.hoisted(() => ({
+    ignoreMutate: vi.fn(),
+    overview: undefined as CalendarsOverview | undefined,
     mutateAsync: vi.fn(),
     createMutate: vi.fn(),
     delMutate: vi.fn(),
-    absences: [] as Array<{ id: number; startDate: string; endDate: string; reason: string | null }>,
+    absences: [] as GameTimeAbsence[],
     success: vi.fn(),
     error: vi.fn(),
 }));
@@ -16,7 +19,9 @@ vi.mock('../../../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: m.mutateAsync, mutate: m.createMutate, isPending: false }),
     useDeleteAbsence: () => ({ mutate: m.delMutate, isPending: false }),
     useGameTimeAbsences: () => ({ data: m.absences }),
+    useIgnoreAbsence: () => ({ mutate: m.ignoreMutate, isPending: false }),
 }));
+vi.mock('../../../../../hooks/use-calendar-sync', () => ({ useCalendarsOverview: () => ({ data: m.overview }) }));
 vi.mock('../../../../../lib/toast', () => ({ toast: { success: m.success, error: m.error } }));
 
 const THURSDAY = new Date(2026, 7, 27, 12, 0, 0); // 2026-08-27
@@ -29,6 +34,7 @@ beforeEach(() => {
     vi.setSystemTime(THURSDAY);
     vi.clearAllMocks();
     m.absences = [];
+    m.overview = undefined;
 });
 afterEach(() => { vi.useRealTimers(); });
 
@@ -117,7 +123,7 @@ describe('useAbsenceSection — the Undo action is a touch target (ROK-1585 AC5)
         const addOpts = m.success.mock.calls.at(-1)?.[1] as UndoOpts;
         expectUndoHitArea(addOpts);
 
-        const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: null, source: 'manual' };
+        const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: null, source: 'manual', provider: null };
         act(() => result.current.remove(row));
         const [, opts] = m.delMutate.mock.calls.at(-1) as [number, { onSuccess: () => void }];
         opts.onSuccess();
@@ -139,7 +145,7 @@ describe('useAbsenceSection — rows and remove', () => {
     });
 
     it('remove deletes, then toasts with an Undo that re-creates the same range + note', () => {
-        const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: 'Lake trip', source: 'manual' };
+        const row: AwayRowItem = { key: 'manual-7', id: 7, startDate: '2026-09-19', endDate: '2026-09-20', reason: 'Lake trip', source: 'manual', provider: null };
         const { result } = renderHook(() => useAbsenceSection());
         act(() => result.current.remove(row));
 
@@ -156,7 +162,63 @@ describe('useAbsenceSection — rows and remove', () => {
 
     it('remove ignores rows without a server id', () => {
         const { result } = renderHook(() => useAbsenceSection());
-        act(() => result.current.remove({ key: 'cal-1', id: null, startDate: '2026-09-19', endDate: '2026-09-19', reason: null, source: 'calendar' }));
+        act(() => result.current.remove({ key: 'cal-1', id: null, startDate: '2026-09-19', endDate: '2026-09-19', reason: null, source: 'calendar', provider: null }));
         expect(m.delMutate).not.toHaveBeenCalled();
+    });
+});
+
+/* ── ROK-1595 S1: synced calendar rows ─────────────────────────────────── */
+
+const synced: GameTimeAbsence = { id: 12, startDate: '2026-10-16', endDate: '2026-10-16', reason: null, source: 'calendar', provider: 'google' };
+const calRow: AwayRowItem = { key: 'calendar-12', id: 12, startDate: '2026-10-16', endDate: '2026-10-16', reason: null, source: 'calendar', provider: 'google' };
+
+function overviewWith(over: Partial<CalendarConnection>, enabled = true): CalendarsOverview {
+    const conn: CalendarConnection = {
+        id: 7, provider: 'google', accountLabel: null, status: 'active', lastSyncedAt: null, errorCode: null,
+        read: { enabled: true, calendarIds: [] }, write: { enabled: false, target: 'dedicated' }, ...over,
+    };
+    return { enabled, providers: { google: { available: true }, microsoft: { available: false }, apple: { available: false } },
+        connections: [conn], readSettings: { mode: 'both', lookAheadWeeks: 4 }, feed: null };
+}
+
+describe('useAbsenceSection — synced calendar rows (ROK-1595 S1)', () => {
+    it('keeps a synced absence a calendar row (D4: it used to be forced to manual)', () => {
+        m.absences = [synced, { id: 3, startDate: '2026-09-19', endDate: '2026-09-20', reason: null }];
+        const { result } = renderHook(() => useAbsenceSection());
+        expect(result.current.rows.map((r) => [r.key, r.source, r.provider])).toEqual([
+            ['manual-3', 'manual', null], ['calendar-12', 'calendar', 'google'],
+        ]);
+    });
+
+    it('ignore posts the row id, toasts "Ignored …" with no Undo (F-9), and toasts on failure', () => {
+        const { result } = renderHook(() => useAbsenceSection());
+        act(() => result.current.ignore(calRow));
+        const [id, opts] = m.ignoreMutate.mock.calls[0] as [number, { onSuccess: () => void; onError: () => void }];
+        expect(id).toBe(12);
+        opts.onSuccess();
+        expect(m.success).toHaveBeenCalledWith('Ignored Fri Oct 16');
+        expect(m.success.mock.calls.at(-1)).toHaveLength(1);
+        opts.onError();
+        expect(m.error).toHaveBeenCalledWith('Could not ignore that day');
+    });
+
+    it('never ignores a manual row or a row without a server id', () => {
+        const { result } = renderHook(() => useAbsenceSection());
+        act(() => result.current.ignore({ ...calRow, source: 'manual', provider: null }));
+        act(() => result.current.ignore({ ...calRow, id: null }));
+        expect(m.ignoreMutate).not.toHaveBeenCalled();
+    });
+
+    it('reads "Synced N min ago" off the newest reading connection; null with the kill switch off', () => {
+        const fourMinAgo = new Date(THURSDAY.getTime() - 4 * 60_000).toISOString();
+        m.overview = overviewWith({ lastSyncedAt: fourMinAgo });
+        const { result, rerender } = renderHook(() => useAbsenceSection());
+        expect(result.current.syncedText).toBe('Synced 4 min ago');
+        m.overview = overviewWith({ lastSyncedAt: fourMinAgo }, false);
+        rerender();
+        expect(result.current.syncedText).toBeNull();
+        m.overview = overviewWith({ lastSyncedAt: fourMinAgo, read: { enabled: false, calendarIds: [] } });
+        rerender();
+        expect(result.current.syncedText).toBeNull();
     });
 });
