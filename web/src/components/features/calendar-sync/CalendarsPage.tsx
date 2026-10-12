@@ -71,11 +71,18 @@ function DesktopSendEvents({ connections }: { connections: CalendarConnection[] 
     return <>{liveConnections(connections).map((c) => <SendEventsSettings key={c.id} connection={c} />)}</>;
 }
 
-/** ROK-1595 read rules: K2 switches inside the phone column, K4 radio cards as a full-width row on desktop. */
-function ReadRules({ connections, mode, desktopRow }: { connections: CalendarConnection[]; mode: CalendarReadMode; desktopRow: boolean }): JSX.Element {
+/**
+ * ROK-1595 read rules: K2 switches inside the phone column, K4 radio cards as a
+ * full-width row on desktop. The mode is per USER (D1) and the mirror draws one
+ * section (K2) / one card (K4), so it renders ONCE, bound to the first live
+ * connection for its grant and on/off state; the per-connection calendar
+ * picker stays on each connection card.
+ */
+function ReadRules({ connections, mode, desktopRow }: { connections: CalendarConnection[]; mode: CalendarReadMode; desktopRow: boolean }): JSX.Element | null {
     const desktop = useMediaQuery(DESKTOP_MQ);
-    if (desktop !== desktopRow) return <></>;
-    return <>{liveConnections(connections).map((c) => <CalendarReadRules key={c.id} connection={c} mode={mode} desktop={desktop} />)}</>;
+    const first = liveConnections(connections)[0];
+    if (desktop !== desktopRow || !first) return null;
+    return <CalendarReadRules connection={first} mode={mode} desktop={desktop} />;
 }
 
 /** ROK-1596 K2 (phone): "Write · send my Raid Ledger events" under the connection, before "Add a calendar"; each row opens K5 (W1b). */

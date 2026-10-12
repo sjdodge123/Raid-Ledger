@@ -35,11 +35,17 @@ function overview(enabled = true): CalendarsOverview {
 }
 
 /** Absences list that forgets ignored ids; Ignore answers `status` once `gate` opens. */
-function serve(absences: GameTimeAbsence[], opts: { status?: number; gate?: Promise<void>; enabled?: boolean } = {}) {
+interface ServeOpts { status?: number; gate?: Promise<void>; enabled?: boolean; refetchGate?: Promise<void> }
+
+function serve(absences: GameTimeAbsence[], opts: ServeOpts = {}) {
     const ignored = new Set<number>();
     const posted: string[] = [];
     server.use(
-        http.get(GAME_TIME_ABSENCES_URL, () => HttpResponse.json({ data: absences.filter((a) => !ignored.has(a.id)) })),
+        http.get(GAME_TIME_ABSENCES_URL, async () => {
+            // `refetchGate` holds every list read made after an Ignore, so only the rollback can restore a row.
+            if (opts.refetchGate && posted.length > 0) await opts.refetchGate;
+            return HttpResponse.json({ data: absences.filter((a) => !ignored.has(a.id)) });
+        }),
         http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json(overview(opts.enabled ?? true))),
         http.post(ABSENCE_IGNORE_URL, async ({ params }) => {
             posted.push(String(params['id']));
@@ -112,14 +118,18 @@ describe('AwayPanel — synced calendar days (ROK-1595 S1)', () => {
     it('puts the row back and toasts when the server refuses (409)', async () => {
         let release: () => void = () => {};
         const gate = new Promise<void>((resolve) => { release = resolve; });
-        serve([manualAbsenceFixture, calendarAbsenceFixture], { status: 409, gate });
+        let releaseRefetch: () => void = () => {};
+        const refetchGate = new Promise<void>((resolve) => { releaseRefetch = resolve; });
+        serve([manualAbsenceFixture, calendarAbsenceFixture], { status: 409, gate, refetchGate });
         renderWithProviders(<AwayPanel layout="stacked" />);
         await screen.findByText(SYNCED);
         fireEvent.click(within(rowOf(SYNCED)).getByRole('button', { name: `Ignore ${SYNCED}` }));
         await waitFor(() => expect(screen.queryByText(SYNCED)).toBeNull());
         release();
         await waitFor(() => expect(t.error).toHaveBeenCalledWith('Could not ignore that day'));
-        expect(await screen.findByText(SYNCED)).toBeInTheDocument();
+        // The post-error refetch is still held: the row is back from the rollback alone.
+        await waitFor(() => expect(screen.queryByText(SYNCED), 'rolled back before the list refetch lands').not.toBeNull());
+        releaseRefetch();
     });
 });
 
