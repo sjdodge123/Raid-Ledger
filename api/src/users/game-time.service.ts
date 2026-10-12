@@ -18,6 +18,7 @@ import {
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { defined } from '../common/defined.helpers';
 import { fetchCalendarBusyHours } from '../calendar-sync/read/calendar-busy-query.helpers';
+import { attachCalendarCopies } from './game-time-calendar-copy.helpers';
 import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
 import {
   CALENDAR_READ_QUEUE,
@@ -314,7 +315,10 @@ export class GameTimeService {
       weekEnd,
       tzOffset,
     );
-    const result = calendarBusy.length > 0 ? { ...view, calendarBusy } : view;
+    // ROK-1595 G-1: "also on Google Calendar" on the viewer's own blocks.
+    const events = await attachCalendarCopies(this.db, userId, view.events);
+    const own = { ...view, events };
+    const result = calendarBusy.length > 0 ? { ...own, calendarBusy } : own;
     this.setCache(cacheKey, result);
     return result;
   }

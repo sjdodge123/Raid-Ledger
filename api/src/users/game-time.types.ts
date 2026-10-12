@@ -2,7 +2,10 @@
  * Shared type definitions for the GameTime feature.
  * Extracted from game-time.service.ts for file size compliance (ROK-711).
  */
-import type { GameTimeAbsence } from '@raid-ledger/contract';
+import type {
+  CalendarProvider,
+  GameTimeAbsence,
+} from '@raid-ledger/contract';
 
 export interface TemplateSlot {
   dayOfWeek: number;
@@ -37,6 +40,8 @@ export interface EventBlockDescriptor {
     characters?: Array<{ gameId: number; avatarUrl: string | null }>;
   }>;
   signupCount: number;
+  /** ROK-1595 G-1: provider of our synced copy on the viewer's calendar. */
+  calendarCopy?: CalendarProvider;
 }
 
 export interface OverrideRecord {
