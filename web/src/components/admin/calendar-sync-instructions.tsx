@@ -39,8 +39,8 @@ function GoogleProjectSteps() {
         <>
             <Step title="Create a Google Cloud project.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.createProject}>Create a project</ExtLink>, name
-                it &quot;Raid Ledger&quot; and click <strong>Create</strong>. Already have one? Pick it
-                in the project menu at the top of the page instead.
+                it &quot;Raid Ledger&quot; and click <strong>Create</strong>. Then check the project menu at
+                the top of the page shows it as selected (pick it there if not, or pick an existing project).
             </Step>
             <Step title="Turn on the Google Calendar API.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.calendarApi}>Google Calendar API</ExtLink> and
@@ -71,7 +71,7 @@ function GoogleClientSteps() {
             </Step>
             <Step title="Paste the keys here.">
                 Google shows a <strong>Client ID</strong> and a <strong>Client secret</strong>. Copy each
-                one into the Google fields below.
+                one into the Google fields below before closing that window: Google shows the secret only once.
             </Step>
             <Step title="Turn it on.">
                 Switch on <strong>Enable Calendar Sync</strong> above and click{' '}

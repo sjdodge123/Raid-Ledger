@@ -31,7 +31,7 @@ import {
 } from './calendar-sync-form.helpers';
 
 const PROVIDER_COPY: Record<CalendarSyncFormProvider, { name: string; console: string; idLabel: string }> = {
-    google: { name: 'Google', console: 'Google Cloud Console → APIs & Services → Credentials', idLabel: 'Google client ID' },
+    google: { name: 'Google', console: 'Google Cloud Console → Google Auth Platform → Clients', idLabel: 'Google client ID' },
     microsoft: { name: 'Microsoft', console: 'Microsoft Entra ID → App registrations', idLabel: 'Microsoft application (client) ID' },
 };
 
