@@ -206,7 +206,12 @@ export class SignupsRosterService {
           this.logger,
           voiceLost,
         ),
-      );
+      )
+      .catch((err: unknown) => {
+        this.logger.warn(
+          `ROK-1769: Failed roster notifications for event ${eventId}: ${err instanceof Error ? err.message : 'Unknown error'}`,
+        );
+      });
     return getRosterWithAssignments(eventId).then(async (roster) => {
       // ROK-1269: emit signup_reconfirmed per attendee whose pending status
       // got flipped to confirmed by this roster update. Done after tx commit.
