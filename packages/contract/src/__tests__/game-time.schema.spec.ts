@@ -9,6 +9,7 @@
 import { describe, it, expect } from 'vitest';
 import {
     GameTimeAbsenceInputSchema,
+    GameTimeAbsenceSchema,
     GameTimeResponseSchema,
 } from '../game-time.schema.js';
 
@@ -169,6 +170,42 @@ describe('GameTimeResponseSchema.calendarBusy (ROK-1593 §3.6)', () => {
     it('rejects an hour outside the grid', () => {
         expect(busyIssues({ ...busy, endHour: 25 })).toEqual([
             { code: 'too_big', path: ['calendarBusy', 0, 'endHour'] },
+        ]);
+    });
+});
+
+describe('GameTimeAbsenceSchema.source/provider (ROK-1593 PR-B)', () => {
+    const legacy = { id: 7, startDate: '2026-10-01', endDate: '2026-10-03', reason: 'Trip' };
+
+    function absenceIssues(input: Record<string, unknown>) {
+        const result = GameTimeAbsenceSchema.safeParse(input);
+        if (result.success) return [];
+        return result.error.issues.map(({ code, path }) => ({ code, path }));
+    }
+
+    it('still parses a pre-1593 absence without source or provider', () => {
+        expect(GameTimeAbsenceSchema.parse(legacy)).toEqual(legacy);
+    });
+
+    it('parses a calendar absence with its provider', () => {
+        const input = { ...legacy, reason: null, source: 'calendar', provider: 'google' };
+        expect(GameTimeAbsenceSchema.parse(input)).toEqual(input);
+    });
+
+    it('parses a manual absence', () => {
+        const input = { ...legacy, source: 'manual' };
+        expect(GameTimeAbsenceSchema.parse(input)).toEqual(input);
+    });
+
+    it('rejects an unknown source', () => {
+        expect(absenceIssues({ ...legacy, source: 'import' })).toEqual([
+            { code: 'invalid_value', path: ['source'] },
+        ]);
+    });
+
+    it('rejects an unknown provider', () => {
+        expect(absenceIssues({ ...legacy, source: 'calendar', provider: 'outlook' })).toEqual([
+            { code: 'invalid_value', path: ['provider'] },
         ]);
     });
 });

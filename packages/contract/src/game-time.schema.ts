@@ -95,11 +95,22 @@ export type GameTimeOverrideInput = z.infer<typeof GameTimeOverrideInputSchema>;
 /**
  * Absence range schema (returned from API).
  */
+export const GameTimeAbsenceSourceSchema = z.enum(['manual', 'calendar']);
+export type GameTimeAbsenceSource = z.infer<typeof GameTimeAbsenceSourceSchema>;
+
 export const GameTimeAbsenceSchema = z.object({
   id: z.number(),
   startDate: z.string(),
   endDate: z.string(),
   reason: z.string().nullable(),
+  /**
+   * ROK-1593: where the absence came from. Optional (additive) — a payload
+   * without it is a manual absence. `calendar` rows are derived by sync and
+   * are dismissed with Ignore, never deleted.
+   */
+  source: GameTimeAbsenceSourceSchema.optional(),
+  /** ROK-1593: the calendar provider a `calendar` absence was derived from. */
+  provider: CalendarProviderSchema.optional(),
 });
 export type GameTimeAbsence = z.infer<typeof GameTimeAbsenceSchema>;
 
