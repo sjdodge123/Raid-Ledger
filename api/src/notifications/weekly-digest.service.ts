@@ -13,20 +13,34 @@ import { NotificationDedupService } from './notification-dedup.service';
 import {
   assembleDigestSections,
   buildDigestSources,
-} from './weekly-digest-data.helpers';
-import {
-  buildWeeklyDigestEmbed,
-  digestSectionsV2FromV1,
-} from './weekly-digest-embed.helpers';
+  type DigestSpotlightContext,
+} from './weekly-digest-assembly.helpers';
+import { buildWeeklyDigestEmbed } from './weekly-digest-embed.helpers';
 import {
   DIGEST_DEDUP_TTL_SECONDS,
   DIGEST_JOB_NAME,
   digestDedupKey,
   isDigestSlot,
+  isoWeek,
   parseDigestSlot,
   resolveDigestChannel,
   safeTimeZone,
 } from './weekly-digest-schedule.helpers';
+import {
+  formatSpotlightWeek,
+  parseSpotlightHistory,
+  serializeSpotlightHistory,
+  type SpotlightCandidate,
+} from './weekly-digest-spotlight.helpers';
+
+type DigestEmbed = NonNullable<ReturnType<typeof buildWeeklyDigestEmbed>>;
+
+/** A built digest plus what the post must remember once it lands. */
+interface BuiltDigest {
+  embed: DigestEmbed;
+  spotlight: SpotlightCandidate | null;
+  context: DigestSpotlightContext;
+}
 
 /** Why a tick did or did not post — the fixture endpoint returns it. */
 export type DigestOutcome =
@@ -88,7 +102,9 @@ export class WeeklyDigestService {
    * Build and send this week's digest, bypassing the enabled + slot gates
    * (the tick has already checked them; the DEMO_MODE fixture skips them).
    * The dedup key is claimed only once there is a post to send, and given
-   * back if the send fails so the next tick retries.
+   * back if the send fails so the next tick retries. The spotlight history
+   * is written only after a successful send (AC4) — never on a duplicate,
+   * an empty week or a failed send.
    */
   async postDigest(now: Date): Promise<DigestOutcome> {
     if (!this.discordBotClient.isConnected()) {
@@ -101,15 +117,16 @@ export class WeeklyDigestService {
       return { status: 'no-channel' };
     }
     const timeZone = await this.getTimeZone();
-    const embed = await this.buildEmbed(now, timeZone);
-    if (!embed) return { status: 'empty', channelId };
+    const built = await this.buildDigest(now, timeZone);
+    if (!built) return { status: 'empty', channelId };
     const dedupKey = digestDedupKey(now, timeZone);
     const already = await this.dedupService.checkAndMarkSent(
       dedupKey,
       DIGEST_DEDUP_TTL_SECONDS,
     );
     if (already) return { status: 'duplicate', channelId, dedupKey };
-    const messageId = await this.send(channelId, embed, dedupKey);
+    const messageId = await this.send(channelId, built.embed, dedupKey);
+    await this.rememberSpotlight(built);
     return { status: 'posted', channelId, dedupKey, messageId };
   }
 
@@ -122,7 +139,7 @@ export class WeeklyDigestService {
 
   private async send(
     channelId: string,
-    embed: NonNullable<ReturnType<typeof buildWeeklyDigestEmbed>>,
+    embed: DigestEmbed,
     dedupKey: string,
   ): Promise<string> {
     try {
@@ -142,25 +159,65 @@ export class WeeklyDigestService {
     }
   }
 
-  private async buildEmbed(now: Date, timeZone: string) {
+  private async buildDigest(
+    now: Date,
+    timeZone: string,
+  ): Promise<BuiltDigest | null> {
+    const context = await this.spotlightContext(now, timeZone);
     const sections = await assembleDigestSections(
       buildDigestSources(this.db, this.redis),
+      context,
       (section, error) =>
         this.logger.warn(
-          `Digest section ${section} failed: ${error instanceof Error ? error.message : String(error)}`,
+          `Digest section ${section} failed: ${errorMessage(error)}`,
         ),
     );
     const [clientUrl, branding] = await Promise.all([
       this.settingsService.getTrustedClientUrl(),
       this.settingsService.getBranding().catch(() => null),
     ]);
-    return buildWeeklyDigestEmbed({
-      sections: digestSectionsV2FromV1(sections),
+    const embed = buildWeeklyDigestEmbed({
+      sections,
       clientUrl,
       communityName: branding?.communityName ?? null,
       windowEnd: now,
       timeZone,
     });
+    return embed ? { embed, spotlight: sections.spotlight, context } : null;
+  }
+
+  /** This week plus the stored rotation memory; unreadable ⇒ no history. */
+  private async spotlightContext(
+    now: Date,
+    timeZone: string,
+  ): Promise<DigestSpotlightContext> {
+    const raw = await this.settingsService
+      .get(SETTING_KEYS.WEEKLY_DIGEST_SPOTLIGHT_HISTORY)
+      .catch(() => null);
+    return {
+      history: parseSpotlightHistory(raw),
+      week: formatSpotlightWeek(isoWeek(now, timeZone)),
+    };
+  }
+
+  /**
+   * Record the posted spotlight's kind (capped at 4). The message is already
+   * out, so a failed write is logged, never thrown — the week stays posted.
+   */
+  private async rememberSpotlight(built: BuiltDigest): Promise<void> {
+    if (!built.spotlight) return;
+    const { history, week } = built.context;
+    const value = serializeSpotlightHistory(history, {
+      week,
+      kind: built.spotlight.kind,
+    });
+    await this.settingsService
+      .set(SETTING_KEYS.WEEKLY_DIGEST_SPOTLIGHT_HISTORY, value)
+      .catch((error: unknown) =>
+        this.logger.error(
+          `Weekly digest: saving the spotlight history failed: ${errorMessage(error)}`,
+        ),
+      );
   }
 
   private async resolveChannel(): Promise<string | null> {
@@ -174,4 +231,8 @@ export class WeeklyDigestService {
   private async getTimeZone(): Promise<string> {
     return safeTimeZone(await this.settingsService.getDefaultTimezone());
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

@@ -24,7 +24,6 @@ import type {
   DigestLfgLine,
   DigestPlayingLine,
   DigestSection,
-  DigestSections,
 } from './weekly-digest-data.helpers';
 import {
   DIGEST_LINE_CAPS,
@@ -92,24 +91,6 @@ export function isDigestV2Empty(s: DigestSectionsV2): boolean {
     s.lfg.items.length === 0 &&
     (s.bestPrice === null || s.bestPrice.items.length === 0)
   );
-}
-
-/**
- * @deprecated Transitional bridge until L6 assembles {@link DigestSectionsV2};
- * the v1 any-discount deals are dropped (replaced by Best price, ruling §11).
- */
-export function digestSectionsV2FromV1(s: DigestSections): DigestSectionsV2 {
-  return {
-    spotlight: null,
-    playing: s.playing,
-    newGameIds: [],
-    recap: s.recap,
-    priorRecap: null,
-    milestones: null,
-    upcoming: null,
-    lfg: s.lfg,
-    bestPrice: null,
-  };
 }
 
 export interface WeeklyDigestEmbedInput {
