@@ -25,6 +25,8 @@ export const VOICE_LINE =
   'You no longer have access to the private voice channel. Sign up for the event again to get it back.';
 /** The render seam's fixed notification id (demo-test-render-dm-embed.controller.ts). */
 const RENDER_NOTIFICATION_ID = 'demo-render-dm-embed';
+/** `getEmojiForType('slot_vacated')` — the DM builder titles `${emoji} ${title}`. */
+const SLOT_VACATED_EMOJI = '🚪';
 /** discord-api-types ButtonStyle.Link. */
 const LINK_STYLE = 5;
 
@@ -228,9 +230,8 @@ export async function assertRenderedDm(
     message: n.message,
     ...(n.payload ? { payload: n.payload } : {}),
   });
-  if (r.embed.title !== n.title) {
-    fail(`DM title: expected "${n.title}", got "${String(r.embed.title)}"`);
-  }
+  const wantTitle = `${SLOT_VACATED_EMOJI} ${n.title}`;
+  if (r.embed.title !== wantTitle) fail(`DM title: expected "${wantTitle}", got "${String(r.embed.title)}"`);
   const desc = r.embed.description ?? '';
   for (const line of expectedLines) {
     if (!desc.includes(line)) fail(`DM description missing "${line}" — got "${desc}"`);
