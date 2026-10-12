@@ -97,6 +97,8 @@ export async function notifyNewAssignments(
   signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
   oldRoleBySignupId: Map<number, string | null>,
   extraPayload: Record<string, string>,
+  /** ROK-1769: pool → bench loses private voice; the line rides on the DM. */
+  voiceLostUserIds: ReadonlySet<number> = new Set(),
 ): Promise<void> {
   for (const assignment of newAssignments) {
     if (!assignment.userId) continue;
@@ -105,17 +107,38 @@ export async function notifyNewAssignments(
     const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
     const newRole = assignment.slot;
     if (oldRole !== null || newRole === null) continue;
-    const isGeneric = newRole === 'player';
-    await notificationService.create({
-      userId: assignment.userId,
-      type: 'roster_reassigned',
-      title: 'Roster Assignment',
-      message: isGeneric
-        ? `You've been assigned to the roster for ${eventTitle}`
-        : `You've been assigned to the ${formatRoleLabel(newRole)} role for ${eventTitle}`,
-      payload: { eventId, newRole, ...extraPayload },
-    });
+    const input = newAssignmentInput(
+      assignment.userId,
+      eventId,
+      eventTitle,
+      newRole,
+      extraPayload,
+    );
+    const lostVoice =
+      newRole === 'bench' && voiceLostUserIds.has(assignment.userId);
+    await notificationService.create(
+      lostVoice ? appendVoiceAccessLine(input) : input,
+    );
   }
+}
+
+function newAssignmentInput(
+  userId: number,
+  eventId: number,
+  eventTitle: string,
+  newRole: string,
+  extraPayload: Record<string, string>,
+) {
+  const isGeneric = newRole === 'player';
+  return {
+    userId,
+    type: 'roster_reassigned' as const,
+    title: 'Roster Assignment',
+    message: isGeneric
+      ? `You've been assigned to the roster for ${eventTitle}`
+      : `You've been assigned to the ${formatRoleLabel(newRole)} role for ${eventTitle}`,
+    payload: { eventId, newRole, ...extraPayload },
+  };
 }
 
 export async function validateRosterAssignments(

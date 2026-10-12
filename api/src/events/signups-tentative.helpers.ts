@@ -10,13 +10,10 @@ import type {
   DisplaceTentativeParams,
   ExecuteDisplacementParams,
   RearrangeVictimParams,
-  DisplacedNotificationParams,
   DisplacedDestination,
 } from './signups.service.types';
 import { findOldestTentativeOccupant } from './signups-allocation.helpers';
 import { findNextPosition } from './signups-roster-query.helpers';
-import type { NotificationService } from '../notifications/notification.service';
-import { withVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
 
 export async function reslotTentativeTx(
   tx: Tx,
@@ -257,46 +254,5 @@ async function moveVictimToBench(
   p.occupiedPositions[p.role]?.delete(p.victim.position);
   logger.log(
     `ROK-1729: Displaced tentative signup ${p.victim.signupId} from ${p.role} slot ${p.victim.position} to bench slot ${position} (roster full)`,
-  );
-}
-
-const DISPLACED_ACTION: Record<DisplacedDestination, (r?: string) => string> = {
-  role: (r) => `moved to ${r}`,
-  bench: () => 'moved to the bench',
-  pool: () => 'moved to the unassigned pool',
-};
-
-export async function sendDisplacedNotification(
-  p: DisplacedNotificationParams,
-  notificationService: NotificationService,
-  fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
-) {
-  const { db, eventId, victimSignupId, role, rearrangedToRole } = p;
-  const [signup] = await db
-    .select({ userId: schema.eventSignups.userId })
-    .from(schema.eventSignups)
-    .where(eq(schema.eventSignups.id, victimSignupId))
-    .limit(1);
-  if (!signup?.userId) return;
-  const [event] = await db
-    .select({ title: schema.events.title })
-    .from(schema.events)
-    .where(eq(schema.events.id, eventId))
-    .limit(1);
-  const eventTitle = event?.title ?? `Event #${eventId}`;
-  const action = DISPLACED_ACTION[p.destination](rearrangedToRole);
-  const extraPayload = await fetchNotificationCtx(eventId);
-  const input = {
-    userId: signup.userId,
-    type: 'tentative_displaced' as const,
-    title: 'Roster update',
-    message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
-    payload: { eventId, ...extraPayload },
-  };
-  // ROK-1769 one-DM rule: benched off a private-voice roster → voice line.
-  await notificationService.create(
-    p.destination === 'bench'
-      ? await withVoiceAccessLine(db, eventId, input)
-      : input,
   );
 }

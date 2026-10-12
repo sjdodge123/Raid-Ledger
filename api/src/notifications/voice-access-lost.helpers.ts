@@ -1,8 +1,9 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { UpdateRosterDto } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 import type { CreateNotificationInput } from './notification.types';
+import { shouldCreateEphemeralChannel } from '../discord-bot/services/ephemeral-voice.gate.helpers';
 
 /**
  * ROK-1769: "how to get back in" DM. When a member loses their place on an
@@ -64,7 +65,7 @@ export function emitIfVoiceAccessLost(
 
 type SignupLike = { id: number; status: string };
 
-/** Users a roster edit moved from a real slot (or no slot) onto the bench. */
+/** Users a roster edit moved from a real slot or the pool onto the bench. */
 export function findNewlyBenchedUserIds(
   assignments: UpdateRosterDto['assignments'],
   signupByUserId: Map<number | null, SignupLike>,
@@ -74,25 +75,36 @@ export function findNewlyBenchedUserIds(
   for (const a of assignments) {
     if (!a.userId || a.slot !== 'bench') continue;
     const signup = signupByUserId.get(a.userId);
-    if (!signup || !oldRoleBySignupId.has(signup.id)) continue;
+    if (!signup) continue;
+    // No old assignment = the unassigned pool, which is on the allow-list.
     const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
     if (hadVoiceAccess(signup.status, oldRole)) ids.push(a.userId);
   }
   return ids;
 }
 
+/** The two ephemeral-voice switches; `SettingsService` satisfies it. */
+export interface VoiceGateSettings {
+  getEphemeralVoiceEnabled(): Promise<boolean>;
+  getEphemeralVoiceForced(): Promise<boolean>;
+}
+
+export interface VoiceGateDeps {
+  db: PostgresJsDatabase<typeof schema>;
+  settings: VoiceGateSettings;
+}
+
 /**
- * The event qualifies when its voice is private, ephemeral voice is not
- * explicitly off, it is not cancelled, and it does not end within 10 minutes
- * (re-joining would not help). The user must be active (not deactivated).
- * Returns the event title, or null to skip.
+ * The event qualifies when its voice is private, an ephemeral channel is on
+ * per the canonical gate (global switch, force, per-event opt-in), it is not
+ * cancelled, and it does not end within 10 minutes (re-joining would not
+ * help). Returns the event title, or null to skip.
  */
-export async function loadVoiceAccessTarget(
-  db: PostgresJsDatabase<typeof schema>,
+async function loadVoiceAccessEvent(
+  deps: VoiceGateDeps,
   eventId: number,
-  userId: number,
 ): Promise<{ title: string } | null> {
-  const [ev] = await db
+  const [ev] = await deps.db
     .select({
       title: schema.events.title,
       privateVoice: schema.events.privateVoice,
@@ -103,16 +115,46 @@ export async function loadVoiceAccessTarget(
     .from(schema.events)
     .where(eq(schema.events.id, eventId))
     .limit(1);
-  if (!ev || ev.privateVoice !== true || ev.ephemeralVoiceEnabled === false)
+  if (!ev || ev.privateVoice !== true || ev.cancelledAt || ev.endingSoon)
     return null;
-  if (ev.cancelledAt || ev.endingSoon) return null;
-  const [user] = await db
-    .select({ deactivatedAt: schema.users.deactivatedAt })
+  const [globalEnabled, forced] = await Promise.all([
+    deps.settings.getEphemeralVoiceEnabled(),
+    deps.settings.getEphemeralVoiceForced(),
+  ]);
+  const on = shouldCreateEphemeralChannel(
+    globalEnabled,
+    forced,
+    ev.ephemeralVoiceEnabled,
+  );
+  return on ? { title: ev.title } : null;
+}
+
+/** The given users that exist and are not deactivated — one query. */
+async function activeUserIds(
+  db: PostgresJsDatabase<typeof schema>,
+  userIds: readonly number[],
+): Promise<Set<number>> {
+  const rows = await db
+    .select({ id: schema.users.id })
     .from(schema.users)
-    .where(eq(schema.users.id, userId))
-    .limit(1);
-  if (!user || user.deactivatedAt) return null;
-  return { title: ev.title };
+    .where(
+      and(
+        inArray(schema.users.id, [...userIds]),
+        isNull(schema.users.deactivatedAt),
+      ),
+    );
+  return new Set(rows.map((r) => r.id));
+}
+
+/** Event gate + active-user gate for one member (listener path). */
+export async function loadVoiceAccessTarget(
+  deps: VoiceGateDeps,
+  eventId: number,
+  userId: number,
+): Promise<{ title: string } | null> {
+  const ev = await loadVoiceAccessEvent(deps, eventId);
+  if (!ev) return null;
+  return (await activeUserIds(deps.db, [userId])).has(userId) ? ev : null;
 }
 
 export function buildVoiceAccessLostInput(
@@ -150,31 +192,49 @@ export function appendVoiceAccessLine(
 }
 
 /**
- * The users (already known to have lost their allow-list place) whose event +
- * account pass the `loadVoiceAccessTarget` gate. Fails open to "none": a gate
- * error must never block the removal DM itself.
+ * The users (already known to have lost their allow-list place) who pass the
+ * event + active-user gates: one event read, one users read. Fails open to
+ * "none": a gate error must never block the removal DM itself.
  */
 export async function voiceLossUserIds(
-  db: PostgresJsDatabase<typeof schema>,
+  deps: VoiceGateDeps,
   eventId: number,
   userIds: readonly number[],
 ): Promise<Set<number>> {
-  const lost = new Set<number>();
+  if (userIds.length === 0) return new Set();
   try {
-    for (const userId of userIds)
-      if (await loadVoiceAccessTarget(db, eventId, userId)) lost.add(userId);
+    if (!(await loadVoiceAccessEvent(deps, eventId))) return new Set();
+    return await activeUserIds(deps.db, userIds);
   } catch {
     return new Set();
   }
-  return lost;
 }
 
 /** Gate + append for a single DM (fails open to the unchanged input). */
 export async function withVoiceAccessLine(
-  db: PostgresJsDatabase<typeof schema>,
+  deps: VoiceGateDeps,
   eventId: number,
   input: CreateNotificationInput,
 ): Promise<CreateNotificationInput> {
-  const lost = await voiceLossUserIds(db, eventId, [input.userId]);
+  const lost = await voiceLossUserIds(deps, eventId, [input.userId]);
   return lost.has(input.userId) ? appendVoiceAccessLine(input) : input;
+}
+
+/**
+ * One-DM rule: members a roster edit moved onto the bench (from a slot or the
+ * pool) who lost private voice — the line rides on their roster DM.
+ */
+export function benchedVoiceLossUserIds(
+  deps: VoiceGateDeps,
+  eventId: number,
+  assignments: UpdateRosterDto['assignments'],
+  signupByUserId: Map<number | null, SignupLike>,
+  oldRoleBySignupId: Map<number, string | null>,
+): Promise<Set<number>> {
+  const benched = findNewlyBenchedUserIds(
+    assignments,
+    signupByUserId,
+    oldRoleBySignupId,
+  );
+  return voiceLossUserIds(deps, eventId, benched);
 }

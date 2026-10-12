@@ -8,6 +8,15 @@ import { BenchPromotionService } from './bench-promotion.service';
 import { SignupsAllocationService } from './signups-allocation.service';
 import { SignupsRosterService } from './signups-roster.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SettingsService } from '../settings/settings.service';
+
+/** ROK-1769 voice-line gate: ephemeral voice off globally. */
+function voiceGateSettingsOff() {
+  return {
+    getEphemeralVoiceEnabled: jest.fn().mockResolvedValue(false),
+    getEphemeralVoiceForced: jest.fn().mockResolvedValue(false),
+  };
+}
 
 describe('SignupsService — promotion (MMO)', () => {
   let service: SignupsService;
@@ -117,6 +126,7 @@ describe('SignupsService — promotion (MMO)', () => {
         SignupsService,
         { provide: DrizzleAsyncProvider, useValue: mockDb },
         { provide: NotificationService, useValue: mockNotificationService },
+        { provide: SettingsService, useValue: voiceGateSettingsOff() },
         {
           provide: RosterNotificationBufferService,
           useValue: mockRosterNotificationBuffer,

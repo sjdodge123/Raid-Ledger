@@ -119,13 +119,10 @@ function logWarnReason(logger: Logger, msg: string) {
 function sendRosterNotifications(
   args: Parameters<typeof notifH.notifyNewAssignments>,
   logger: Logger,
-  voiceLostUserIds: ReadonlySet<number>,
 ): void {
   const reassign = 'Failed to send roster reassign notifications';
   const assign = 'Failed to send roster assignment notifications';
-  notifH
-    .notifyRoleChanges(...args, voiceLostUserIds)
-    .catch(logWarnReason(logger, reassign));
+  notifH.notifyRoleChanges(...args).catch(logWarnReason(logger, reassign));
   notifH.notifyNewAssignments(...args).catch(logWarnReason(logger, assign));
 }
 
@@ -151,9 +148,9 @@ export function fireRosterNotifications(
           signupByUserId,
           oldRoleBySignupId,
           extra,
+          voiceLostUserIds,
         ],
         logger,
-        voiceLostUserIds,
       ),
     )
     .catch(logWarnReason(logger, 'Failed to fetch notification context'));

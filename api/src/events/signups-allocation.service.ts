@@ -15,6 +15,7 @@ import type {
 } from './signups.service.types';
 import * as promoH from './signups-promotion.helpers';
 import * as tentH from './signups-tentative.helpers';
+import * as tentNotifyH from './signups-tentative-notify.helpers';
 import * as notifH from './signups-notification.helpers';
 import * as allocH from './signups-auto-allocate.helpers';
 import {
@@ -23,6 +24,7 @@ import {
 } from './signups-allocation.helpers';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class SignupsAllocationService {
@@ -34,6 +36,7 @@ export class SignupsAllocationService {
     private notificationService: NotificationService,
     private benchPromotionService: BenchPromotionService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async autoAllocateSignup(
@@ -224,9 +227,12 @@ export class SignupsAllocationService {
   }
 
   private fireDisplacedNotification(p: DisplacedNotificationParams) {
-    tentH
-      .sendDisplacedNotification(p, this.notificationService, (eId) =>
-        notifH.fetchNotificationContext(this.notificationService, eId),
+    tentNotifyH
+      .sendDisplacedNotification(
+        p,
+        this.notificationService,
+        (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
+        this.settingsService,
       )
       .catch((err: unknown) => {
         this.logger.warn(
