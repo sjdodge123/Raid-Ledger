@@ -39,6 +39,10 @@ import type { AggregateGameTimeResponse } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { SignupStatus } from '../../drizzle/schema/event-signups';
 import { templateDayToGridDay } from '../../users/game-time-heatmap.helpers';
+import {
+  fetchCalendarBusyBlocks,
+  type CalendarBusyBlock,
+} from '../../calendar-sync/read/calendar-busy-query.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Cell = AggregateGameTimeResponse['cells'][number];
@@ -320,8 +324,17 @@ export function applyBusyCounts(
   }));
 }
 
+/** Calendar busy blocks as duration rows, so they expand like sign-ups. */
+function asDurationRows(blocks: CalendarBusyBlock[]): BusySignupRow[] {
+  return blocks.map<BusySignupRow>((b) => ({
+    userId: b.userId,
+    duration: [b.startsAt, b.endsAt],
+  }));
+}
+
 /**
- * Hours the given members are already committed during the viewer's local week.
+ * Hours the given members are already committed during the viewer's local week:
+ * active sign-ups, absences and synced-calendar busy blocks (ROK-1593).
  *
  * @param db - Drizzle handle.
  * @param userIds - Roster to look up. Empty short-circuits without querying.
@@ -341,11 +354,13 @@ export async function fetchBusyKeys(
   const busy = new Map<number, Set<string>>();
   if (userIds.length === 0) return busy;
   const [localStart, localEnd] = localWeekBounds(weekStart, weekEnd, tzOffset);
-  const [signups, absences] = await Promise.all([
+  const [signups, absences, calendarBlocks] = await Promise.all([
     fetchSignups(db, userIds, localStart, localEnd),
     fetchAbsences(db, userIds, weekStart, weekEnd),
+    // ROK-1593: synced-calendar blocks, R4-filtered; same Set, so R5 holds.
+    fetchCalendarBusyBlocks(db, userIds, localStart, localEnd),
   ]);
-  for (const row of signups) {
+  for (const row of [...signups, ...asDurationRows(calendarBlocks)]) {
     addKeys(
       busy,
       row.userId,

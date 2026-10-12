@@ -14,6 +14,8 @@ import {
 } from './game-time-absence.helpers';
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { defined } from '../common/defined.helpers';
+import { fetchCalendarBusyHours } from '../calendar-sync/read/calendar-busy-query.helpers';
+import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
 
 // Re-export types for backward compatibility
 export type {
@@ -29,6 +31,11 @@ import type {
   AbsenceRecord,
   CompositeViewResult,
 } from './game-time.types';
+
+/** Composite view plus the viewer's own synced-calendar busy hours (ROK-1593). */
+type CompositeViewWithCalendar = CompositeViewResult & {
+  calendarBusy?: GameTimeCalendarBusy[];
+};
 
 /** TTL for in-memory game-time cache (ms). */
 const CACHE_TTL_MS = 2 * 60 * 1000;
@@ -253,17 +260,27 @@ export class GameTimeService {
     userId: number,
     weekStart: Date,
     tzOffset = 0,
-  ): Promise<CompositeViewResult> {
+  ): Promise<CompositeViewWithCalendar> {
     const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}`;
-    const cached = this.getCached<CompositeViewResult>(cacheKey);
+    const cached = this.getCached<CompositeViewWithCalendar>(cacheKey);
     if (cached) return cached;
-    const result = await buildCompositeViewResult(
+    const view = await buildCompositeViewResult(
       this.db,
       (id) => this.getTemplate(id),
       userId,
       weekStart,
       tzOffset,
     );
+    // ROK-1593 D15: a separate field — never folded into slot status.
+    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const calendarBusy = await fetchCalendarBusyHours(
+      this.db,
+      userId,
+      weekStart,
+      weekEnd,
+      tzOffset,
+    );
+    const result = calendarBusy.length > 0 ? { ...view, calendarBusy } : view;
     this.setCache(cacheKey, result);
     return result;
   }
