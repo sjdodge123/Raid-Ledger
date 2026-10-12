@@ -57,6 +57,7 @@ describe('DesignSystemPage', () => {
         'Pattern — journey hero',
         'Pattern — week strip',
         'Pattern — group marks and legend',
+        'Pattern — own-calendar busy band and radio cards',
         'Forms — the form primitives',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);

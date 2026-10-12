@@ -54,6 +54,7 @@ function createDefaultEditorMock(overrides = {}) {
         tzLabel: 'PST',
         overrides: [],
         absences: [],
+        calendarBusy: [],
         ...overrides,
     };
 }
@@ -172,6 +173,7 @@ describe('GameTimePanel - Profile Mode (ROK-301) — part 4', () => {
                 isLoading: false,
                 tzLabel: 'PST',
                 absences: [],
+                calendarBusy: [],
                 discard: vi.fn(),
                 overrides: [],
             });
@@ -209,6 +211,7 @@ describe('Availability Data Preservation — part 2 (sub 1)', () => {
             isLoading: false,
             tzLabel: 'PST',
             absences: [],
+            calendarBusy: [],
             discard: vi.fn(),
             overrides: [],
         });
@@ -241,6 +244,7 @@ describe('Availability Data Preservation — part 2 (sub 2)', () => {
             isLoading: false,
             tzLabel: 'PST',
             absences: [],
+            calendarBusy: [],
             discard: vi.fn(),
             overrides: [],
         });

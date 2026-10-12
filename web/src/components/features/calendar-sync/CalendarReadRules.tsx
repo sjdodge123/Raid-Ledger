@@ -13,6 +13,7 @@ import { RadioGroup } from '../../ui/radio-group';
 import { useStartOAuth } from '../../../hooks/use-calendar-sync';
 import { readGranted, switchesOf, modeOf, useReadRules, type ReadSwitches } from './use-read-rules';
 import { READ_COPY as R } from './calendar-sync.copy';
+import { RADIO_CARDS } from './radio-cards.classes';
 
 interface RulesProps { connection: CalendarConnection; mode: CalendarReadMode; desktop: boolean }
 
@@ -58,16 +59,14 @@ function PhoneSwitches({ switches, disabled, choose }: ControlProps): JSX.Elemen
 }
 
 const MODES: readonly CalendarReadMode[] = ['days', 'hours', 'both'];
-/** NP-2 radio cards: the list `RadioGroup` in a 3-column grid, each option a bordered card; ON = `border-success`. */
-const CARDS = '[&>div]:grid [&>div]:grid-cols-3 [&>div]:gap-3 [&_label]:rounded-lg [&_label]:border [&_label]:border-edge '
-    + '[&_label]:bg-panel [&_label]:px-3 [&_label:has(:checked)]:border-success';
+/** NP-2 radio cards: classes in `radio-cards.classes.ts`. */
 
 function DesktopCards({ mode, enabled, disabled, choose }: ControlProps): JSX.Element {
     const options = MODES.map((m) => ({ value: m, label: R.modes[m].label, description: R.modes[m].description }));
     return (
         <RadioGroup<CalendarReadMode | 'off'> label={R.desktopHeading} hideLabel options={options}
             value={enabled ? mode : 'off'} onChange={(m) => choose(m === 'off' ? null : m)} disabled={disabled}
-            className={CARDS} />
+            className={RADIO_CARDS} />
     );
 }
 
