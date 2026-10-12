@@ -8,6 +8,7 @@ import * as schema from '../../drizzle/schema';
 import { defined } from '../../common/defined.helpers';
 import { insertWithSlugRetry } from '../public-lineup-slug.helpers';
 import { activeUsersFilter } from '../../users/users-active.helpers';
+import { votableStandalonePollSql } from './standalone-poll-votable.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -259,14 +260,9 @@ export async function completeStandalonePoll(
 /**
  * Find all ACTIVE standalone polls — the events-page banner's list.
  *
- * ROK-1609: `m.status = 'scheduling'` alone kept advertising polls that every
- * other surface already calls expired, so the banner offered "Vote →" onto a
- * ■ POLL EXPIRED page. A poll is listed only while it is genuinely votable:
- * the lineup is not archived, the deadline (when it has one) is still ahead,
- * and — per ROK-1607 — at least one proposed time is still in the future. A
- * poll with no slots yet stays listed: suggesting a time is the point of it.
- * The three conditions mirror `pollStatusFromMatch`, so the banner, the poll
- * page and the Discord card agree on what "open" means.
+ * ROK-1609: listed only while genuinely votable — see
+ * `votableStandalonePollSql` (shared with the weekly digest, ROK-1771) — and
+ * visible to the caller (public, admin, creator or invitee; ROK-1750).
  */
 export async function findActiveStandalonePolls(
   db: Db,
@@ -301,10 +297,7 @@ export async function findActiveStandalonePolls(
     JOIN games g ON g.id = m.game_id
     LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_match_members GROUP BY match_id) mem ON mem.match_id = m.id
     LEFT JOIN (SELECT match_id, COUNT(*)::int AS cnt FROM community_lineup_schedule_slots GROUP BY match_id) sl ON sl.match_id = m.id
-    WHERE m.status = 'scheduling'
-      AND l.phase_duration_override->>'standalone' = 'true'
-      AND (l.status IS NULL OR l.status <> 'archived')
-      AND (l.phase_deadline IS NULL OR l.phase_deadline > NOW())
+    WHERE ${votableStandalonePollSql()}
       AND (
         l.visibility = 'public'
         OR ${caller.isAdmin}::boolean
@@ -312,16 +305,6 @@ export async function findActiveStandalonePolls(
         OR EXISTS (
           SELECT 1 FROM community_lineup_invitees i
           WHERE i.lineup_id = l.id AND i.user_id = ${caller.id}
-        )
-      )
-      AND (
-        NOT EXISTS (
-          SELECT 1 FROM community_lineup_schedule_slots s
-          WHERE s.match_id = m.id
-        )
-        OR EXISTS (
-          SELECT 1 FROM community_lineup_schedule_slots s
-          WHERE s.match_id = m.id AND s.proposed_time > NOW()
         )
       )
     ORDER BY m.created_at DESC

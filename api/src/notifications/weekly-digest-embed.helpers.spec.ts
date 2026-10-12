@@ -1,5 +1,7 @@
 /**
- * Unit tests for the weekly-digest embed builder (ROK-1435 slice L3).
+ * Unit tests for the weekly-digest embed builder (ROK-1435 slice L3; v1
+ * sections under the ROK-1771 v2 input — the any-discount "On sale" field is
+ * replaced by "Best price", operator ruling 2026-10-12).
  * Pins: every section rendered in order and non-inline; empty sections
  * omitted (all-empty ⇒ null); the 1024-char fitting boundary and the "+N more"
  * count; the per-section link targets and the no-origin fallback; Discord's
@@ -8,20 +10,21 @@
 import { embedLength, type APIEmbedField } from 'discord.js';
 import { colorForState } from '../discord-bot/embeds/embed-chrome.helpers';
 import { personalizedFieldName } from '../discord-bot/embeds/embed-personalized.helpers';
+import type { DigestBestPriceLine } from './weekly-digest-best-price.helpers';
 import type {
-  DigestDealLine,
   DigestLfgLine,
   DigestPlayingLine,
-  DigestSections,
 } from './weekly-digest-data.helpers';
 import {
   DIGEST_DESCRIPTION,
   DIGEST_FIELD_NAMES,
   buildWeeklyDigestEmbed,
   digestTitle,
+  type DigestSectionsV2,
 } from './weekly-digest-embed.helpers';
 import {
   DIGEST_EMBED_LIMITS,
+  DIGEST_FIELD_CAPS,
   DIGEST_NAME_MAX,
   fitSectionLines,
   sanitizeName,
@@ -30,7 +33,7 @@ import {
 const ORIGIN = 'https://raid.example.test';
 const END = new Date('2026-09-22T12:00:00Z');
 
-function playing(n: number, total = n): DigestSections['playing'] {
+function playing(n: number, total = n): DigestSectionsV2['playing'] {
   const items: DigestPlayingLine[] = Array.from({ length: n }, (_, i) => ({
     gameId: i + 1,
     name: `Game ${String(i + 1)}`,
@@ -40,15 +43,23 @@ function playing(n: number, total = n): DigestSections['playing'] {
   return { items, total };
 }
 
-function deal(gameId: number, price: number | null): DigestDealLine {
+function deal(gameId: number, price: number): DigestBestPriceLine {
   return {
     gameId,
     name: `Deal ${String(gameId)}`,
     slug: 'd',
     cutPercent: 40,
     price,
+    wishlisters: 5,
   };
 }
+
+const V2_EMPTY_EXTRAS = {
+  spotlight: null,
+  priorRecap: null,
+  milestones: null,
+  upcoming: null,
+} as const;
 
 function lfgLine(
   slug: string,
@@ -65,11 +76,12 @@ function lfgLine(
   };
 }
 
-function full(): DigestSections {
+function full(): DigestSectionsV2 {
   return {
+    ...V2_EMPTY_EXTRAS,
     playing: playing(2),
     recap: { eventsRun: 4, playersAttended: 9, attendances: 17 },
-    deals: { items: [deal(7, 29.99), deal(8, null)], total: 2 },
+    bestPrice: { items: [deal(7, 29.99), deal(8, 9.5)], total: 2 },
     lfg: {
       items: [
         lfgLine('valheim'),
@@ -80,16 +92,17 @@ function full(): DigestSections {
   };
 }
 
-function empty(): DigestSections {
+function empty(): DigestSectionsV2 {
   return {
+    ...V2_EMPTY_EXTRAS,
     playing: { items: [], total: 0 },
     recap: null,
-    deals: { items: [], total: 0 },
+    bestPrice: { items: [], total: 0 },
     lfg: { items: [], total: 0 },
   };
 }
 
-function build(sections: DigestSections, clientUrl: string | null = ORIGIN) {
+function build(sections: DigestSectionsV2, clientUrl: string | null = ORIGIN) {
   const embed = buildWeeklyDigestEmbed({ sections, clientUrl, windowEnd: END });
   if (!embed) throw new Error('expected an embed, got null');
   return embed;
@@ -100,13 +113,13 @@ function fieldNamed(fields: APIEmbedField[] | undefined, name: string) {
 }
 
 describe('buildWeeklyDigestEmbed — sections', () => {
-  it('renders all four sections, in order, full width', () => {
+  it('renders all four v1-backbone sections, in the v2 order, full width', () => {
     const data = build(full()).toJSON();
     expect(data.fields?.map((f) => f.name)).toEqual([
       DIGEST_FIELD_NAMES.playing,
       DIGEST_FIELD_NAMES.recap,
-      DIGEST_FIELD_NAMES.deals,
       DIGEST_FIELD_NAMES.lfg,
+      DIGEST_FIELD_NAMES.bestPrice,
     ]);
     expect(data.fields?.every((f) => f.inline === false)).toBe(true);
   });
@@ -121,9 +134,9 @@ describe('buildWeeklyDigestEmbed — sections', () => {
     expect(fieldNamed(fields, DIGEST_FIELD_NAMES.recap)).toBe(
       `**4** events · **9** players\n[past events ↗](${ORIGIN}/events?tab=past)`,
     );
-    expect(fieldNamed(fields, DIGEST_FIELD_NAMES.deals)).toBe(
-      `**[Deal 7](${ORIGIN}/games/7)** −40% · $29.99\n` +
-        `**[Deal 8](${ORIGIN}/games/8)** −40%\n` +
+    expect(fieldNamed(fields, DIGEST_FIELD_NAMES.bestPrice)).toBe(
+      `**[Deal 7](${ORIGIN}/games/7)** −40% · $29.99 · all-time low · 5 wishlisted\n` +
+        `**[Deal 8](${ORIGIN}/games/8)** −40% · $9.50 · all-time low · 5 wishlisted\n` +
         `[see all ↗](${ORIGIN}/games)`,
     );
     expect(fieldNamed(fields, DIGEST_FIELD_NAMES.lfg)).toBe(
@@ -168,9 +181,13 @@ describe('buildWeeklyDigestEmbed — empty sections', () => {
       { playing: { items: [], total: 0 } },
     ],
     ['recap', DIGEST_FIELD_NAMES.recap, { recap: null }],
-    ['deals', DIGEST_FIELD_NAMES.deals, { deals: { items: [], total: 0 } }],
+    [
+      'best price',
+      DIGEST_FIELD_NAMES.bestPrice,
+      { bestPrice: { items: [], total: 0 } },
+    ],
     ['lfg (AC5)', DIGEST_FIELD_NAMES.lfg, { lfg: { items: [], total: 0 } }],
-  ] as Array<[string, string, Partial<DigestSections>]>)(
+  ] as Array<[string, string, Partial<DigestSectionsV2>]>)(
     'omits the %s field entirely when it is empty',
     (_, name, patch) => {
       const names = build({ ...full(), ...patch })
@@ -218,7 +235,7 @@ describe('fitSectionLines — the 1024 boundary', () => {
     );
   });
 
-  it('fits 60 long-named LFG groups under 1024 with an accurate remainder', () => {
+  it('fits 60 long-named LFG groups under the LFG cap with an accurate remainder', () => {
     const items = Array.from({ length: 60 }, (_, i) =>
       lfgLine(`slug-${String(i)}`, { gameName: 'N'.repeat(90) }),
     );
@@ -227,7 +244,7 @@ describe('fitSectionLines — the 1024 boundary', () => {
         build({ ...full(), lfg: { items, total: 60 } }).toJSON().fields,
         DIGEST_FIELD_NAMES.lfg,
       ) ?? '';
-    expect(value.length).toBeLessThanOrEqual(DIGEST_EMBED_LIMITS.fieldValue);
+    expect(value.length).toBeLessThanOrEqual(DIGEST_FIELD_CAPS.lfg);
     const shown = value.split('\n').length - 1;
     expect(value).toContain(
       `+${String(60 - shown)} more · [see all ↗](${ORIGIN}/games?lfg=1)`,
@@ -241,6 +258,7 @@ describe('buildWeeklyDigestEmbed — Discord totals', () => {
     const many = <T>(make: (i: number) => T) =>
       Array.from({ length: 80 }, (_, i) => make(i));
     const data = build({
+      ...V2_EMPTY_EXTRAS,
       playing: {
         items: many((i) => ({
           gameId: i,
@@ -251,7 +269,7 @@ describe('buildWeeklyDigestEmbed — Discord totals', () => {
         total: 80,
       },
       recap: { eventsRun: 99999, playersAttended: 99999, attendances: 1 },
-      deals: {
+      bestPrice: {
         items: many((i) => ({ ...deal(i, 9.99), name: long })),
         total: 80,
       },
@@ -331,5 +349,15 @@ describe('buildWeeklyDigestEmbed — privacy and mentions', () => {
         value: 'x',
       }),
     ).toThrow('personalized field on channel embed');
+  });
+});
+
+describe('sanitizeName — length cap', () => {
+  it('never cuts an emoji in half at the cap', () => {
+    // 98 ASCII + a surrogate-pair emoji straddling the 99-unit cut point.
+    const name = `${'a'.repeat(98)}🎮tail`;
+    const out = sanitizeName(name);
+    expect(out).toBe(`${'a'.repeat(98)}…`);
+    expect(out).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/);
   });
 });

@@ -19,6 +19,12 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import { WeeklyDigestService } from './weekly-digest.service';
 import { digestDedupKey, safeTimeZone } from './weekly-digest-schedule.helpers';
 import { nonEmpty } from '../common/testing/narrow';
+import {
+  assembleDigestSections,
+  buildDigestSources,
+} from './weekly-digest-assembly.helpers';
+import { isoWeek } from './weekly-digest-schedule.helpers';
+import { formatSpotlightWeek } from './weekly-digest-spotlight.helpers';
 
 const HOUR = 3_600_000;
 
@@ -348,5 +354,113 @@ describe('Weekly digest dispatch dedup (ROK-1435 L4, integration)', () => {
 
     const retry = await service.postDigest(now);
     expect(retry).toMatchObject({ status: 'posted', dedupKey: key });
+  });
+});
+
+/** A guild-seen member who joined two days ago (milestones B1). */
+async function seedNewMember(testApp: TestApp, tag: string): Promise<number> {
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId: `d:wd-new-${tag}`,
+        username: `wd-new-${tag}`,
+        displayName: `Newcomer ${tag}`,
+        role: 'member',
+        createdAt: new Date(Date.now() - 2 * 24 * HOUR),
+        guildMemberSeenAt: new Date(),
+      })
+      .returning(),
+    'new member',
+  );
+  return u.id;
+}
+
+/** A steam-wishlisted game sitting at its all-time low (Best price). */
+async function seedWishlistedLow(
+  testApp: TestApp,
+  userId: number,
+): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'Digest Deal Game',
+        slug: 'wd-digest-deal',
+        itadGameId: 'itad-wd-digest-deal',
+        itadCurrentCut: 60,
+        itadCurrentPrice: '11.99',
+        itadLowestPrice: '11.99',
+      })
+      .returning(),
+    'deal game',
+  );
+  await testApp.db
+    .insert(schema.gameInterests)
+    .values({ userId, gameId: g.id, source: 'steam_wishlist' });
+  return g.id;
+}
+
+/** A scheduled (not ad-hoc) event starting in two days (Coming up). */
+async function seedFutureEvent(
+  testApp: TestApp,
+  creatorId: number,
+): Promise<number> {
+  const start = new Date(Date.now() + 48 * HOUR);
+  const [e] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: 'Weekly digest future raid',
+        creatorId,
+        gameId: testApp.seed.game.id,
+        duration: [start, new Date(start.getTime() + 3 * HOUR)],
+      })
+      .returning(),
+    'future event',
+  );
+  return e.id;
+}
+
+describe('Weekly digest v2 assembly over the real reads (ROK-1771 L6b, integration)', () => {
+  let testApp: TestApp;
+  let redis: Redis;
+
+  beforeAll(async () => {
+    testApp = await getTestApp();
+    redis = testApp.app.get<Redis>(REDIS_CLIENT);
+  });
+
+  afterEach(async () => {
+    testApp.seed = await truncateAllTables(testApp.db);
+  });
+
+  it('fills spotlight, milestones, Coming up and Best price from one seeded week', async () => {
+    const member = await seedNewMember(testApp, 'mira');
+    const marathon = await seedEvent(testApp, member, {
+      duration: endedAgo(24, 4),
+    });
+    await seedSignup(testApp, marathon, member);
+    const future = await seedFutureEvent(testApp, member);
+    const deal = await seedWishlistedLow(testApp, member);
+    const onError = jest.fn();
+    const week = formatSpotlightWeek(isoWeek(new Date(), 'UTC'));
+
+    const s = await assembleDigestSections(
+      buildDigestSources(testApp.db, redis),
+      { history: [], week },
+      onError,
+    );
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(s.spotlight).toMatchObject({
+      kind: 'marathon',
+      eventId: marathon,
+      durationMinutes: 240,
+    });
+    expect(s.milestones?.newMembers.total).toBeGreaterThanOrEqual(1);
+    expect(s.milestones?.newMembers.names).toContain('Newcomer mira');
+    expect(s.upcoming?.events.map((e) => e.eventId)).toContain(future);
+    expect(s.bestPrice?.items.map((l) => l.gameId)).toEqual([deal]);
   });
 });

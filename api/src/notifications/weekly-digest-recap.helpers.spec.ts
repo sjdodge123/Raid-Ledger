@@ -10,6 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import {
   RECAP_WINDOW_DAYS,
+  SHOWS_ACTIVITY_SQL,
   buildWeeklyRecapQuery,
   fetchWeeklyRecap,
   isEmptyWeeklyRecap,
@@ -57,12 +58,13 @@ describe('buildWeeklyRecapQuery', () => {
   });
 
   it('applies the show_activity opt-out predicate by default', () => {
-    expect(render()).toContain("p.key = 'show_activity'");
-    expect(render()).toContain("p.value = 'false'::jsonb");
+    expect(render()).toContain('sa_pref.user_id = a.user_id');
+    expect(render()).toContain("sa_pref.key = 'show_activity'");
+    expect(render()).toContain("sa_pref.value = 'false'::jsonb");
   });
 
   it('applies the opt-out predicate when respectActivityOptOut is true', () => {
-    expect(render(true)).toContain("p.key = 'show_activity'");
+    expect(render(true)).toContain("sa_pref.key = 'show_activity'");
   });
 
   it('omits the opt-out predicate when respectActivityOptOut is false', () => {
@@ -82,6 +84,77 @@ describe('buildWeeklyRecapQuery', () => {
   it('binds no parameters (the window is a constant, not user input)', () => {
     const { params } = new PgDialect().sqlToQuery(buildWeeklyRecapQuery());
     expect(params).toEqual([]);
+  });
+});
+
+describe('buildWeeklyRecapQuery — endOffsetDays (ROK-1771 C1)', () => {
+  function renderOffset(endOffsetDays: number): string {
+    return new PgDialect()
+      .sqlToQuery(buildWeeklyRecapQuery({ endOffsetDays }))
+      .sql.replace(/\s+/g, ' ');
+  }
+
+  it('offset 0 renders exactly the default current-week query', () => {
+    expect(renderOffset(0)).toBe(render());
+  });
+
+  it('offset 7 shifts both bounds back a week: [NOW()-14d, NOW()-7d]', () => {
+    const text = renderOffset(7);
+    expect(text).toContain(
+      "e.duration && tsrange((NOW() - INTERVAL '14 days')::timestamp, (NOW() - INTERVAL '7 days')::timestamp, '[]')",
+    );
+    expect(text).toContain("upper(e.duration) >= (NOW() - INTERVAL '14 days')");
+    expect(text).toContain("upper(e.duration) <= (NOW() - INTERVAL '7 days')");
+    expect(text).not.toContain('upper(e.duration) <= NOW()');
+  });
+
+  it('keeps the privacy predicate and binds no parameters when shifted', () => {
+    const query = buildWeeklyRecapQuery({ endOffsetDays: 7 });
+    const { sql: text, params } = new PgDialect().sqlToQuery(query);
+    expect(text).toContain("sa_pref.key = 'show_activity'");
+    expect(params).toEqual([]);
+  });
+
+  it('rejects a negative or fractional offset', () => {
+    expect(() => buildWeeklyRecapQuery({ endOffsetDays: -1 })).toThrow(
+      /endOffsetDays/,
+    );
+    expect(() => buildWeeklyRecapQuery({ endOffsetDays: 1.5 })).toThrow(
+      /endOffsetDays/,
+    );
+  });
+});
+
+describe('SHOWS_ACTIVITY_SQL', () => {
+  function text(ref: string): string {
+    return new PgDialect()
+      .sqlToQuery(SHOWS_ACTIVITY_SQL(ref))
+      .sql.replace(/\s+/g, ' ');
+  }
+
+  it('is a NOT EXISTS on the show_activity=false preference of the given column', () => {
+    const out = text('x.user_id');
+    expect(out).toContain(
+      'NOT EXISTS ( SELECT 1 FROM user_preferences sa_pref',
+    );
+    expect(out).toContain('sa_pref.user_id = x.user_id');
+    expect(out).toContain("sa_pref.key = 'show_activity'");
+    expect(out).toContain("sa_pref.value = 'false'::jsonb");
+  });
+
+  it('binds no parameters', () => {
+    expect(
+      new PgDialect().sqlToQuery(SHOWS_ACTIVITY_SQL('a.user_id')).params,
+    ).toEqual([]);
+  });
+
+  it('rejects anything that is not a bare alias.column reference', () => {
+    expect(() => SHOWS_ACTIVITY_SQL('user_id')).toThrow(
+      /not a column reference/,
+    );
+    expect(() => SHOWS_ACTIVITY_SQL('a.user_id OR 1=1')).toThrow(
+      /not a column reference/,
+    );
   });
 });
 
@@ -163,6 +236,13 @@ describe('fetchWeeklyRecap', () => {
     expect(recap).toEqual({ eventsRun: 1, playersAttended: 2, attendances: 3 });
     const sent = new PgDialect().sqlToQuery(at(execute.mock.calls, 0)[0]).sql;
     expect(sent).toContain('show_activity');
+  });
+
+  it('passes endOffsetDays through to the query (prior-week window)', async () => {
+    const { db, execute } = mockDb([]);
+    await fetchWeeklyRecap(db, { endOffsetDays: 7 });
+    const sent = new PgDialect().sqlToQuery(at(execute.mock.calls, 0)[0]).sql;
+    expect(sent).toContain("INTERVAL '14 days'");
   });
 
   it('passes respectActivityOptOut=false through to the query', async () => {
