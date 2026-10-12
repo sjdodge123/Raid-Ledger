@@ -578,7 +578,9 @@ describe('weekly digest v2 — §4.2 trim order', () => {
     ]);
     expect(DIGEST_TRIM_STEPS).toEqual(seen.at(-1));
   });
+});
 
+describe('weekly digest v2 — §4.2 trim effects', () => {
   it('each trim does what §4.2 says and never touches spotlight or recap', () => {
     const s = full();
     const lfg = must(s.lfg.items[0]);
