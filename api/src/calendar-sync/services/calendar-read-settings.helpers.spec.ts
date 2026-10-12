@@ -37,6 +37,24 @@ describe('isManualSyncThrottled', () => {
     expect(isManualSyncThrottled(partial, NOW)).toBe(true);
   });
 
+  it('partial success at the cadence edge (next = last + 35 min) → not throttled', () => {
+    const partial = row({
+      lastErrorCode: 'provider_error',
+      lastSyncedAt: at(-6),
+      nextSyncAt: at(-6 + 35),
+    });
+    expect(isManualSyncThrottled(partial, NOW)).toBe(false);
+  });
+
+  it('just past the cadence edge (next = last + 36 min) reads as a backoff → throttled', () => {
+    const failed = row({
+      lastErrorCode: 'provider_error',
+      lastSyncedAt: at(-6),
+      nextSyncAt: at(-6 + 36),
+    });
+    expect(isManualSyncThrottled(failed, NOW)).toBe(true);
+  });
+
   it('true failure after an older success, inside its backoff → throttled', () => {
     const failed = row({
       lastErrorCode: 'provider_error',

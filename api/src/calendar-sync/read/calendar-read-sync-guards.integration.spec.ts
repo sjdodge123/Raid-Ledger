@@ -99,6 +99,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  jest.restoreAllMocks();
   await readQueue.drain(true);
   await readQueue.clean(0, 1000, 'failed');
   await setCalendarSyncEnabled(settings, false);

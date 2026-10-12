@@ -171,7 +171,7 @@ export class GoogleCalendarAdapter
         `Google read hit the page cap on ${truncated} calendar(s)`,
       );
     }
-    assertSomeReadable(calendarIds, refused);
+    assertSomeReadable(calendarIds, refused, missing);
     return busyResult(blocks, missing, refused);
   }
 
@@ -271,8 +271,19 @@ function accessTokenOf(credentials: CalendarCredentials): string {
  * Every requested calendar refused by a policy 403 → the policy error, so
  * the caller's fail-and-backoff path runs and the last good blocks stay.
  */
-function assertSomeReadable(requested: string[], refused: string[]): void {
-  if (requested.length > 0 && refused.length === requested.length) {
+/**
+ * Every requested calendar refused (or refused + gone) → nothing was read, so
+ * fail transiently and keep the old blocks rather than commit an empty set.
+ */
+function assertSomeReadable(
+  requested: string[],
+  refused: string[],
+  missing: string[],
+): void {
+  if (
+    refused.length > 0 &&
+    refused.length + missing.length === requested.length
+  ) {
     throw new TransientError(GOOGLE_POLICY_403);
   }
 }
