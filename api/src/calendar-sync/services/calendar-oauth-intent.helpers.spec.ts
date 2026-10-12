@@ -56,9 +56,9 @@ describe('read consent (ROK-1593 D-R3)', () => {
 
   it('grantCoversIntent(read) needs the read scopes, Google-only', () => {
     expect(grantCoversIntent('read', 'google', connectSet)).toBe(false);
-    expect(
-      grantCoversIntent('read', 'google', [GOOGLE_EVENTS_SCOPE]),
-    ).toBe(false);
+    expect(grantCoversIntent('read', 'google', [GOOGLE_EVENTS_SCOPE])).toBe(
+      false,
+    );
     expect(grantCoversIntent('read', 'google', [...GOOGLE_READ_SCOPES])).toBe(
       true,
     );
