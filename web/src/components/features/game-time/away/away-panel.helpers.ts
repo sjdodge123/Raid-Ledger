@@ -90,19 +90,6 @@ export function newestReadSync(overview: CalendarsOverview | undefined): string 
     return Number.isFinite(newest) ? new Date(newest).toISOString() : null;
 }
 
-/** "Synced 4 min ago" for the calendar group's divider; null when there is no sync time. */
-export function syncedAgoLabel(iso: string | null, nowMs: number): string | null {
-    const at = iso ? Date.parse(iso) : Number.NaN;
-    if (Number.isNaN(at)) return null;
-    const mins = Math.max(0, Math.floor((nowMs - at) / 60_000));
-    if (mins < 1) return 'Synced just now';
-    if (mins < 60) return `Synced ${mins} min ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `Synced ${hours} hour${hours === 1 ? '' : 's'} ago`;
-    const days = Math.floor(hours / 24);
-    return `Synced ${days} day${days === 1 ? '' : 's'} ago`;
-}
-
 /**
  * Which preset the current dates correspond to — derived, never stored, so a
  * hand-edited date flips the chips to Custom (moved from `game-time-absence.tsx`).

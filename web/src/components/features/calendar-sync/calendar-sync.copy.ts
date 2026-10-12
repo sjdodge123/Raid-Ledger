@@ -8,6 +8,7 @@
  */
 
 import type { CalendarConnection, CalendarOAuthErrorCode } from '@raid-ledger/contract';
+import { syncedAgo } from '../../../lib/synced-ago';
 
 /** Approved K1 lede (describes read sync). */
 const LEDE_APPROVED = 'Connect a calendar and Raid Ledger fills in your time away for you.';
@@ -132,17 +133,6 @@ export const EVENT_CALENDAR_COPY = {
     undoFailed: 'Could not remove the calendar copy. Try again.',
     icsFailed: 'Could not download the calendar file. Try again.',
 } as const;
-
-/** "N min ago" for a sync timestamp (lane copy beyond the canvas's "4 min ago"). */
-export function syncedAgo(iso: string, now: number = Date.now()): string {
-    const minutes = Math.max(0, Math.floor((now - Date.parse(iso)) / 60_000));
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `${hours} h ago`;
-    const days = Math.floor(hours / 24);
-    return days === 1 ? '1 day ago' : `${days} days ago`;
-}
 
 /**
  * Read sync (ROK-1595): K2 phone switches, K4 desktop radio cards, the

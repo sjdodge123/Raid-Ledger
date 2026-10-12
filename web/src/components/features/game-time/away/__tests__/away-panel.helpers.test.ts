@@ -7,7 +7,6 @@ import {
     newestReadSync,
     nextAwayLabel,
     rowMeta,
-    syncedAgoLabel,
     upcomingAbsences,
 } from '../away-panel.helpers';
 import { toAwayRows } from '../away-row.types';
@@ -153,8 +152,7 @@ describe('nextAwayLabel — from calendar (ROK-1595 S2)', () => {
     });
 });
 
-describe('synced-ago (ROK-1595 S1 divider)', () => {
-    const NOW = Date.parse('2026-10-12T09:04:30.000Z');
+describe('newestReadSync (ROK-1595 S1 divider; wording pinned in lib/synced-ago.test.ts)', () => {
     const overview = (connections: CalendarsOverview['connections'], enabled = true): CalendarsOverview => ({
         enabled, providers: { google: { available: true }, microsoft: { available: false }, apple: { available: false } },
         connections, readSettings: { mode: 'both', lookAheadWeeks: 4 }, feed: null,
@@ -162,15 +160,6 @@ describe('synced-ago (ROK-1595 S1 divider)', () => {
     const conn = (id: number, lastSyncedAt: string | null, read = true): CalendarsOverview['connections'][number] => ({
         id, provider: 'google', accountLabel: null, status: 'active', lastSyncedAt, errorCode: null,
         read: { enabled: read, calendarIds: [] }, write: { enabled: false, target: 'dedicated' },
-    });
-
-    it('labels minutes, hours and days, and "just now" under a minute', () => {
-        expect(syncedAgoLabel('2026-10-12T09:00:00.000Z', NOW)).toBe('Synced 4 min ago');
-        expect(syncedAgoLabel('2026-10-12T09:04:00.000Z', NOW)).toBe('Synced just now');
-        expect(syncedAgoLabel('2026-10-12T07:00:00.000Z', NOW)).toBe('Synced 2 hours ago');
-        expect(syncedAgoLabel('2026-10-11T09:00:00.000Z', NOW)).toBe('Synced 1 day ago');
-        expect(syncedAgoLabel(null, NOW)).toBeNull();
-        expect(syncedAgoLabel('not a date', NOW)).toBeNull();
     });
 
     it('takes the newest sync among READING connections; null when off or never synced', () => {

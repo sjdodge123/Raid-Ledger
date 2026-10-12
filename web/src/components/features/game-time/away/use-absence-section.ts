@@ -13,7 +13,9 @@ import { useCalendarsOverview } from '../../../../hooks/use-calendar-sync';
 import { useToday } from './use-today';
 import { toast } from '../../../../lib/toast';
 import { quickRange, spanDays, spanLabel } from '../absence-dates.utils';
-import { awayRangeLabel, newestReadSync, syncedAgoLabel, upcomingAbsences, type AwayPick } from './away-panel.helpers';
+import { awayRangeLabel, newestReadSync, upcomingAbsences, type AwayPick } from './away-panel.helpers';
+import { READ_COPY } from '../../calendar-sync/calendar-sync.copy';
+import { syncedAgo } from '../../../../lib/synced-ago';
 import { toAwayRows, type AwayRowItem } from './away-row.types';
 
 /** The add form's draft. */
@@ -115,7 +117,7 @@ function useCalendarSyncedText(): string | null {
         const timer = setInterval(() => setNow(Date.now()), 60_000);
         return () => clearInterval(timer);
     }, [newest]);
-    return syncedAgoLabel(newest, now);
+    return newest ? READ_COPY.synced(syncedAgo(newest, now)) : null;
 }
 
 /** Form + mutations + upcoming rows for the away panel. */

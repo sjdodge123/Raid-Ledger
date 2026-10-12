@@ -220,5 +220,8 @@ describe('useAbsenceSection — synced calendar rows (ROK-1595 S1)', () => {
         m.overview = overviewWith({ lastSyncedAt: fourMinAgo, read: { enabled: false, calendarIds: [] } });
         rerender();
         expect(result.current.syncedText).toBeNull();
+        m.overview = overviewWith({ lastSyncedAt: new Date(THURSDAY.getTime() - 2 * 3_600_000).toISOString() });
+        rerender();
+        expect(result.current.syncedText).toBe('Synced 2 h ago');
     });
 });

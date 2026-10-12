@@ -6,7 +6,8 @@
 import { describe, it, expect } from 'vitest';
 import { providerCalendarsFixture, readConnectionFixture } from '../../../test/mocks/calendar-sync-handlers';
 import { checkedIds, modeOf, pickable, readChangeFor, readGranted, switchesOf } from './use-read-rules';
-import { readStatusLine, syncedAgo } from './calendar-sync.copy';
+import { readStatusLine } from './calendar-sync.copy';
+import { syncedAgo } from '../../../lib/synced-ago';
 
 describe('switchesOf / modeOf', () => {
     it.each([
