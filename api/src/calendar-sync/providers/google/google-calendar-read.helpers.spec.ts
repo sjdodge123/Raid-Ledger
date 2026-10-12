@@ -275,14 +275,27 @@ describe('mapGoogleReadError (plan D5)', () => {
     expect((slow as RateLimitError).retryAfterMs).toBe(120_000);
   });
 
-  it('404, 410 and a plain 403 → NotFound (calendar skipped); 5xx → transient', () => {
+  it('403 quotaExceeded / dailyLimitExceeded → RateLimitError ≥ 60 s, never NotFound', () => {
+    const quota = thrown(res(403, fixture('events-403-quota'), '5'));
+    expect(quota).toBeInstanceOf(RateLimitError);
+    expect((quota as RateLimitError).retryAfterMs).toBe(60_000);
+    const daily = thrown(
+      res(403, { error: { errors: [{ reason: 'dailyLimitExceeded' }] } }),
+    );
+    expect(daily).toBeInstanceOf(RateLimitError);
+  });
+
+  it('only 404 / 410 → NotFound (calendar pruned); other 403s and 5xx → transient', () => {
     expect(thrown(res(404, fixture('error-404')))).toBeInstanceOf(
       NotFoundError,
     );
     expect(thrown(res(410, null))).toBeInstanceOf(NotFoundError);
     expect(thrown(res(403, { error: { code: 403 } }))).toBeInstanceOf(
-      NotFoundError,
+      TransientError,
     );
+    expect(
+      thrown(res(403, fixture('events-403-domain-policy'))),
+    ).toBeInstanceOf(TransientError);
     expect(thrown(res(503, null))).toBeInstanceOf(TransientError);
   });
 });

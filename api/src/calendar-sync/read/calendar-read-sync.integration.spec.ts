@@ -253,17 +253,20 @@ async function connection(id: number) {
 // ── Cron ────────────────────────────────────────────────────────
 
 describe('CalendarReadCron', () => {
-  it('queues only read-enabled, syncable, due connections (error past its backoff included)', async () => {
+  it('queues only read-enabled, active, due connections (a backed-off failure included once due)', async () => {
     const now = new Date();
     const past = new Date(now.getTime() - HOUR);
     const future = new Date(now.getTime() + HOUR);
     const due = await member();
-    const errorDue = await member({ status: 'error', nextSyncAt: past });
+    const errorDue = await member({
+      lastErrorCode: 'provider_error',
+      nextSyncAt: past,
+    });
     await member({ readEnabled: false });
     await member({ status: 'needs_reconnect', nextSyncAt: past });
     await member({ status: 'disconnecting', nextSyncAt: past });
     await member({ nextSyncAt: future });
-    await member({ status: 'error', nextSyncAt: future });
+    await member({ lastErrorCode: 'provider_error', nextSyncAt: future });
 
     const picked = await cron.run(now);
 

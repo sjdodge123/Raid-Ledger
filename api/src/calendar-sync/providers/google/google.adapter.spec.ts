@@ -411,6 +411,9 @@ describe('GoogleCalendarAdapter read (ROK-1593 A3)', () => {
     [401, 'events-401', ProviderAuthError],
     [403, 'events-403-scope', ProviderAuthError],
     [403, 'events-403-rate', RateLimitError],
+    // A quota 403 is a rate limit; a policy 403 fails the run (no prune).
+    [403, 'events-403-quota', RateLimitError],
+    [403, 'events-403-domain-policy', TransientError],
     [500, 'error-404', TransientError],
   ])(
     '%i %s → %p; String(err) carries no token or calendar id',

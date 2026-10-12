@@ -51,7 +51,6 @@ const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
 const MINUTE_MS = 60 * 1000;
 
-
 /** `${gridDayOfWeek}:${localHour}` — the key both templates and busy rows share. */
 export function busyKey(gridDayOfWeek: number, hour: number): string {
   return `${gridDayOfWeek}:${hour}`;
