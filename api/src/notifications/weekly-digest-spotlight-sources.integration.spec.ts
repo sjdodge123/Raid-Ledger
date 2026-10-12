@@ -464,6 +464,8 @@ describe('AC10 — inactive members and guests contribute to nothing (integratio
   it('A1: rollups of inactive members raise no game', async () => {
     const { t } = ctx;
     const game = await seedGame(t, 'Gone Game');
+    // One active player: any single inactive one would make the 2-player bar.
+    await seedRollup(t, await seedUser(t, 'alice'), game, 1, 10);
     for (const id of await seedGone(t)) await seedRollup(t, id, game, 1, 10);
     await expect(fetchRisingGameCandidate(t.db)).resolves.toBeNull();
   });
