@@ -109,3 +109,26 @@ describe('calendar-busy.utils', () => {
         expect(busyHourCount([busy(2, 20, 22)], [...slots, { dayOfWeek: 2, hour: 21, status: 'blocked' }], 2, EVENING)).toBe(1);
     });
 });
+
+describe('busyRunsForDays — overlapping ranges (review #3)', () => {
+    it('unions overlapping and adjacent ranges on a day into one run', () => {
+        const runs = busyRunsForDays([busy(2, 20, 22), busy(2, 20, 21), busy(2, 22, 23), busy(4, 18, 19)], [2, 4], EVENING);
+        expect(runs).toEqual([
+            { dayOfWeek: 2, startIndex: 3, endIndex: 6, provider: 'google' },
+            { dayOfWeek: 4, startIndex: 1, endIndex: 2, provider: 'google' },
+        ]);
+    });
+
+    it('keeps a gap between two ranges as two runs', () => {
+        expect(busyRunsForDays([busy(2, 17, 18), busy(2, 20, 21)], [2], EVENING)).toEqual([
+            { dayOfWeek: 2, startIndex: 0, endIndex: 1, provider: 'google' },
+            { dayOfWeek: 2, startIndex: 3, endIndex: 4, provider: 'google' },
+        ]);
+    });
+
+    it('draws two calendars busy at the same hour as ONE band, not a stacked pair', () => {
+        render(<CalendarBusyLayer busy={[busy(2, 20, 21), busy(2, 20, 22)]} gridDims={DIMS} hours={EVENING} />);
+        expect(screen.getAllByText('Busy · Google Calendar')).toHaveLength(1);
+        expect(screen.getByTestId('calendar-busy-band-2-20').style.height).toBe(`${2 * 40 - 2}px`);
+    });
+});

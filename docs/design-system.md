@@ -929,7 +929,7 @@ Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/sr
 
 **Own-calendar busy band (NP-1, ROK-1595 S2).** On the viewer's OWN game-time grid (phone `DayBlockEditor`,
 desktop `GameTimeGrid` via `GridOverlayLayer`), each `calendarBusy` range from their synced calendar is a
-**band**, not an edge: `CalendarBusyLayer.tsx` draws a translucent `bg-busy/25` fill with a `border-l-4
+**band**, not an edge: `CalendarBusyLayer.tsx` draws a translucent `bg-busy/20` fill (spec F-1) with a `border-l-4
 border-busy` edge and the label "Busy · Google Calendar" (`busyBandLabel`, provider name from
 `PROVIDER_CALENDAR_NAME`). It sits above the slot blocks (`z-[9]`, over `SlotBlockLayer`'s `z-[8]`) so it reads
 over a free block, and is `pointer-events-none` throughout so editing is untouched. Positions come from the

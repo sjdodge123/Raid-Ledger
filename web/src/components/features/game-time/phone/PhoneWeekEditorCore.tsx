@@ -77,7 +77,8 @@ export interface PhoneWeekEditorCoreProps {
     awayDays?: AwayDays;
     /**
      * The viewer's synced-calendar busy hours (ROK-1595 S2): a band on the day
-     * and " · Nh busy" in the header. Ignored in group mode.
+     * and " · Nh busy" in the header (those hours leave "Nh free").
+     * Never drawn or counted in group mode (§4.16 narrowed to group views).
      */
     calendarBusy?: readonly GameTimeCalendarBusy[] | undefined;
 }
@@ -103,13 +104,17 @@ export function PhoneWeekEditorCore({
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
     const strip = { groupBands: useGroupBands(group?.cells), groupVotes: useGroupVotes(group?.slotMarks) };
-    const editorProps = { slots, onChange, dims, inspectorPlacement, presets, calendarBusy };
+    // §4.16 (narrowed): the viewer's own busy band never paints in a group view.
+    const ownBusy = group ? undefined : calendarBusy;
+    const editorProps = { slots, onChange, dims, inspectorPlacement, presets, calendarBusy: ownBusy };
+    // S2: "3h free · 1h busy" — busy hours inside a slot are not free time.
+    const busyHours = busyHourCount(ownBusy ?? [], slots, pager.day, hours);
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
             <DayPager
-                day={pager.day} freeHours={pager.freeHours} subtitle={group?.subtitle}
-                busyHours={group ? 0 : busyHourCount(calendarBusy ?? [], slots, pager.day, hours)} canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
+                day={pager.day} freeHours={Math.max(0, pager.freeHours - busyHours)} subtitle={group?.subtitle}
+                busyHours={busyHours} canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
             {gridHeader}
             {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0` — see the
                 day slot's comment below. */}

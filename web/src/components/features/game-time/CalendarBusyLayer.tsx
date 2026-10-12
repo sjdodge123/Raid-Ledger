@@ -46,7 +46,7 @@ function BusyBand({ run, gridDims, col, startHour }: {
     const label = busyBandLabel(run.provider);
     return (
         <div
-            className="pointer-events-none absolute overflow-hidden rounded-sm border-l-4 border-busy bg-busy/25 px-1.5 py-0.5"
+            className="pointer-events-none absolute overflow-hidden rounded-sm border-l-4 border-busy bg-busy/20 px-1.5 py-0.5"
             style={{
                 top: gridDims.headerHeight + run.startIndex * gridDims.rowHeight + 1,
                 left: gridDims.colStartLeft + col * (gridDims.colWidth + 1),

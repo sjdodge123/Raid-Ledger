@@ -38,17 +38,26 @@ function contiguousRuns(indices: number[]): Array<[number, number]> {
     return runs;
 }
 
-/** Every visible run of every busy range on the given days. */
+/**
+ * Every visible busy run on the given days. Ranges are unioned per day first
+ * (two picked calendars both busy at 8 PM, or 7–9 PM next to 9–10 PM), so an
+ * overlap draws ONE band — no duplicate key, no stacked darker fill. A day's
+ * runs take the provider of its first range (one provider ships today).
+ */
 export function busyRunsForDays(
     busy: readonly GameTimeCalendarBusy[], days: readonly number[], hours: readonly number[],
 ): BusyRun[] {
-    return busy.flatMap((b) => {
-        if (!days.includes(b.dayOfWeek)) return [];
-        const indices = rangeHours(b).map((h) => hours.indexOf(h)).filter((i) => i >= 0).sort((x, y) => x - y);
-        return contiguousRuns(indices).map(([startIndex, endIndex]) => ({
-            dayOfWeek: b.dayOfWeek, startIndex, endIndex, provider: b.provider,
-        }));
-    });
+    const byDay = new Map<number, { provider: CalendarProvider; indices: Set<number> }>();
+    for (const b of busy) {
+        if (!days.includes(b.dayOfWeek)) continue;
+        const entry = byDay.get(b.dayOfWeek) ?? { provider: b.provider, indices: new Set<number>() };
+        for (const i of rangeHours(b).map((h) => hours.indexOf(h))) if (i >= 0) entry.indices.add(i);
+        byDay.set(b.dayOfWeek, entry);
+    }
+    return [...byDay].flatMap(([dayOfWeek, { provider, indices }]) =>
+        contiguousRuns([...indices].sort((x, y) => x - y)).map(([startIndex, endIndex]) => ({
+            dayOfWeek, startIndex, endIndex, provider,
+        })));
 }
 
 /**
