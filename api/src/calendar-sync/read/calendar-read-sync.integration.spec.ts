@@ -3,16 +3,20 @@
  * provider: `CalendarReadCron` → read queue → `CalendarReadProcessor` →
  * `calendar_busy_blocks` → busy hours / the scheduling heatmap.
  *
- * The read worker is paused for the file; each test runs the queued job
- * through `CalendarReadProcessor.process` so the outcome is deterministic.
- * The one exception (auth failure → `attemptsMade` 1) needs the real worker,
- * so it resumes it for that test only and waits for the job to fail.
+ * The app's read and write WORKERS are closed for the file (the app is per
+ * file). Pausing is not enough: `worker.pause()` leaves an in-flight
+ * blocking fetch that grabs the next job added, and a `queue.pause()` flag
+ * is wiped when the per-test truncate obliterates the queues — either way a
+ * job ran concurrently with the test (seen on the fleet). Each test runs the
+ * queued job through `CalendarReadProcessor.process` instead. The one
+ * exception (auth failure → `attemptsMade` 1) needs real BullMQ attempt
+ * accounting, so it starts a dedicated `Worker` over the same processor.
  *
  * Fixture times are TOMORROW (UTC) so they sit inside the read window
  * (local midnight today → +N days) whatever the wall clock says.
  */
 import { getQueueToken } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
+import { Worker, type Queue } from 'bullmq';
 import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -62,7 +66,6 @@ let settings: SettingsService;
 let readQueue: Queue<CalendarReadJobData>;
 let writeQueue: Queue;
 let readProcessor: CalendarReadProcessor;
-let writeProcessor: CalendarWriteProcessor;
 let cron: CalendarReadCron;
 let seq = 0;
 
@@ -75,15 +78,9 @@ beforeAll(async () => {
   );
   writeQueue = testApp.app.get<Queue>(getQueueToken(CALENDAR_WRITE_QUEUE));
   readProcessor = testApp.app.get(CalendarReadProcessor);
-  writeProcessor = testApp.app.get(CalendarWriteProcessor);
   cron = testApp.app.get(CalendarReadCron);
-  await readProcessor.worker.pause(true);
-  await writeProcessor.worker.pause(true);
-});
-
-afterAll(() => {
-  void readProcessor.worker.resume();
-  void writeProcessor.worker.resume();
+  await readProcessor.worker.close(true);
+  await testApp.app.get(CalendarWriteProcessor).worker.close(true);
 });
 
 /** Empty the shared Fake: copies, calendars, seeded busy, recorded calls. */
@@ -355,14 +352,21 @@ describe('kill switch and provider failures', () => {
     fake.failNextFetch(new ProviderAuthError('invalid_grant'));
     const jobId = readSyncJobId(m.connectionId);
     await enqueue(m.connectionId);
-    void readProcessor.worker.resume();
+    const worker = new Worker<CalendarReadJobData>(
+      CALENDAR_READ_QUEUE,
+      (job) => readProcessor.process(job),
+      {
+        connection: readQueue.opts.connection,
+        ...(readQueue.opts.prefix ? { prefix: readQueue.opts.prefix } : {}),
+      },
+    );
     try {
       await waitFor(async () => {
         const job = await readQueue.getJob(jobId);
         expect(await job?.getState()).toBe('failed');
       }, 15_000);
     } finally {
-      await readProcessor.worker.pause(true);
+      await worker.close();
     }
 
     const job = await readQueue.getJob(jobId);
@@ -550,6 +554,7 @@ describe('disconnect and stored shape', () => {
 
     expect(res.status).toBeLessThan(300);
     const job = await writeQueue.getJob(disconnectJobId(m.connectionId));
+    // Not yet run: still pending (no worker is running in this file).
     expect(await job?.getState()).toMatch(/^(waiting|delayed|prioritized)$/);
     expect((await connection(m.connectionId)).status).toBe('disconnecting');
     expect(await blocksOf(m.connectionId)).toEqual([]);
@@ -585,7 +590,9 @@ describe('disconnect and stored shape', () => {
       sql`SELECT * FROM calendar_busy_blocks`,
     );
     expect(rows).toHaveLength(2);
-    const allowed = /^\d+$|^\d{4}-\d{2}-\d{2}$/;
+    // Raw SQL leaves values unparsed: ids, `YYYY-MM-DD` dates, UTC instants.
+    const allowed =
+      /^\d+$|^\d{4}-\d{2}-\d{2}$|^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(\.\d+)?\+00$/;
     const offenders = rows.flatMap((row) =>
       Object.entries(row).filter(([, v]) => {
         if (v === null || v instanceof Date) return false;
