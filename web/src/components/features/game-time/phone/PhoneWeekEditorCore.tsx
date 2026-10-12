@@ -8,6 +8,7 @@ import { DayPager } from './DayPager';
 import { GroupDayView } from './GroupDayView';
 import { OutsideHoursHint } from './GroupDayMarks';
 import { WeekStrip } from './WeekStrip';
+import type { AwayDays } from './away-days';
 import { groupBandShares, type GroupBandShare } from './group-day.utils';
 import { usePhoneWeekEditor } from './use-phone-week-editor';
 
@@ -69,10 +70,10 @@ export interface PhoneWeekEditorCoreProps {
      */
     group?: GroupOverlay;
     /**
-     * Days of the week the viewer is away (ROK-1585) — `awayDaysOfWeek` from
+     * Days of the week the viewer is away (ROK-1585) — `awaySourcesOfWeek` from
      * `away-days.ts`. Forwarded to `WeekStrip`, which ignores it in group mode.
      */
-    awayDays?: ReadonlySet<number>;
+    awayDays?: AwayDays;
 }
 
 /**
