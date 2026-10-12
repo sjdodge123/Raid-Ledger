@@ -175,22 +175,44 @@ export function plainMarkdown(line: string): string {
   return out;
 }
 
-/** Plain-text `line` cut to `cap` with `…`, never splitting an escape pair. */
-function clipLine(line: string, cap: number): string {
+/**
+ * The longest prefix of `text` at most `max` UTF-16 units long that ends on a
+ * code-point boundary, so a surrogate pair (an emoji in a name) is never cut.
+ */
+function sliceCodePoints(text: string, max: number): string {
+  let out = '';
+  for (const cp of text) {
+    if (out.length + cp.length > max) break;
+    out += cp;
+  }
+  return out;
+}
+
+/**
+ * Plain-text `line` cut to `cap` with `…`, never splitting an escape pair or
+ * a surrogate pair.
+ */
+export function clipLine(line: string, cap: number): string {
   if (line.length <= cap) return line;
   const plain = plainMarkdown(line);
   if (plain.length <= cap) return plain;
-  let cut = plain.slice(0, cap - 1);
+  let cut = sliceCodePoints(plain, cap - 1);
   const trailing = /\\+$/.exec(cut)?.[0].length ?? 0;
   if (trailing % 2 === 1) cut = cut.slice(0, -1);
   return `${cut}…`;
 }
 
 /**
- * Fit lines under `cap`; if even the first line alone does not fit with its
- * tail (only a pathological name can do that), return that line alone —
- * clipped as plain text when it is itself too long — rather than an empty
- * value, which Discord rejects.
+ * Fit lines under `cap` via `fitSectionLines`, which drops lines from the end
+ * and, for a section with a tail ("+N more" / see-all link), ends with the
+ * tail ALONE (`shown = 0`) before giving up. So the clip below runs only when
+ * nothing fits — not even the tail by itself — or the section has no tail and
+ * its first line is too long (only a pathological name or URL can do that).
+ * Then the first line is returned alone, clipped as plain text, rather than
+ * an empty value, which Discord rejects. Recap consequence: with its
+ * `total = 1` tail, a recap URL of roughly 143–173 chars renders the tail
+ * alone (`+1 more · [past events ↗](…)`, no counts); a longer one falls
+ * through to the counts line alone.
  */
 export function fitOrClip(
   lines: string[],
