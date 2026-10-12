@@ -75,12 +75,6 @@ export const GameTimeEventBlockSchema = z.object({
     )
     .optional(),
   signupCount: z.number().optional(),
-  /**
-   * ROK-1595 G-1: set when we hold a synced copy of this sign-up on the
-   * viewer's own calendar (ROK-1596 write sync), naming the provider ("also
-   * on Google Calendar"). Absent = no copy. Own view only.
-   */
-  calendarCopy: CalendarProviderSchema.optional(),
 });
 export type GameTimeEventBlock = z.infer<typeof GameTimeEventBlockSchema>;
 

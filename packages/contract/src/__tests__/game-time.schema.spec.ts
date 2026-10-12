@@ -10,7 +10,6 @@ import { describe, it, expect } from 'vitest';
 import {
     GameTimeAbsenceInputSchema,
     GameTimeAbsenceSchema,
-    GameTimeEventBlockSchema,
     GameTimeResponseSchema,
 } from '../game-time.schema.js';
 
@@ -207,39 +206,6 @@ describe('GameTimeAbsenceSchema.source/provider (ROK-1593 PR-B)', () => {
     it('rejects an unknown provider', () => {
         expect(absenceIssues({ ...legacy, source: 'calendar', provider: 'outlook' })).toEqual([
             { code: 'invalid_value', path: ['provider'] },
-        ]);
-    });
-});
-
-describe('GameTimeEventBlockSchema.calendarCopy (ROK-1595 G-1)', () => {
-    const legacy = {
-        eventId: 12,
-        title: 'Karazhan',
-        gameSlug: null,
-        gameName: null,
-        coverUrl: null,
-        signupId: 34,
-        confirmationStatus: 'confirmed',
-        dayOfWeek: 4,
-        startHour: 20,
-        endHour: 23,
-    };
-
-    it('still parses a pre-1595 event block without calendarCopy', () => {
-        const parsed = GameTimeEventBlockSchema.parse(legacy);
-        expect(parsed).toEqual(legacy);
-        expect(parsed).not.toHaveProperty('calendarCopy');
-    });
-
-    it('parses a block that names the calendar holding our copy', () => {
-        const input = { ...legacy, calendarCopy: 'google' };
-        expect(GameTimeEventBlockSchema.parse(input)).toEqual(input);
-    });
-
-    it('rejects an unknown provider', () => {
-        const result = GameTimeEventBlockSchema.safeParse({ ...legacy, calendarCopy: 'outlook' });
-        expect(result.success ? [] : result.error.issues.map(({ code, path }) => ({ code, path }))).toEqual([
-            { code: 'invalid_value', path: ['calendarCopy'] },
         ]);
     });
 });
