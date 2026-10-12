@@ -524,6 +524,10 @@ function maxDigest(): DigestSectionsV2 {
 }
 
 describe('weekly digest v2 — per-field caps and the 6000 budget', () => {
+  it('gives Coming up an 850 cap so 5 linked events and 2 polls fit', () => {
+    expect(DIGEST_FIELD_CAPS.upcoming).toBe(850);
+  });
+
   it('keeps every field under its §4.1 cap and the embed within 6000', () => {
     const data = build(maxDigest());
     const caps: Record<string, number> = {

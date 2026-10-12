@@ -18,7 +18,7 @@ export const DIGEST_EMBED_LIMITS = {
 } as const;
 
 /**
- * Per-field value caps (ROK-1771 spec §4.1). Their sum (3400) plus names and
+ * Per-field value caps (ROK-1771 spec §4.1). Their sum (3550) plus names and
  * chrome keeps a full digest well inside the 6000 total.
  */
 export const DIGEST_FIELD_CAPS = {
@@ -26,7 +26,8 @@ export const DIGEST_FIELD_CAPS = {
   playing: 700,
   recap: 200,
   milestones: 500,
-  upcoming: 700,
+  // 850, not 700 (Lead, L6): 5 linked events + 2 polls + the tail all fit.
+  upcoming: 850,
   lfg: 500,
   bestPrice: 400,
 } as const;
