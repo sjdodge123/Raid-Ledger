@@ -14,7 +14,10 @@ import {
   assembleDigestSections,
   buildDigestSources,
 } from './weekly-digest-data.helpers';
-import { buildWeeklyDigestEmbed } from './weekly-digest-embed.helpers';
+import {
+  buildWeeklyDigestEmbed,
+  digestSectionsV2FromV1,
+} from './weekly-digest-embed.helpers';
 import {
   DIGEST_DEDUP_TTL_SECONDS,
   DIGEST_JOB_NAME,
@@ -152,7 +155,7 @@ export class WeeklyDigestService {
       this.settingsService.getBranding().catch(() => null),
     ]);
     return buildWeeklyDigestEmbed({
-      sections,
+      sections: digestSectionsV2FromV1(sections),
       clientUrl,
       communityName: branding?.communityName ?? null,
       windowEnd: now,
