@@ -7,6 +7,7 @@
  *   no retry (the user re-grants from the page).
  * - Other auth → `needs_reconnect`, `auth`, no retry.
  * - Rate limit → retry no sooner than `retryAfterMs`.
+ * - 400-class refusal / missing OAuth client → `provider_error`, no retry.
  * - Anything else → `provider_error`, retry; after the final attempt the
  *   connection goes `error` with `next_sync_at` backing off 1 h → 2 h → 4 h
  *   → capped 6 h (stateless: the gap since the last success picks the step).
@@ -19,6 +20,7 @@ import { and, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
+  CalendarProviderError,
   ProviderAuthError,
   RateLimitError,
 } from '../providers/calendar-provider.errors';
@@ -53,7 +55,11 @@ export function classifyReadFailure(err: unknown): ReadFailureDecision {
       retryAfterMs: err.retryAfterMs,
     };
   }
-  return { code: 'provider_error', retry: true };
+  // A permanent refusal or a removed OAuth client cannot heal by retrying.
+  const permanent =
+    err instanceof CalendarProviderError &&
+    (err.code === 'rejected' || err.code === 'not_configured');
+  return { code: 'provider_error', retry: !permanent };
 }
 
 /** 1 h on the first exhausted failure, then doubling, capped at 6 h. */
@@ -77,7 +83,7 @@ function failureFields(
     return { readAccessGranted: false, readEnabled: false };
   }
   if (decision.code === 'auth') return { status: 'needs_reconnect' };
-  if (!opts.finalAttempt) return null;
+  if (decision.retry && !opts.finalAttempt) return null;
   const backoff = readErrorBackoffMs(conn, opts.now);
   return {
     status: 'error',
