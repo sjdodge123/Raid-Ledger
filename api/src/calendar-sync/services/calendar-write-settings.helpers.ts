@@ -1,9 +1,10 @@
 /**
  * ROK-1596 D6: `PATCH /users/me/calendars/:id` — the send-my-events settings.
  *
- * This story accepts the `write` block only; a `read` key answers 400
- * `read_not_available` until ROK-1593. Validation runs BEFORE anything is
- * persisted:
+ * ROK-1593 §1.4: a `read` block is delegated to
+ * `calendar-read-settings.helpers.ts` (it replaced 1596's 400
+ * `read_not_available`); it is validated before the write half persists and
+ * applied after it. Validation runs BEFORE anything is persisted:
  * - write on while another of the user's connections already sends → 409
  *   `write_already_enabled` (Q15 / F6: one destination at a time);
  * - target `primary` on a grant without `calendar.events` → 409
@@ -21,11 +22,7 @@
  * emptied dedicated calendar is kept, F9). The 409 codes travel in the error
  * MESSAGE — the web client reads only `message` (handover W1).
  */
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { and, eq, ne, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
@@ -40,6 +37,12 @@ import {
 } from '../write/calendar-write.enqueue.helpers';
 import { decryptCalendarCredentials } from './calendar-credentials.helpers';
 import { affectedEventIds } from './calendar-oauth-intent.helpers';
+import {
+  applyReadUpdate,
+  loadOwnCalendarConnection,
+  planReadUpdate,
+  type CalendarReadSettingsDeps,
+} from './calendar-read-settings.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
@@ -47,6 +50,8 @@ type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
 
 export interface CalendarWriteSettingsDeps extends CalendarWriteEnqueueDeps {
   db: Db;
+  /** ROK-1593: the `read` block's dependencies. */
+  read: CalendarReadSettingsDeps;
 }
 
 export interface CalendarWriteSettingsInput {
@@ -69,18 +74,20 @@ interface WriteBody {
   target?: CalendarWriteTarget | undefined;
 }
 
-/** Validate, persist and enqueue one write-settings change. */
+/** Validate, persist and enqueue one connection-settings change. */
 export async function updateCalendarWriteSettings(
   deps: CalendarWriteSettingsDeps,
   input: CalendarWriteSettingsInput,
 ): Promise<void> {
-  const write = parseWriteBody(input.body);
-  if (!write) {
-    await loadOwnConnection(deps.db, input); // still 404 a foreign id
-    return;
+  const { read, write } = parseSettingsBody(input.body);
+  // Still 404s a foreign id when the body is empty.
+  const own = await loadOwnConnection(deps.db, input);
+  const readPlan = read ? planReadUpdate(own, read) : null;
+  if (write) {
+    const { row, next } = await persistWrite(deps.db, input, write);
+    await enqueueFollowUp(deps, row, next);
   }
-  const { row, next } = await persistWrite(deps.db, input, write);
-  await enqueueFollowUp(deps, row, next);
+  if (readPlan) await applyReadUpdate(deps.read, readPlan);
 }
 
 /**
@@ -125,30 +132,16 @@ function resolveNextWrite(row: ConnectionRow, write: WriteBody): NextWrite {
   return next;
 }
 
-/** 400 on a malformed body or any `read` key; the `write` block or null. */
-function parseWriteBody(body: unknown) {
+/** 400 on a malformed body; the `read` / `write` blocks, either absent. */
+function parseSettingsBody(body: unknown) {
   const parsed = UpdateCalendarConnectionSchema.safeParse(body ?? {});
   if (!parsed.success) throw new BadRequestException('invalid_body');
-  if (parsed.data.read !== undefined) {
-    throw new BadRequestException('read_not_available');
-  }
-  return parsed.data.write ?? null;
+  return { read: parsed.data.read ?? null, write: parsed.data.write ?? null };
 }
 
-/** The caller's own row; anything else (incl. another user's id) → 404. */
-async function loadOwnConnection(
-  db: Db | Tx,
-  input: CalendarWriteSettingsInput,
-): Promise<ConnectionRow> {
-  const t = schema.calendarConnections;
-  const [row] = await db
-    .select()
-    .from(t)
-    .where(and(eq(t.id, input.connectionId), eq(t.userId, input.userId)))
-    .limit(1);
-  if (!row || row.status === 'disconnecting') throw new NotFoundException();
-  return row;
-}
+/** The caller's own row (shared with the read half); else 404. */
+const loadOwnConnection = (db: Db | Tx, input: CalendarWriteSettingsInput) =>
+  loadOwnCalendarConnection(db, input);
 
 /** Q15 / F6: write on at most one of a user's connections. */
 async function assertNoOtherWriteConnection(

@@ -9,6 +9,7 @@ import { and, asc, eq, ne } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CALENDAR_LOOK_AHEAD_WEEKS,
+  CalendarReadModeSchema,
   type CalendarConnection,
   type CalendarConnectionStatus,
   type CalendarProvider,
@@ -18,6 +19,7 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
+import { CALENDAR_READ_MODE_KEY } from '../read/calendar-busy-query.helpers';
 import type { SettingsCore } from '../../settings/settings-bot.helpers';
 import {
   getCalendarProviderConfig,
@@ -38,6 +40,7 @@ const CONNECTION_COLUMNS = {
   lastErrorCode: calendarConnections.lastErrorCode,
   readEnabled: calendarConnections.readEnabled,
   readCalendarIds: calendarConnections.readCalendarIds,
+  readAccessGranted: calendarConnections.readAccessGranted,
   writeEnabled: calendarConnections.writeEnabled,
   writeTarget: calendarConnections.writeTarget,
 };
@@ -51,13 +54,31 @@ export interface CalendarConnectionRow {
   lastErrorCode: string | null;
   readEnabled: boolean;
   readCalendarIds: string[];
+  /** ROK-1593 §3.6: drives `readAccess`; absent → field omitted. */
+  readAccessGranted?: boolean;
   writeEnabled: boolean;
   writeTarget: string;
 }
 
-/** Read settings are fixed until ROK-1593 makes the mode a user choice. */
+/** The switch-off shape and the fallback when no mode is stored. */
 function defaultReadSettings(): CalendarReadSettings {
   return { mode: 'both', lookAheadWeeks: CALENDAR_LOOK_AHEAD_WEEKS };
+}
+
+/** ROK-1593 D12: the user's `calendar_read_mode`, default `both`. */
+async function loadReadSettings(
+  db: Db,
+  userId: number,
+): Promise<CalendarReadSettings> {
+  const prefs = schema.userPreferences;
+  const [pref] = await db
+    .select({ value: prefs.value })
+    .from(prefs)
+    .where(and(eq(prefs.userId, userId), eq(prefs.key, CALENDAR_READ_MODE_KEY)))
+    .limit(1);
+  const mode = CalendarReadModeSchema.safeParse(pref?.value);
+  if (!mode.success) return defaultReadSettings();
+  return { mode: mode.data, lookAheadWeeks: CALENDAR_LOOK_AHEAD_WEEKS };
 }
 
 /** The switch-off overview: nothing available, nothing listed. */
@@ -123,6 +144,9 @@ export function toCalendarConnection(
       enabled: row.writeEnabled,
       target: row.writeTarget as CalendarWriteTarget,
     },
+    ...(row.readAccessGranted !== undefined && {
+      readAccess: row.readAccessGranted ? 'granted' : 'missing',
+    }),
   };
 }
 
@@ -151,15 +175,16 @@ export async function buildCalendarsOverview(
   userId: number,
 ): Promise<CalendarsOverview> {
   if (!(await getCalendarSyncEnabled(svc))) return buildDisabledOverview();
-  const [providers, connections] = await Promise.all([
+  const [providers, connections, readSettings] = await Promise.all([
     getProviderAvailability(svc, true),
     listUserConnections(db, userId),
+    loadReadSettings(db, userId),
   ]);
   return {
     enabled: true,
     providers,
     connections,
-    readSettings: defaultReadSettings(),
+    readSettings,
     feed: null,
   };
 }

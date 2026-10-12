@@ -2,6 +2,7 @@
  * ROK-1592 L15: `POST /admin/test/calendar/seed-connection` — DEMO_MODE only.
  * ROK-1596 W3: `writeEnabled?`/`writeTarget?` on it, and `POST seed-link`
  * (a link row + a Fake copy for one user × event, without the queue).
+ * ROK-1593 §3.6: `POST seed-busy` (busy blocks for one connection).
  *
  * Creates a `google` connection with a `demo-fake:` subject and Fake
  * credentials, owned by the caller (or `userId`), so smoke specs and UI test
@@ -39,6 +40,10 @@ import {
   SeedLinkSchema,
   seedDemoLink,
 } from './calendar-demo-seed-link.helpers';
+import {
+  SeedBusySchema,
+  seedDemoBusy,
+} from './calendar-demo-seed-busy.helpers';
 
 const SeedConnectionSchema = z
   .object({
@@ -98,6 +103,14 @@ export class CalendarDemoSeedController {
     const input = parseDemoBody(SeedLinkSchema, body ?? {});
     const clientUrl = await this.settings.getClientUrl();
     return seedDemoLink(this.db, fake, clientUrl, input);
+  }
+
+  /** Foreign busy blocks for one connection (+ the Fake), no queue. */
+  @Post('seed-busy')
+  async seedBusy(@Body() body: unknown): Promise<{ inserted: number }> {
+    const fake = await this.assertDemoMode();
+    const input = parseDemoBody(SeedBusySchema, body ?? {});
+    return seedDemoBusy(this.db, fake, input);
   }
 
   /** Request-time gate, same checks as `DemoTestCoreController`. */

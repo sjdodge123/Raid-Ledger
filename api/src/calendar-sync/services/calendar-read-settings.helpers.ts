@@ -1,0 +1,179 @@
+/**
+ * ROK-1593 §1.4 / §3.6: the read half of the user's Calendar Sync routes.
+ *
+ * - `PATCH /users/me/calendars/:id` `read` block (replaces 1596's 400
+ *   `read_not_available`): `enabled: true` on a grant without the read scopes
+ *   → 409 `read_scopes` (the web starts OAuth with `intent=read`); the
+ *   dedicated (Raid Ledger) calendar is stripped from `calendarIds` (R1); a
+ *   connection left reading gets a sync enqueued.
+ * - `GET :id/calendars` — the read picker, dedicated calendar flagged
+ *   `isRaidLedger` (the adapters leave that flag to the caller).
+ * - `POST :id/sync` — manual sync, 429 `sync_throttled` within 5 min of the
+ *   last one (D-R6, no new column).
+ * - `PUT settings` — `user_preferences.calendar_read_mode` (D12). The busy
+ *   query reads the mode at request time, so the cached hours are dropped.
+ *   The `derive` job is PR-B: there is nothing to enqueue in PR-A.
+ *
+ * Error codes travel in the exception MESSAGE (the web reads `message`).
+ */
+import {
+  BadRequestException,
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  NotFoundException,
+} from '@nestjs/common';
+import { and, eq, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import {
+  CalendarReadSettingsSchema,
+  type ProviderCalendar,
+  type UpdateCalendarConnection,
+} from '@raid-ledger/contract';
+import * as schema from '../../drizzle/schema';
+import { CALENDAR_READ_MODE_KEY } from '../read/calendar-busy-query.helpers';
+import {
+  enqueueCalendarReadSync,
+  type CalendarReadEnqueueDeps,
+} from '../read/calendar-read.enqueue.helpers';
+import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
+import { withFreshCredentials } from './calendar-credentials.helpers';
+
+type Db = PostgresJsDatabase<typeof schema>;
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
+type ReadBody = NonNullable<UpdateCalendarConnection['read']>;
+
+/** Manual sync: at most one per connection per 5 minutes (D-R6). */
+export const MANUAL_SYNC_THROTTLE_MS = 5 * 60 * 1000;
+
+export interface CalendarReadSettingsDeps {
+  db: Db;
+  readQueue: CalendarReadEnqueueDeps;
+  /** `GameTimeService.invalidateUserCache` — busy hours are cached. */
+  invalidateUser: (userId: number) => void;
+}
+
+export interface OwnConnectionRef {
+  userId: number;
+  connectionId: number;
+}
+
+/** PUT settings body: the contract's read settings, look-ahead optional. */
+const ReadSettingsBodySchema = CalendarReadSettingsSchema.partial({
+  lookAheadWeeks: true,
+});
+
+/** The caller's own row; anything else (incl. another user's id) → 404. */
+export async function loadOwnCalendarConnection(
+  db: Db | Tx,
+  ref: OwnConnectionRef,
+): Promise<ConnectionRow> {
+  const t = schema.calendarConnections;
+  const [row] = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.id, ref.connectionId), eq(t.userId, ref.userId)))
+    .limit(1);
+  if (!row || row.status === 'disconnecting') throw new NotFoundException();
+  return row;
+}
+
+export interface ReadUpdatePlan {
+  row: ConnectionRow;
+  readEnabled: boolean;
+  readCalendarIds: string[];
+}
+
+/** Validate a PATCH `read` block against the row. Persists nothing. */
+export function planReadUpdate(
+  row: ConnectionRow,
+  read: ReadBody,
+): ReadUpdatePlan {
+  if (read.enabled === true && !row.readAccessGranted) {
+    throw new ConflictException('read_scopes');
+  }
+  const ids = read.calendarIds ?? row.readCalendarIds;
+  const dedicated = row.dedicatedCalendarId;
+  return {
+    row,
+    readEnabled: read.enabled ?? row.readEnabled,
+    readCalendarIds: [...new Set(ids)].filter((id) => id !== dedicated),
+  };
+}
+
+/** Persist a validated plan; a connection left reading gets a sync. */
+export async function applyReadUpdate(
+  deps: CalendarReadSettingsDeps,
+  plan: ReadUpdatePlan,
+): Promise<void> {
+  const { row } = plan;
+  await deps.db
+    .update(schema.calendarConnections)
+    .set({
+      readEnabled: plan.readEnabled,
+      readCalendarIds: plan.readCalendarIds,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.calendarConnections.id, row.id));
+  deps.invalidateUser(row.userId);
+  if (plan.readEnabled) await enqueueCalendarReadSync(deps.readQueue, row.id);
+}
+
+/** `GET :id/calendars`: the picker rows, dedicated flagged `isRaidLedger`. */
+export async function listConnectionCalendars(
+  db: Db,
+  registry: Pick<CalendarProviderRegistry, 'getReadProviderForConnection'>,
+  ref: OwnConnectionRef,
+): Promise<ProviderCalendar[]> {
+  const row = await loadOwnCalendarConnection(db, ref);
+  if (!row.readAccessGranted) throw new ConflictException('read_scopes');
+  const provider = await registry.getReadProviderForConnection(row);
+  if (!provider) throw new NotFoundException();
+  const rows = await withFreshCredentials(db, row, provider, (creds) =>
+    provider.listCalendars(creds),
+  );
+  return rows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    primary: c.primary,
+    writable: c.writable,
+    isRaidLedger: c.isRaidLedger || c.id === row.dedicatedCalendarId,
+  }));
+}
+
+/** `POST :id/sync`: 409 when not reading, 429 inside the throttle window. */
+export async function requestManualReadSync(
+  deps: Pick<CalendarReadSettingsDeps, 'db' | 'readQueue'>,
+  ref: OwnConnectionRef,
+  nowMs: number = Date.now(),
+): Promise<void> {
+  const row = await loadOwnCalendarConnection(deps.db, ref);
+  if (!row.readAccessGranted) throw new ConflictException('read_scopes');
+  if (!row.readEnabled) throw new ConflictException('read_disabled');
+  const last = row.lastSyncedAt?.getTime();
+  if (last !== undefined && nowMs - last < MANUAL_SYNC_THROTTLE_MS) {
+    throw new HttpException('sync_throttled', HttpStatus.TOO_MANY_REQUESTS);
+  }
+  await enqueueCalendarReadSync(deps.readQueue, row.id);
+}
+
+/** `PUT settings`: validate, upsert the read mode, drop cached hours. */
+export async function updateUserReadSettings(
+  deps: Pick<CalendarReadSettingsDeps, 'db' | 'invalidateUser'>,
+  userId: number,
+  body: unknown,
+): Promise<void> {
+  const parsed = ReadSettingsBodySchema.safeParse(body ?? {});
+  if (!parsed.success) throw new BadRequestException('invalid_body');
+  const prefs = schema.userPreferences;
+  await deps.db
+    .insert(prefs)
+    .values({ userId, key: CALENDAR_READ_MODE_KEY, value: parsed.data.mode })
+    .onConflictDoUpdate({
+      target: [prefs.userId, prefs.key],
+      set: { value: sql`excluded.value`, updatedAt: new Date() },
+    });
+  deps.invalidateUser(userId);
+  // PR-B: enqueue `derive` for the user here (synced away days follow mode).
+}
