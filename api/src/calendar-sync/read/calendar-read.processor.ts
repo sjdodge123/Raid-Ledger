@@ -8,7 +8,10 @@
  *
  * PR-B: a `derive` job rebuilds one user's synced away days
  * (`runCalendarDerive`) in its own transaction; a successful sync derives in
- * the sync's transaction (`afterBlocks`).
+ * the sync's transaction (`afterBlocks`). A derive failure there (a DB error
+ * or a lock-order deadlock) is NOT a provider failure (review MINOR-2): it is
+ * tagged `CalendarDeriveError`, never recorded on the connection (no
+ * `provider_error` in the UI), logged, and rethrown for a BullMQ retry.
  */
 import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
@@ -48,6 +51,26 @@ type ReadConnection = typeof schema.calendarConnections.$inferSelect;
 export type ReadJobOutcome = ReadSyncOutcome | 'derived';
 
 const logger = new Logger('CalendarReadProcessor');
+
+/** A throw from the in-sync derive — ours, not the provider's (MINOR-2). */
+export class CalendarDeriveError extends Error {
+  constructor(readonly inner: unknown) {
+    super('calendar away-day derive failed');
+    this.name = 'CalendarDeriveError';
+  }
+}
+
+async function deriveInSync(
+  tx: ReadSyncTx,
+  userId: number,
+  defaultTimezone: string,
+): Promise<void> {
+  try {
+    await runCalendarDerive(tx, userId, { defaultTimezone });
+  } catch (err) {
+    throw new CalendarDeriveError(err);
+  }
+}
 
 /**
  * D11 / Q12: a read sync failed for good — `needs_reconnect`, lost read
@@ -102,9 +125,8 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
       clientUrl: await this.settings.getClientUrl(),
       defaultTimezone,
       stillAllowed: isEnabled,
-      afterBlocks: async (tx: ReadSyncTx, userId: number) => {
-        await runCalendarDerive(tx, userId, { defaultTimezone });
-      },
+      afterBlocks: (tx: ReadSyncTx, userId: number) =>
+        deriveInSync(tx, userId, defaultTimezone),
       onCommitted: (userId: number) =>
         this.gameTime.invalidateUserCache(userId),
     };
@@ -134,6 +156,11 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     conn: ReadConnection,
     err: unknown,
   ): Promise<never> {
+    if (err instanceof CalendarDeriveError) {
+      const name = err.inner instanceof Error ? err.inner.name : 'unknown';
+      logger.error(`away-day derive failed in sync ${conn.id} (${name})`);
+      throw err.inner;
+    }
     const decision = await recordReadSyncFailure(this.db, conn, err, {
       finalAttempt: isFinalAttempt(job),
     });

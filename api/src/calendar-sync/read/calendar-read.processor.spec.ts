@@ -190,3 +190,27 @@ describe('CalendarReadProcessor derive (ROK-1593 B3b)', () => {
     });
   });
 });
+
+describe('CalendarReadProcessor in-sync derive failure (review MINOR-2)', () => {
+  beforeEach(() => {
+    runSync.mockReset();
+    runDerive.mockReset();
+  });
+
+  it.each([0, 3])(
+    'attempt %p: rethrows the derive error, records nothing on the connection',
+    async (attemptsMade) => {
+      const { processor, sets, queue } = setup();
+      const dbErr = new Error('deadlock detected');
+      runDerive.mockRejectedValue(dbErr);
+      runSync.mockImplementation(async (deps) => {
+        await deps.afterBlocks?.(TX as never, CONN.userId);
+        return 'synced';
+      });
+      await expect(processor.process(job(attemptsMade))).rejects.toBe(dbErr);
+      // No provider_error / backoff on the connection, no broken-conn derive.
+      expect(sets).toEqual([]);
+      expect(queue.add).not.toHaveBeenCalled();
+    },
+  );
+});
