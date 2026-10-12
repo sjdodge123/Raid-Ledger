@@ -228,6 +228,7 @@ describe('GET /users/me/calendars — row mapping', () => {
           calendarIds: ['primary', 'team@group.calendar.google.com'],
         },
         write: { enabled: true, target: 'primary' },
+        readAccess: 'missing',
       },
       {
         id: second.id,
@@ -238,6 +239,7 @@ describe('GET /users/me/calendars — row mapping', () => {
         errorCode: 'auth_revoked',
         read: { enabled: false, calendarIds: [] },
         write: { enabled: false, target: 'dedicated' },
+        readAccess: 'missing',
       },
     ]);
     expect(() => CalendarsOverviewSchema.parse(res.body)).not.toThrow();

@@ -161,15 +161,22 @@ describe('PATCH /users/me/calendars/:id — validation (D6)', () => {
     expect((await rowOf(id))?.writeEnabled).toBe(false);
   });
 
-  it('a `read` key → 400 read_not_available, nothing persisted', async () => {
+  // ROK-1593 §1.4: the intentional contract change of 1596's 400
+  // `read_not_available` — the `read` block is accepted now and validated
+  // before the write half persists.
+  it('read on without the read grant → 409 read_scopes, nothing persisted', async () => {
     const id = await seedConnection();
+    expect((await rowOf(id))?.readAccessGranted).toBe(false);
     const res = await patch(id, {
       read: { enabled: true },
       write: { enabled: true },
     });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toBe('read_not_available');
-    expect((await rowOf(id))?.writeEnabled).toBe(false);
+    expect(res.status).toBe(409);
+    expect(res.body.message).toBe('read_scopes');
+    expect(await rowOf(id)).toMatchObject({
+      writeEnabled: false,
+      readEnabled: false,
+    });
   });
 
   it('kill switch off → 404 (guard)', async () => {
