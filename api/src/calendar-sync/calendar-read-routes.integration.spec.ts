@@ -1,12 +1,13 @@
 /**
  * ROK-1593 A8 (§1.4 / §3.6): the read routes against Postgres + the Fake
  * provider (`demo-fake:` rows, DEMO_MODE double gate). The read worker is
- * paused so a queued sync is run explicitly through
- * `CalendarReadProcessor.process` — deterministic.
+ * paused, but a fetch already in flight can still take the first job added,
+ * so enqueues are asserted on `queue.add` (not on a job state) and the sync
+ * the throttle needs is run explicitly through `CalendarReadProcessor`.
  */
 import { eq } from 'drizzle-orm';
 import { getQueueToken } from '@nestjs/bullmq';
-import type { Job, Queue } from 'bullmq';
+import { Job, type Queue } from 'bullmq';
 import { CalendarsOverviewSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -37,6 +38,10 @@ let settings: SettingsService;
 let processor: CalendarReadProcessor;
 let queue: Queue;
 let user: { userId: number; token: string };
+let addSpy: jest.SpyInstance<
+  ReturnType<Queue['add']>,
+  Parameters<Queue['add']>
+>;
 let seq = 0;
 
 beforeAll(async () => {
@@ -55,11 +60,13 @@ beforeEach(async () => {
   await settings.setDemoMode(true);
   await setCalendarSyncEnabled(settings, true);
   await queue.drain(true); // ids repeat across truncations
+  addSpy = jest.spyOn(queue, 'add');
   seq += 1;
   user = await member('me');
 });
 
 afterEach(async () => {
+  addSpy.mockRestore();
   await queue.drain(true);
   await setCalendarSyncEnabled(settings, false);
   await settings.setDemoMode(false);
@@ -124,6 +131,12 @@ function patch(id: number, body: object, token = user.token) {
 
 function putSettings(body: object, token = user.token) {
   return testApp.request.put(`${ROUTE}/settings`).set(auth(token)).send(body);
+}
+
+/** How many sync adds this test made for the connection. */
+function syncAdds(id: number): number {
+  const jobId = readSyncJobId(id);
+  return addSpy.mock.calls.filter(([, , opts]) => opts?.jobId === jobId).length;
 }
 
 async function jobState(id: number): Promise<string | null> {
@@ -216,7 +229,7 @@ describe('PATCH /users/me/calendars/:id — read block (replaces 1596 400)', () 
     const row = await rowOf(id);
     expect(row?.readCalendarIds).toEqual(['primary', 'work']);
     expect(row?.readEnabled).toBe(true);
-    expect(await jobState(id)).toBe('waiting');
+    expect(syncAdds(id)).toBe(1);
   });
 
   it('read off → persisted, no sync queued', async () => {
@@ -233,18 +246,16 @@ describe('POST /users/me/calendars/:id/sync', () => {
   it('twice within 5 minutes → 202 then 429 sync_throttled, one job only', async () => {
     const id = await seedConnection({ granted: true, readEnabled: true });
     expect((await postSync(id)).status).toBe(202);
-    const job = (await queue.getJob(
-      readSyncJobId(id),
-    )) as Job<CalendarReadJobData>;
-    expect(job?.id).toBe(readSyncJobId(id));
+    expect(syncAdds(id)).toBe(1);
+    const data: CalendarReadJobData = { kind: 'sync', connectionId: id };
+    const job = new Job(queue, 'sync', data);
     expect(await processor.process(job)).toBe('synced');
-    await queue.remove(readSyncJobId(id));
     expect((await rowOf(id))?.lastSyncedAt).not.toBeNull();
 
     const again = await postSync(id);
     expect(again.status).toBe(429);
     expect(again.body.message).toBe('sync_throttled');
-    expect(await jobState(id)).toBeNull();
+    expect(syncAdds(id)).toBe(1);
   });
 
   it('a sync older than 5 minutes is not throttled', async () => {
@@ -255,7 +266,7 @@ describe('POST /users/me/calendars/:id/sync', () => {
       lastSyncedAt,
     });
     expect((await postSync(id)).status).toBe(202);
-    expect(await jobState(id)).toBe('waiting');
+    expect(syncAdds(id)).toBe(1);
   });
 
   it('read off → 409 read_disabled, nothing queued', async () => {
