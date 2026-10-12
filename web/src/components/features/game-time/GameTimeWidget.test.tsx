@@ -26,6 +26,7 @@ function makeEditorData(overrides: Record<string, unknown> = {}) {
         tzLabel: 'EST',
         overrides: [],
         absences: [],
+        calendarBusy: [],
         ...overrides,
     };
 }
@@ -119,6 +120,20 @@ describe('GameTimeWidget — part 1', () => {
 
         expect(screen.getByText('My Game Time')).toBeInTheDocument();
         expect(screen.getByTestId('game-time-grid')).toBeInTheDocument();
+    });
+
+    it('modal draws the viewer\'s own-calendar busy band (ROK-1595 AC 8)', () => {
+        mockEditorData({
+            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            calendarBusy: [{ dayOfWeek: 1, startHour: 20, endHour: 22, provider: 'google' }],
+        });
+
+        renderWidget({ eventStart: '2026-02-09T19:00:00', eventEnd: '2026-02-09T22:00:00' });
+
+        fireEvent.click(screen.getByTestId('game-time-widget'));
+
+        expect(screen.getByTestId('calendar-busy-band-1-20')).toBeInTheDocument();
+        expect(screen.getByText('Busy · Google Calendar')).toBeInTheDocument();
     });
 
     it('modal shows a simple selected highlight for the current event', () => {
