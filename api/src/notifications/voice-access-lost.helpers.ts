@@ -19,7 +19,8 @@ export const VOICE_ACCESS_LOST_SUBTYPE = 'voice_access_lost';
 /** One DM per removal: repeat triggers inside this window are dropped. */
 export const VOICE_ACCESS_DEDUP_TTL_SECONDS = 15 * 60;
 
-export type VoiceAccessLostReason = 'admin_removed' | 'departed' | 'benched';
+/** Only departure emits now; the other removal paths merge into their DM. */
+export type VoiceAccessLostReason = 'departed';
 
 export interface VoiceAccessLostPayload {
   eventId: number;
@@ -126,4 +127,54 @@ export function buildVoiceAccessLostInput(
     message: `You no longer have access to the private voice channel for "${eventTitle}". Sign up for the event again to get your access back.`,
     payload: { eventId, subtype: VOICE_ACCESS_LOST_SUBTYPE },
   };
+}
+
+/**
+ * One-DM rule (ROK-1769): removal paths that ALREADY DM the member (organizer
+ * removal, roster edit to bench, tentative displaced to bench) fold this line
+ * into that DM instead of emitting `VOICE_ACCESS_LOST_EVENT`. Only departure,
+ * which DMs nobody else, sends the standalone voice DM.
+ */
+export const VOICE_ACCESS_LOST_LINE =
+  'You no longer have access to the private voice channel. Sign up for the event again to get it back.';
+
+/** Append the voice line; the subtype relabels the DM button "Sign Up". */
+export function appendVoiceAccessLine(
+  input: CreateNotificationInput,
+): CreateNotificationInput {
+  return {
+    ...input,
+    message: `${input.message}\n\n${VOICE_ACCESS_LOST_LINE}`,
+    payload: { ...input.payload, subtype: VOICE_ACCESS_LOST_SUBTYPE },
+  };
+}
+
+/**
+ * The users (already known to have lost their allow-list place) whose event +
+ * account pass the `loadVoiceAccessTarget` gate. Fails open to "none": a gate
+ * error must never block the removal DM itself.
+ */
+export async function voiceLossUserIds(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  userIds: readonly number[],
+): Promise<Set<number>> {
+  const lost = new Set<number>();
+  try {
+    for (const userId of userIds)
+      if (await loadVoiceAccessTarget(db, eventId, userId)) lost.add(userId);
+  } catch {
+    return new Set();
+  }
+  return lost;
+}
+
+/** Gate + append for a single DM (fails open to the unchanged input). */
+export async function withVoiceAccessLine(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  input: CreateNotificationInput,
+): Promise<CreateNotificationInput> {
+  const lost = await voiceLossUserIds(db, eventId, [input.userId]);
+  return lost.has(input.userId) ? appendVoiceAccessLine(input) : input;
 }

@@ -9,6 +9,8 @@ import type { UpdateRosterDto } from '@raid-ledger/contract';
 import type { Tx } from './signups.service.types';
 import { formatRoleLabel } from './signups-roster.helpers';
 import type { NotificationService } from '../notifications/notification.service';
+import type { CreateNotificationInput } from '../notifications/notification.types';
+import { appendVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
 
 export async function fetchNotificationContext(
   notificationService: NotificationService,
@@ -32,6 +34,8 @@ export async function notifyRoleChanges(
   signupByUserId: Map<number | null, typeof schema.eventSignups.$inferSelect>,
   oldRoleBySignupId: Map<number, string | null>,
   extraPayload: Record<string, string>,
+  /** ROK-1769: benched members who lost private voice — line rides on the DM. */
+  voiceLostUserIds: ReadonlySet<number> = new Set(),
 ): Promise<void> {
   for (const assignment of newAssignments) {
     if (!assignment.userId) continue;
@@ -40,8 +44,7 @@ export async function notifyRoleChanges(
     const oldRole = oldRoleBySignupId.get(signup.id) ?? null;
     const newRole = assignment.slot;
     if (oldRole === newRole || oldRole === null || newRole === null) continue;
-    await sendRoleChangeNotification(
-      notificationService,
+    const input = roleChangeInput(
       assignment.userId,
       eventId,
       eventTitle,
@@ -49,38 +52,41 @@ export async function notifyRoleChanges(
       newRole,
       extraPayload,
     );
+    const lostVoice =
+      newRole === 'bench' && voiceLostUserIds.has(assignment.userId);
+    await notificationService.create(
+      lostVoice ? appendVoiceAccessLine(input) : input,
+    );
   }
 }
 
-async function sendRoleChangeNotification(
-  notificationService: NotificationService,
+function roleChangeInput(
   userId: number,
   eventId: number,
   eventTitle: string,
   oldRole: string,
   newRole: string,
   extraPayload: Record<string, string>,
-): Promise<void> {
+): CreateNotificationInput {
   if (oldRole === 'bench' && newRole !== 'bench') {
-    await notificationService.create({
+    return {
       userId,
       type: 'bench_promoted',
       title: 'Promoted from Bench',
       message: `You've been moved from bench to ${formatRoleLabel(newRole)} for ${eventTitle}`,
       payload: { eventId, ...extraPayload },
-    });
-  } else {
-    const isBenched = newRole === 'bench';
-    await notificationService.create({
-      userId,
-      type: 'roster_reassigned',
-      title: isBenched ? 'Moved to Bench' : 'Role Changed',
-      message: isBenched
-        ? `You've been moved from ${formatRoleLabel(oldRole)} to bench for ${eventTitle}`
-        : `Your role changed from ${formatRoleLabel(oldRole)} to ${formatRoleLabel(newRole)} for ${eventTitle}`,
-      payload: { eventId, oldRole, newRole, ...extraPayload },
-    });
+    };
   }
+  const isBenched = newRole === 'bench';
+  return {
+    userId,
+    type: 'roster_reassigned',
+    title: isBenched ? 'Moved to Bench' : 'Role Changed',
+    message: isBenched
+      ? `You've been moved from ${formatRoleLabel(oldRole)} to bench for ${eventTitle}`
+      : `Your role changed from ${formatRoleLabel(oldRole)} to ${formatRoleLabel(newRole)} for ${eventTitle}`,
+    payload: { eventId, oldRole, newRole, ...extraPayload },
+  };
 }
 
 export async function notifyNewAssignments(

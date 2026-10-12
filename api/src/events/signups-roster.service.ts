@@ -138,22 +138,20 @@ export class SignupsRosterService {
       signupId: signup.id,
       action: 'admin_removed',
     });
-    if (signup.userId)
-      voiceH.emitIfVoiceAccessLost(this.eventEmitter, {
-        eventId,
-        userId: signup.userId,
-        reason: 'admin_removed',
-        status: signup.status,
-        role: assignment?.role ?? null,
-      });
-    if (signup.userId)
+    if (signup.userId) {
+      // ROK-1769 one-DM rule: lost private voice rides on the removal DM.
+      const lost = voiceH.hadVoiceAccess(signup.status, assignment?.role)
+        ? await voiceH.voiceLossUserIds(this.db, eventId, [signup.userId])
+        : new Set<number>();
       await rosterOpsH.notifyRemovedUser(
         this.notificationService,
         signup.userId,
         eventId,
         event.title,
         (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
+        lost.has(signup.userId),
       );
+    }
     if (assignment?.role && assignment.role !== 'bench') {
       await this.scheduleBackfill(
         eventId,
@@ -182,6 +180,12 @@ export class SignupsRosterService {
     const { event, signupByUserId, oldRoleBySignupId, reconfirmedUserIds } =
       await this.executeRosterUpdate(eventId, userId, isAdmin, dto);
     this.emit(SIGNUP_EVENTS.UPDATED, { eventId, action: 'roster_updated' });
+    const voiceLost = await this.benchedVoiceLoss(
+      eventId,
+      dto,
+      signupByUserId,
+      oldRoleBySignupId,
+    );
     rosterOpsH.fireRosterNotifications(
       this.notificationService,
       eventId,
@@ -191,8 +195,8 @@ export class SignupsRosterService {
       oldRoleBySignupId,
       (eId) => notifH.fetchNotificationContext(this.notificationService, eId),
       this.logger,
+      voiceLost,
     );
-    this.emitBenchedVoiceLoss(eventId, dto, signupByUserId, oldRoleBySignupId);
     return getRosterWithAssignments(eventId).then(async (roster) => {
       // ROK-1269: emit signup_reconfirmed per attendee whose pending status
       // got flipped to confirmed by this roster update. Done after tx commit.
@@ -201,24 +205,22 @@ export class SignupsRosterService {
     });
   }
 
-  /** ROK-1769: members a roster edit benched lose private voice access. */
-  private emitBenchedVoiceLoss(
+  /**
+   * ROK-1769 one-DM rule: benched members who lost private voice get the
+   * voice line on their "Moved to Bench" DM, not a second DM.
+   */
+  private benchedVoiceLoss(
     eventId: number,
     dto: UpdateRosterDto,
     signupByUserId: Parameters<typeof voiceH.findNewlyBenchedUserIds>[1],
     oldRoleBySignupId: Map<number, string | null>,
-  ): void {
+  ): Promise<Set<number>> {
     const benched = voiceH.findNewlyBenchedUserIds(
       dto.assignments,
       signupByUserId,
       oldRoleBySignupId,
     );
-    for (const userId of benched)
-      this.eventEmitter.emit(voiceH.VOICE_ACCESS_LOST_EVENT, {
-        eventId,
-        userId,
-        reason: 'benched',
-      } satisfies voiceH.VoiceAccessLostPayload);
+    return voiceH.voiceLossUserIds(this.db, eventId, benched);
   }
 
   /** Run roster replacement inside a transaction for atomicity (ROK-824). */

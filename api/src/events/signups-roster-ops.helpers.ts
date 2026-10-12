@@ -11,6 +11,7 @@ import type { UpdateRosterDto } from '@raid-ledger/contract';
 import * as cancelH from './signups-cancel.helpers';
 import * as notifH from './signups-notification.helpers';
 import type { NotificationService } from '../notifications/notification.service';
+import { appendVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
 
 type Tx = PostgresJsDatabase<typeof schema>;
 type Logger = {
@@ -90,15 +91,20 @@ export async function notifyRemovedUser(
   eventId: number,
   eventTitle: string,
   fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
+  lostPrivateVoice = false,
 ) {
   const extraPayload = await fetchNotificationCtx(eventId);
-  await notificationService.create({
+  const input = {
     userId,
-    type: 'slot_vacated',
+    type: 'slot_vacated' as const,
     title: 'Removed from Event',
     message: `You were removed from ${eventTitle}`,
     payload: { eventId, ...extraPayload },
-  });
+  };
+  // ROK-1769 one-DM rule: the voice line rides on this DM.
+  await notificationService.create(
+    lostPrivateVoice ? appendVoiceAccessLine(input) : input,
+  );
 }
 
 /** `.catch` handler: warns `msg` with the failure's reason appended. */
@@ -111,12 +117,15 @@ function logWarnReason(logger: Logger, msg: string) {
 
 /** Fire both roster notification fan-outs; each failure is warned on its own. */
 function sendRosterNotifications(
-  args: Parameters<typeof notifH.notifyRoleChanges>,
+  args: Parameters<typeof notifH.notifyNewAssignments>,
   logger: Logger,
+  voiceLostUserIds: ReadonlySet<number>,
 ): void {
   const reassign = 'Failed to send roster reassign notifications';
   const assign = 'Failed to send roster assignment notifications';
-  notifH.notifyRoleChanges(...args).catch(logWarnReason(logger, reassign));
+  notifH
+    .notifyRoleChanges(...args, voiceLostUserIds)
+    .catch(logWarnReason(logger, reassign));
   notifH.notifyNewAssignments(...args).catch(logWarnReason(logger, assign));
 }
 
@@ -129,6 +138,7 @@ export function fireRosterNotifications(
   oldRoleBySignupId: Map<number, string | null>,
   fetchNotificationCtx: (eventId: number) => Promise<Record<string, string>>,
   logger: Logger,
+  voiceLostUserIds: ReadonlySet<number> = new Set(),
 ) {
   fetchNotificationCtx(eventId)
     .then((extra) =>
@@ -143,6 +153,7 @@ export function fireRosterNotifications(
           extra,
         ],
         logger,
+        voiceLostUserIds,
       ),
     )
     .catch(logWarnReason(logger, 'Failed to fetch notification context'));

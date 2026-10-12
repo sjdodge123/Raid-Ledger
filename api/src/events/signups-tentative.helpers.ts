@@ -16,6 +16,7 @@ import type {
 import { findOldestTentativeOccupant } from './signups-allocation.helpers';
 import { findNextPosition } from './signups-roster-query.helpers';
 import type { NotificationService } from '../notifications/notification.service';
+import { withVoiceAccessLine } from '../notifications/voice-access-lost.helpers';
 
 export async function reslotTentativeTx(
   tx: Tx,
@@ -285,11 +286,17 @@ export async function sendDisplacedNotification(
   const eventTitle = event?.title ?? `Event #${eventId}`;
   const action = DISPLACED_ACTION[p.destination](rearrangedToRole);
   const extraPayload = await fetchNotificationCtx(eventId);
-  await notificationService.create({
+  const input = {
     userId: signup.userId,
-    type: 'tentative_displaced',
+    type: 'tentative_displaced' as const,
     title: 'Roster update',
     message: `A confirmed player took your ${role} slot in "${eventTitle}". You've been ${action}.`,
     payload: { eventId, ...extraPayload },
-  });
+  };
+  // ROK-1769 one-DM rule: benched off a private-voice roster → voice line.
+  await notificationService.create(
+    p.destination === 'bench'
+      ? await withVoiceAccessLine(db, eventId, input)
+      : input,
+  );
 }
