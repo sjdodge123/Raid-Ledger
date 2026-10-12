@@ -2584,3 +2584,10 @@ same day (#1278, #1279, #1280).
 
 - **[med]** `api/src/auth/refresh/refresh-token.service.ts:199-245` (`consumeRow` → `mintChild`) — pre-existing (ROK-1353): the child insert does not check whether the family was revoked meanwhile, so a `revokeFamily` that runs while a mint is in flight leaves a live child (fleet run 2c53b4959397: child c3f261ab stayed unrevoked after the family revoke). Wrapping consume → insert → parent update in one transaction does NOT fix it on its own: under READ COMMITTED the revoke's UPDATE snapshot cannot see the uncommitted child, and a long transaction would hold the parent row lock across any stall. Not fixed in the ROK-1754 review pass (scope guard).
   Suggested: insert the child with `INSERT … SELECT … WHERE NOT EXISTS (SELECT 1 FROM refresh_tokens WHERE family_id = $f AND revoked_at IS NOT NULL)` and treat 0 rows as a 401, plus an integration case that revokes between consume and insert.
+
+### 2026-10-12 — feat/rok-1593-calendar-read-sync (surfaced during code review)
+
+- **med** `api/src/calendar-sync/providers/google/google-write.helpers.ts:212-214` (`assertWriteOk`) — pre-existing ROK-1596 behaviour: a Google 403 whose reason is a quota/daily-limit reason (`quotaExceeded`, `dailyLimitExceeded`) is not in the write map's rate-limit set, so it falls through to `ProviderAuthError(reason)` and the write side flips the connection to `needs_reconnect` — the user is told to reconnect for what is only a quota hit. The ROK-1593 read path already maps these to `RateLimitError` (`google-calendar-read.helpers.ts` `QUOTA_REASONS`).
+  Suggested: map quota reasons to `RateLimitError` in the write map too (share `QUOTA_REASONS`), with a write-helper unit case.
+- **low** `api/src/drizzle/schema/calendar-busy-blocks.ts:42-48` — `calendar_busy_blocks.ends_at` has no index of its own (it is only the trailing column of `calendar_busy_blocks_user_range_idx`, led by `user_id`), so `pruneEndedBusyBlocks` (`read/calendar-read-purge.helpers.ts`, every 15 min from the read cron) scans the whole table.
+  Suggested: add an index on `ends_at` in a follow-up migration.
