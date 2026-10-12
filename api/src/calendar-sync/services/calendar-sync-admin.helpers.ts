@@ -140,9 +140,10 @@ const logger = new Logger('CalendarSyncAdmin');
 /**
  * The switch is already saved when the effects run, so a purge/enqueue
  * failure (e.g. Redis down) must not turn the admin's save into a 500 for a
- * setting that DID change. Logged + sent to Sentry instead: while off, the
- * busy query ignores blocks anyway; the next enable (or the read cron)
- * re-enqueues the syncs.
+ * setting that DID change. Logged at error level + sent to Sentry instead.
+ * Recovery: while off, the busy query ignores blocks and the read cron
+ * deletes any synced absence still stored every tick (PR-B review MAJOR-1);
+ * the next enable (or the read cron) re-enqueues the syncs.
  */
 async function applyKillSwitchEffectsSafely(
   effects: KillSwitchEffects,
@@ -152,9 +153,8 @@ async function applyKillSwitchEffectsSafely(
     await applyKillSwitchEffects(effects, enabled);
   } catch (err) {
     const code = err instanceof Error ? err.name : 'unknown';
-    logger.error(
-      `calendar sync kill-switch effects failed (enabled=${enabled}): ${code}`,
-    );
+    const step = enabled ? 'sync enqueue' : 'purge (cron self-heals)';
+    logger.error(`calendar sync kill-switch ${step} failed: ${code}`);
     Sentry.captureException(err);
   }
 }

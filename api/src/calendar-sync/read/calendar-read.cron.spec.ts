@@ -6,6 +6,7 @@ import { PgDialect } from 'drizzle-orm/pg-core';
 import type { Queue } from 'bullmq';
 import type { CronJobService } from '../../cron-jobs/cron-job.service';
 import type { SettingsService } from '../../settings/settings.service';
+import type { GameTimeService } from '../../users/game-time.service';
 import {
   CalendarReadCron,
   READ_CRON_LIMIT,
@@ -20,8 +21,17 @@ import {
 const NOW = new Date('2026-10-11T12:00:00Z');
 const MIN = 60_000;
 
-function recordingDb(dueIds: number[]) {
+const strayRows = [{ userId: 9 }, { userId: 9 }, { userId: 11 }];
+
+function recordingDb(dueIds: number[], staleUsers: number[] = []) {
   const calls = { limit: [] as number[], sets: [] as unknown[], deletes: 0 };
+  const distinct = {
+    from: () => distinct,
+    innerJoin: () => distinct,
+    where: () => distinct,
+    orderBy: () => distinct,
+    limit: () => Promise.resolve(staleUsers.map((userId) => ({ userId }))),
+  };
   const chain = {
     from: () => chain,
     where: () => chain,
@@ -33,6 +43,7 @@ function recordingDb(dueIds: number[]) {
   };
   const db = {
     select: () => chain,
+    selectDistinct: () => distinct,
     update: () => ({
       set: (v: unknown) => {
         calls.sets.push(v);
@@ -43,7 +54,7 @@ function recordingDb(dueIds: number[]) {
       where: () => ({
         returning: () => {
           calls.deletes += 1;
-          return Promise.resolve([]);
+          return Promise.resolve(calls.deletes === 3 ? strayRows : []);
         },
       }),
     }),
@@ -51,8 +62,12 @@ function recordingDb(dueIds: number[]) {
   return { db, calls };
 }
 
-function makeCron(dueIds: number[], enabled = true) {
-  const { db, calls } = recordingDb(dueIds);
+function makeCron(dueIds: number[], enabled = true, staleUsers: number[] = []) {
+  const { db, calls } = recordingDb(dueIds, staleUsers);
+  const invalidated: number[] = [];
+  const gameTime = {
+    invalidateUserCache: (u: number) => invalidated.push(u),
+  };
   const added: string[] = [];
   const queue = {
     getJob: () => Promise.resolve(undefined),
@@ -68,8 +83,9 @@ function makeCron(dueIds: number[], enabled = true) {
     settings as unknown as SettingsService,
     {} as CronJobService,
     queue as unknown as Queue,
+    gameTime as unknown as GameTimeService,
   );
-  return { cron, calls, added };
+  return { cron, calls, added, invalidated };
 }
 
 describe('dueReadConnectionFilter', () => {
@@ -103,13 +119,22 @@ describe('CalendarReadCron.run', () => {
     expect(added).toEqual(['cal-read-4', 'cal-read-7']);
   });
 
-  it('kill switch off → nothing selected or queued; both prunes still run', async () => {
-    const { cron, calls, added } = makeCron([4], false);
+  it('kill switch off → nothing selected or queued; prunes + stray-absence purge run', async () => {
+    const { cron, calls, added, invalidated } = makeCron([4], false, [5]);
     await expect(cron.run(NOW)).resolves.toEqual([]);
     expect(calls.limit).toEqual([]);
     expect(added).toEqual([]);
-    // Ended busy blocks + (PR-B) stale ignored days.
+    // Ended busy blocks + stale ignored days + (MAJOR-1) synced absences.
+    expect(calls.deletes).toBe(3);
+    expect(invalidated).toEqual([9, 11]);
+  });
+
+  it('kill switch on → a derive per user with stale synced absences (MAJOR-2)', async () => {
+    const { cron, added, calls, invalidated } = makeCron([4], true, [5, 8]);
+    await cron.run(NOW, () => 0.5);
+    expect(added).toEqual(['cal-derive-5', 'cal-derive-8', 'cal-read-4']);
     expect(calls.deletes).toBe(2);
+    expect(invalidated).toEqual([]);
   });
 
   it('prunes blocks ended more than 24 h ago (before any window start)', () => {

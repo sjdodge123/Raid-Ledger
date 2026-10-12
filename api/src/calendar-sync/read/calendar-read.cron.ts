@@ -8,6 +8,11 @@
  * a successful sync re-stamps it anyway). Also prunes ended busy blocks and
  * (PR-B) ignored days older than UTC yesterday — both run even while the
  * kill switch is off.
+ *
+ * PR-B self-heal (review MAJOR-1/2, `calendar-away-heal.helpers.ts`): while
+ * the switch is off each tick deletes any synced absence still stored (a
+ * failed or raced admin purge); while it is on each tick queues a derive for
+ * users whose synced absences point at a connection that stopped counting.
  */
 import { Inject, Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
@@ -20,7 +25,13 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { getCalendarSyncEnabled } from '../../settings/settings-calendar-sync.helpers';
 import { SettingsService } from '../../settings/settings.service';
+import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
+import {
+  enqueueDerivesBestEffort,
+  findUsersWithStaleCalendarAbsences,
+  purgeStrayCalendarAbsences,
+} from './calendar-away-heal.helpers';
 import {
   READ_SYNCABLE_STATUSES,
   enqueueCalendarReadSyncs,
@@ -83,6 +94,7 @@ export class CalendarReadCron {
     private readonly settings: SettingsService,
     private readonly cronJobService: CronJobService,
     @InjectQueue(CALENDAR_READ_QUEUE) private readonly queue: Queue,
+    private readonly gameTime: GameTimeService,
   ) {}
 
   @Cron('*/15 * * * *', { name: READ_CRON_NAME })
@@ -96,7 +108,12 @@ export class CalendarReadCron {
   async run(now = new Date(), random = Math.random): Promise<number[]> {
     await pruneEndedBusyBlocks(this.db, now);
     await pruneStaleIgnoredDays(this.db, now);
-    if (!(await getCalendarSyncEnabled(this.settings))) return [];
+    if (!(await getCalendarSyncEnabled(this.settings))) {
+      await this.purgeStrayAbsences();
+      return [];
+    }
+    const stale = await findUsersWithStaleCalendarAbsences(this.db);
+    await enqueueDerivesBestEffort(this.queue, stale, 'stale connection');
     const ids = await findDueReadConnections(this.db, now);
     await leaseReadConnections(this.db, ids, now, random);
     const deps = {
@@ -105,5 +122,11 @@ export class CalendarReadCron {
     };
     await enqueueCalendarReadSyncs(deps, ids);
     return ids;
+  }
+
+  /** Switch off: synced away days must not count (D10 / Q12). */
+  private async purgeStrayAbsences(): Promise<void> {
+    const users = await purgeStrayCalendarAbsences(this.db);
+    users.forEach((u) => this.gameTime.invalidateUserCache(u));
   }
 }

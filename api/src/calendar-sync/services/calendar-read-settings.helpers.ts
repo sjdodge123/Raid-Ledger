@@ -43,6 +43,7 @@ import {
   enqueueCalendarReadSync,
   type CalendarReadEnqueueDeps,
 } from '../read/calendar-read.enqueue.helpers';
+import { enqueueDerivesBestEffort } from '../read/calendar-away-heal.helpers';
 import type { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { withFreshCredentials } from './calendar-credentials.helpers';
 
@@ -118,7 +119,11 @@ export function planReadUpdate(
   };
 }
 
-/** Persist a validated plan; a connection left reading gets a sync. */
+/**
+ * Persist a validated plan; a connection left reading gets a sync. Turning
+ * read off queues a derive (review MAJOR-2): the connection's blocks stop
+ * counting, so its synced away days must go too (Q12).
+ */
 export async function applyReadUpdate(
   deps: CalendarReadSettingsDeps,
   plan: ReadUpdatePlan,
@@ -134,6 +139,9 @@ export async function applyReadUpdate(
     .where(eq(schema.calendarConnections.id, row.id));
   deps.invalidateUser(row.userId);
   if (plan.readEnabled) await enqueueCalendarReadSync(deps.readQueue, row.id);
+  else if (row.readEnabled) {
+    await enqueueDerivesBestEffort(deps.readQueue.queue, [row.userId], 'read off');
+  }
 }
 
 /** `GET :id/calendars`: the picker rows, dedicated flagged `isRaidLedger`. */
