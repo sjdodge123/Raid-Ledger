@@ -174,12 +174,7 @@ export function spotlightField(
 ): APIEmbedField | null {
   if (!pick) return null;
   const lines = spotlightLines(pick, links);
-  const value = fitOrClip(
-    lines,
-    lines.length,
-    null,
-    DIGEST_FIELD_CAPS.spotlight,
-  );
+  const value = fitOrClip(lines, 0, null, DIGEST_FIELD_CAPS.spotlight);
   if (value === '') return null;
   return { name: spotlightFieldName(pick.kind), value, inline: false };
 }
