@@ -8,11 +8,11 @@
  * There is no any-discount fallback; an empty result hides the section.
  *
  * Privacy (AC10): only wishlists of active members (not deactivated, banned
- * or kicked) who have not opted out (`show_activity = false`) count, so an
- * opted-out or departed member contributes to neither the count nor whether
- * a game qualifies at all.
+ * or kicked) who were seen in the guild (no OAuth guests) and have not opted
+ * out (`show_activity = false`) count, so an opted-out or departed member or
+ * a guest contributes to neither the count nor whether a game qualifies.
  */
-import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { bestPriceCondition } from '../igdb/igdb-discover-deals.helpers';
@@ -78,12 +78,16 @@ export function shapeBestPriceRows(
 const wishlisterCount = () =>
   sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
 
-/** Drizzle twin of `ACTIVE_MEMBER_SQL_AND` + the digest opt-out rule. */
+/**
+ * Drizzle twin of `ACTIVE_MEMBER_SQL_AND` + `GUILD_MEMBER_SEEN` (no OAuth
+ * guests) + the digest opt-out rule (AC10).
+ */
 const countedWishlister = () =>
   and(
     activeUsersFilter(),
     isNull(schema.users.bannedAt),
     isNull(schema.users.kickedAt),
+    isNotNull(schema.users.guildMemberSeenAt),
     SHOWS_ACTIVITY_SQL('game_interests.user_id'),
   );
 

@@ -345,6 +345,39 @@ describe('A4 Common Ground result (ROK-1771 L3, integration)', () => {
   });
 });
 
+describe('A4 Common Ground runner-up fall-through (ROK-1771, integration)', () => {
+  const ctx = useApp();
+
+  it('names the next visible game when the top runner-up is hidden', async () => {
+    const { t, creatorId } = ctx;
+    const [win, second, third] = [
+      await seedGame(t, 'Deep Rock Galactic'),
+      await seedGame(t, 'Valheim'),
+      await seedGame(t, 'Satisfactory'),
+    ];
+    const voters = await Promise.all(
+      ['f1', 'f2', 'f3', 'f4', 'f5', 'f6'].map((tag) => seedUser(t, tag)),
+    );
+    const lineupId = await seedDecidedLineup(t, creatorId, win, {
+      decidedAgo: DAY,
+    });
+    await seedVotes(t, lineupId, win, voters.slice(0, 3));
+    await seedVotes(t, lineupId, second, voters.slice(3, 5));
+    await seedVotes(t, lineupId, third, voters.slice(5));
+    await t.db
+      .update(schema.games)
+      .set({ hidden: true })
+      .where(eq(schema.games.id, second));
+    const c = await fetchCommonGroundCandidate(t.db);
+    expect(c?.runnerUp).toEqual({
+      gameId: third,
+      name: 'Satisfactory',
+      votes: 1,
+    });
+    expect(JSON.stringify(c)).not.toContain('Valheim');
+  });
+});
+
 describe('A5 marathon (ROK-1771 L3, integration)', () => {
   const ctx = useApp();
 

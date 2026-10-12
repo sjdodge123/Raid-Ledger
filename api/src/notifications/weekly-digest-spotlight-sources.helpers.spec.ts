@@ -3,6 +3,7 @@
  * (shape helpers + the duo's pairing over the reused co-play math).
  */
 import {
+  pickNamedRunnerUp,
   runnerUpVotes,
   shapeBossKills,
   shapeCommonGround,
@@ -88,7 +89,8 @@ describe('Common Ground shaping', () => {
   });
 
   it('builds winner, total and runner-up', () => {
-    expect(shapeCommonGround(lineup, votes, 'Valheim')).toEqual({
+    const named = { gameId: 2, name: 'Valheim', votes: 2 };
+    expect(shapeCommonGround(lineup, votes, named)).toEqual({
       kind: 'common_ground',
       lineupId: 9,
       winner: { gameId: 1, name: 'Deep Rock', votes: 5 },
@@ -98,8 +100,23 @@ describe('Common Ground shaping', () => {
   });
 
   it('returns null without a decided lineup; no runner-up name → null', () => {
-    expect(shapeCommonGround(undefined, votes, 'x')).toBeNull();
+    expect(shapeCommonGround(undefined, votes, null)).toBeNull();
     expect(shapeCommonGround(lineup, votes, null)?.runnerUp).toBeNull();
+  });
+
+  it('falls through a hidden runner-up to the next visible game', () => {
+    // Game 2 (the top runner-up) is hidden, so it has no name.
+    const names = new Map([[3, 'Satisfactory']]);
+    expect(pickNamedRunnerUp(votes, 1, names)).toEqual({
+      gameId: 3,
+      name: 'Satisfactory',
+      votes: 2,
+    });
+  });
+
+  it('names no runner-up when every other game is hidden', () => {
+    expect(pickNamedRunnerUp(votes, 1, new Map())).toBeNull();
+    expect(pickNamedRunnerUp(votes, 1, new Map([[1, 'Deep Rock']]))).toBeNull();
   });
 });
 

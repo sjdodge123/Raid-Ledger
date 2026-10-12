@@ -30,9 +30,11 @@ const WINDOW_START_DATE = sql.raw(
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
 
 /**
- * AC10: a read that NAMES a member also requires they were actually seen in
- * the guild, so a Discord-OAuth guest (poll link / PUG invite) is never
- * named. Alias `u` = users. The one definition — B1, B3 and the duo use it.
+ * AC10: every digest read where a member is named OR contributes to a count
+ * requires they were actually seen in the guild, so a Discord-OAuth guest
+ * (poll link / PUG invite) never appears in, or moves, any section. Alias
+ * `u` = users. The one definition — B1–B4, the A1/A2/A5 spotlight sources
+ * and best price (its Drizzle twin) use it.
  */
 export const GUILD_MEMBER_SEEN = sql.raw(
   ' AND u.guild_member_seen_at IS NOT NULL',
@@ -91,14 +93,14 @@ const RECENT_GAMES_CTE = sql`recent AS (
       SELECT r.game_id FROM game_activity_rollups r
       INNER JOIN users u ON u.id = r.user_id
       WHERE r.period = 'day' AND r.period_start >= ${WINDOW_START_DATE}
-        AND r.total_seconds > 0${ACTIVE_MEMBER}
+        AND r.total_seconds > 0${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
       UNION
       SELECT e.game_id FROM event_signups s
       INNER JOIN events e ON e.id = s.event_id
       INNER JOIN users u ON u.id = s.user_id
       WHERE ${ATTENDED_ENDED} AND e.game_id IS NOT NULL
-        AND upper(e.duration) >= ${WINDOW_START}${ACTIVE_MEMBER}
+        AND upper(e.duration) >= ${WINDOW_START}${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('s.user_id')}
     )`;
 
@@ -130,9 +132,11 @@ export function buildFirstGamesQuery(): SQL {
 
 /**
  * B4 — all-time community seconds per game before the window and through now,
- * opted-out members' rows excluded, bounded to games with rollups this week.
- * Deactivated members' hours stay in: the total is community history and must
- * not shrink (a shrinking total could re-cross a threshold and repeat a line).
+ * opted-out members' and never-in-the-guild guests' rows excluded, bounded
+ * to games with rollups this week. Deactivated members' hours stay in: the
+ * total is community history and must not shrink (a shrinking total could
+ * re-cross a threshold and repeat a line). `guild_member_seen_at` is a stamp
+ * that leaving the guild does not clear, so the guest check keeps them in.
  */
 export function buildHourMilestonesQuery(minSeconds: number): SQL {
   return sql`
@@ -143,7 +147,8 @@ export function buildHourMilestonesQuery(minSeconds: number): SQL {
            SUM(r.total_seconds)::bigint AS seconds_through
     FROM game_activity_rollups r
     INNER JOIN games g ON g.id = r.game_id
-    WHERE r.period = 'day'
+    INNER JOIN users u ON u.id = r.user_id
+    WHERE r.period = 'day'${GUILD_MEMBER_SEEN}
       AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
       AND r.game_id IN (
         SELECT DISTINCT game_id FROM game_activity_rollups

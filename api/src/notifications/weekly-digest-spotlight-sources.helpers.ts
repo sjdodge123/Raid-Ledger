@@ -6,10 +6,11 @@
  *
  * Window: the digest's rolling `[NOW()-7d, NOW())`; "prior" = the 7 days
  * before it. Wherever a person's activity is counted, opted-out members
- * (`show_activity = false`) and members who left/were banned/kicked are
- * excluded at the row level, so they contribute to nothing.
+ * (`show_activity = false`), members who left/were banned/kicked and OAuth
+ * guests never seen in the guild (`GUILD_MEMBER_SEEN`) are excluded at the
+ * row level, so they contribute to nothing (AC10).
  */
-import { and, eq, sql, type SQL } from 'drizzle-orm';
+import { and, inArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { ACTIVE_MEMBER_SQL_AND } from '../users/users-active.helpers';
@@ -19,6 +20,7 @@ import {
   ATTENDED_SIGNUP_SQL,
   SHOWS_ACTIVITY_SQL,
 } from './weekly-digest-recap.helpers';
+import { GUILD_MEMBER_SEEN } from './weekly-digest-milestones-sql.helpers';
 import { SPOTLIGHT_BARS } from './weekly-digest-spotlight.helpers';
 import type {
   BossKillsCandidate,
@@ -27,7 +29,8 @@ import type {
   RisingGameCandidate,
 } from './weekly-digest-spotlight.helpers';
 import {
-  runnerUpVotes,
+  pickNamedRunnerUp,
+  rankedRunnerUps,
   shapeBossKills,
   shapeCommonGround,
   shapeMarathon,
@@ -62,7 +65,7 @@ export function buildRisingGameQuery(): SQL {
       INNER JOIN users u ON u.id = r.user_id
       WHERE r.period = 'day'
         AND r.period_start > (NOW() - INTERVAL '14 days')::date
-        AND r.period_start <= NOW()::date${ACTIVE_MEMBER}
+        AND r.period_start <= NOW()::date${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
     )
     SELECT w.game_id, g.name AS game_name,
@@ -149,7 +152,7 @@ export function buildMarathonQuery(): SQL {
       INNER JOIN users u ON u.id = s.user_id
       WHERE ${ATTENDED_SIGNUP_SQL}
         AND upper(e.duration) >= NOW() - INTERVAL '7 days'
-        AND upper(e.duration) <= NOW()${ACTIVE_MEMBER}
+        AND upper(e.duration) <= NOW()${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('s.user_id')}
     )
     SELECT a.event_id, a.title AS event_title,
@@ -179,13 +182,17 @@ export async function fetchBossKillsCandidate(
   return shapeBossKills(Array.from(rows));
 }
 
-/** Name of one game, or null when it is gone, hidden or banned. */
-async function gameName(db: Db, gameId: number): Promise<string | null> {
-  const [row] = await db
-    .select({ name: schema.games.name })
+/** Names of the given games that still exist and are neither hidden nor banned. */
+async function visibleGameNames(
+  db: Db,
+  gameIds: readonly number[],
+): Promise<Map<number, string>> {
+  if (gameIds.length === 0) return new Map();
+  const rows = await db
+    .select({ id: schema.games.id, name: schema.games.name })
     .from(schema.games)
-    .where(and(eq(schema.games.id, gameId), VISIBILITY_FILTER()));
-  return row?.name ?? null;
+    .where(and(inArray(schema.games.id, [...gameIds]), VISIBILITY_FILTER()));
+  return new Map(rows.map((r) => [r.id, r.name]));
 }
 
 /** A4 — Common Ground result candidate, or null when none was decided. */
@@ -196,9 +203,14 @@ export async function fetchCommonGroundCandidate(
   const lineup = Array.from(rows)[0];
   if (!lineup) return null;
   const votes = await countVotesPerGame(db, lineup.lineup_id);
-  const second = runnerUpVotes(votes, lineup.decided_game_id);
-  const secondName = second ? await gameName(db, second.gameId) : null;
-  return shapeCommonGround(lineup, votes, secondName);
+  const winnerId = lineup.decided_game_id;
+  const others = rankedRunnerUps(votes, winnerId).map((v) => v.gameId);
+  const names = await visibleGameNames(db, others);
+  return shapeCommonGround(
+    lineup,
+    votes,
+    pickNamedRunnerUp(votes, winnerId, names),
+  );
 }
 
 /** A5 — marathon candidate, or null when no attended event ended. */

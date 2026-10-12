@@ -84,27 +84,54 @@ export interface GameVotes {
   voteCount: number;
 }
 
+/** Every voted game other than the winner, best first (ties → lower game id). */
+export function rankedRunnerUps(
+  votes: readonly GameVotes[],
+  winnerId: number,
+): GameVotes[] {
+  return votes
+    .filter((v) => v.gameId !== winnerId && v.voteCount > 0)
+    .sort((a, b) => b.voteCount - a.voteCount || a.gameId - b.gameId);
+}
+
 /** The highest-voted game other than the winner (ties → lower game id). */
 export function runnerUpVotes(
   votes: readonly GameVotes[],
   winnerId: number,
 ): GameVotes | null {
-  const others = votes
-    .filter((v) => v.gameId !== winnerId && v.voteCount > 0)
-    .sort((a, b) => b.voteCount - a.voteCount || a.gameId - b.gameId);
-  return others[0] ?? null;
+  return rankedRunnerUps(votes, winnerId)[0] ?? null;
+}
+
+/** A runner-up already resolved to a visible game's name. */
+export type NamedRunnerUp = NonNullable<CommonGroundCandidate['runnerUp']>;
+
+/**
+ * The best-ranked runner-up whose name is known (`names` holds only visible
+ * games), so a hidden/banned second place falls through to the next one.
+ */
+export function pickNamedRunnerUp(
+  votes: readonly GameVotes[],
+  winnerId: number,
+  names: ReadonlyMap<number, string>,
+): NamedRunnerUp | null {
+  for (const v of rankedRunnerUps(votes, winnerId)) {
+    const name = names.get(v.gameId);
+    if (name !== undefined) {
+      return { gameId: v.gameId, name, votes: v.voteCount };
+    }
+  }
+  return null;
 }
 
 /** A4 — decided lineup + per-game vote counts → candidate. */
 export function shapeCommonGround(
   lineup: DecidedLineupRow | undefined,
   votes: readonly GameVotes[],
-  runnerUpName: string | null,
+  runnerUp: NamedRunnerUp | null,
 ): CommonGroundCandidate | null {
   if (!lineup) return null;
   const winnerId = lineup.decided_game_id;
   const winnerVotes = votes.find((v) => v.gameId === winnerId);
-  const second = runnerUpVotes(votes, winnerId);
   return {
     kind: 'common_ground',
     lineupId: lineup.lineup_id,
@@ -114,10 +141,7 @@ export function shapeCommonGround(
       votes: winnerVotes?.voteCount ?? 0,
     },
     totalVotes: votes.reduce((sum, v) => sum + v.voteCount, 0),
-    runnerUp:
-      second && runnerUpName !== null
-        ? { gameId: second.gameId, name: runnerUpName, votes: second.voteCount }
-        : null,
+    runnerUp,
   };
 }
 
