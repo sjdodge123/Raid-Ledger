@@ -13,7 +13,7 @@ import type { CalendarConnection, CalendarsOverview } from '@raid-ledger/contrac
 import { server } from '../test/mocks/server';
 import { createTestQueryClient } from '../test/render-helpers';
 import {
-    CALENDAR_CONNECTION_URL, CALENDAR_READ_SETTINGS_URL, calendarErrorResponse, calendarReadErrorHandlers,
+    CALENDAR_CONNECTION_URL, CALENDAR_READ_SETTINGS_URL, CALENDARS_OVERVIEW_URL, calendarErrorResponse, calendarReadErrorHandlers,
     calendarsOverviewFixture, providerCalendarsFixture, readConnectionFixture,
 } from '../test/mocks/calendar-sync-handlers';
 
@@ -171,13 +171,34 @@ describe('useSetReadCalendars', () => {
 });
 
 describe('useSyncNow', () => {
-    it('202 → queued, and refetches the overview (Synced N min ago)', async () => {
+    it('202 → queued; refetches every read dependent only once lastSyncedAt advances', async () => {
+        let reads = 0;
+        const landed: CalendarConnection = { ...readConnectionFixture, lastSyncedAt: '2026-10-12T09:05:00.000Z' };
+        server.use(http.get(CALENDARS_OVERVIEW_URL, () => {
+            reads += 1;
+            return HttpResponse.json(calendarsOverviewFixture({ connections: [reads >= 2 ? landed : readConnectionFixture] }));
+        }));
         const { invalidate, wrapper } = setup(readConnectionFixture);
-        const { result } = renderHook(() => useSyncNow(), { wrapper });
+        const { result } = renderHook(() => useSyncNow(1), { wrapper });
         act(() => result.current.mutate(readConnectionFixture.id));
         await waitFor(() => expect(result.current.isSuccess).toBe(true));
         expect(result.current.data).toEqual({ outcome: 'queued' });
-        expect(invalidatedKeys(invalidate)).toEqual([[...CALENDARS_OVERVIEW_KEY]]);
+        await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(READ_DEPENDENTS));
+        // Landed on the 2nd re-read: not refreshed early, and not only after the cap ran out.
+        expect(reads).toBe(2);
+    });
+
+    it('202 whose sync never lands: re-reads the overview at most 6 times, then refreshes once', async () => {
+        let reads = 0;
+        server.use(http.get(CALENDARS_OVERVIEW_URL, () => {
+            reads += 1;
+            return HttpResponse.json(calendarsOverviewFixture({ connections: [readConnectionFixture] }));
+        }));
+        const { invalidate, wrapper } = setup(readConnectionFixture);
+        const { result } = renderHook(() => useSyncNow(1), { wrapper });
+        act(() => result.current.mutate(readConnectionFixture.id));
+        await waitFor(() => expect(invalidatedKeys(invalidate)).toEqual(READ_DEPENDENTS));
+        expect(reads).toBe(6);
     });
 
     it('429 → a throttled result (not an error), with no refetch', async () => {
