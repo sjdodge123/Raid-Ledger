@@ -18,6 +18,12 @@ import {
 import * as schema from '../drizzle/schema';
 import { SIGNUP_EVENTS } from '../discord-bot/discord-bot.constants';
 import { moveToBench } from '../discord-bot/processors/departure-grace.helpers';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { SignupsService } from './signups.service';
+import { handleExistingSignup } from '../discord-bot/listeners/signup-signup.handlers';
+import { handleTentative } from '../discord-bot/listeners/signup-status.handlers';
+import type { SignupInteractionDeps } from '../discord-bot/listeners/signup-interaction.types';
+import type { ButtonInteraction } from 'discord.js';
 import {
   createMemberAndLogin,
   createFutureEvent,
@@ -143,6 +149,92 @@ async function testActiveDuplicateEmitsNothing() {
   expect(signupEmits()).toEqual([]);
 }
 
+/** The embed-button handlers' deps, wired to the real app (ROK-1769). */
+function buttonDeps(): SignupInteractionDeps {
+  return {
+    db: testApp.db,
+    signupsService: testApp.app.get(SignupsService),
+    activityLog: testApp.app.get(ActivityLogService),
+    updateEmbedSignupCount: jest.fn().mockResolvedValue(undefined),
+  } as unknown as SignupInteractionDeps;
+}
+
+/** A Discord button click by the member (createMemberAndLogin links `local:<email>`). */
+function buttonClick(username: string) {
+  const editReply = jest.fn().mockResolvedValue(undefined);
+  const interaction = {
+    user: { id: `local:${username}@test.local` },
+    editReply,
+  } as unknown as ButtonInteraction;
+  return { interaction, editReply };
+}
+
+function replyContent(editReply: jest.Mock): string {
+  const arg = editReply.mock.calls.at(-1)?.[0] as { content?: string };
+  return arg?.content ?? '';
+}
+
+async function testDiscordSignUpButtonReslots() {
+  const { eventId, member, signupId } = await rosteredThenDeparted('btnjoin');
+  const { interaction, editReply } = buttonClick('btnjoin');
+  const existing = await testApp.app
+    .get(SignupsService)
+    .findByDiscordUser(eventId, 'local:btnjoin@test.local');
+  if (!existing) throw new Error('departed signup not found by discord id');
+  spyOnEmitter();
+  await handleExistingSignup(interaction, eventId, existing, buttonDeps());
+  expect((await getSignupAssignment(testApp, signupId))?.role).toBe('player');
+  expect(signupEmits()).toContainEqual({
+    name: SIGNUP_EVENTS.UPDATED,
+    payload: {
+      eventId,
+      userId: member.userId,
+      signupId,
+      action: 'signup_reactivated',
+    },
+  });
+  expect(replyContent(editReply)).toContain('changed to **signed up**');
+}
+
+async function testDiscordSignUpButtonBenchReply() {
+  const { eventId, signupId } = await rosteredThenDeparted('btnfull');
+  const filler = await createMemberAndLogin(
+    testApp,
+    'fill2',
+    'fill2@test.local',
+  );
+  await postSignup(filler.token, eventId);
+  const { interaction, editReply } = buttonClick('btnfull');
+  const existing = await testApp.app
+    .get(SignupsService)
+    .findByDiscordUser(eventId, 'local:btnfull@test.local');
+  if (!existing) throw new Error('departed signup not found by discord id');
+  await handleExistingSignup(interaction, eventId, existing, buttonDeps());
+  expect((await getSignupAssignment(testApp, signupId))?.role).toBe('bench');
+  expect(replyContent(editReply)).toContain('placed on the **bench**');
+}
+
+async function testDiscordTentativeButtonReslots() {
+  const { eventId, member, signupId } = await rosteredThenDeparted('btntent');
+  const { interaction } = buttonClick('btntent');
+  spyOnEmitter();
+  await handleTentative(interaction, eventId, buttonDeps());
+  expect((await getSignupAssignment(testApp, signupId))?.role).toBe('player');
+  const [row] = await testApp.db
+    .select({ status: schema.eventSignups.status })
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.id, signupId));
+  expect(row?.status).toBe('tentative');
+  expect(signupEmits()).toContainEqual(
+    expect.objectContaining({
+      payload: expect.objectContaining({
+        userId: member.userId,
+        action: 'signup_reactivated',
+      }),
+    }),
+  );
+}
+
 beforeAll(() => setupAll());
 afterEach(() => resetAfterEach());
 
@@ -153,4 +245,13 @@ describe('Re-signup after departure (ROK-1769)', () => {
     testReactivationStaysBenchedWhenFull());
   it('emits no signup event for a duplicate of an active signup', () =>
     testActiveDuplicateEmitsNothing());
+});
+
+describe('Re-signup after departure via the Discord embed buttons (ROK-1769)', () => {
+  it('Sign Up re-slots a departed linked member and emits signup_reactivated', () =>
+    testDiscordSignUpButtonReslots());
+  it('Sign Up tells a departed member they landed on the bench when full', () =>
+    testDiscordSignUpButtonBenchReply());
+  it('Tentative re-slots a departed linked member and emits signup_reactivated', () =>
+    testDiscordTentativeButtonReslots());
 });
