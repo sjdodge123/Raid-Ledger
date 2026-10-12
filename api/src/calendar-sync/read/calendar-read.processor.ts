@@ -5,8 +5,12 @@
  * terminal state (D5) and decides: retryable → rethrow for BullMQ backoff
  * (attempts 4, 60 s exponential); otherwise `UnrecoverableError` (auth →
  * `needs_reconnect`, scope 403 → `read_access_granted=false`, U7).
+ *
+ * PR-B: a `derive` job rebuilds one user's synced away days
+ * (`runCalendarDerive`) in its own transaction; a successful sync derives in
+ * the sync's transaction (`afterBlocks`).
  */
-import { Inject, type OnModuleInit } from '@nestjs/common';
+import { Inject, Logger, type OnModuleInit } from '@nestjs/common';
 import { InjectQueue, Processor, WorkerHost } from '@nestjs/bullmq';
 import { type Job, type Queue, UnrecoverableError } from 'bullmq';
 import { and, eq, inArray } from 'drizzle-orm';
@@ -20,9 +24,12 @@ import { GameTimeService } from '../../users/game-time.service';
 import { CALENDAR_READ_QUEUE } from '../calendar-sync.constants';
 import { CalendarProviderRegistry } from '../providers/calendar-provider.registry';
 import { isFinalAttempt } from '../write/calendar-write-reconcile-persist.helpers';
+import { runCalendarDerive } from './calendar-away-persist.helpers';
 import {
   READ_SYNCABLE_STATUSES,
+  enqueueCalendarDerive,
   type CalendarReadJobData,
+  type CalendarReadQueue,
 } from './calendar-read.enqueue.helpers';
 import {
   recordReadSyncFailure,
@@ -31,24 +38,35 @@ import {
 import {
   runCalendarReadSync,
   type ReadSyncOutcome,
+  type ReadSyncTx,
 } from './calendar-read-sync.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 type ReadConnection = typeof schema.calendarConnections.$inferSelect;
 
+/** `derive` = a derive job ran (it never touches a provider). */
+export type ReadJobOutcome = ReadSyncOutcome | 'derived';
+
+const logger = new Logger('CalendarReadProcessor');
+
 /**
- * D11 hook point: a read sync failed for good — `needs_reconnect`, lost
- * read grant, or a transient failure backed off (status stays `active`). PR-B enqueues a
- * `derive` for `userId` here. PR-A: nothing to rebuild yet — busy hours
- * already filter on `status='active' AND read_enabled`.
+ * D11 / Q12: a read sync failed for good — `needs_reconnect`, lost read
+ * grant, or a transient failure backed off (status stays `active`). A broken
+ * connection's blocks stop counting, so its away days must go too: enqueue a
+ * `derive` for the user (a later successful sync restores them). Best effort
+ * — a queue failure is logged and never masks the sync failure.
  */
-export function onReadConnectionBroken(
+export async function onReadConnectionBroken(
+  queue: CalendarReadQueue,
   userId: number,
   decision: ReadFailureDecision,
 ): Promise<void> {
-  void userId;
-  void decision;
-  return Promise.resolve();
+  try {
+    await enqueueCalendarDerive(queue, userId);
+  } catch (err) {
+    const name = err instanceof Error ? err.name : 'unknown';
+    logger.warn(`derive enqueue after ${decision.code} failed (${name})`);
+  }
 }
 
 @Processor(CALENDAR_READ_QUEUE, { concurrency: 3 })
@@ -69,21 +87,24 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     this.queueHealth.register(this.queue);
   }
 
-  async process(job: Job<CalendarReadJobData>): Promise<ReadSyncOutcome> {
+  async process(job: Job<CalendarReadJobData>): Promise<ReadJobOutcome> {
     const isEnabled = () => getCalendarSyncEnabled(this.settings);
     if (!(await isEnabled())) return 'skipped';
-    // ROK-1593 B4: `derive` joined the union; lane B3b handles it here.
-    if (job.data.kind !== 'sync') return 'skipped';
+    if (job.data.kind === 'derive') return this.derive(job.data.userId);
     const conn = await this.loadConnection(job.data.connectionId);
     if (!conn) return 'skipped';
     const provider = await this.registry.getReadProviderForConnection(conn);
     if (!provider) return 'skipped';
+    const defaultTimezone = await this.defaultTimezone();
     const deps = {
       db: this.db,
       provider,
       clientUrl: await this.settings.getClientUrl(),
-      defaultTimezone: (await this.settings.getDefaultTimezone()) ?? 'UTC',
+      defaultTimezone,
       stillAllowed: isEnabled,
+      afterBlocks: async (tx: ReadSyncTx, userId: number) => {
+        await runCalendarDerive(tx, userId, { defaultTimezone });
+      },
       onCommitted: (userId: number) =>
         this.gameTime.invalidateUserCache(userId),
     };
@@ -92,6 +113,20 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     } catch (err) {
       return this.fail(job, conn, err);
     }
+  }
+
+  /** PR-B (D9): rebuild one user's away days, then drop their cached week. */
+  private async derive(userId: number): Promise<'derived'> {
+    const defaultTimezone = await this.defaultTimezone();
+    await this.db.transaction((tx) =>
+      runCalendarDerive(tx, userId, { defaultTimezone }),
+    );
+    this.gameTime.invalidateUserCache(userId);
+    return 'derived';
+  }
+
+  private async defaultTimezone(): Promise<string> {
+    return (await this.settings.getDefaultTimezone()) ?? 'UTC';
   }
 
   private async fail(
@@ -104,7 +139,7 @@ export class CalendarReadProcessor extends WorkerHost implements OnModuleInit {
     });
     if (decision.retry && !isFinalAttempt(job)) throw err;
     this.gameTime.invalidateUserCache(conn.userId);
-    await onReadConnectionBroken(conn.userId, decision);
+    await onReadConnectionBroken(this.queue, conn.userId, decision);
     if (decision.retry) throw err;
     throw new UnrecoverableError(`calendar read sync: ${decision.code}`);
   }

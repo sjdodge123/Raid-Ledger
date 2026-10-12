@@ -1,7 +1,8 @@
 /**
  * ROK-1593 §3.4 / D5: what the read worker does with a failed sync — the
  * connection write (via the real `recordReadSyncFailure`) and whether BullMQ
- * may retry. The runner is mocked to throw.
+ * may retry. The runner is mocked to throw. Also (ROK-1593 B3b) the `derive`
+ * job kind and the sync's `afterBlocks` hook, with `runCalendarDerive` mocked.
  */
 import { UnrecoverableError, type Job, type Queue } from 'bullmq';
 import type { QueueHealthService } from '../../queue/queue-health.service';
@@ -15,11 +16,17 @@ import type { CalendarProviderRegistry } from '../providers/calendar-provider.re
 import type { CalendarReadJobData } from './calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './calendar-read.processor';
 import { runCalendarReadSync } from './calendar-read-sync.helpers';
+import { runCalendarDerive } from './calendar-away-persist.helpers';
 
 jest.mock('./calendar-read-sync.helpers', () => ({
   runCalendarReadSync: jest.fn(),
 }));
+jest.mock('./calendar-away-persist.helpers', () => ({
+  runCalendarDerive: jest.fn(),
+}));
 const runSync = jest.mocked(runCalendarReadSync);
+const runDerive = jest.mocked(runCalendarDerive);
+const TX = { tx: true };
 
 const CONN = {
   id: 5,
@@ -39,6 +46,7 @@ function setup(enabled = true) {
     limit: () => Promise.resolve([CONN]),
   };
   const db = {
+    transaction: (fn: (tx: unknown) => Promise<unknown>) => fn(TX),
     select: () => chain,
     update: () => ({
       set: (v: Record<string, unknown>) => {
@@ -54,15 +62,20 @@ function setup(enabled = true) {
   };
   const registry = { getReadProviderForConnection: () => Promise.resolve({}) };
   const invalidate = jest.fn();
+  const queue = {
+    add: jest.fn().mockResolvedValue(undefined),
+    getJob: jest.fn().mockResolvedValue(undefined),
+    remove: jest.fn(),
+  };
   const processor = new CalendarReadProcessor(
     db as never,
     registry as unknown as CalendarProviderRegistry,
     settings as unknown as SettingsService,
     { invalidateUserCache: invalidate } as unknown as GameTimeService,
-    {} as Queue,
+    queue as unknown as Queue,
     {} as QueueHealthService,
   );
-  return { processor, sets, invalidate };
+  return { processor, sets, invalidate, queue };
 }
 
 function job(attemptsMade: number): Job<CalendarReadJobData> {
@@ -77,7 +90,7 @@ describe('CalendarReadProcessor failures', () => {
   beforeEach(() => runSync.mockReset());
 
   it('auth error → needs_reconnect + UnrecoverableError (no retry)', async () => {
-    const { processor, sets } = setup();
+    const { processor, sets, queue } = setup();
     runSync.mockRejectedValue(new ProviderAuthError());
     await expect(processor.process(job(0))).rejects.toBeInstanceOf(
       UnrecoverableError,
@@ -88,6 +101,12 @@ describe('CalendarReadProcessor failures', () => {
         lastErrorCode: 'auth',
       }),
     ]);
+    // Q12: the broken connection's away days are re-derived away.
+    expect(queue.add).toHaveBeenCalledWith(
+      'derive',
+      { kind: 'derive', userId: CONN.userId },
+      expect.objectContaining({ jobId: `cal-derive-${CONN.userId}` }),
+    );
   });
 
   it('403 scope → read_access_granted=false, read off, no retry', async () => {
@@ -139,5 +158,35 @@ describe('CalendarReadProcessor failures', () => {
     await expect(processor.process(job(0))).resolves.toBe('skipped');
     expect(runSync).not.toHaveBeenCalled();
     expect(sets).toEqual([]);
+  });
+});
+
+describe('CalendarReadProcessor derive (ROK-1593 B3b)', () => {
+  beforeEach(() => {
+    runSync.mockReset();
+    runDerive.mockReset();
+  });
+
+  it('derive job → runCalendarDerive in a tx, cache dropped, no sync', async () => {
+    const { processor, invalidate } = setup();
+    const deriveJob = {
+      data: { kind: 'derive', userId: 9 },
+    } as unknown as Job<CalendarReadJobData>;
+    await expect(processor.process(deriveJob)).resolves.toBe('derived');
+    expect(runDerive).toHaveBeenCalledWith(TX, 9, { defaultTimezone: 'UTC' });
+    expect(invalidate).toHaveBeenCalledWith(9);
+    expect(runSync).not.toHaveBeenCalled();
+  });
+
+  it('a sync derives in its own transaction via afterBlocks', async () => {
+    const { processor } = setup();
+    runSync.mockImplementation(async (deps) => {
+      await deps.afterBlocks?.(TX as never, CONN.userId);
+      return 'synced';
+    });
+    await expect(processor.process(job(0))).resolves.toBe('synced');
+    expect(runDerive).toHaveBeenCalledWith(TX, CONN.userId, {
+      defaultTimezone: 'UTC',
+    });
   });
 });
