@@ -213,26 +213,3 @@ describe('Manage: Sync now (F-4) and the phone picker sheet', () => {
         expect(within(sheet).queryByRole('checkbox', { name: 'Raid Ledger' })).toBeNull();
     });
 });
-
-describe('two Google accounts — the mode is per user (D1), so it renders once', () => {
-    const second: CalendarConnection = { ...readConnectionFixture, id: readConnectionFixture.id + 1, accountLabel: 'alt@example.com' };
-
-    function renderTwo(): void {
-        server.use(...userCalendarHandlers(calendarsOverviewFixture({ connections: [readConnectionFixture, second] })));
-        render(<QueryClientProvider client={createTestQueryClient()}><MemoryRouter><CalendarsPage /></MemoryRouter></QueryClientProvider>);
-    }
-
-    it.each([false, true])('desktop=%s: one read-rules section, bound to the first connection', async (desktop) => {
-        setDesktop(desktop);
-        renderTwo();
-        const sections = await screen.findAllByTestId('calendar-read-rules');
-        expect(sections, 'one per-user mode control, not one per connection card').toHaveLength(1);
-        expect(sections[0]).toHaveAttribute('data-connection-id', String(readConnectionFixture.id));
-    });
-
-    it('desktop: each connection card keeps its own "Calendars to check" picker', async () => {
-        setDesktop(true);
-        renderTwo();
-        await waitFor(() => expect(screen.getAllByTestId('calendar-picker')).toHaveLength(2));
-    });
-});

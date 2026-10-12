@@ -123,7 +123,11 @@ async function removeMember(userId: number): Promise<void> {
 async function openAs(page: Page, member: Member) {
     await signInContextAs(page.context(), member.userId);
     await page.goto(PAGE);
-    const rules = page.locator(`[data-testid="calendar-read-rules"][data-connection-id="${member.connectionId}"]`);
+    // The read rules are per USER (one section for the page, not bound to a connection); the
+    // member's own connection card proves the page is showing this member's account.
+    await expect(page.locator(`[data-testid="calendar-connection-card"][data-connection-id="${member.connectionId}"]`))
+        .toBeVisible({ timeout: 15_000 });
+    const rules = page.getByTestId('calendar-read-rules');
     await expect(rules).toBeVisible({ timeout: 15_000 });
     return rules;
 }
@@ -141,7 +145,7 @@ async function phoneSwitches(page: Page, member: Member): Promise<void> {
     expect((await saved).status(), 'PUT /users/me/calendars/settings is 204 No Content').toBe(204);
     expect((await saved).request().postDataJSON(), 'hours off with days on is mode `days`').toEqual({ mode: 'days' });
     await page.reload();
-    rules = page.locator(`[data-testid="calendar-read-rules"][data-connection-id="${member.connectionId}"]`);
+    rules = page.getByTestId('calendar-read-rules');
     await expect(rules.getByRole('switch', { name: 'Busy hours become busy' })).not.toBeChecked({ timeout: 15_000 });
     await expect(rules.getByRole('switch', { name: 'Whole days become away' })).toBeChecked();
 }
@@ -156,7 +160,7 @@ async function desktopCards(page: Page, member: Member): Promise<void> {
     await rules.getByRole('radio', { name: 'Whole days only' }).click();
     await expect(rules.getByRole('radio', { name: 'Whole days only' })).toBeChecked();
     await page.reload();
-    await expect(page.locator(`[data-testid="calendar-read-rules"][data-connection-id="${member.connectionId}"]`)
+    await expect(page.getByTestId('calendar-read-rules')
         .getByRole('radio', { name: 'Whole days only' })).toBeChecked({ timeout: 15_000 });
     // K4 "Calendars to check": the Fake's primary calendar, checked (empty ids = primary), and
     // un-uncheckable while it is the only one ticked (F-5 last-uncheck guard).

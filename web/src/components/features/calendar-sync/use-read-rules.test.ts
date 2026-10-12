@@ -5,7 +5,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { providerCalendarsFixture, readConnectionFixture } from '../../../test/mocks/calendar-sync-handlers';
-import { checkedIds, modeOf, pickable, readChangeFor, readGranted, switchesOf } from './use-read-rules';
+import { checkedIds, enabledTargets, modeOf, pickable, readChangeFor, readGranted, readableConnections, switchesOf } from './use-read-rules';
 import { readStatusLine } from './calendar-sync.copy';
 import { syncedAgo } from '../../../lib/synced-ago';
 
@@ -83,5 +83,20 @@ describe('readGranted / status line', () => {
         expect(syncedAgo(at, Date.parse(at) + 20_000)).toBe('just now');
         expect(syncedAgo(at, Date.parse(at) + 3 * 3_600_000)).toBe('3 h ago');
         expect(syncedAgo(at, Date.parse(at) + 26 * 3_600_000)).toBe('1 day ago');
+    });
+});
+
+describe('readableConnections / enabledTargets (review r2: the mode spans every account)', () => {
+    const off = { ...readConnectionFixture, id: 2, read: { enabled: false, calendarIds: [] } };
+    const writeOnly = { ...readConnectionFixture, id: 3, readAccess: 'missing' as const };
+    const leaving = { ...readConnectionFixture, id: 4, status: 'disconnecting' as const };
+    const broken = { ...readConnectionFixture, id: 5, status: 'needs_reconnect' as const };
+    it('keeps every account that can read, broken ones included; drops write-only and disconnecting', () => {
+        const ids = readableConnections([readConnectionFixture, off, writeOnly, leaving, broken]).map((c) => c.id);
+        expect(ids).toEqual([readConnectionFixture.id, 2, 5]);
+    });
+    it('on/off touches only the accounts not already there', () => {
+        expect(enabledTargets([readConnectionFixture, off], false).map((c) => c.id)).toEqual([readConnectionFixture.id]);
+        expect(enabledTargets([readConnectionFixture, off], true).map((c) => c.id)).toEqual([2]);
     });
 });
