@@ -69,6 +69,9 @@ describe('read consent (ROK-1593 D-R3)', () => {
 
   it('§1.1 regression: a read grant WITHOUT calendar.events writes only the read flags', async () => {
     const db = createDrizzleMock();
+    // A write_target UPDATE (the m1 fall-back) would resolve here, so a
+    // bypassed read branch fails on the assertions below, not on the mock.
+    db.returning.mockResolvedValue([{ writeEnabled: false }]);
     const queue = { add: jest.fn(), getJob: jest.fn() };
     const out = await applyConsentIntent(db as never, {
       intent: 'read',
@@ -78,8 +81,6 @@ describe('read consent (ROK-1593 D-R3)', () => {
       grantedScopes: [...connectSet, ...GOOGLE_READ_SCOPES],
       queue: queue as never,
     });
-    expect(out).toBe('read');
-    expect(db.update).toHaveBeenCalledTimes(1);
     const set = at(db.set.mock.calls, 0)[0] as Record<string, unknown>;
     expect(Object.keys(set).sort()).toEqual([
       'readAccessGranted',
@@ -87,6 +88,8 @@ describe('read consent (ROK-1593 D-R3)', () => {
       'updatedAt',
     ]);
     expect(set).toMatchObject({ readAccessGranted: true, readEnabled: true });
+    expect(db.update).toHaveBeenCalledTimes(1);
+    expect(out).toBe('read');
     expect(queue.add).not.toHaveBeenCalled();
   });
 });
