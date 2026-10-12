@@ -26,7 +26,8 @@ import {
 import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
-  CalendarReadSettingsSchema,
+  CalendarSyncErrorCodeSchema,
+  UpdateCalendarReadSettingsSchema,
   type ProviderCalendar,
   type UpdateCalendarConnection,
 } from '@raid-ledger/contract';
@@ -58,11 +59,6 @@ export interface OwnConnectionRef {
   userId: number;
   connectionId: number;
 }
-
-/** PUT settings body: the contract's read settings, look-ahead optional. */
-const ReadSettingsBodySchema = CalendarReadSettingsSchema.partial({
-  lookAheadWeeks: true,
-});
 
 /** The caller's own row; anything else (incl. another user's id) → 404. */
 export async function loadOwnCalendarConnection(
@@ -150,7 +146,8 @@ export async function requestManualReadSync(
 ): Promise<void> {
   const row = await loadOwnCalendarConnection(deps.db, ref);
   if (!row.readAccessGranted) throw new ConflictException('read_scopes');
-  if (!row.readEnabled) throw new ConflictException('read_disabled');
+  if (!row.readEnabled)
+    throw new ConflictException(CalendarSyncErrorCodeSchema.enum.read_disabled);
   const last = row.lastSyncedAt?.getTime();
   if (last !== undefined && nowMs - last < MANUAL_SYNC_THROTTLE_MS) {
     throw new HttpException('sync_throttled', HttpStatus.TOO_MANY_REQUESTS);
@@ -164,7 +161,7 @@ export async function updateUserReadSettings(
   userId: number,
   body: unknown,
 ): Promise<void> {
-  const parsed = ReadSettingsBodySchema.safeParse(body ?? {});
+  const parsed = UpdateCalendarReadSettingsSchema.safeParse(body ?? {});
   if (!parsed.success) throw new BadRequestException('invalid_body');
   const prefs = schema.userPreferences;
   await deps.db

@@ -55,6 +55,7 @@ export const CalendarSyncErrorCodeSchema = z.enum([
   'read_scopes',
   'rate_limited',
   'provider_error',
+  'read_disabled',
 ]);
 export type CalendarSyncErrorCode = z.infer<typeof CalendarSyncErrorCodeSchema>;
 
@@ -103,6 +104,13 @@ export const CalendarReadSettingsSchema = z
   })
   .strict();
 export type CalendarReadSettings = z.infer<typeof CalendarReadSettingsSchema>;
+
+/** `PUT /users/me/calendars/settings` body: look-ahead is derived server-side. */
+export const UpdateCalendarReadSettingsSchema =
+  CalendarReadSettingsSchema.partial({ lookAheadWeeks: true });
+export type UpdateCalendarReadSettings = z.infer<
+  typeof UpdateCalendarReadSettingsSchema
+>;
 
 /** The subscribe-by-URL ICS feed. Tentative sign-ups are always included. */
 export const CalendarFeedSchema = z.object({ url: z.string() }).strict();

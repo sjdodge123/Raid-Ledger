@@ -17,6 +17,7 @@ import {
     CalendarSyncErrorCodeSchema,
     CalendarsOverviewSchema,
     UpdateCalendarConnectionSchema,
+    UpdateCalendarReadSettingsSchema,
 } from '../calendar-sync.schema.js';
 import {
     AdminCalendarSyncSettingsSchema,
@@ -228,11 +229,40 @@ describe('CalendarSyncErrorCodeSchema (ROK-1593 §3.6)', () => {
             'read_scopes',
             'rate_limited',
             'provider_error',
+            'read_disabled',
         ]);
     });
 
     it('rejects an unknown code', () => {
         expect(CalendarSyncErrorCodeSchema.safeParse('scopes').success).toBe(false);
+    });
+});
+
+describe('UpdateCalendarReadSettingsSchema (ROK-1593 PUT settings)', () => {
+    it('accepts a valid body', () => {
+        const body = { mode: 'both', lookAheadWeeks: 4 };
+        expect(UpdateCalendarReadSettingsSchema.safeParse(body).success).toBe(true);
+    });
+
+    it('accepts an omitted lookAheadWeeks', () => {
+        const result = UpdateCalendarReadSettingsSchema.safeParse({ mode: 'both' });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects a stray key', () => {
+        const issues = issuesOf(UpdateCalendarReadSettingsSchema, {
+            mode: 'both',
+            extra: 1,
+        });
+        expect(issues.map((i) => i.code)).toEqual(['unrecognized_keys']);
+    });
+
+    it('rejects a look-ahead other than the fixed window', () => {
+        const result = UpdateCalendarReadSettingsSchema.safeParse({
+            mode: 'both',
+            lookAheadWeeks: 8,
+        });
+        expect(result.success).toBe(false);
     });
 });
 
