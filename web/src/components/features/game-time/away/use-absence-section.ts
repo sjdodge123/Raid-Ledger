@@ -7,7 +7,7 @@
  * `useAbsenceSection` joins them with the upcoming rows. There is no `show`
  * flag — the panel is always open wherever it is mounted.
  */
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences, useIgnoreAbsence } from '../../../../hooks/use-game-time';
 import { useCalendarsOverview } from '../../../../hooks/use-calendar-sync';
 import { useToday } from './use-today';
@@ -101,10 +101,21 @@ function useAwayIgnore() {
     }, [ignoreAbsence]);
 }
 
-/** "Synced N min ago" for the calendar group; null with the kill switch off or no sync yet. */
+/**
+ * "Synced N min ago" for the calendar group; null with the kill switch off or
+ * no sync yet. `now` is read on mount and re-read once a minute while there is
+ * a sync time to age (render stays pure).
+ */
 function useCalendarSyncedText(): string | null {
     const { data } = useCalendarsOverview();
-    return syncedAgoLabel(newestReadSync(data), Date.now());
+    const newest = newestReadSync(data);
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        if (!newest) return undefined;
+        const timer = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(timer);
+    }, [newest]);
+    return syncedAgoLabel(newest, now);
 }
 
 /** Form + mutations + upcoming rows for the away panel. */
