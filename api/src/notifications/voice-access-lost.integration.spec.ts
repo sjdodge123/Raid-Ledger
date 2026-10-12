@@ -9,11 +9,13 @@
  * `DiscordNotificationService.dispatch` (resolves true = queued for DM).
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { Job } from 'bullmq';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
   loginAsAdmin,
+  waitFor,
 } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { SignupsService } from '../events/signups.service';
@@ -21,13 +23,19 @@ import {
   createMemberAndLogin,
   createFutureEvent,
   getSignupAssignment,
+  createMmoEvent,
+  signupWithPrefs,
 } from '../events/signups.integration.spec-helpers';
+import { formatRoleLabel } from '../events/signups-roster.helpers';
+import { DepartureGraceProcessor } from '../discord-bot/processors/departure-grace.processor';
+import type { DepartureGraceJobData } from '../discord-bot/queues/departure-grace.queue';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { DiscordNotificationService } from './discord-notification.service';
 import { NotificationService } from './notification.service';
 import { VoiceAccessLostListener } from './voice-access-lost.listener';
 import {
   VOICE_ACCESS_LOST_EVENT,
+  VOICE_ACCESS_LOST_LINE,
   hadVoiceAccess,
   type VoiceAccessLostPayload,
 } from './voice-access-lost.helpers';
@@ -105,8 +113,51 @@ async function rosteredOnPrivateEvent(privateVoice = true) {
   expect(res.status).toBe(201);
   const signupId = (res.body as { id: number }).id;
   expect((await getSignupAssignment(testApp, signupId))?.role).toBe('player');
-  return { eventId, userId: member.userId, signupId };
+  const title = await eventTitle(eventId);
+  return { eventId, userId: member.userId, signupId, title };
 }
+
+async function eventTitle(eventId: number): Promise<string> {
+  const [ev] = await testApp.db
+    .select({ title: schema.events.title })
+    .from(schema.events)
+    .where(eq(schema.events.id, eventId));
+  if (!ev) throw new Error(`event ${eventId} not found`);
+  return ev.title;
+}
+
+async function setPrivateVoice(eventId: number) {
+  await testApp.db
+    .update(schema.events)
+    .set({ privateVoice: true, ephemeralVoiceEnabled: true })
+    .where(eq(schema.events.id, eventId));
+}
+
+/** Notification rows (= DMs) for a user, by id. */
+async function notifRows(userId: number) {
+  return testApp.db
+    .select({
+      id: schema.notifications.id,
+      type: schema.notifications.type,
+      title: schema.notifications.title,
+      message: schema.notifications.message,
+      payload: schema.notifications.payload,
+    })
+    .from(schema.notifications)
+    .where(eq(schema.notifications.userId, userId));
+}
+
+async function snapshot(userId: number): Promise<Set<string>> {
+  return new Set((await notifRows(userId)).map((r) => r.id));
+}
+
+/** The DMs created for a user since `before` was taken. */
+async function newRows(userId: number, before: Set<string>) {
+  return (await notifRows(userId)).filter((r) => !before.has(r.id));
+}
+
+const voiceEmitsFor = (userId: number) =>
+  voiceEmits.filter((e) => e.userId === userId);
 
 function voiceDmCalls(userId: number): unknown[][] {
   return dispatchSpy.mock.calls.filter((c: unknown[]) => {
@@ -117,22 +168,54 @@ function voiceDmCalls(userId: number): unknown[][] {
   });
 }
 
-describe('ROK-1769 voice-access DM — triggers', () => {
-  it('organizer removal emits voice-access.lost for a rostered member', async () => {
+const VOICE_PAYLOAD = expect.objectContaining({ subtype: 'voice_access_lost' });
+
+describe('ROK-1769 one DM per removal — organizer removal', () => {
+  it('private voice: ONE removal DM carrying the voice line, no second voice DM', async () => {
     const m = await rosteredOnPrivateEvent();
+    const before = await snapshot(m.userId);
     await signups().adminRemoveSignup(
       m.eventId,
       m.signupId,
       testApp.seed.adminUser.id,
       true,
     );
-    expect(voiceEmits).toEqual([
-      { eventId: m.eventId, userId: m.userId, reason: 'admin_removed' },
-    ]);
+    const rows = await newRows(m.userId, before);
+    expect(voiceEmitsFor(m.userId)).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        type: 'slot_vacated',
+        title: 'Removed from Event',
+        message: `You were removed from ${m.title}\n\n${VOICE_ACCESS_LOST_LINE}`,
+        payload: VOICE_PAYLOAD,
+      }),
+    );
+    expect(voiceDmCalls(m.userId)).toHaveLength(1);
   });
 
-  it('a roster edit that benches a member emits voice-access.lost', async () => {
+  it('non-private voice: the plain removal DM, no voice line', async () => {
+    const m = await rosteredOnPrivateEvent(false);
+    const before = await snapshot(m.userId);
+    await signups().adminRemoveSignup(
+      m.eventId,
+      m.signupId,
+      testApp.seed.adminUser.id,
+      true,
+    );
+    const rows = await newRows(m.userId, before);
+    expect(voiceEmitsFor(m.userId)).toEqual([]);
+    expect(rows.map((r) => [r.title, r.message])).toEqual([
+      ['Removed from Event', `You were removed from ${m.title}`],
+    ]);
+    expect(rows[0]?.payload).not.toHaveProperty('subtype');
+  });
+});
+
+describe('ROK-1769 one DM per removal — roster edit to bench', () => {
+  it('private voice: ONE "Moved to Bench" DM carrying the voice line', async () => {
     const m = await rosteredOnPrivateEvent();
+    const before = await snapshot(m.userId);
     await signups().updateRoster(m.eventId, testApp.seed.adminUser.id, true, {
       assignments: [
         {
@@ -144,15 +227,106 @@ describe('ROK-1769 voice-access DM — triggers', () => {
         },
       ],
     });
-    expect(voiceEmits).toEqual([
-      { eventId: m.eventId, userId: m.userId, reason: 'benched' },
-    ]);
+    await waitFor(async () => {
+      expect(await newRows(m.userId, before)).toHaveLength(1);
+    });
+    const rows = await newRows(m.userId, before);
+    expect(voiceEmitsFor(m.userId)).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        type: 'roster_reassigned',
+        title: 'Moved to Bench',
+        message: `You've been moved from ${formatRoleLabel('player')} to bench for ${m.title}\n\n${VOICE_ACCESS_LOST_LINE}`,
+        payload: VOICE_PAYLOAD,
+      }),
+    );
   });
 
   it('a bench-only or declined member never had access', () => {
     expect(hadVoiceAccess('signed_up', 'bench')).toBe(false);
     expect(hadVoiceAccess('declined', 'player')).toBe(false);
     expect(hadVoiceAccess('tentative', null)).toBe(true);
+  });
+});
+
+/** Full MMO roster (capacity 5) on a private-voice event, last dps tentative. */
+async function fullPrivateRosterWithTentative() {
+  const config = { type: 'mmo', tank: 1, healer: 1, dps: 3, flex: 0 };
+  const eventId = await createMmoEvent(testApp, adminToken, config);
+  await setPrivateVoice(eventId);
+  const prefs = [['tank'], ['healer'], ['dps'], ['dps'], ['dps']];
+  const members: { userId: number; signupId: number }[] = [];
+  for (const [i, p] of prefs.entries()) {
+    const name = `vfr${seq}_${i}`;
+    const m = await createMemberAndLogin(testApp, name, `${name}@test.local`);
+    const su = await signupWithPrefs(testApp, m.token, eventId, p);
+    members.push({ userId: m.userId, signupId: su.id });
+  }
+  const victim = members[4];
+  if (!victim) throw new Error('victim missing');
+  await testApp.db
+    .update(schema.eventSignups)
+    .set({ status: 'tentative' })
+    .where(eq(schema.eventSignups.id, victim.signupId));
+  return { eventId, victim, title: await eventTitle(eventId) };
+}
+
+describe('ROK-1769 one DM per removal — tentative displaced to bench', () => {
+  it('private voice: ONE displaced DM carrying the voice line', async () => {
+    seq += 1;
+    const r = await fullPrivateRosterWithTentative();
+    const before = await snapshot(r.victim.userId);
+    const nc = await createMemberAndLogin(
+      testApp,
+      `vfrnew${seq}`,
+      `vfrnew${seq}@test.local`,
+    );
+    await signupWithPrefs(testApp, nc.token, r.eventId, ['dps']);
+    await waitFor(async () => {
+      expect(await newRows(r.victim.userId, before)).toHaveLength(1);
+    });
+    expect((await getSignupAssignment(testApp, r.victim.signupId))?.role).toBe(
+      'bench',
+    );
+    const rows = await newRows(r.victim.userId, before);
+    expect(voiceEmitsFor(r.victim.userId)).toEqual([]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toEqual(
+      expect.objectContaining({
+        type: 'tentative_displaced',
+        message: `A confirmed player took your dps slot in "${r.title}". You've been moved to the bench.\n\n${VOICE_ACCESS_LOST_LINE}`,
+        payload: VOICE_PAYLOAD,
+      }),
+    );
+  });
+});
+
+describe('ROK-1769 one DM per removal — departure', () => {
+  it('departure sends the member no other DM, then exactly one voice DM', async () => {
+    const m = await rosteredOnPrivateEvent();
+    const now = Date.now();
+    await testApp.db
+      .update(schema.events)
+      .set({
+        duration: [new Date(now - 30 * 60_000), new Date(now + 2 * 3600_000)],
+      })
+      .where(eq(schema.events.id, m.eventId));
+    const before = await snapshot(m.userId);
+    const job = {
+      data: { eventId: m.eventId, discordUserId: 'gone', signupId: m.signupId },
+    } as Job<DepartureGraceJobData>;
+    await testApp.app.get(DepartureGraceProcessor).process(job);
+    const departed = {
+      eventId: m.eventId,
+      userId: m.userId,
+      reason: 'departed' as const,
+    };
+    expect(voiceEmitsFor(m.userId)).toEqual([departed]);
+    expect(await newRows(m.userId, before)).toEqual([]);
+    expect(await listener().handle(departed)).toBe(true);
+    const rows = await newRows(m.userId, before);
+    expect(rows.map((r) => r.title)).toEqual(['Voice Channel Access Removed']);
   });
 });
 
@@ -185,7 +359,7 @@ describe('ROK-1769 voice-access DM — listener skips', () => {
     const p = {
       eventId: m.eventId,
       userId: m.userId,
-      reason: 'benched' as const,
+      reason: 'departed' as const,
     };
     expect(await listener().handle(p)).toBe(false);
     expect(voiceDmCalls(m.userId)).toHaveLength(0);
@@ -200,7 +374,7 @@ describe('ROK-1769 voice-access DM — listener skips', () => {
     const p = {
       eventId: m.eventId,
       userId: m.userId,
-      reason: 'admin_removed' as const,
+      reason: 'departed' as const,
     };
     expect(await listener().handle(p)).toBe(false);
     expect(voiceDmCalls(m.userId)).toHaveLength(0);
