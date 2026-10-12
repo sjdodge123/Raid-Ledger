@@ -1,0 +1,9 @@
+{
+  "kind": "calendar#calendarList",
+  "items": [
+    { "id": "fixture-owner@example.test", "summary": "fixture-owner@example.test", "primary": true, "accessRole": "owner" },
+    { "id": "team-fixture@group.calendar.google.com", "summary": "Team fixture", "accessRole": "writer" },
+    { "id": "holidays-fixture@group.v.calendar.google.com", "summary": "Holidays fixture", "accessRole": "reader" },
+    { "id": "boss-fixture@example.test", "accessRole": "freeBusyReader" }
+  ]
+}

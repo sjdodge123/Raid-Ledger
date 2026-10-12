@@ -1,8 +1,9 @@
 /**
  * ROK-1592: Google's account capability (connect / refresh / revoke), plan
  * L1 + §3 2b. ROK-1596 G2: the write capability (dedicated "Raid Ledger"
- * calendar + per-sign-up copies) delegates to `google-write.helpers`. Read
- * lands with ROK-1593.
+ * calendar + per-sign-up copies) delegates to `google-write.helpers`.
+ * ROK-1593 A3: the read capability (picker + busy time) delegates to
+ * `google-calendar-read.helpers`; it never reads titles (§6.4.1).
  *
  * The client id + secret are read per call from app settings, so an admin
  * edit applies without a restart. Nothing here logs a token, code or secret.
@@ -19,15 +20,27 @@ import {
 } from '../calendar-provider.errors';
 import type {
   AuthUrlInput,
+  BusyBlock,
   CalendarAccountProvider,
   CalendarCredentials,
+  CalendarReadCapability,
   CalendarWriteCapability,
   ConnectResult,
   CopyEventInput,
   CopyRef,
+  FetchBusyResult,
   OAuthCodeInput,
   OAuthCredentials,
+  ProviderCalendar,
+  TimeRange,
 } from '../calendar-provider.interface';
+import {
+  buildCalendarListUrl,
+  buildEventsListUrl,
+  normalizeGoogleEvent,
+  readAllGooglePages,
+  toProviderCalendar,
+} from './google-calendar-read.helpers';
 import {
   buildGoogleAuthUrl,
   googleScopesFor,
@@ -52,7 +65,10 @@ import {
 
 @Injectable()
 export class GoogleCalendarAdapter
-  implements CalendarAccountProvider, CalendarWriteCapability
+  implements
+    CalendarAccountProvider,
+    CalendarReadCapability,
+    CalendarWriteCapability
 {
   readonly key = 'google' as const;
   private readonly logger = new Logger(GoogleCalendarAdapter.name);
@@ -106,6 +122,50 @@ export class GoogleCalendarAdapter
     if (credentials.kind !== 'oauth') return;
     const token = credentials.refreshToken || credentials.accessToken;
     if (token) await revokeGoogleToken(token);
+  }
+
+  /** Calendars the user can at least see busy time of (picker, R1). */
+  async listCalendars(
+    credentials: CalendarCredentials,
+  ): Promise<ProviderCalendar[]> {
+    const token = accessTokenOf(credentials);
+    const { items } = await readAllGooglePages(token, buildCalendarListUrl);
+    return items.flatMap((item) => toProviderCalendar(item) ?? []);
+  }
+
+  /**
+   * Busy blocks across `calendarIds` (full window, no sync token — plan D4).
+   * A calendar that is gone/unreadable is skipped and reported in
+   * `missingCalendarIds`; every other error fails the whole fetch.
+   */
+  async fetchBusy(
+    credentials: CalendarCredentials,
+    range: TimeRange,
+    calendarIds: string[],
+  ): Promise<FetchBusyResult> {
+    const token = accessTokenOf(credentials);
+    const blocks: BusyBlock[] = [];
+    const missing: string[] = [];
+    let truncated = 0;
+    for (const calendarId of calendarIds) {
+      const url = (page?: string) =>
+        buildEventsListUrl(calendarId, range, page);
+      const read = await ignoreNotFound(readAllGooglePages(token, url));
+      if (!read) missing.push(calendarId);
+      else if (read.truncated) truncated += 1;
+      for (const item of read?.items ?? []) {
+        const block = normalizeGoogleEvent(item, null);
+        if (block) blocks.push(block);
+      }
+    }
+    if (truncated > 0) {
+      this.logger.warn(
+        `Google read hit the page cap on ${truncated} calendar(s)`,
+      );
+    }
+    return missing.length > 0
+      ? { blocks, missingCalendarIds: missing }
+      : { blocks };
   }
 
   /** Known id still there → it; gone (404/410) or none → a new calendar. */

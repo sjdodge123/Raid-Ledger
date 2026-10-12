@@ -1,0 +1,7 @@
+{
+  "nextPageToken": "fixture-page-2-token",
+  "items": [
+    { "id": "p1a", "status": "confirmed", "summary": "Page one fixture A", "start": { "dateTime": "2026-10-20T10:00:00Z" }, "end": { "dateTime": "2026-10-20T11:00:00Z" } },
+    { "id": "p1b", "status": "confirmed", "summary": "Page one fixture B", "start": { "dateTime": "2026-10-21T10:00:00Z" }, "end": { "dateTime": "2026-10-21T11:00:00Z" } }
+  ]
+}

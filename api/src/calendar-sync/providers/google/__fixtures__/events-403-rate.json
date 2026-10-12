@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": 403,
+    "message": "Rate Limit Exceeded",
+    "errors": [{ "domain": "usageLimits", "reason": "userRateLimitExceeded", "message": "Rate Limit Exceeded" }]
+  }
+}

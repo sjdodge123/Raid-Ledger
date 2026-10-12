@@ -1,0 +1,5 @@
+{
+  "items": [
+    { "id": "p2a", "status": "confirmed", "summary": "Page two fixture A", "start": { "dateTime": "2026-10-22T10:00:00Z" }, "end": { "dateTime": "2026-10-22T11:00:00Z" } }
+  ]
+}
