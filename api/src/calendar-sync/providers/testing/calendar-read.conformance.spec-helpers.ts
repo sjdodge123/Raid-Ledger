@@ -16,7 +16,8 @@ import {
  * conformance suite. The factory runs before EACH case and stages what the
  * adapter needs (a real adapter: an in-memory API behind its HTTP seam).
  * Read must return what the SAME provider's write path stored, so the
- * copy round-trip below is real, not a fixture.
+ * copy round-trip below is real, not a fixture. Copy ids use a real
+ * 12-hex instance so every adapter's copy-id parser accepts them.
  */
 export interface ReadConformanceHarness {
   provider: CalendarReadCapability & CalendarWriteCapability;
@@ -43,7 +44,7 @@ const RANGE: TimeRange = {
 };
 const at = (iso: string) => new Date(`2026-11-${iso}:00.000Z`);
 const COPY: CopyEventInput = {
-  copyId: 'rl:conformance-instance:42:7',
+  copyId: 'rl:0123456789ab:42:7',
   title: 'Raid Night',
   description: 'https://raid.example/events/42',
   url: 'https://raid.example/events/42',
@@ -100,7 +101,7 @@ function describeBusy(get: ReadHarness): void {
     await h.provider.upsertEvent(h.credentials, cal, COPY, null);
     const maybe = {
       ...COPY,
-      copyId: 'rl:conformance-instance:43:7',
+      copyId: 'rl:0123456789ab:43:7',
       tentative: true,
     };
     await h.provider.upsertEvent(h.credentials, cal, maybe, null);
