@@ -86,6 +86,9 @@ interface SeedOpts {
   readEnabled?: boolean;
   dedicated?: string | null;
   lastSyncedAt?: Date | null;
+  status?: string;
+  lastErrorCode?: string | null;
+  nextSyncAt?: Date | null;
 }
 
 async function seedConnection(opts: SeedOpts = {}): Promise<number> {
@@ -105,6 +108,9 @@ async function seedConnection(opts: SeedOpts = {}): Promise<number> {
       readEnabled: opts.readEnabled ?? false,
       dedicatedCalendarId: opts.dedicated ?? null,
       lastSyncedAt: opts.lastSyncedAt ?? null,
+      status: opts.status ?? 'active',
+      lastErrorCode: opts.lastErrorCode ?? null,
+      nextSyncAt: opts.nextSyncAt ?? null,
     })
     .where(eq(conns.id, id));
   return id;
@@ -238,6 +244,29 @@ describe('PATCH /users/me/calendars/:id — read block (replaces 1596 400)', () 
     expect((await rowOf(id))?.readEnabled).toBe(false);
     expect(await jobState(id)).toBeNull();
   });
+
+  it('more than 25 calendars → 400, nothing persisted or queued; 25 is fine', async () => {
+    const id = await seedConnection({ granted: true });
+    const ids = (n: number) => Array.from({ length: n }, (_, i) => `cal-${i}`);
+    const res = await patch(id, {
+      read: { enabled: true, calendarIds: ids(26) },
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.message).toBe(
+      'calendarIds: at most 25 calendars can be read per connection',
+    );
+    expect(await rowOf(id)).toMatchObject({
+      readEnabled: false,
+      readCalendarIds: [],
+    });
+    expect(syncAdds(id)).toBe(0);
+
+    const ok = await patch(id, {
+      read: { enabled: true, calendarIds: ids(25) },
+    });
+    expect(ok.status).toBe(204);
+    expect((await rowOf(id))?.readCalendarIds).toHaveLength(25);
+  });
 });
 
 // ─── POST :id/sync ───────────────────────────────────────────────────────────
@@ -264,6 +293,41 @@ describe('POST /users/me/calendars/:id/sync', () => {
       granted: true,
       readEnabled: true,
       lastSyncedAt,
+    });
+    expect((await postSync(id)).status).toBe(202);
+    expect(syncAdds(id)).toBe(1);
+  });
+
+  // A failing sync never moves last_synced_at, so the 5-min rule alone let a
+  // broken connection be hammered.
+  it.each([
+    ['an error row inside its backoff', 'error', 60],
+    ['an active row with a last_error_code inside its backoff', 'active', 60],
+    ['a needs_reconnect row', 'needs_reconnect', null],
+  ] as const)(
+    '%s → 429 sync_throttled, nothing queued',
+    async (_l, status, mins) => {
+      const id = await seedConnection({
+        granted: true,
+        readEnabled: true,
+        status,
+        lastErrorCode: status === 'needs_reconnect' ? 'auth' : 'provider_error',
+        nextSyncAt: mins === null ? null : new Date(Date.now() + mins * 60_000),
+      });
+      const res = await postSync(id);
+      expect(res.status).toBe(429);
+      expect(res.body.message).toBe('sync_throttled');
+      expect(syncAdds(id)).toBe(0);
+    },
+  );
+
+  it('an error row whose backoff has passed may sync again', async () => {
+    const id = await seedConnection({
+      granted: true,
+      readEnabled: true,
+      status: 'error',
+      lastErrorCode: 'provider_error',
+      nextSyncAt: new Date(Date.now() - 60_000),
     });
     expect((await postSync(id)).status).toBe(202);
     expect(syncAdds(id)).toBe(1);
@@ -348,5 +412,29 @@ describe('POST /admin/test/calendar/seed-busy', () => {
       readAccessGranted: true,
       readEnabled: true,
     });
+  });
+
+  it("drops the owner's cached game-time so the busy hours show at once", async () => {
+    const id = await seedConnection();
+    const gameTime = () =>
+      testApp.request
+        .get('/users/me/game-time')
+        .query({ week: '2026-11-01T00:00:00.000Z', tzOffset: '0' })
+        .set(auth(user.token));
+    const before = await gameTime(); // caches the week without busy hours
+    expect(before.status).toBe(200);
+    expect(before.body.data).not.toHaveProperty('calendarBusy');
+
+    const res = await seedBusy({
+      connectionId: id,
+      blocks: [block],
+      readAccess: 'granted',
+    });
+    expect(res.status).toBe(201);
+
+    const after = await gameTime();
+    expect(after.body.data.calendarBusy).toEqual([
+      expect.objectContaining({ dayOfWeek: 1, startHour: 18, endHour: 20 }),
+    ]);
   });
 });

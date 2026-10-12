@@ -8,6 +8,8 @@
  * from CLIENT_URL, and 400 on an invalid body with nothing persisted.
  */
 import { eq } from 'drizzle-orm';
+import { getQueueToken } from '@nestjs/bullmq';
+import type { Queue } from 'bullmq';
 import { AdminCalendarSyncSettingsSchema } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -18,6 +20,7 @@ import { createMemberAndLogin } from '../events/signups.integration.spec-helpers
 import * as schema from '../drizzle/schema';
 import { SETTING_KEYS } from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
+import { CALENDAR_READ_QUEUE } from './calendar-sync.constants';
 
 const ROUTE = '/admin/settings/calendar-sync';
 /** Distinctive so a substring search over any response cannot false-match. */
@@ -267,5 +270,39 @@ describe('invalid body → 400, nothing persisted', () => {
     const get = await getAsAdmin();
     expect(get.body.enabled).toBe(false);
     expect(get.body.google).toEqual({ clientId: null, hasSecret: false });
+  });
+});
+
+// ROK-1593: the switch saves before its effects run, so an effect failure
+// (Redis down) must not 500 a setting that did change.
+describe('kill-switch effects failing', () => {
+  it('a throwing enqueue on enable still answers 200 with the switch on', async () => {
+    const owner = await createMemberAndLogin(
+      testApp,
+      'cal-ks-owner',
+      'cal-ks-owner@example.test',
+    );
+    await testApp.db.insert(schema.calendarConnections).values({
+      userId: owner.userId,
+      provider: 'google',
+      accountSubject: 'sub-cal-ks-owner',
+      credentialsEncrypted: 'not-a-real-credential',
+      status: 'active',
+      readEnabled: true,
+      readAccessGranted: true,
+    });
+    const queue = testApp.app.get<Queue>(getQueueToken(CALENDAR_READ_QUEUE));
+    const add = jest
+      .spyOn(queue, 'add')
+      .mockRejectedValue(new Error('redis down'));
+    try {
+      const res = await putAsAdmin({ enabled: true });
+      expect(add).toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      expect(res.body.enabled).toBe(true);
+    } finally {
+      add.mockRestore();
+    }
+    expect((await getAsAdmin()).body.enabled).toBe(true);
   });
 });

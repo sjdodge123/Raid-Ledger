@@ -493,7 +493,7 @@ function describeSchedulingAvailability() {
   /** A + B templated on Tuesday 20:00 + 21:00, NO sign-up. */
   async function seedCalendarFixture(
     suffix: string,
-  ): Promise<Fixture & { memberBToken: string }> {
+  ): Promise<Fixture & { memberBToken: string; memberAId: number }> {
     const memberA = await createUser(`${suffix}-a`);
     const memberB = await createUser(`${suffix}-b`);
     const { lineupId, matchId } = await seedPoll(memberA.id);
@@ -508,6 +508,7 @@ function describeSchedulingAvailability() {
       token: memberA.token,
       memberBId: memberB.id,
       memberBToken: memberB.token,
+      memberAId: memberA.id,
     };
   }
 
@@ -654,10 +655,18 @@ function describeSchedulingAvailability() {
     expect(cellAt(res.body, 21)?.busyCount).toBe(0);
   });
 
-  // §6.4.3: busy blocks are shown only to their owner.
+  // §6.4.3: busy blocks are shown only to their owner. A (who shares the
+  // lineup with B) has a block of their own at 20:00, so A's calendarBusy is
+  // populated — B's 21:00 block must not be in it. B is read first, so a
+  // composite cache not keyed per user would also hand B's hours to A.
   it('carries calendarBusy on the owner composite only', async () => {
     const fixture = await seedCalendarFixture('cal-visibility');
     await seedBusyBlock(fixture.memberBId, BLOCK_21_START, BLOCK_21_END);
+    await seedBusyBlock(
+      fixture.memberAId,
+      '2026-03-03T20:00:00.000Z',
+      '2026-03-03T21:00:00.000Z',
+    );
     const ownerRes = await getOwnGameTime(fixture.memberBToken);
     const otherRes = await getOwnGameTime(fixture.token);
 
@@ -671,7 +680,14 @@ function describeSchedulingAvailability() {
       },
     ]);
     expect(otherRes.status).toBe(200);
-    expect(otherRes.body.data).not.toHaveProperty('calendarBusy');
+    expect(otherRes.body.data.calendarBusy).toEqual([
+      {
+        dayOfWeek: TUESDAY_GRID_DAY,
+        startHour: 20,
+        endHour: 21,
+        provider: 'google',
+      },
+    ]);
   });
 }
 
