@@ -67,16 +67,31 @@ const ATTENDED_CTE = sql`
       AND upper(e.duration) <= NOW()${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
   )`;
 
-// Same predicate as the `filtered` CTE in igdb-discover-community-playing.helpers.ts.
+/** A bare `alias.column` reference — `SHOWS_ACTIVITY_SQL` inlines it raw. */
+const USER_ID_REF = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
+
+/**
+ * The digest's one privacy rule (ROK-1435 Decision 4a, ROK-1771 AC10): true
+ * unless the member set `show_activity = false`. `userIdRef` is the qualified
+ * user-id column of the row being filtered, e.g. `'a.user_id'`. Same predicate
+ * as the `filtered` CTE in igdb-discover-community-playing.helpers.ts.
+ */
+export function SHOWS_ACTIVITY_SQL(userIdRef: string): SQL {
+  if (!USER_ID_REF.test(userIdRef)) {
+    throw new Error(`SHOWS_ACTIVITY_SQL: not a column reference: ${userIdRef}`);
+  }
+  return sql`NOT EXISTS (
+      SELECT 1 FROM user_preferences sa_pref
+      WHERE sa_pref.user_id = ${sql.raw(userIdRef)}
+        AND sa_pref.key = 'show_activity'
+        AND sa_pref.value = 'false'::jsonb
+    )`;
+}
+
 const OPT_OUT_FILTERED_CTE = sql`
   filtered AS (
     SELECT a.* FROM attended a
-    WHERE NOT EXISTS (
-      SELECT 1 FROM user_preferences p
-      WHERE p.user_id = a.user_id
-        AND p.key = 'show_activity'
-        AND p.value = 'false'::jsonb
-    )
+    WHERE ${SHOWS_ACTIVITY_SQL('a.user_id')}
   )`;
 
 const UNFILTERED_CTE = sql`

@@ -10,6 +10,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import {
   RECAP_WINDOW_DAYS,
+  SHOWS_ACTIVITY_SQL,
   buildWeeklyRecapQuery,
   fetchWeeklyRecap,
   isEmptyWeeklyRecap,
@@ -57,12 +58,13 @@ describe('buildWeeklyRecapQuery', () => {
   });
 
   it('applies the show_activity opt-out predicate by default', () => {
-    expect(render()).toContain("p.key = 'show_activity'");
-    expect(render()).toContain("p.value = 'false'::jsonb");
+    expect(render()).toContain('sa_pref.user_id = a.user_id');
+    expect(render()).toContain("sa_pref.key = 'show_activity'");
+    expect(render()).toContain("sa_pref.value = 'false'::jsonb");
   });
 
   it('applies the opt-out predicate when respectActivityOptOut is true', () => {
-    expect(render(true)).toContain("p.key = 'show_activity'");
+    expect(render(true)).toContain("sa_pref.key = 'show_activity'");
   });
 
   it('omits the opt-out predicate when respectActivityOptOut is false', () => {
@@ -82,6 +84,39 @@ describe('buildWeeklyRecapQuery', () => {
   it('binds no parameters (the window is a constant, not user input)', () => {
     const { params } = new PgDialect().sqlToQuery(buildWeeklyRecapQuery());
     expect(params).toEqual([]);
+  });
+});
+
+describe('SHOWS_ACTIVITY_SQL', () => {
+  function text(ref: string): string {
+    return new PgDialect()
+      .sqlToQuery(SHOWS_ACTIVITY_SQL(ref))
+      .sql.replace(/\s+/g, ' ');
+  }
+
+  it('is a NOT EXISTS on the show_activity=false preference of the given column', () => {
+    const out = text('x.user_id');
+    expect(out).toContain(
+      'NOT EXISTS ( SELECT 1 FROM user_preferences sa_pref',
+    );
+    expect(out).toContain('sa_pref.user_id = x.user_id');
+    expect(out).toContain("sa_pref.key = 'show_activity'");
+    expect(out).toContain("sa_pref.value = 'false'::jsonb");
+  });
+
+  it('binds no parameters', () => {
+    expect(
+      new PgDialect().sqlToQuery(SHOWS_ACTIVITY_SQL('a.user_id')).params,
+    ).toEqual([]);
+  });
+
+  it('rejects anything that is not a bare alias.column reference', () => {
+    expect(() => SHOWS_ACTIVITY_SQL('user_id')).toThrow(
+      /not a column reference/,
+    );
+    expect(() => SHOWS_ACTIVITY_SQL('a.user_id OR 1=1')).toThrow(
+      /not a column reference/,
+    );
   });
 });
 
