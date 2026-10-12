@@ -30,6 +30,13 @@ export function oauthCallbackPath(provider: CalendarOAuthProvider): string {
   return `/api/calendar-sync/oauth/${provider}/callback`;
 }
 
+/**
+ * ROK-1593 D16: emitted by `GameTimeService.saveTemplate` after the save
+ * commits; `CalendarTemplateSavedListener` re-derives the user's away days
+ * (Rule B reads the template). Payload `{ userId }`.
+ */
+export const GAME_TIME_TEMPLATE_SAVED_EVENT = 'game-time.template-saved';
+
 /** ROK-1596 D3: the single write queue (reconcile, write-off, disconnect). */
 export const CALENDAR_WRITE_QUEUE = 'calendar-write';
 

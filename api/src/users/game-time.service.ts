@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
@@ -18,7 +19,10 @@ import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { defined } from '../common/defined.helpers';
 import { fetchCalendarBusyHours } from '../calendar-sync/read/calendar-busy-query.helpers';
 import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
-import { CALENDAR_READ_QUEUE } from '../calendar-sync/calendar-sync.constants';
+import {
+  CALENDAR_READ_QUEUE,
+  GAME_TIME_TEMPLATE_SAVED_EVENT,
+} from '../calendar-sync/calendar-sync.constants';
 import { enqueueCalendarDerive } from '../calendar-sync/read/calendar-read.enqueue.helpers';
 import {
   deleteManualAbsence,
@@ -66,6 +70,7 @@ export class GameTimeService {
     private db: PostgresJsDatabase<typeof schema>,
     @InjectQueue(CALENDAR_READ_QUEUE)
     private readonly calendarReadQueue: Queue,
+    private readonly events: EventEmitter2,
   ) {}
 
   private getCached<T>(key: string): T | undefined {
@@ -126,6 +131,8 @@ export class GameTimeService {
     await this.performTemplateSave(userId, mergedDbSlots);
     await this.updateGameTimeConfirmedAt(userId);
     this.invalidateUserCache(userId);
+    // ROK-1593 D16: committed — synced away days (Rule B) follow the template.
+    this.events.emit(GAME_TIME_TEMPLATE_SAVED_EVENT, { userId });
     const preservedDisplay = preservedSlots.map((s) => ({
       dayOfWeek: (s.dayOfWeek + 1) % 7,
       hour: s.hour,
@@ -234,6 +241,7 @@ export class GameTimeService {
     // "I'm away some days" answers the game-time check too (ROK-1564).
     await this.updateGameTimeConfirmedAt(userId);
     this.invalidateUserCache(userId); // after the insert + stamp (review MINOR a)
+    await this.enqueueDerive(userId); // Q-D: a manual day hides a synced one
     return defined(row, 'inserted absence row');
   }
 
@@ -241,6 +249,7 @@ export class GameTimeService {
   async deleteAbsence(userId: number, absenceId: number): Promise<void> {
     this.invalidateUserCache(userId);
     await deleteManualAbsence(this.db, userId, absenceId);
+    await this.enqueueDerive(userId); // Q-D: a synced day may come back
   }
 
   /**
@@ -251,6 +260,11 @@ export class GameTimeService {
   async ignoreAbsence(userId: number, absenceId: number): Promise<void> {
     await ignoreCalendarAbsence(this.db, userId, absenceId);
     this.invalidateUserCache(userId);
+    await this.enqueueDerive(userId);
+  }
+
+  /** Re-derive synced away days; a queue failure is logged, never surfaced. */
+  private async enqueueDerive(userId: number): Promise<void> {
     await enqueueCalendarDerive(this.calendarReadQueue, userId).catch(
       (err: unknown) =>
         this.logger.warn(

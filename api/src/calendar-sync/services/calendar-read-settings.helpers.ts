@@ -21,6 +21,7 @@ import {
   ConflictException,
   HttpException,
   HttpStatus,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { and, eq, sql } from 'drizzle-orm';
@@ -38,6 +39,7 @@ import {
   READ_SYNC_JITTER_MS,
 } from '../read/calendar-read-sync.helpers';
 import {
+  enqueueCalendarDerive,
   enqueueCalendarReadSync,
   type CalendarReadEnqueueDeps,
 } from '../read/calendar-read.enqueue.helpers';
@@ -48,6 +50,8 @@ type Db = PostgresJsDatabase<typeof schema>;
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 type ConnectionRow = typeof schema.calendarConnections.$inferSelect;
 type ReadBody = NonNullable<UpdateCalendarConnection['read']>;
+
+const logger = new Logger('CalendarReadSettings');
 
 /** Manual sync: at most one per connection per 5 minutes (D-R6). */
 export const MANUAL_SYNC_THROTTLE_MS = 5 * 60 * 1000;
@@ -217,9 +221,13 @@ export async function requestManualReadSync(
   await enqueueCalendarReadSync(deps.readQueue, row.id);
 }
 
-/** `PUT settings`: validate, upsert the read mode, drop cached hours. */
+/**
+ * `PUT settings`: validate, upsert the read mode, drop cached hours, then
+ * re-derive synced away days (mode `hours` derives none, `days`/`both` do).
+ * The derive enqueue is best effort — the mode is already saved.
+ */
 export async function updateUserReadSettings(
-  deps: Pick<CalendarReadSettingsDeps, 'db' | 'invalidateUser'>,
+  deps: Pick<CalendarReadSettingsDeps, 'db' | 'invalidateUser' | 'readQueue'>,
   userId: number,
   body: unknown,
 ): Promise<void> {
@@ -234,5 +242,10 @@ export async function updateUserReadSettings(
       set: { value: sql`excluded.value`, updatedAt: new Date() },
     });
   deps.invalidateUser(userId);
-  // PR-B: enqueue `derive` for the user here (synced away days follow mode).
+  await enqueueCalendarDerive(deps.readQueue.queue, userId).catch(
+    (err: unknown) => {
+      const name = err instanceof Error ? err.name : 'unknown';
+      logger.warn(`derive enqueue after read-mode save failed (${name})`);
+    },
+  );
 }

@@ -23,6 +23,7 @@ import { GoogleCalendarAdapter } from './providers/google/google.adapter';
 import { FakeCalendarProvider } from './providers/testing/fake-calendar.provider';
 import { CalendarReadCron } from './read/calendar-read.cron';
 import { CalendarReadProcessor } from './read/calendar-read.processor';
+import { CalendarTemplateSavedListener } from './read/calendar-template-saved.listener';
 import { CalendarAccountDeleteListener } from './write/calendar-account-delete.listener';
 import { CalendarDisconnectSweepCron } from './write/calendar-disconnect-sweep.cron';
 import { CalendarWriteListener } from './write/calendar-write.listener';
@@ -79,6 +80,7 @@ const fakeProvider = {
     CalendarAccountDeleteListener,
     CalendarReadProcessor,
     CalendarReadCron,
+    CalendarTemplateSavedListener,
   ],
   exports: [CalendarSyncEnabledGuard, CalendarProviderRegistry],
 })
