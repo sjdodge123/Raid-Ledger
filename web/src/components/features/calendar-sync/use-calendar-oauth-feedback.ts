@@ -1,6 +1,6 @@
 /**
- * The OAuth callback lands on `/profile/gaming/calendars?connected=google`
- * or `?error=<code>` (ROK-1594). Success is a toast (the result of an action
+ * The OAuth callback lands on `/profile/integrations?connected=google`
+ * or `?error=<code>` (ROK-1594; moved ROK-1780). Success is a toast (the result of an action
  * the user took, design-system §4.8); an error is kept for an inline banner,
  * because the user has to act on it. Both params are stripped once handled.
  */

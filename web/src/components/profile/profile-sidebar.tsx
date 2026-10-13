@@ -2,7 +2,6 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useResetOnboarding } from '../../hooks/use-onboarding-fte';
 import { useAuth } from '../../hooks/use-auth';
 import { useGameTime } from '../../hooks/use-game-time';
-import { useCalendarSyncEnabled } from '../../hooks/use-calendar-sync';
 import { getSections, type NavItem, type NavSection } from './profile-nav-data';
 import { gameTimeSummary } from '../features/game-time/phone/phone-week-summary';
 
@@ -88,8 +87,7 @@ export function ProfileSidebar({ onNavigate }: ProfileSidebarProps) {
         isSet: gameTimeData?.slots?.some(s => s.fromTemplate) ?? false,
         summary: gameTimeSummary(gameTimeData?.slots ?? [], gameTimeData?.gameTimeAgeDays, 'No game time yet'),
     };
-    const calendars = useCalendarSyncEnabled();
-    const sections = getSections(user?.id ?? 0, { calendars });
+    const sections = getSections(user?.id ?? 0);
 
     return (
         <nav className="w-full h-full overflow-y-auto py-4 px-2" aria-label="Profile navigation">

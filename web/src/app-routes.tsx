@@ -5,6 +5,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
+import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
 import { AuthSuccessPage } from './pages/auth-success-page';
@@ -18,7 +19,7 @@ import {
   InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
   UserProfilePage, OnboardingWizardPage,
   ProfileLayout, PreferencesPanel,
-  NotificationsPanel, ProfileGameTimePanel, CalendarsPanel, SendEventsPanel,
+  NotificationsPanel, ProfileGameTimePanel, SendEventsPanel,
   CharactersPanel, WatchedGamesPanel,
   AvatarPanel, IntegrationsPanel, AccountPanel,
   AdminSettingsLayout, AdminSetupWizard,
@@ -43,8 +44,7 @@ function ProfileRoutes() {
       <Route path="preferences" element={<PreferencesPanel />} />
       <Route path="notifications" element={<NotificationsPanel />} />
       <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />
-      <Route path="gaming/calendars" element={<CalendarsPanel />} />
-      <Route path="gaming/calendars/send/:connectionId" element={<SendEventsPanel />} />
+      <Route path="integrations/calendars/send/:connectionId" element={<SendEventsPanel />} />
       <Route path="gaming/characters" element={<CharactersPanel />} />
       <Route path="gaming/watched-games" element={<WatchedGamesPanel />} />
       <Route path="account" element={<AccountPanel />} />
@@ -56,6 +56,9 @@ function ProfileRoutes() {
       <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
       <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
       <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
+      {/* ROK-1780: Calendars moved inline onto My Integrations; the query string carries OAuth feedback */}
+      <Route path="gaming/calendars" element={<LegacyCalendarsRedirect />} />
+      <Route path="gaming/calendars/send/:connectionId" element={<LegacySendEventsRedirect />} />
       <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
     </Route>
   );

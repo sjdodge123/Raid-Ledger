@@ -14,10 +14,9 @@ import {
     calendarConnectionFixture, calendarsOverviewVariants, userCalendarHandlers,
 } from '../../../test/mocks/calendar-sync-handlers';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
-import { CALENDARS_PATH } from '../../profile/profile-nav-data';
 import { CalendarsPage } from './CalendarsPage';
 import { SendEventsPage } from './SendEventsPage';
-import { sendEventsPath } from './calendar-sync-row';
+import { CALENDARS_PATH, SEND_EVENTS_BASE, sendEventsPath } from './calendar-sync-row';
 import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 
@@ -41,7 +40,7 @@ function renderAt(url: string) {
             <MemoryRouter initialEntries={[url]}>
                 <Routes>
                     <Route path={CALENDARS_PATH} element={<CalendarsPage />} />
-                    <Route path={`${CALENDARS_PATH}/send/:connectionId`} element={<SendEventsPage />} />
+                    <Route path={`${SEND_EVENTS_BASE}/:connectionId`} element={<SendEventsPage />} />
                 </Routes>
             </MemoryRouter>
         </QueryClientProvider>,
@@ -106,7 +105,7 @@ describe('K5 Send my events — phone sub-page', () => {
 
     it('an unknown connection id shows the not-found line', async () => {
         setDesktop(false);
-        renderAt(`${CALENDARS_PATH}/send/999999`);
+        renderAt(`${SEND_EVENTS_BASE}/999999`);
         expect(await screen.findByTestId('send-events-not-found')).toHaveTextContent(S.notFound);
     });
 

@@ -29,7 +29,9 @@ import { signInContextAs } from './browser-session';
 import { isPhoneLayout } from './helpers';
 import { seedFixtureVoter } from './scheduling-poll-fixtures';
 
-const CALENDARS = '/profile/gaming/calendars';
+// ROK-1780: Calendars render inline on My Integrations; the phone K5 page moved under it.
+const CALENDARS = '/profile/integrations';
+const SEND_EVENTS = '/profile/integrations/calendars/send';
 const MENU_ITEMS = ['Google Calendar', 'Outlook', 'Download .ics'];
 /** A distinct fixture user per project (slots are only read for calendar state here). */
 const VIEWER_SLOT_BY_PROJECT: Readonly<Record<string, number>> = { desktop: 4, mobile: 5, tablet: 6 };
@@ -171,7 +173,7 @@ test('Calendars: K4 card (desktop) / K5 page (phone) saves the radio and the swi
         const entry = page.locator(`[data-testid="send-events-entry"]${own}`);
         await entry.scrollIntoViewIfNeeded();
         await entry.click();
-        settingsUrl = `${CALENDARS}/send/${connectionId}`;
+        settingsUrl = `${SEND_EVENTS}/${connectionId}`;
         await expect(page).toHaveURL(new RegExp(`${settingsUrl}$`));
         const sub = page.getByTestId('send-events-page');
         await expect(sub.getByRole('heading', { name: 'Send my events' })).toBeVisible();

@@ -1,6 +1,9 @@
 /**
  * Integrations panel showing Discord and Steam link status (ROK-548).
  * Reuses DiscordLinkCta and SteamSection from identity-sections.
+ * ROK-1780: the whole Calendars page renders as a sibling below the
+ * Integrations card while the Calendar Sync kill switch is on, whatever the
+ * Discord link state (it used to be Profile → Gaming → Calendars).
  */
 import type { JSX } from 'react';
 import { useAuth } from '../../hooks/use-auth';
@@ -10,6 +13,8 @@ import { useSteamLink } from '../../hooks/use-steam-link';
 import { isDiscordLinked, buildDiscordAvatarUrl } from '../../lib/avatar';
 import { DiscordLinkCta, SteamSection } from './identity-sections';
 import { useSteamRedirectFeedback } from './identity-hooks';
+import { useCalendarSyncEnabled } from '../../hooks/use-calendar-sync';
+import { CalendarsPage } from '../../components/features/calendar-sync/CalendarsPage';
 
 /** Discord linked status display */
 function DiscordLinkedStatus({ user }: {
@@ -30,7 +35,13 @@ function DiscordLinkedStatus({ user }: {
     );
 }
 
-/** Integrations panel with Discord and Steam sections. */
+/** Calendars section — rendered only while the admin kill switch is on (ROK-1780). */
+function CalendarsSection(): JSX.Element | null {
+    const enabled = useCalendarSyncEnabled();
+    return enabled ? <CalendarsPage /> : null;
+}
+
+/** Integrations panel with Discord and Steam sections, then Calendars. */
 export function IntegrationsPanel(): JSX.Element | null {
     useSteamRedirectFeedback();
     const { user } = useAuth();
@@ -59,6 +70,7 @@ export function IntegrationsPanel(): JSX.Element | null {
                         unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} syncWishlist={syncWishlist} />
                 )}
             </div>
+            <CalendarsSection />
         </div>
     );
 }

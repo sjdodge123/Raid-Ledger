@@ -26,7 +26,8 @@ import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 
-const PATH = '/profile/gaming/calendars';
+// ROK-1780: the page renders inline on My Integrations, where the OAuth callback lands.
+const PATH = '/profile/integrations';
 const realMatchMedia = window.matchMedia;
 
 function setDesktop(desktop: boolean): void {

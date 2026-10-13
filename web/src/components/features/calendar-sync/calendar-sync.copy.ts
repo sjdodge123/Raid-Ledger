@@ -107,7 +107,7 @@ export const SEND_EVENTS_COPY = {
     /* K2 section label over the phone entry row. */
     writeHeading: 'Write · send my Raid Ledger events',
     pageTitle: 'Send my events',
-    back: 'Calendars',
+    back: 'My Integrations',
     entrySub: { dedicated: 'To Google Calendar · a "Raid Ledger" calendar', primary: 'To Google Calendar · my main calendar', off: 'Off' },
     notFound: 'That calendar is no longer connected.',
 } as const;
