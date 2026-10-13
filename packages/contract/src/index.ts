@@ -68,6 +68,9 @@ export * from './blizzard.schema.js';
 // Plugins (ROK-236)
 export * from './plugins.schema.js';
 
+// Game servers (ROK-268)
+export * from './game-servers.schema.js';
+
 // Feedback (ROK-186)
 export * from './feedback.schema.js';
 
