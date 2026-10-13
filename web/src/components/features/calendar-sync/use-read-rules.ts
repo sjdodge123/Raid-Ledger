@@ -2,15 +2,18 @@
  * Read rules (ROK-1595 K2/K4). The read MODE is per user (`PUT settings`) and
  * renders once on the page; read on/off and the picked calendars are per
  * connection (`PATCH :id`) — spec D1. Phone shows the mode as two switches;
- * both off turns reading off (operator ruling F-2) on every account that
- * reads. Desktop picks one of three modes. With two or more readable accounts
- * each card also carries its own on/off. Every change saves at once; the hooks
+ * desktop picks one of three modes. With ONE readable account both switches
+ * off turns its reading off (F-2). With two or more (operator 2026-10-13) the
+ * page control only sets the mode and cannot go all-off; each card's own
+ * switch is the only per-account on/off. While any read save is in flight
+ * every read control is disabled. Every change saves at once; the hooks
  * patch the overview optimistically and put it back on an error (D3), and the
  * section shows "Could not save".
  */
 import { useState } from 'react';
+import { useIsMutating } from '@tanstack/react-query';
 import type { CalendarConnection, CalendarReadMode, ProviderCalendar } from '@raid-ledger/contract';
-import { useSetReadEnabled, useUpdateReadSettings } from '../../../hooks/use-calendar-read';
+import { READ_SAVE_KEY, useSetReadEnabled, useUpdateReadSettings } from '../../../hooks/use-calendar-read';
 
 export interface ReadSwitches { days: boolean; hours: boolean }
 
@@ -65,30 +68,40 @@ export function enabledTargets(readable: readonly CalendarConnection[], enabled:
     return readable.filter((c) => c.read.enabled !== enabled);
 }
 
+/** True while any read on/off or read-mode save is in flight (page or card). */
+export function useReadSaving(): boolean {
+    return useIsMutating({ mutationKey: [...READ_SAVE_KEY] }) > 0;
+}
+
 /**
- * The page-level mode control. "On" = at least one readable account reads.
- * Applies a `ReadChange`: PATCH read on/off on every account it touches first
- * (the mode only counts once reading is on), then PUT the mode.
+ * The page-level mode control. One readable account: "on" = it reads, and a
+ * `ReadChange` PATCHes read on/off first (the mode only counts once reading
+ * is on), then PUTs the mode. Two or more (`multi`): it only PUTs the mode,
+ * shows as on, and never touches per-account on/off (cards own that).
  */
 export function useReadMode(readable: readonly CalendarConnection[], mode: CalendarReadMode) {
     const setEnabled = useSetReadEnabled();
     const setMode = useUpdateReadSettings();
     const [failed, setFailed] = useState(false);
     const onError = (): void => setFailed(true);
-    const enabled = readable.some((c) => c.read.enabled);
+    const multi = readable.length > 1;
+    const enabled = multi || readable.some((c) => c.read.enabled);
     const putMode = (next: CalendarReadMode | undefined): void => {
         if (next) setMode.mutate(next, { onError });
     };
     const choose = (next: CalendarReadMode | null): void => {
         setFailed(false);
+        if (multi) {
+            if (next !== null && next !== mode) putMode(next);
+            return;
+        }
         const change = readChangeFor(next, mode, enabled);
         const on = change.enabled;
         if (on === undefined) return putMode(change.mode);
         const writes = enabledTargets(readable, on).map((c) => setEnabled.mutateAsync({ id: c.id, enabled: on }));
         void Promise.all(writes).then(() => putMode(change.mode), onError);
     };
-    const busy = setEnabled.isPending || setMode.isPending;
-    return { choose, failed, busy, enabled };
+    return { choose, failed, busy: useReadSaving(), enabled, multi };
 }
 
 /** One account's read on/off (the per-card switch); its error stays on its own card. */
@@ -99,5 +112,5 @@ export function useConnectionRead(connection: CalendarConnection) {
         setFailed(false);
         setEnabled.mutate({ id: connection.id, enabled: on }, { onError: () => setFailed(true) });
     };
-    return { toggle, failed, busy: setEnabled.isPending };
+    return { toggle, failed, busy: useReadSaving() };
 }

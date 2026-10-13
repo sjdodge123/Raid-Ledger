@@ -2,6 +2,8 @@
  * "When a calendar says you are busy" (ROK-1595): K2's two switches + "Look
  * ahead" below 1024px, K4's three radio cards from 1024px (spec D2). The mode
  * is per USER, so this renders once for the page, not for one connection.
+ * With two or more readable accounts the switches only pick the mode: the
+ * last one on is locked with a hint (each card has its own on/off).
  * Without any account that reads it is "Grant read access". When every
  * account that reads is broken (`needs_reconnect`) the rows stay but are
  * disabled; the row's "Fix" is the way out. Saving is immediate — see
@@ -47,14 +49,22 @@ function LookAheadRow(): JSX.Element {
     );
 }
 
-interface ControlProps { switches: ReadSwitches; mode: CalendarReadMode; enabled: boolean; disabled: boolean; choose: (next: CalendarReadMode | null) => void }
+interface ControlProps {
+    switches: ReadSwitches; mode: CalendarReadMode; enabled: boolean; disabled: boolean; multi: boolean;
+    choose: (next: CalendarReadMode | null) => void;
+}
 
-function PhoneSwitches({ switches, disabled, choose }: ControlProps): JSX.Element {
+function PhoneSwitches({ switches, disabled, multi, choose }: ControlProps): JSX.Element {
     const flip = (key: keyof ReadSwitches) => (on: boolean): void => choose(modeOf({ ...switches, [key]: on }));
+    // 2+ accounts: the page switches set WHAT counts and cannot both be off (operator 2026-10-13).
+    const keepOne = multi && switches.days !== switches.hours;
     return (
         <div>
-            <SwitchRow copy={R.days} checked={switches.days} disabled={disabled} testId="calendar-read-days" onChange={flip('days')} />
-            <SwitchRow copy={R.hours} checked={switches.hours} disabled={disabled} testId="calendar-read-hours" onChange={flip('hours')} />
+            <SwitchRow copy={R.days} checked={switches.days} disabled={disabled || (keepOne && switches.days)}
+                testId="calendar-read-days" onChange={flip('days')} />
+            <SwitchRow copy={R.hours} checked={switches.hours} disabled={disabled || (keepOne && switches.hours)}
+                testId="calendar-read-hours" onChange={flip('hours')} />
+            {keepOne && <p className="text-xs text-muted" data-testid="calendar-read-keep-one">{R.keepOne}</p>}
             <LookAheadRow />
         </div>
     );
@@ -89,9 +99,9 @@ function GrantRead(): JSX.Element {
 interface ControlsProps { readable: readonly CalendarConnection[]; mode: CalendarReadMode; desktop: boolean }
 
 function ReadControls({ readable, mode, desktop }: ControlsProps): JSX.Element {
-    const { choose, failed, busy, enabled } = useReadMode(readable, mode);
+    const { choose, failed, busy, enabled, multi } = useReadMode(readable, mode);
     const props: ControlProps = {
-        switches: switchesOf(mode, enabled), mode, enabled, choose,
+        switches: switchesOf(mode, enabled), mode, enabled, multi, choose,
         disabled: busy || readable.every((c) => c.status === 'needs_reconnect'),
     };
     return (

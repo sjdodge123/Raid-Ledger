@@ -3,6 +3,8 @@
  * (D1), so it renders once for the page and is never bound to the first
  * connection; read on/off is per connection, so each card carries its own
  * switch (keyed by id — an error cannot carry over to another account).
+ * Operator 2026-10-13: with 2+ accounts the page switches only set the mode,
+ * cannot both be off, and never touch per-account on/off.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -13,7 +15,7 @@ import type { CalendarConnection, CalendarReadMode } from '@raid-ledger/contract
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import {
-    CALENDAR_CONNECTION_URL, CALENDARS_OVERVIEW_URL, calendarsOverviewFixture, readConnectionFixture, userCalendarHandlers,
+    CALENDAR_CONNECTION_URL, CALENDAR_READ_SETTINGS_URL, CALENDARS_OVERVIEW_URL, calendarsOverviewFixture, readConnectionFixture, userCalendarHandlers,
 } from '../../../test/mocks/calendar-sync-handlers';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
@@ -57,6 +59,18 @@ function recordPatches(fail: readonly number[] = []) {
     return patches;
 }
 
+/** Records every PUT settings body. */
+function recordPuts() {
+    const puts: unknown[] = [];
+    server.use(http.put(CALENDAR_READ_SETTINGS_URL, async ({ request }) => {
+        puts.push(await request.json());
+        return new HttpResponse(null, { status: 204 });
+    }));
+    return puts;
+}
+
+const readOff = (c: CalendarConnection): CalendarConnection => ({ ...c, read: { ...c.read, enabled: false } });
+
 const accountSwitch = (c: CalendarConnection) => screen.findByRole('switch', { name: R.accountRead.aria(c.accountLabel ?? '') });
 
 beforeEach(() => { setAccessToken('test-token'); setDesktop(false); });
@@ -92,14 +106,53 @@ describe('the per-user mode control', () => {
         expect(screen.queryByTestId('calendar-read-grant')).toBeNull();
     });
 
-    it('F-2 with two accounts: both mode switches off turns reading off on BOTH', async () => {
+});
+
+describe('two accounts: the page switches set only the mode (operator 2026-10-13)', () => {
+    it('two accounts, mode days: "Whole days" (the last one on) is locked with a hint; nothing is sent', async () => {
         renderPage([first, second], 'days');
         const patches = recordPatches();
-        expect(await screen.findByRole('switch', { name: R.hours.aria })).toHaveAttribute('aria-checked', 'false');
-        fireEvent.click(screen.getByRole('switch', { name: R.days.aria }));
-        await waitFor(() => expect(patches).toHaveLength(2));
-        expect(patches.map((p) => p.id).sort()).toEqual([String(first.id), String(second.id)].sort());
-        expect(patches.map((p) => p.body)).toEqual([{ read: { enabled: false } }, { read: { enabled: false } }]);
+        const puts = recordPuts();
+        const days = await screen.findByRole('switch', { name: R.days.aria });
+        expect(days, 'the page switches cannot both be off with 2+ accounts').toBeDisabled();
+        expect(screen.getByTestId('calendar-read-keep-one')).toHaveTextContent(R.keepOne);
+        expect(screen.getByRole('switch', { name: R.hours.aria })).toBeEnabled();
+        fireEvent.click(days);
+        expect(patches, 'the page control never turns an account off').toEqual([]);
+        expect(puts).toEqual([]);
+    });
+
+    it('one account: both switches can still go off (F-2), so no lock and no hint', async () => {
+        renderPage([first], 'days');
+        expect(await screen.findByRole('switch', { name: R.days.aria })).toBeEnabled();
+        expect(screen.queryByTestId('calendar-read-keep-one')).toBeNull();
+    });
+
+    it('every account off on its card: the switches still show the mode; "Busy hours" on PUTs the mode and enables no account', async () => {
+        renderPage([readOff(first), readOff(second)], 'days');
+        const patches = recordPatches();
+        const puts = recordPuts();
+        expect(await screen.findByRole('switch', { name: R.days.aria })).toHaveAttribute('aria-checked', 'true');
+        fireEvent.click(screen.getByRole('switch', { name: R.hours.aria }));
+        await waitFor(() => expect(puts).toEqual([{ mode: 'both' }]));
+        expect(patches, 're-enabling from the page must not override the per-card choices').toEqual([]);
+        expect(await accountSwitch(first)).toHaveAttribute('aria-checked', 'false');
+        expect(await accountSwitch(second)).toHaveAttribute('aria-checked', 'false');
+    });
+
+    it('a per-card save in flight disables the page switches until it settles', async () => {
+        renderPage([first, second]);
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.patch(CALENDAR_CONNECTION_URL, async () => {
+            await gate;
+            return new HttpResponse(null, { status: 204 });
+        }));
+        fireEvent.click(await accountSwitch(second));
+        await waitFor(() => expect(screen.getByRole('switch', { name: R.hours.aria }), 'page control while a card saves').toBeDisabled());
+        expect(await accountSwitch(first), 'other cards wait too').toBeDisabled();
+        release();
+        await waitFor(() => expect(screen.getByRole('switch', { name: R.hours.aria })).toBeEnabled());
     });
 });
 

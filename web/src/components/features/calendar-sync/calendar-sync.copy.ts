@@ -162,6 +162,8 @@ export const READ_COPY = {
     grant: 'Grant read access',
     granting: 'Opening Google…',
     saveFailed: 'Could not save. Try again.',
+    /** 2+ accounts: the last page switch on is locked (operator 2026-10-13). */
+    keepOne: 'One stays on. To stop reading an account, turn it off on its card.',
     /** Per-account read on/off, shown on each card once two or more accounts can read (review r2). */
     accountRead: { title: 'Read this account', sub: 'Its busy times count', aria: (label: string) => `Read busy times from ${label}` },
     pickerLabel: 'Calendars to check',
