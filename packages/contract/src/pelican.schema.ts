@@ -13,6 +13,8 @@ import { z } from 'zod';
 export const PELICAN_PANEL_URL_MAX = 2048;
 /** Longest client API key accepted. */
 export const PELICAN_API_KEY_MAX = 512;
+/** Printable ASCII without spaces; empty is allowed (= clear the key). */
+export const PELICAN_API_KEY_CHARSET = /^[\x21-\x7E]*$/;
 
 /**
  * Why a panel URL is unacceptable, or `null` when it is fine.
@@ -75,7 +77,14 @@ export const PelicanConfigUpdateSchema = z
           'Panel URL must be an http(s) URL with no credentials, query or fragment',
       })
       .optional(),
-    apiKey: z.string().trim().max(PELICAN_API_KEY_MAX).optional(),
+    apiKey: z
+      .string()
+      .trim()
+      .max(PELICAN_API_KEY_MAX)
+      // Pelican keys are `pacc_`/`papp_` + ASCII token. Anything else would
+      // make the Bearer header throw an error whose message carries the key.
+      .regex(PELICAN_API_KEY_CHARSET, 'API key contains invalid characters')
+      .optional(),
     defaultTimezone: z
       .string()
       .trim()
