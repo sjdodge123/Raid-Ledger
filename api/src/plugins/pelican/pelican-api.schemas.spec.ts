@@ -12,6 +12,26 @@ function asRecord(value: unknown): Record<string, unknown> {
   return { ...value };
 }
 
+function withFirstTask(patch: Record<string, unknown>): unknown {
+  const body = asRecord(loadPelicanFixture('server-schedules'));
+  const data = Array.isArray(body.data) ? body.data : [];
+  const attributes = asRecord(asRecord(data[0]).attributes);
+  const relationships = asRecord(attributes.relationships);
+  const tasks = asRecord(relationships.tasks);
+  const taskData = Array.isArray(tasks.data) ? tasks.data : [];
+  const task = asRecord(taskData[0]);
+  const patched = {
+    ...task,
+    attributes: { ...asRecord(task.attributes), ...patch },
+  };
+  const nextTasks = { ...tasks, data: [patched] };
+  const nextAttrs = { ...attributes, relationships: { tasks: nextTasks } };
+  return {
+    ...body,
+    data: [{ object: 'server_schedule', attributes: nextAttrs }],
+  };
+}
+
 describe('Pelican upstream schemas', () => {
   it('unwraps the paginated server list', () => {
     const parsed = PelicanServerPageSchema.parse(
@@ -75,47 +95,6 @@ describe('Pelican upstream schemas — tolerance and rejection', () => {
     expect(parsed[0]?.tasks).toEqual([]);
   });
 
-  function withFirstTask(patch: Record<string, unknown>): unknown {
-    const body = asRecord(loadPelicanFixture('server-schedules'));
-    const data = Array.isArray(body.data) ? body.data : [];
-    const attributes = asRecord(asRecord(data[0]).attributes);
-    const relationships = asRecord(attributes.relationships);
-    const tasks = asRecord(relationships.tasks);
-    const taskData = Array.isArray(tasks.data) ? tasks.data : [];
-    const task = asRecord(taskData[0]);
-    const patched = {
-      ...task,
-      attributes: { ...asRecord(task.attributes), ...patch },
-    };
-    const nextTasks = { ...tasks, data: [patched] };
-    const nextAttrs = { ...attributes, relationships: { tasks: nextTasks } };
-    return {
-      ...body,
-      data: [{ object: 'server_schedule', attributes: nextAttrs }],
-    };
-  }
-
-  it.each([0, 900])('accepts a task time_offset of %d', (offset) => {
-    const parsed = PelicanScheduleListSchema.parse(
-      withFirstTask({ time_offset: offset }),
-    );
-    expect(parsed[0]?.tasks[0]?.time_offset).toBe(offset);
-  });
-
-  it.each([901, -1])('rejects a task time_offset of %d', (offset) => {
-    const result = PelicanScheduleListSchema.safeParse(
-      withFirstTask({ time_offset: offset }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  it('parses an unknown task action', () => {
-    const parsed = PelicanScheduleListSchema.parse(
-      withFirstTask({ action: 'wake' }),
-    );
-    expect(parsed[0]?.tasks[0]?.action).toBe('wake');
-  });
-
   it('ignores unknown upstream fields (additive releases)', () => {
     const body = asRecord(loadPelicanFixture('server-resources'));
     const attributes = {
@@ -141,5 +120,28 @@ describe('Pelican upstream schemas — tolerance and rejection', () => {
       meta: { pagination: { total: 1 } },
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('Pelican upstream schemas — task bounds (ROK-1773 D6)', () => {
+  it.each([0, 900])('accepts a task time_offset of %d', (offset) => {
+    const parsed = PelicanScheduleListSchema.parse(
+      withFirstTask({ time_offset: offset }),
+    );
+    expect(parsed[0]?.tasks[0]?.time_offset).toBe(offset);
+  });
+
+  it.each([901, -1])('rejects a task time_offset of %d', (offset) => {
+    const result = PelicanScheduleListSchema.safeParse(
+      withFirstTask({ time_offset: offset }),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('parses an unknown task action', () => {
+    const parsed = PelicanScheduleListSchema.parse(
+      withFirstTask({ action: 'wake' }),
+    );
+    expect(parsed[0]?.tasks[0]?.action).toBe('wake');
   });
 });
