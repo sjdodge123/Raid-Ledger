@@ -35,23 +35,31 @@ function labelFor(options: ZoneOption[], id: string): ZoneOption {
     return options.find((o) => o.id === id) ?? { id, label: id };
 }
 
-export function PelicanTimezoneField({ value, onChange, inherited }: {
+/** Per-row reuse (ROK-1094 servers table) passes its own `id`, `label`, `hint` and `testId`. */
+export interface PelicanTimezoneFieldProps {
     value: string; onChange: (tz: string) => void; inherited: boolean;
-}) {
+    id?: string; label?: string; hint?: string; testId?: string;
+}
+
+const DEFAULT_HINT = 'Pelican’s API doesn’t say which timezone a schedule uses. Raid Ledger reads schedules in this zone.';
+
+export function PelicanTimezoneField({
+    value, onChange, inherited, id = 'pelicanDefaultTimezone', label = 'Default timezone', hint: hintText = DEFAULT_HINT,
+    testId = 'pelican-timezone-input',
+}: PelicanTimezoneFieldProps) {
     const options = useMemo(() => buildZoneOptions(), []);
     const selected = labelFor(options, value);
     const [text, setText] = useState(selected.label);
-    const hint = 'Pelican’s API doesn’t say which timezone a schedule uses. Raid Ledger reads schedules in this zone.'
-        + (inherited ? ' Prefilled from the community default.' : '');
+    const hint = hintText + (inherited && hintText === DEFAULT_HINT ? ' Prefilled from the community default.' : '');
     return (
-        <Field id="pelicanDefaultTimezone" label="Default timezone" hint={hint}>
+        <Field id={id} label={label} hint={hint}>
             <Combobox<ZoneOption>
                 options={filterZones(options, text === selected.label ? '' : text)}
                 getKey={(o) => o.id} getLabel={(o) => o.label}
                 value={selected} onChange={(o) => { if (o) onChange(o.id); }}
                 inputValue={text} onInputChange={setText}
                 placeholder="Search timezones" fieldSize="lg" openOnFocus
-                emptyText="No matching timezone" testIds={{ input: 'pelican-timezone-input' }}
+                emptyText="No matching timezone" testIds={{ input: testId }}
             />
         </Field>
     );

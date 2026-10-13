@@ -1,0 +1,56 @@
+/** Pure view helpers for the Pelican admin Servers section (ROK-1094). */
+import type { PelicanServerRowDto, PelicanServerUpdate, PelicanSyncResult } from '@raid-ledger/contract';
+
+export type ChipTone = 'success' | 'warning' | 'danger' | 'neutral';
+
+export interface StateChipView { tone: ChipTone; label: string; title: string }
+
+/** Member state → chip. A suspended server reports `offline`; `isSuspended` wins (ruling Q8). */
+export function stateChipView(row: Pick<PelicanServerRowDto, 'state' | 'isSuspended'>): StateChipView {
+    if (row.isSuspended) return { tone: 'danger', label: 'Suspended', title: 'Suspended on the panel — members see it as offline' };
+    switch (row.state) {
+        case 'running': return { tone: 'success', label: 'Running', title: 'The server is running' };
+        case 'starting': return { tone: 'warning', label: 'Starting', title: 'The server is starting' };
+        case 'stopping': return { tone: 'warning', label: 'Stopping', title: 'The server is stopping' };
+        case 'offline': return { tone: 'danger', label: 'Offline', title: 'The server is offline' };
+        default: return { tone: 'neutral', label: 'Unknown', title: 'Not checked recently — needs a game and Show on calendar' };
+    }
+}
+
+export type SyncToastTone = 'success' | 'info' | 'error';
+
+function plural(n: number, word: string): string {
+    return `${n} ${word}${n === 1 ? '' : 's'}`;
+}
+
+/** One toast per Sync-now outcome (§4.8): ok = success, in_progress = info, everything else = error. */
+export function syncToast(result: PelicanSyncResult): { tone: SyncToastTone; text: string } {
+    if (result.code === 'ok') {
+        const extra = [
+            result.markedMissing > 0 ? `${result.markedMissing} missing from panel` : '',
+            result.restored > 0 ? `${result.restored} back` : '',
+        ].filter(Boolean).join(', ');
+        return { tone: 'success', text: `Synced ${plural(result.upserted, 'server')}${extra ? ` (${extra})` : ''}` };
+    }
+    const text = result.message || `Sync failed (${result.code})`;
+    return { tone: result.code === 'in_progress' ? 'info' : 'error', text };
+}
+
+/** The row as it will look once `patch` lands — the optimistic cache write. */
+export function applyServerPatch(
+    row: PelicanServerRowDto, patch: PelicanServerUpdate, gameName?: string | null,
+): PelicanServerRowDto {
+    return {
+        ...row,
+        ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: patch.showOnCalendar }),
+        ...(patch.timezone === undefined ? {} : { timezone: patch.timezone === '' ? null : patch.timezone }),
+        ...(patch.gameId === undefined ? {} : {
+            gameId: patch.gameId,
+            gameName: patch.gameId === null ? null : gameName ?? row.gameName,
+        }),
+    };
+}
+
+export function errorMessage(err: unknown, fallback: string): string {
+    return err instanceof Error && err.message ? err.message : fallback;
+}
