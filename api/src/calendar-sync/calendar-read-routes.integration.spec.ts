@@ -27,6 +27,7 @@ import {
 import { upsertCalendarConnection } from './services/calendar-connect.helpers';
 import type { CalendarReadJobData } from './read/calendar-read.enqueue.helpers';
 import { CalendarReadProcessor } from './read/calendar-read.processor';
+import { resolveWeekStart } from '../users/users-controller.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/users/me/calendars';
@@ -436,6 +437,42 @@ describe('POST /admin/test/calendar/seed-busy', () => {
     expect(after.body.data.calendarBusy).toEqual([
       expect.objectContaining({ dayOfWeek: 1, startHour: 18, endHour: 20 }),
     ]);
+  });
+
+  // ROK-1595 round 4: the controller passes `weekSent=false` when no `week`
+  // is sent, and the service keys busy hours from the tz-shifted start.
+  // Assumes a UTC server clock (CI/fleet), as `resolveWeekStart` does.
+  it('no week: a Mon 20:00 UTC-6 block keys to local Monday, not Tuesday', async () => {
+    const id = await seedConnection();
+    const HOUR = 60 * 60 * 1000;
+    const WEEK = 7 * 24 * HOUR;
+    // Mon 20:00 at UTC-6 = Tue 02:00Z = server Sunday 00:00Z + 50h. A second
+    // copy one week later keeps the case deterministic if the server week
+    // rolls over between this line and the request: only one is in range.
+    const serverSunday = resolveWeekStart().getTime();
+    const blocks = [0, WEEK].map((w) => ({
+      start: new Date(serverSunday + w + 50 * HOUR).toISOString(),
+      end: new Date(serverSunday + w + 51 * HOUR).toISOString(),
+    }));
+    const seeded = await seedBusy({
+      connectionId: id,
+      blocks,
+      readAccess: 'granted',
+    });
+    expect(seeded.status).toBe(201);
+
+    const res = await testApp.request
+      .get('/users/me/game-time')
+      .query({ tzOffset: '360' })
+      .set(auth(user.token));
+    expect(res.status).toBe(200);
+    const busy: unknown[] = res.body.data.calendarBusy;
+    expect(busy).toEqual([
+      expect.objectContaining({ dayOfWeek: 1, startHour: 20, endHour: 21 }),
+    ]);
+    expect(busy).not.toContainEqual(
+      expect.objectContaining({ dayOfWeek: 2, startHour: 20 }),
+    );
   });
 
   // ROK-1595 G-2: the fleet plan / Playwright seed synced away days.

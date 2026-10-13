@@ -120,4 +120,24 @@ describe('composite busy hours key to the viewer local week (ROK-1595)', () => {
       { dayOfWeek: 1, startHour: 20, endHour: 21, provider: 'google' },
     ]);
   });
+
+  it('east of UTC (UTC+2, no week): local Sunday starts Saturday 22:00Z', () => {
+    const CEST = -120;
+    const start = calendarBusyWeekStart(
+      new Date('2026-10-11T00:00:00Z'),
+      CEST,
+      false,
+    );
+    expect(start.toISOString()).toBe('2026-10-10T22:00:00.000Z');
+    // Sun 01:00 and Mon 01:00 local, i.e. 23:00Z the evening before.
+    const blocks = [
+      block('2026-10-10T23:00:00Z', '2026-10-11T00:00:00Z'),
+      block('2026-10-11T23:00:00Z', '2026-10-12T00:00:00Z'),
+    ];
+    const end = new Date(start.getTime() + WEEK_MS);
+    expect(busyRangesForBlocks(blocks, start, end, CEST)).toEqual([
+      { dayOfWeek: 0, startHour: 1, endHour: 2, provider: 'google' },
+      { dayOfWeek: 1, startHour: 1, endHour: 2, provider: 'google' },
+    ]);
+  });
 });
