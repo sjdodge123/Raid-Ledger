@@ -1,8 +1,9 @@
 /**
  * One Pelican server — a table row (≥1024px) or a stacked card (<1024px), the
  * same controls in both (ROK-1094). Every control applies immediately and its
- * PATCH carries only the field it changed.
+ * PATCH carries only the field it changed — the game only once one is picked.
  */
+import { useState, type FocusEvent } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { IgdbGameDto, PelicanServerRowDto, PelicanServerUpdate } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
@@ -29,16 +30,46 @@ function ServerName({ row }: { row: PelicanServerRowDto }) {
     );
 }
 
+function rowGame(row: PelicanServerRowDto): IgdbGameDto | null {
+    return row.gameId === null ? null
+        : { id: row.gameId, igdbId: null, name: row.gameName ?? `Game ${row.gameId}`, slug: '', coverUrl: null };
+}
+
+/**
+ * Apply-immediately game choice (ROK-1094 review MAJOR). Typing over the name makes
+ * GameSearchInput emit "no game", which must NOT unmap the server: only a pick PATCHes
+ * `{gameId}`, and `{gameId:null}` comes from Clear selection or from leaving the box
+ * empty. Leaving unpicked text puts the row's game back. The shown value stays the
+ * row's game while typing, so the input (and its clear button) never remounts mid-edit.
+ */
+function useGameDraft(row: PelicanServerRowDto, onUpdate: ServerUpdateHandler) {
+    const [dirty, setDirty] = useState(false);
+    const [resetKey, setResetKey] = useState(0);
+    const onChange = (game: IgdbGameDto | null): void => {
+        setDirty(game === null);
+        if (game !== null && game.id !== row.gameId) onUpdate(row.id, { gameId: game.id }, game.name);
+    };
+    const onClear = (): void => {
+        setDirty(false);
+        if (row.gameId !== null) onUpdate(row.id, { gameId: null }, null);
+    };
+    const onBlur = (e: FocusEvent<HTMLDivElement>): void => {
+        if (!dirty || (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) return;
+        if ((e.currentTarget.querySelector('input')?.value ?? '').trim() === '') { onClear(); return; }
+        setDirty(false);
+        setResetKey((k) => k + 1);
+    };
+    return { value: rowGame(row), onChange, onClear, onBlur, resetKey };
+}
+
 /** GameSearchInput, not GameFilterInput: the row's `gameName` names a game the registry may not list. */
 function GamePicker({ row, suggestions, onUpdate }: Omit<ServerRowProps, 'defaultTimezone'>) {
-    const value: IgdbGameDto | null = row.gameId === null ? null
-        : { id: row.gameId, igdbId: null, name: row.gameName ?? `Game ${row.gameId}`, slug: '', coverUrl: null };
+    const g = useGameDraft(row, onUpdate);
     return (
-        <GameSearchInput id={`pelican-server-${row.id}-game`} value={value} initialSuggestions={suggestions}
-            onChange={(game) => {
-                const gameId = game?.id ?? null;
-                if (gameId !== row.gameId) onUpdate(row.id, { gameId }, game?.name ?? null);
-            }} />
+        <div onBlur={g.onBlur}>
+            <GameSearchInput key={g.resetKey} id={`pelican-server-${row.id}-game`} value={g.value}
+                initialSuggestions={suggestions} onChange={g.onChange} onClear={g.onClear} />
+        </div>
     );
 }
 

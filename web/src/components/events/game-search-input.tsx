@@ -39,6 +39,12 @@ interface GameSearchInputProps {
     autoFocus?: boolean;
     /** Smoke-test hooks (the scheduling poll's `game-search-*` ids). */
     testIds?: GameSearchTestIds;
+    /**
+     * ROK-1094: fired after `onChange(null)` only when the user presses "Clear
+     * selection" — lets an apply-immediately caller tell a deliberate clear
+     * from the `onChange(null)` that typing over the picked name emits.
+     */
+    onClear?: () => void;
 }
 
 function Cover({ game, w, h }: { game: IgdbGameDto; w: number; h: number }): JSX.Element {
@@ -77,7 +83,14 @@ function ClearButton({ onClear }: { onClear: () => void }): JSX.Element {
     );
 }
 
-function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGameDto | null) => void, initialSuggestions?: IgdbGameDto[]) {
+interface GameSearchStateProps {
+    value: IgdbGameDto | null;
+    onChange: (game: IgdbGameDto | null) => void;
+    initialSuggestions?: IgdbGameDto[] | undefined;
+    onClear?: (() => void) | undefined;
+}
+
+function useGameSearchState({ value, onChange, initialSuggestions, onClear }: GameSearchStateProps) {
     const [query, setQuery] = useState(value?.name ?? '');
     // True once the user edits the text; false on mount and after a pick or
     // clear, so a prefilled / picked name never searches by itself (ROK-1647).
@@ -104,7 +117,7 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
     // after that commit — a synchronous focus() would land on the old node.
     const refocus = useRef(false);
     useEffect(() => { if (refocus.current) { refocus.current = false; inputRef.current?.focus(); } });
-    const clear = (): void => { setEngaged(false); onChange(null); setQuery(''); refocus.current = true; };
+    const clear = (): void => { setEngaged(false); onChange(null); onClear?.(); setQuery(''); refocus.current = true; };
     return {
         inputRef, searching, hasSuggestions, pick, type, clear, query,
         options: searching ? (search?.data?.data ?? []) : (initialSuggestions ?? []),
@@ -114,8 +127,8 @@ function useGameSearchState(value: IgdbGameDto | null, onChange: (game: IgdbGame
 }
 
 /** Game search combobox with the "Game" label, selected badge and clear button. */
-export function GameSearchInput({ value, onChange, error, initialSuggestions, id = 'game-search', autoFocus, testIds }: GameSearchInputProps): JSX.Element {
-    const { inputRef, ...s } = useGameSearchState(value, onChange, initialSuggestions);
+export function GameSearchInput({ value, onChange, onClear, error, initialSuggestions, id = 'game-search', autoFocus, testIds }: GameSearchInputProps): JSX.Element {
+    const { inputRef, ...s } = useGameSearchState({ value, onChange, initialSuggestions, onClear });
     return (
         <div className="relative">
             <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
