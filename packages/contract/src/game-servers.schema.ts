@@ -1,5 +1,5 @@
 /**
- * Game-server calendar + status contract (ROK-268, Pelican S1).
+ * Game-server calendar + status contract (ROK-268).
  *
  * Provider-agnostic shapes a `GameServerProvider` plugin returns and the
  * `/game-servers/*` endpoints serve. Core never names a provider: `provider`
