@@ -10,6 +10,8 @@ import { PelicanAdminController } from './pelican-admin.controller';
 import { PelicanConfigService } from './pelican-config.service';
 import { PelicanClientFactory } from './pelican-client.factory';
 import { PelicanServersRepository } from './pelican-servers.repository';
+import { PelicanServersAdminRepository } from './pelican-servers-admin.repository';
+import { PelicanServersAdminController } from './pelican-servers-admin.controller';
 import { PelicanSyncService } from './pelican-sync.service';
 import { PelicanStatusService } from './pelican-status.service';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
@@ -24,11 +26,12 @@ type UninstalledPayload = { slug: string };
  */
 @Module({
   imports: [SettingsModule],
-  controllers: [PelicanAdminController],
+  controllers: [PelicanAdminController, PelicanServersAdminController],
   providers: [
     PelicanConfigService,
     PelicanClientFactory,
     PelicanServersRepository,
+    PelicanServersAdminRepository,
     PelicanSyncService,
     PelicanStatusService,
     PelicanCronRegistrar,
