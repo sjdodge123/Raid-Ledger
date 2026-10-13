@@ -178,6 +178,17 @@ describe('CalendarSyncPanel — redirect URIs', () => {
         expect(screen.queryByRole('textbox', { name: 'Microsoft JavaScript origin' })).not.toBeInTheDocument();
     });
 
+    it('ROK-1778: shows one Privacy policy link — the redirect URI origin + /privacy — and copies it', async () => {
+        await renderPanel(calendarSyncSettingsFixture);
+        const expected = `${new URL(calendarSyncSettingsFixture.redirectUris.google).origin}/privacy`;
+        const fields = screen.getAllByRole('textbox', { name: 'Privacy policy link' });
+        expect(fields).toHaveLength(1);
+        expect(fields[0]).toHaveValue(expected);
+        expect(fields[0]).toHaveAttribute('readonly');
+        fireEvent.click(screen.getByRole('button', { name: 'Copy Privacy policy link' }));
+        await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(expected));
+    });
+
     it('Copy puts the redirect URI on the clipboard', async () => {
         await renderPanel(calendarSyncSettingsFixture);
         fireEvent.click(screen.getByRole('button', { name: 'Copy Microsoft redirect URI' }));

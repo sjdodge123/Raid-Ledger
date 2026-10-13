@@ -13,6 +13,7 @@ describe('CalendarSyncInstructions', () => {
             ['Create a project', `${CONSOLE}/projectcreate`],
             ['Google Calendar API', `${CONSOLE}/apis/library/calendar-json.googleapis.com`],
             ['Google Auth Platform', `${CONSOLE}/auth/overview`],
+            ['Branding', `${CONSOLE}/auth/branding`],
             ['Audience', `${CONSOLE}/auth/audience`],
             ['Create OAuth client', `${CONSOLE}/auth/clients/create`],
             ['Verification Center', `${CONSOLE}/auth/verification`],
@@ -39,8 +40,21 @@ describe('CalendarSyncInstructions', () => {
         expect(screen.getByTestId('calendar-sync-unverified-note')).toHaveTextContent(/up to 100 people/);
     });
 
-    it('lists seven steps', () => {
+    it('lists eight steps', () => {
         renderWithProviders(<CalendarSyncInstructions />);
-        expect(within(screen.getByTestId('calendar-sync-instructions')).getAllByRole('listitem')).toHaveLength(7);
+        expect(within(screen.getByTestId('calendar-sync-instructions')).getAllByRole('listitem')).toHaveLength(8);
+    });
+
+    it('ROK-1778: fills in Branding right before publishing, skipping the logo and pasting the privacy link', () => {
+        renderWithProviders(<CalendarSyncInstructions />);
+        const steps = within(screen.getByTestId('calendar-sync-instructions')).getAllByRole('listitem');
+        const branding = steps.findIndex((li) => li.textContent?.startsWith('Fill in the Branding page.'));
+        const publish = steps.findIndex((li) => li.textContent?.startsWith('Let any member connect.'));
+        expect(branding).toBeGreaterThan(-1);
+        expect(publish).toBe(branding + 1);
+        const step = steps[branding];
+        expect(step).toHaveTextContent('Skip the App logo: adding one sends your branding to Google for review.');
+        expect(step).toHaveTextContent(/Privacy policy link shown below into Application privacy policy link/);
+        expect(step).toHaveTextContent(/Authorized domains/);
     });
 });

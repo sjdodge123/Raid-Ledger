@@ -14,6 +14,7 @@ const GOOGLE_SETUP_LINKS = {
     createProject: `${CONSOLE}/projectcreate`,
     calendarApi: `${CONSOLE}/apis/library/calendar-json.googleapis.com`,
     authOverview: `${CONSOLE}/auth/overview`,
+    branding: `${CONSOLE}/auth/branding`,
     audience: `${CONSOLE}/auth/audience`,
     verification: `${CONSOLE}/auth/verification`,
     createClient: `${CONSOLE}/auth/clients/create`,
@@ -35,6 +36,23 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
     );
 }
 
+/** ROK-1778: Publish app stays off until the Branding page is saved. */
+function BrandingStep() {
+    return (
+        <Step title="Fill in the Branding page.">
+            Publish stays off until this page is saved. Open{' '}
+            <ExtLink href={GOOGLE_SETUP_LINKS.branding}>Branding</ExtLink>. For User support email, pick your
+            email. <strong>Skip the App logo: adding one sends your branding to Google for review.</strong> Under
+            App domain, paste the <strong>Google JavaScript origin</strong> shown below (your Raid Ledger
+            address) into Application home page, and the <strong>Privacy policy link</strong> shown below into
+            Application privacy policy link; leave the terms of service link empty. Under Authorized domains
+            click <strong>Add domain</strong> and enter your site&apos;s domain without https:// (for
+            raid.example.com, enter example.com). Enter your email as the developer contact and
+            click <strong>Save</strong>.
+        </Step>
+    );
+}
+
 function GoogleProjectSteps() {
     return (
         <>
@@ -52,6 +70,7 @@ function GoogleProjectSteps() {
                 click <strong>Get started</strong>. Enter &quot;Raid Ledger&quot; as the app name and your
                 email where it asks, choose <strong>External</strong>, agree, and click <strong>Create</strong>.
             </Step>
+            <BrandingStep />
             <Step title="Let any member connect.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.audience}>Audience</ExtLink>, click{' '}
                 <strong>Publish app</strong> and confirm. Members then connect their own calendars: there
@@ -108,7 +127,7 @@ export function CalendarSyncInstructions() {
                 <strong>Advanced</strong>, then <strong>Go to Raid Ledger (unsafe)</strong>. An unverified app
                 can be connected by up to 100 people in total. To remove the screen and the limit, submit the
                 app from the <ExtLink href={GOOGLE_SETUP_LINKS.verification}>Verification Center</ExtLink>;
-                Google asks for your site&apos;s domain and a privacy policy link, and review can take a few weeks.
+                Google asks for your site&apos;s domain and the privacy policy link above, and review can take a few weeks.
             </p>
         </div>
     );
