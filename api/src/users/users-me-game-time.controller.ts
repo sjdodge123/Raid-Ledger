@@ -51,6 +51,7 @@ export class UsersMeGameTimeController {
       req.user.id,
       weekStart,
       parseTzOffset(tzOffsetStr),
+      Boolean(week),
     );
     return { data: result };
   }
