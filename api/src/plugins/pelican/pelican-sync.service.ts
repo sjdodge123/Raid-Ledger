@@ -59,6 +59,7 @@ export class PelicanSyncService {
       return emptyOutcome(listing.code);
     }
     const counts = await this.repo.applyListing(listing.servers, new Date());
+    if (counts === null) return emptyOutcome('not_configured');
     this.logger.log(
       `Pelican sync on ${conn.host}: ${counts.upserted} listed, ` +
         `${counts.markedMissing} newly missing, ${counts.restored} restored`,

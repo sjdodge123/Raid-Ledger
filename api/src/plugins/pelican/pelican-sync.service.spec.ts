@@ -1,7 +1,10 @@
 import { Logger } from '@nestjs/common';
 import { PelicanClient } from './pelican-client';
 import type { PelicanClientFactory } from './pelican-client.factory';
-import type { PelicanServersRepository } from './pelican-servers.repository';
+import type {
+  PelicanListingCounts,
+  PelicanServersRepository,
+} from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
 import { toListedServer } from './pelican-sync.helpers';
 import type { PluginRegistryService } from '../plugin-host/plugin-registry.service';
@@ -37,7 +40,11 @@ function build(
     ),
   };
   const counts = { upserted: 2, markedMissing: 1, restored: 1 };
-  const repo = { applyListing: jest.fn(() => Promise.resolve(counts)) };
+  const repo = {
+    applyListing: jest.fn((): Promise<PelicanListingCounts | null> =>
+      Promise.resolve(counts),
+    ),
+  };
   const service = new PelicanSyncService(
     registry as unknown as PluginRegistryService,
     factory as unknown as PelicanClientFactory,
@@ -149,5 +156,18 @@ describe('PelicanSyncService.syncServers — failures and overlap', () => {
       expect(text).not.toContain(s.name);
     }
     expect(text).not.toContain(KEY);
+  });
+});
+
+describe('PelicanSyncService.syncServers — uninstall race', () => {
+  it('reports not_configured when the repository refused the write', async () => {
+    const { service, repo } = build(twoPages);
+    repo.applyListing.mockResolvedValueOnce(null);
+    expect(await service.syncServers()).toEqual({
+      code: 'not_configured',
+      upserted: 0,
+      markedMissing: 0,
+      restored: 0,
+    });
   });
 });

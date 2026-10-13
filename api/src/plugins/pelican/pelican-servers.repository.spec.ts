@@ -80,6 +80,7 @@ describe('PelicanServersRepository.markMissing', () => {
 describe('PelicanServersRepository.applyListing', () => {
   it('counts restored rows, upserts, then marks missing in one transaction', async () => {
     const { db, repo } = build();
+    db.execute.mockResolvedValueOnce([{ '?column?': 1 }]);
     db.where.mockReturnValueOnce(Promise.resolve([{ id: 3 }])).mockReturnThis();
     db.returning
       .mockResolvedValueOnce([{ id: 1 }, { id: 3 }])
@@ -89,5 +90,16 @@ describe('PelicanServersRepository.applyListing', () => {
     expect(db.transaction).toHaveBeenCalledTimes(1);
     const restoredWhere = render(db.where.mock.calls[0]?.[0]);
     expect(restoredWhere.sql).toContain('"missing_since" is not null');
+  });
+
+  it('writes nothing and returns null once the plugin is inactive (uninstall race)', async () => {
+    const { db, repo } = build();
+    db.execute.mockResolvedValueOnce([]);
+    expect(await repo.applyListing([listed(1)], NOW)).toBeNull();
+    const lock = render(db.execute.mock.calls[0]?.[0]);
+    expect(lock.sql).toContain('for share');
+    expect(lock.params).toContain('pelican');
+    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.update).not.toHaveBeenCalled();
   });
 });

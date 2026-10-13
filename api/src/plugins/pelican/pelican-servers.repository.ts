@@ -11,7 +11,12 @@ import {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import { pelicanServers, type PelicanServerRow } from '../../drizzle/schema';
+import {
+  pelicanServers,
+  plugins,
+  type PelicanServerRow,
+} from '../../drizzle/schema';
+import { PELICAN_PLUGIN_ID } from './pelican.constants';
 import type { ListedServer } from './pelican-sync.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -36,12 +41,19 @@ export interface PelicanStatusWrite {
 export class PelicanServersRepository {
   constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
 
-  /** Upsert + missing-mark in one transaction (D4, D5). */
+  /**
+   * Upsert + missing-mark in one transaction (D4, D5). Writes nothing and
+   * returns `null` when the plugin is no longer active: the share lock on
+   * its `plugins` row makes a concurrent deactivate (which must precede
+   * uninstall) wait for this commit, so uninstall's `deleteAll` always runs
+   * after these rows land and cannot leave any behind (D13).
+   */
   applyListing(
     servers: ListedServer[],
     now: Date,
-  ): Promise<PelicanListingCounts> {
+  ): Promise<PelicanListingCounts | null> {
     return this.db.transaction(async (tx) => {
+      if (!(await this.lockActivePlugin(tx))) return null;
       const restored = await this.countMissing(tx, servers);
       const upserted = await this.upsertListed(tx, servers, now);
       const markedMissing = await this.markMissing(
@@ -51,6 +63,14 @@ export class PelicanServersRepository {
       );
       return { upserted, markedMissing, restored };
     });
+  }
+
+  /** `SELECT … FOR SHARE` on the active Pelican `plugins` row. */
+  private async lockActivePlugin(tx: Executor): Promise<boolean> {
+    const rows = await tx.execute(
+      sql`select 1 from ${plugins} where ${plugins.slug} = ${PELICAN_PLUGIN_ID} and ${plugins.active} = true for share`,
+    );
+    return Array.isArray(rows) && rows.length > 0;
   }
 
   /**
