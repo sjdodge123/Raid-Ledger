@@ -31,7 +31,9 @@ export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
   private manifests = new Map<string, PluginManifest>();
   private activeSlugs = new Set<string>();
-  private readonly store = new PluginAdapterStore();
+  private readonly store = new PluginAdapterStore((id) =>
+    this.activeSlugs.has(id),
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
@@ -200,12 +202,12 @@ export class PluginRegistryService implements OnModuleInit {
       .update(plugins)
       .set({ active: false, updatedAt: new Date() })
       .where(eq(plugins.slug, slug));
+    await this.refreshActiveCache();
     // Owned adapters first, so one keyed by a game slug is suspended (and
     // restored on activate) rather than hard-deleted below (ROK-268).
     this.store.suspendAdaptersOwnedBy(slug);
     const manifest = this.manifests.get(slug);
     if (manifest) this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
-    await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
   }
@@ -282,5 +284,7 @@ export class PluginRegistryService implements OnModuleInit {
         this.activeSlugs = new Set<string>();
       } else throw error;
     }
+    // Adapters registered before their owner was known active (ROK-268).
+    this.store.restoreActiveOwners();
   }
 }

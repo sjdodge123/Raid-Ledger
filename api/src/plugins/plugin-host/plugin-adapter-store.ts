@@ -11,9 +11,15 @@
 
 /** Optional per-registration metadata. */
 export interface AdapterRegistrationOptions {
-  /** Plugin id that owns this adapter — suspended/restored with that plugin. */
+  /**
+   * Plugin id that owns this adapter — suspended/restored with that plugin.
+   * Registering while the owner is inactive lands the adapter suspended.
+   */
   ownerPluginId?: string;
 }
+
+/** Whether a plugin is currently active (defaults to always-active). */
+export type OwnerActivePredicate = (pluginId: string) => boolean;
 
 interface SuspendedEntry {
   multi: boolean;
@@ -27,6 +33,10 @@ export class PluginAdapterStore {
   private readonly multiAdapters = new Map<string, Map<string, unknown[]>>();
   private readonly owners = new Map<unknown, string>();
   private readonly suspended = new Map<string, SuspendedEntry[]>();
+
+  constructor(
+    private readonly isOwnerActive: OwnerActivePredicate = () => true,
+  ) {}
 
   registerAdapter(
     point: string,
@@ -76,7 +86,7 @@ export class PluginAdapterStore {
     }
     if (!list.includes(adapter)) list.push(adapter);
     this.recordOwner(adapter, opts);
-    return list.length;
+    return this.getMultiAdapters(point, key).length;
   }
 
   getMultiAdapters<T>(point: string, key: string): T[] {
@@ -123,6 +133,16 @@ export class PluginAdapterStore {
     return entries.length;
   }
 
+  /** Restore every suspended owner the predicate now reports active. */
+  restoreActiveOwners(): number {
+    let restored = 0;
+    for (const pluginId of [...this.suspended.keys()]) {
+      if (this.isOwnerActive(pluginId))
+        restored += this.restoreAdaptersOwnedBy(pluginId);
+    }
+    return restored;
+  }
+
   private restoreEntry(entry: SuspendedEntry): void {
     if (entry.multi) {
       this.registerMultiAdapter(entry.point, entry.key, entry.adapter);
@@ -137,7 +157,9 @@ export class PluginAdapterStore {
     opts: AdapterRegistrationOptions | undefined,
   ): void {
     const owner = opts?.ownerPluginId;
-    if (owner !== undefined) this.owners.set(adapter, owner);
+    if (owner === undefined) return;
+    this.owners.set(adapter, owner);
+    if (!this.isOwnerActive(owner)) this.suspendAdaptersOwnedBy(owner);
   }
 
   private isOwnedBy(adapter: unknown, pluginId: string): boolean {

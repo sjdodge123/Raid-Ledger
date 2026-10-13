@@ -507,6 +507,14 @@ describe('PluginRegistryService — owner-scoped adapters (ROK-268)', () => {
     expect(seenAtEmit).toEqual([provider]);
     expect(service.getMultiAdapters(POINT, KEY)).toEqual([provider]);
   });
+});
+
+describe('PluginRegistryService — owned adapters: game-slug keys + boot (ROK-268)', () => {
+  const POINT = 'game-server-provider';
+  const KEY = '*';
+
+  beforeEach(() => setupAdaptersEach());
+  afterEach(() => jest.clearAllMocks());
 
   it('an owned adapter under a game-slug key survives deactivate → activate exactly once', async () => {
     const gameManifest: PluginManifest = {
@@ -527,5 +535,35 @@ describe('PluginRegistryService — owner-scoped adapters (ROK-268)', () => {
     await service.activate('game-plugin');
 
     expect(service.getMultiAdapters(POINT, 'wow')).toEqual([provider]);
+  });
+
+  it('an adapter registered while its owner is inactive starts suspended, restored on activate', async () => {
+    const provider = { pluginSlug: 'no-game-plugin' };
+    service.registerManifest(noGameManifest);
+    selectResults = [{ slug: 'other-plugin', active: true }];
+    await service.onModuleInit();
+
+    service.registerMultiAdapter(POINT, KEY, provider, {
+      ownerPluginId: 'no-game-plugin',
+    });
+    expect(service.getMultiAdapters(POINT, KEY)).toEqual([]);
+
+    selectResults = [{ slug: 'no-game-plugin', active: false }];
+    await service.activate('no-game-plugin');
+
+    expect(service.getMultiAdapters(POINT, KEY)).toEqual([provider]);
+  });
+
+  it('an adapter registered before the boot refresh is restored once its owner reads active', async () => {
+    const provider = { pluginSlug: 'no-game-plugin' };
+    service.registerMultiAdapter(POINT, KEY, provider, {
+      ownerPluginId: 'no-game-plugin',
+    });
+    expect(service.getMultiAdapters(POINT, KEY)).toEqual([]);
+
+    selectResults = [{ slug: 'no-game-plugin', active: true }];
+    await service.onModuleInit();
+
+    expect(service.getMultiAdapters(POINT, KEY)).toEqual([provider]);
   });
 });
