@@ -6,9 +6,12 @@
  */
 import {
   blockCountsForMode,
+  busyRangesForBlocks,
+  calendarBusyWeekStart,
   matchesSignupBounds,
   toBusyRanges,
 } from './calendar-busy-query.helpers';
+import type { CalendarBusyBlock } from './calendar-busy-query.helpers';
 
 const START = new Date('2026-03-03T20:30:00.000Z');
 const END = new Date('2026-03-03T22:15:00.000Z');
@@ -82,5 +85,59 @@ describe('toBusyRanges', () => {
 
   it('drops an unknown provider rather than emitting it', () => {
     expect(toBusyRanges(new Map([['outlook|1', new Set([9])]]))).toEqual([]);
+  });
+});
+
+describe('composite busy hours key to the viewer local week (ROK-1595)', () => {
+  const MDT = 360; // getTimezoneOffset() for UTC-6
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  const block = (startsAt: string, endsAt: string): CalendarBusyBlock => ({
+    userId: 1,
+    provider: 'google',
+    startsAt: new Date(startsAt),
+    endsAt: new Date(endsAt),
+  });
+  // Mon 20:00 MDT and Sun 01:00 MDT, as UTC instants.
+  const MON_EVENING = block('2026-10-13T02:00:00Z', '2026-10-13T03:00:00Z');
+  const SUN_EARLY = block('2026-10-11T07:00:00Z', '2026-10-11T08:00:00Z');
+
+  function ranges(weekStart: Date, weekSent: boolean) {
+    const start = calendarBusyWeekStart(weekStart, MDT, weekSent);
+    const end = new Date(start.getTime() + WEEK_MS);
+    return busyRangesForBlocks([MON_EVENING, SUN_EARLY], start, end, MDT);
+  }
+
+  it('no week sent: shifts the server Sunday 00:00Z to the local Sunday', () => {
+    expect(ranges(new Date('2026-10-11T00:00:00Z'), false)).toEqual([
+      { dayOfWeek: 0, startHour: 1, endHour: 2, provider: 'google' },
+      { dayOfWeek: 1, startHour: 20, endHour: 21, provider: 'google' },
+    ]);
+  });
+
+  it('week sent as the local Sunday: no second shift', () => {
+    expect(ranges(new Date('2026-10-11T06:00:00Z'), true)).toEqual([
+      { dayOfWeek: 0, startHour: 1, endHour: 2, provider: 'google' },
+      { dayOfWeek: 1, startHour: 20, endHour: 21, provider: 'google' },
+    ]);
+  });
+
+  it('east of UTC (UTC+2, no week): local Sunday starts Saturday 22:00Z', () => {
+    const CEST = -120;
+    const start = calendarBusyWeekStart(
+      new Date('2026-10-11T00:00:00Z'),
+      CEST,
+      false,
+    );
+    expect(start.toISOString()).toBe('2026-10-10T22:00:00.000Z');
+    // Sun 01:00 and Mon 01:00 local, i.e. 23:00Z the evening before.
+    const blocks = [
+      block('2026-10-10T23:00:00Z', '2026-10-11T00:00:00Z'),
+      block('2026-10-11T23:00:00Z', '2026-10-12T00:00:00Z'),
+    ];
+    const end = new Date(start.getTime() + WEEK_MS);
+    expect(busyRangesForBlocks(blocks, start, end, CEST)).toEqual([
+      { dayOfWeek: 0, startHour: 1, endHour: 2, provider: 'google' },
+      { dayOfWeek: 1, startHour: 1, endHour: 2, provider: 'google' },
+    ]);
   });
 });

@@ -11,9 +11,11 @@ import { http, HttpResponse } from 'msw';
 import {
     UpdateAdminCalendarSyncSettingsSchema,
     UpdateCalendarConnectionSchema,
+    UpdateCalendarReadSettingsSchema,
     type AdminCalendarSyncSettings,
     type CalendarConnection,
     type CalendarsOverview,
+    type ProviderCalendar,
     type UpdateAdminCalendarSyncSettings,
 } from '@raid-ledger/contract';
 
@@ -62,6 +64,10 @@ export const CALENDAR_CONNECTION_URL = `${API_BASE}/users/me/calendars/:id`;
 export const EVENT_CALENDAR_COPY_URL = `${API_BASE}/users/me/calendars/events/:eventId`;
 export const EVENT_CALENDAR_UNDO_URL = `${API_BASE}/users/me/calendars/events/:eventId/undo`;
 export const EVENT_ICS_URL = `${API_BASE}/events/:id/ics`;
+/** Read sync (ROK-1595): picker list, per-user read mode, manual sync. */
+export const PROVIDER_CALENDARS_URL = `${API_BASE}/users/me/calendars/:id/calendars`;
+export const CALENDAR_READ_SETTINGS_URL = `${API_BASE}/users/me/calendars/settings`;
+export const CALENDAR_SYNC_NOW_URL = `${API_BASE}/users/me/calendars/:id/sync`;
 export const GOOGLE_CONSENT_URL_FIXTURE = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=test-client';
 
 /** A healthy Google connection, as `GET /users/me/calendars` lists it. */
@@ -114,10 +120,61 @@ export function userCalendarHandlers(overview: CalendarsOverview = calendarsOver
         http.patch(CALENDAR_CONNECTION_URL, async ({ request }) => {
             const body = UpdateCalendarConnectionSchema.parse(await request.json());
             const write = { ...calendarConnectionFixture.write, ...body.write };
-            return HttpResponse.json({ ...calendarConnectionFixture, write });
+            const read = { ...calendarConnectionFixture.read, ...body.read };
+            return HttpResponse.json({ ...calendarConnectionFixture, read, write });
         }),
+        ...calendarReadHandlers(),
     ];
 }
+
+/* ── Read sync (ROK-1595) ─────────────────────────────────────────────── */
+
+/** A read-granted Google connection with read on and the picker untouched (`[]` = primary). */
+export const readConnectionFixture: CalendarConnection = {
+    ...calendarConnectionFixture,
+    lastSyncedAt: '2026-10-12T09:00:00.000Z',
+    readAccess: 'granted',
+    read: { enabled: true, calendarIds: [] },
+};
+
+/** The picker list: primary, a second calendar, and our dedicated one (the picker hides it). */
+export const providerCalendarsFixture: ProviderCalendar[] = [
+    { id: 'primary', name: 'raider@example.com', primary: true, writable: true, isRaidLedger: false },
+    { id: 'work@group.calendar.google.com', name: 'Work', primary: false, writable: true, isRaidLedger: false },
+    { id: 'rl@group.calendar.google.com', name: 'Raid Ledger', primary: false, writable: true, isRaidLedger: true },
+];
+
+/** Nest's error body: the machine code travels in `message`. */
+export function calendarErrorResponse(status: number, code: string) {
+    return HttpResponse.json({ statusCode: status, message: code, error: 'Error' }, { status });
+}
+
+/** Defaults: list → the fixture, PUT settings → 204, sync → 202. */
+export function calendarReadHandlers(calendars: ProviderCalendar[] = providerCalendarsFixture) {
+    return [
+        http.get(PROVIDER_CALENDARS_URL, () => HttpResponse.json(calendars)),
+        http.put(CALENDAR_READ_SETTINGS_URL, async ({ request }) => {
+            UpdateCalendarReadSettingsSchema.parse(await request.json());
+            return new HttpResponse(null, { status: 204 });
+        }),
+        http.post(CALENDAR_SYNC_NOW_URL, () => new HttpResponse(null, { status: 202 })),
+    ];
+}
+
+/** Variants for `server.use()`: each answers one read route the way the server's error paths do. */
+export const calendarReadErrorHandlers = {
+    /** 429 within 5 min of the last sync; `retryAfterSeconds` adds a `Retry-After` header. */
+    syncThrottled: (retryAfterSeconds?: number) => http.post(CALENDAR_SYNC_NOW_URL, () => HttpResponse.json(
+        { statusCode: 429, message: 'sync_throttled' },
+        { status: 429, ...(retryAfterSeconds === undefined ? {} : { headers: { 'Retry-After': String(retryAfterSeconds) } }) },
+    )),
+    syncConflict: (code: 'read_scopes' | 'read_disabled') => http.post(CALENDAR_SYNC_NOW_URL, () => calendarErrorResponse(409, code)),
+    /** PATCH `read` on a connection without the read grant. */
+    patchReadScopes: () => http.patch(CALENDAR_CONNECTION_URL, () => calendarErrorResponse(409, 'read_scopes')),
+    patchFailed: () => http.patch(CALENDAR_CONNECTION_URL, () => calendarErrorResponse(500, 'Internal server error')),
+    calendarsReadScopes: () => http.get(PROVIDER_CALENDARS_URL, () => calendarErrorResponse(409, 'read_scopes')),
+    settingsFailed: () => http.put(CALENDAR_READ_SETTINGS_URL, () => calendarErrorResponse(500, 'Internal server error')),
+};
 
 export const calendarSyncHandlers = [
     http.get(CALENDAR_SYNC_SETTINGS_URL, () => HttpResponse.json(calendarSyncSettingsFixture)),

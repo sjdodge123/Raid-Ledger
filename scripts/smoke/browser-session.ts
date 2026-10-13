@@ -96,3 +96,46 @@ export async function storageJwtEntries(page: Page): Promise<string[]> {
         return hits;
     }, JWT_PATTERN.source);
 }
+
+/**
+ * Sign `page`'s context in as a FRESH member (e.g. `seed-non-guild-user`) and
+ * finish its first-time onboarding, so AuthGuard stops detouring every page to
+ * the `/onboarding` wizard (ROK-407 — it fires for any non-admin without
+ * `onboardingCompletedAt`; the fixture-user slots are pre-onboarded, a fresh
+ * member is not).
+ *
+ * The member has no password, so its access token is the one its own boot
+ * refresh mints: the first navigation's `POST /auth/refresh` answer. That token
+ * is returned for the spec's member-scoped API calls (≤1h lifetime).
+ *
+ * @param page - A page whose context is not yet signed in.
+ * @param userId - The member to sign in as.
+ * @returns The member's access JWT.
+ */
+export async function signInOnboardedMember(page: Page, userId: number): Promise<string> {
+    await signInContextAs(page.context(), userId);
+    const refresh = page.waitForResponse(
+        (r) => r.request().method() === 'POST' && new URL(r.url()).pathname.endsWith('/auth/refresh'),
+        { timeout: 15_000 },
+    );
+    await page.goto('/');
+    const res = await refresh;
+    const body = (await res.json().catch(() => null)) as { access_token?: unknown } | null;
+    const jwt = body?.access_token;
+    if (res.status() !== 200 || typeof jwt !== 'string') {
+        throw new Error(`[browser-session] boot POST /auth/refresh for user ${userId} → ${res.status()} without an access_token`);
+    }
+    const done = await page.context().request.post(`${resolveApiUrl()}/users/me/complete-onboarding`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!done.ok()) {
+        throw new Error(`[browser-session] POST /users/me/complete-onboarding for user ${userId} → ${done.status()}: ${await done.text()}`);
+    }
+    // The boot above cached the NOT-onboarded user (`raid_ledger_user_cache`), and the next
+    // boot renders from that cache before `/auth/me` lands — wizard first, then a bounce to
+    // /calendar. Let one boot settle on the fresh user: the wizard redirects to /calendar only
+    // once `/auth/me` reports `onboardingCompletedAt`, and that fetch rewrites the cache first.
+    await page.goto('/onboarding');
+    await page.waitForURL(/\/calendar(?:[?#]|$)/, { timeout: 15_000 });
+    return jwt;
+}

@@ -72,6 +72,17 @@ export function isFakeSubject(subject: string): boolean {
   return subject.startsWith(FAKE_SUBJECT_PREFIX);
 }
 
+/**
+ * ROK-1595: the key that scopes per-connection busy seeds. A fake grant's
+ * refresh token is unique per connection and survives `refresh`, so the
+ * seed (decrypting the row) and `fetchBusy` (handed the creds) agree on it.
+ */
+export function fakeOwnerKey(credentials: CalendarCredentials): string {
+  return credentials.kind === 'oauth'
+    ? credentials.refreshToken
+    : credentials.username;
+}
+
 /** One `fetchBusy` call as the fake saw it (ROK-1593). */
 export interface FakeFetchBusyCall {
   range: TimeRange;
@@ -227,6 +238,15 @@ export class FakeCalendarProvider
     this.store.seedBusy(calendarId, blocks);
   }
 
+  /** Blocks only a `fetchBusy` with these credentials sees (ROK-1595). */
+  seedBusyFor(
+    credentials: CalendarCredentials,
+    calendarId: string,
+    blocks: readonly BusyBlock[],
+  ): void {
+    this.store.seedBusy(calendarId, blocks, fakeOwnerKey(credentials));
+  }
+
   /** The next `fetchBusy` rejects with `err`. */
   failNextFetch(err: Error): void {
     this.store.failNextFetch(err);
@@ -239,7 +259,7 @@ export class FakeCalendarProvider
 
   /** An unknown calendar is skipped into `missingCalendarIds` (as Google). */
   fetchBusy(
-    _credentials: CalendarCredentials,
+    credentials: CalendarCredentials,
     range: TimeRange,
     calendarIds: string[],
   ): Promise<FetchBusyResult> {
@@ -251,7 +271,8 @@ export class FakeCalendarProvider
     }
     const known = calendarIds.filter((id) => this.store.hasCalendar(id));
     const missing = calendarIds.filter((id) => !this.store.hasCalendar(id));
-    const blocks = known.flatMap((id) => this.store.busyIn(id, range));
+    const owner = fakeOwnerKey(credentials);
+    const blocks = known.flatMap((id) => this.store.busyIn(id, range, owner));
     return Promise.resolve(
       missing.length > 0 ? { blocks, missingCalendarIds: missing } : { blocks },
     );

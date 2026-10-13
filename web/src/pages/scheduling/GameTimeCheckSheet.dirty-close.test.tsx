@@ -33,6 +33,7 @@ vi.mock('../../hooks/use-game-time', () => ({
   useCreateAbsence: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
   useGameTimeAbsences: () => ({ data: [] }),
+  useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 const onClose = vi.fn();

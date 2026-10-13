@@ -1,7 +1,7 @@
 /** Away days for the week strip and the desktop day headers (ROK-1585). */
 import { describe, it, expect } from 'vitest';
 import type { GameTimeAbsence } from '@raid-ledger/contract';
-import { awayDatesInWeek, awayDaysOfWeek } from '../away-days';
+import { awayDatesInWeek, awayDaysOfWeek, awaySourceOf, awaySourcesOfWeek } from '../away-days';
 
 const away = (startDate: string, endDate: string): GameTimeAbsence => ({
     id: 1, startDate, endDate, reason: null,
@@ -56,5 +56,34 @@ describe('awayDatesInWeek — the Sun–Sat week starting weekStart', () => {
     it('ignores ranges outside the week', () => {
         const weekStart = new Date(2026, 8, 13);
         expect(sorted(awayDatesInWeek([away('2026-09-20', '2026-09-30')], weekStart))).toEqual([]);
+    });
+});
+
+describe('awaySourcesOfWeek / awaySourceOf (ROK-1595 S2)', () => {
+    const today = new Date(2026, 8, 16); // Wed Sep 16 2026
+    const synced = (startDate: string, endDate: string): GameTimeAbsence =>
+        ({ ...away(startDate, endDate), id: 2, source: 'calendar', provider: 'google' });
+
+    it('marks a synced-only day calendar and a manual day manual', () => {
+        const days = awaySourcesOfWeek([away('2026-09-19', '2026-09-19'), synced('2026-09-17', '2026-09-17')], today);
+        expect([...days.entries()].sort()).toEqual([[4, 'calendar'], [6, 'manual']]);
+    });
+
+    it('lets manual win where both cover the day, and reads a missing source as manual', () => {
+        const both = awaySourcesOfWeek([synced('2026-09-18', '2026-09-18'), away('2026-09-18', '2026-09-18')], today);
+        expect(both.get(5)).toBe('manual');
+        expect(awaySourcesOfWeek([away('2026-09-17', '2026-09-17')], today).get(4)).toBe('manual');
+    });
+
+    it('agrees with awayDaysOfWeek on WHICH days are away', () => {
+        const list = [away('2026-09-19', '2026-09-20'), synced('2026-09-16', '2026-09-17')];
+        expect(sorted(new Set(awaySourcesOfWeek(list, today).keys()))).toEqual(sorted(awayDaysOfWeek(list, today)));
+    });
+
+    it('awaySourceOf reads a map, a plain set (manual) and nothing', () => {
+        expect(awaySourceOf(new Map([[3, 'calendar' as const]]), 3)).toBe('calendar');
+        expect(awaySourceOf(new Set([3]), 3)).toBe('manual');
+        expect(awaySourceOf(new Set([3]), 4)).toBeNull();
+        expect(awaySourceOf(undefined, 3)).toBeNull();
     });
 });

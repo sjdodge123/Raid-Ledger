@@ -231,6 +231,7 @@ function GameTimeWidgetModal({ editor, previewBlocks, eventTitle, coverUrl, game
                         onChange={editor.handleChange}
                         tzLabel={editor.tzLabel}
                         previewBlocks={previewBlocks}
+                        calendarBusy={editor.calendarBusy}
                         hourRange={[9, 2]}
                         compact
                         noStickyOffset

@@ -20,7 +20,8 @@ type BodyProps = Omit<AwayPanelProps, 'ctl'> & { ctl: AbsenceSectionCtl };
 
 function AwayPanelBody({ layout, hideSubmit = false, ctl }: BodyProps): JSX.Element {
     const list = (heading?: string) => (
-        <AwayUpcomingList rows={ctl.rows} heading={heading} onRemove={ctl.remove} isDeleting={ctl.isDeleting} />
+        <AwayUpcomingList rows={ctl.rows} heading={heading} onRemove={ctl.remove} onIgnore={ctl.ignore}
+            syncedText={ctl.syncedText} isDeleting={ctl.isDeleting} />
     );
     if (layout === 'inline') {
         return (

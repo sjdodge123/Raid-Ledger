@@ -33,6 +33,7 @@ vi.mock('../../hooks/use-game-time', () => ({
   useCreateAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
   useDeleteAbsence: vi.fn(() => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false })),
   useGameTimeAbsences: vi.fn(() => ({ data: [] })),
+  useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // --- Viewport branch (Modal ≥1024px vs BottomSheet below) ---

@@ -1,13 +1,15 @@
 import { useMemo, type JSX, type ReactNode } from 'react';
-import type { GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import type { BlockPresetControl } from '../block-presets';
 import type { GridDims, HeatmapCellData } from '../game-time-grid.types';
 import { slotCountsByDay, type SlotMark } from '../slot-marks.utils';
+import { busyHourCount } from '../calendar-busy.utils';
 import { DayBlockEditor } from './DayBlockEditor';
 import { DayPager } from './DayPager';
 import { GroupDayView } from './GroupDayView';
 import { OutsideHoursHint } from './GroupDayMarks';
 import { WeekStrip } from './WeekStrip';
+import type { AwayDays } from './away-days';
 import { groupBandShares, type GroupBandShare } from './group-day.utils';
 import { usePhoneWeekEditor } from './use-phone-week-editor';
 
@@ -69,10 +71,28 @@ export interface PhoneWeekEditorCoreProps {
      */
     group?: GroupOverlay;
     /**
-     * Days of the week the viewer is away (ROK-1585) — `awayDaysOfWeek` from
+     * Days of the week the viewer is away (ROK-1585) — `awaySourcesOfWeek` from
      * `away-days.ts`. Forwarded to `WeekStrip`, which ignores it in group mode.
      */
-    awayDays?: ReadonlySet<number>;
+    awayDays?: AwayDays;
+    /**
+     * The viewer's synced-calendar busy hours (ROK-1595 S2): a band on the day
+     * and " · Nh busy" in the header (those hours leave "Nh free").
+     * Never drawn or counted in group mode (§4.16 narrowed to group views).
+     */
+    calendarBusy?: readonly GameTimeCalendarBusy[] | undefined;
+}
+
+/**
+ * The viewer's own busy hours for the day on screen. `own` is undefined in a
+ * group view (§4.16 narrowed: the own band never paints there). S2: busy hours
+ * inside a slot are not free time — 4h of slots with 1h busy reads "3h free · 1h busy".
+ */
+function ownBusy(
+    own: readonly GameTimeCalendarBusy[] | undefined, slots: readonly GameTimeSlot[], day: number, hours: readonly number[], freeHours: number,
+) {
+    const busyHours = busyHourCount(own ?? [], slots, day, hours);
+    return { own, counts: { freeHours: Math.max(0, freeHours - busyHours), busyHours } };
 }
 
 /**
@@ -92,16 +112,16 @@ export interface PhoneWeekEditorCoreProps {
  */
 export function PhoneWeekEditorCore({
     slots, onChange, hours, initialDay = 0, onDayChange, dims, inspectorPlacement,
-    gridHeader, gridFooter, daySlotRef, presets, group, awayDays,
+    gridHeader, gridFooter, daySlotRef, presets, group, awayDays, calendarBusy,
 }: PhoneWeekEditorCoreProps): JSX.Element {
     const pager = usePhoneWeekEditor(slots, hours, initialDay, onDayChange, group?.onWeekStep);
     const strip = { groupBands: useGroupBands(group?.cells), groupVotes: useGroupVotes(group?.slotMarks) };
-    const editorProps = { slots, onChange, dims, inspectorPlacement, presets };
+    const busy = ownBusy(group ? undefined : calendarBusy, slots, pager.day, hours, pager.freeHours);
+    const editorProps = { slots, onChange, dims, inspectorPlacement, presets, calendarBusy: busy.own };
 
     return (
         <div className="flex h-full min-h-0 flex-col" data-testid="phone-week-editor">
-            <DayPager
-                day={pager.day} freeHours={pager.freeHours} subtitle={group?.subtitle}
+            <DayPager day={pager.day} {...busy.counts} subtitle={group?.subtitle}
                 canWrap={Boolean(group?.onWeekStep)} onPrev={pager.goPrev} onNext={pager.goNext} />
             {gridHeader}
             {/* ROK-1579: a FLOOR of three 44px rows, not `min-h-0` — see the

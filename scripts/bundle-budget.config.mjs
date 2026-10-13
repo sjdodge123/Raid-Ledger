@@ -74,7 +74,7 @@ const LAZY_NAMED = [
   { name: 'games-page', kb: 19.7, why: 'route' },
   { name: 'scheduling-poll-page', kb: 16.29, why: 'route' },
   { name: 'SchedulingWireframesPage', kb: 16.18, why: 'DEMO_MODE dev route' },
-  { name: 'DesignSystemPage', kb: 15.44, why: 'DEMO_MODE dev route' },
+  { name: 'DesignSystemPage', kb: 15.7, why: 'DEMO_MODE dev route; +0.26 KB ROK-1595 busy band, radio cards, away rows (their components are already shared chunks, so a lazy split measured +0.2 KB, not less)' },
   { name: 'SimplifyWireframesPage', kb: 14.61, why: 'DEMO_MODE dev route' },
   {
     pattern: /^chunk-[A-Z0-9]{8}$/,

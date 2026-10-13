@@ -1,3 +1,8 @@
+// Run integration tests on a UTC clock, like GitHub CI and the prod container.
+// The fleet runners set TZ=America/Denver, which shifted server-local week
+// starts (resolveWeekStart) and made date-keyed specs disagree with CI (ROK-1595).
+process.env.TZ = 'UTC';
+
 /** @type {import('ts-jest').JestConfigWithTsJest} */
 module.exports = {
   moduleFileExtensions: ['js', 'json', 'ts'],
