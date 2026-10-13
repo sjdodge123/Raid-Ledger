@@ -66,7 +66,7 @@ test('?error=state lands on an inline banner and the param is stripped', async (
     await page.goto(`${PAGE}?error=state`);
     const banner = page.getByTestId('calendar-oauth-error');
     await expect(banner).toHaveAttribute('data-error-code', 'state');
-    await expect(page).toHaveURL(/\/profile\/gaming\/calendars$/);
+    await expect(page).toHaveURL(/\/profile\/integrations$/);
 });
 
 // ---------------------------------------------------------------------------

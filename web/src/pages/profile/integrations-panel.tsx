@@ -1,8 +1,9 @@
 /**
  * Integrations panel showing Discord and Steam link status (ROK-548).
  * Reuses DiscordLinkCta and SteamSection from identity-sections.
- * ROK-1780: the whole Calendars page renders inline below them while the
- * Calendar Sync kill switch is on (it used to be Profile → Gaming → Calendars).
+ * ROK-1780: the whole Calendars page renders as a sibling below the
+ * Integrations card while the Calendar Sync kill switch is on, whatever the
+ * Discord link state (it used to be Profile → Gaming → Calendars).
  */
 import type { JSX } from 'react';
 import { useAuth } from '../../hooks/use-auth';
@@ -30,7 +31,6 @@ function DiscordLinkedStatus({ user }: {
                 <p className="text-sm font-medium text-foreground">{user.username}</p>
                 <p className="text-xs text-success">Discord linked</p>
             </div>
-            <CalendarsSection />
         </div>
     );
 }
@@ -70,6 +70,7 @@ export function IntegrationsPanel(): JSX.Element | null {
                         unlinkSteam={unlinkSteam} syncLibrary={syncLibrary} syncWishlist={syncWishlist} />
                 )}
             </div>
+            <CalendarsSection />
         </div>
     );
 }
