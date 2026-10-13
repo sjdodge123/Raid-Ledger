@@ -200,11 +200,11 @@ export interface CharacterIdentityProvider {
   ): void;
 }
 
-/** A plugin that knows about game servers (Pelican, GPortal, ...) — ROK-268. Core never imports a provider. */
+/** A plugin that knows about game servers (any hosting panel) — ROK-268. Core never imports a provider. */
 export interface GameServerProvider {
   /** Owning plugin id — core skips the provider while that plugin is inactive. */
   readonly pluginSlug: string;
-  /** Human label stamped onto every item/status, e.g. "Pelican". */
+  /** Human label stamped onto every item/status, e.g. the panel's display name. */
   readonly providerLabel: string;
   /** Windows + markers overlapping [from, to). `gameIds` undefined = all mapped games. */
   getCalendarItems(
