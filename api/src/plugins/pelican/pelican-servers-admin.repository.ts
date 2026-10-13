@@ -1,0 +1,124 @@
+import { Inject, Injectable } from '@nestjs/common';
+import { asc, eq, sql } from 'drizzle-orm';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { PelicanServerUpdate } from '@raid-ledger/contract';
+import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
+import * as schema from '../../drizzle/schema';
+import {
+  games,
+  pelicanServers,
+  type NewPelicanServer,
+  type PelicanServerRow,
+} from '../../drizzle/schema';
+import type { PelicanTx } from './pelican-servers.repository';
+
+type Db = PostgresJsDatabase<typeof schema>;
+
+/**
+ * A `pelican_servers` row plus the mapped game's name (ROK-1094). The panel
+ * uuid and identifier are never selected, so they cannot leak from here.
+ */
+export type PelicanAdminServerRow = Omit<
+  PelicanServerRow,
+  'panelUuid' | 'identifier'
+> & { gameName: string | null };
+
+/** Outcome of an admin mapping edit; never a caught FK violation. */
+export type PelicanMappingUpdateResult =
+  | { kind: 'ok'; row: PelicanAdminServerRow }
+  | { kind: 'not_found' }
+  | { kind: 'unknown_game' };
+
+type MappingSet = Pick<
+  NewPelicanServer,
+  'gameId' | 'showOnCalendar' | 'timezone'
+>;
+
+/** Only the keys the admin sent; `timezone: ''` stores NULL (inherit). */
+export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
+  return {
+    ...(patch.gameId !== undefined ? { gameId: patch.gameId } : {}),
+    ...(patch.showOnCalendar !== undefined
+      ? { showOnCalendar: patch.showOnCalendar }
+      : {}),
+    ...(patch.timezone !== undefined
+      ? { timezone: patch.timezone === '' ? null : patch.timezone }
+      : {}),
+  };
+}
+
+/** Admin read/edit of `pelican_servers` — the sync upsert never touches these columns (D4). */
+@Injectable()
+export class PelicanServersAdminRepository {
+  constructor(@Inject(DrizzleAsyncProvider) private readonly db: Db) {}
+
+  /** Every row, missing ones included, ordered by name. */
+  listForAdmin(): Promise<PelicanAdminServerRow[]> {
+    return this.selectJoined(this.db).orderBy(
+      asc(pelicanServers.name),
+      asc(pelicanServers.id),
+    );
+  }
+
+  /**
+   * Apply the admin mapping. The server row is locked and the game is
+   * pre-checked (`FOR SHARE`) in one transaction, so the update cannot hit
+   * the games FK — postgres.js would poison the tx on a caught violation.
+   */
+  updateMapping(
+    id: number,
+    patch: PelicanServerUpdate,
+  ): Promise<PelicanMappingUpdateResult> {
+    return this.db.transaction(async (tx) => {
+      if (!(await this.lockServer(tx, id))) return { kind: 'not_found' };
+      if (patch.gameId != null && !(await this.lockGame(tx, patch.gameId))) {
+        return { kind: 'unknown_game' };
+      }
+      await tx
+        .update(pelicanServers)
+        .set(toMappingSet(patch))
+        .where(eq(pelicanServers.id, id));
+      const [row] = await this.selectJoined(tx).where(
+        eq(pelicanServers.id, id),
+      );
+      return row ? { kind: 'ok', row } : { kind: 'not_found' };
+    });
+  }
+
+  private selectJoined(executor: Db | PelicanTx) {
+    return executor
+      .select({ ...getServerColumns(), gameName: games.name })
+      .from(pelicanServers)
+      .leftJoin(games, eq(games.id, pelicanServers.gameId))
+      .$dynamic();
+  }
+
+  private async lockServer(tx: PelicanTx, id: number): Promise<boolean> {
+    const rows = await tx.execute(
+      sql`select 1 from ${pelicanServers} where ${pelicanServers.id} = ${id} for update`,
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  }
+
+  private async lockGame(tx: PelicanTx, gameId: number): Promise<boolean> {
+    const rows = await tx.execute(
+      sql`select 1 from ${games} where ${games.id} = ${gameId} for share`,
+    );
+    return Array.isArray(rows) && rows.length > 0;
+  }
+}
+
+function getServerColumns() {
+  return {
+    id: pelicanServers.id,
+    name: pelicanServers.name,
+    gameId: pelicanServers.gameId,
+    showOnCalendar: pelicanServers.showOnCalendar,
+    timezone: pelicanServers.timezone,
+    currentState: pelicanServers.currentState,
+    isSuspended: pelicanServers.isSuspended,
+    statusCheckedAt: pelicanServers.statusCheckedAt,
+    lastSyncedAt: pelicanServers.lastSyncedAt,
+    missingSince: pelicanServers.missingSince,
+  };
+}
