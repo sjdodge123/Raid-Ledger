@@ -1022,7 +1022,9 @@ table saying what each chip in a cell means, and a `title` on every chip.
 **Editable admin table (ROK-1094).** When each row carries controls (pickers, a `Switch`, a ghost button),
 keep the same box/header/divider idiom at ≥1024px and switch to one stacked card per row below it via
 `useMediaQuery(DESKTOP_MQ)` (§4.18) — reference `web/src/plugins/pelican/slots/pelican-servers-table.tsx`;
-the status chip in each row stays read-only.
+the status chip in each row stays read-only. In table mode the column header is the label: pass
+`inline` to `GameSearchInput` (label goes `sr-only`, no selected-game line under the box) and `hideLabel`
+to a `Field`-based control, so each cell doesn't repeat it; card mode keeps the visible labels.
 
 **DON'T** use this for anything clickable: these chips are read-only. A tappable chip is §4.20. A filter
 toggle is §4.3.
