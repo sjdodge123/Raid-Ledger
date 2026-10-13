@@ -22,7 +22,9 @@ vi.mock('./use-auth', () => ({ getAuthToken: () => 'test-token' }));
 import { CALENDARS_OVERVIEW_KEY } from './use-calendar-sync';
 import { GAME_TIME_ABSENCES_KEY, GAME_TIME_QUERY_KEY } from './use-game-time';
 import { calendarReadErrorOf } from './calendar-read.helpers';
-import { useProviderCalendars, useSetReadCalendars, useSetReadEnabled, useSyncNow, useUpdateReadSettings } from './use-calendar-read';
+import {
+    READ_SAVE_KEY, useProviderCalendars, useSetReadCalendars, useSetReadEnabled, useSyncNow, useUpdateReadSettings,
+} from './use-calendar-read';
 
 const READ_OFF: CalendarConnection = { ...readConnectionFixture, read: { enabled: false, calendarIds: [] } };
 
@@ -109,6 +111,24 @@ describe('useUpdateReadSettings', () => {
         await waitFor(() => expect(result.current.isError).toBe(true));
         expect(overviewOf(qc)?.readSettings.mode).toBe('both');
         expect(calendarReadErrorOf(result.current.error)).toBe('failed');
+    });
+});
+
+describe('useUpdateReadSettings — the shared read-save key', () => {
+    it('the mode PUT is a READ_SAVE_KEY mutation, so controls waiting on any read save see it in flight', async () => {
+        const { gate, release } = holdOpen();
+        server.use(http.put(CALENDAR_READ_SETTINGS_URL, async () => {
+            await gate;
+            return new HttpResponse(null, { status: 204 });
+        }));
+        const { qc, wrapper } = setup();
+        const { result } = renderHook(() => useUpdateReadSettings(), { wrapper });
+        act(() => result.current.mutate('hours'));
+        await waitFor(() => expect(result.current.isPending).toBe(true));
+        expect(qc.isMutating({ mutationKey: [...READ_SAVE_KEY] }), 'the in-flight mode PUT counts as a read save').toBe(1);
+        release();
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        expect(qc.isMutating({ mutationKey: [...READ_SAVE_KEY] })).toBe(0);
     });
 });
 
