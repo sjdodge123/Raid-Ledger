@@ -14,6 +14,9 @@ describe('redactServerName (ruling Q3)', () => {
     ['Join https://panel.example.com/server/abc', 'Join'],
     ['Terraria 1a2b3c4d-0000-4000-8000-1a2b3c4d5e6f', 'Terraria'],
     ['Terraria 1a2b3c4d', 'Terraria'],
+    ['Valheim nas:2456', 'Valheim'],
+    ['CS (myserver:27015)', 'CS'],
+    ['mc:25565 Survival', 'Survival'],
   ])('%s -> %s', (raw, expected) => {
     expect(redactServerName(raw, 1)).toBe(expected);
   });
@@ -24,6 +27,11 @@ describe('redactServerName (ruling Q3)', () => {
     'Raid night 12:30',
     'deadbeef',
     'Build 20251013',
+    'Valheim: Season 2',
+    // A time keeps: the host label of `host:port` must contain a letter.
+    'Raid 10:30',
+    // Not a full 8-group IPv6 address, so not redacted.
+    'Score a:b:c:d',
   ])('keeps a clean name intact: %s', (raw) => {
     expect(redactServerName(raw, 1)).toBe(raw);
   });

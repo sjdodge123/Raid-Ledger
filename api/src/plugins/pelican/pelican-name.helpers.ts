@@ -11,7 +11,11 @@ const PATTERNS: readonly RegExp[] = [
   /\b(?:localhost|[a-z0-9-]+(?:\.[a-z0-9-]+)+):\d{1,5}\b/gi,
   /\b[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*::(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*)?/gi,
   /::[0-9a-f]{1,4}(?::[0-9a-f]{1,4})*/gi,
-  /\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/gi,
+  // Full 8-group form only; compressed forms are the two `::` patterns above.
+  /\b(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}\b/gi,
+  // Single-label `host:port` (`nas:2456`). The label must hold a letter and
+  // the port 2–5 digits, so times (`10:30`) and `Season 2: x` survive.
+  /(?<![\w.:-])(?=[a-z0-9-]*[a-z])[a-z0-9-]+:\d{2,5}(?![\w:.])/gi,
   /\b(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{8}\b/gi,
 ];
 const EMPTY_BRACKETS = /\(\s*\)|\[\s*\]|\{\s*\}/g;
