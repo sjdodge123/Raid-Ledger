@@ -42,7 +42,7 @@ export function PelicanServersTable({ rows, defaultTimezone, onUpdate }: TablePr
                 <thead className="border-b border-edge bg-surface/50">
                     <tr>
                         {HEADERS.map((h) => (
-                            <th key={h} scope="col" className="px-3 py-2 text-left text-xs font-medium text-muted whitespace-nowrap">{h}</th>
+                            <th key={h} scope="col" className="px-2 py-2 text-left align-bottom text-xs font-medium text-muted">{h}</th>
                         ))}
                     </tr>
                 </thead>

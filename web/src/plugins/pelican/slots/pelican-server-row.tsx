@@ -21,6 +21,9 @@ export interface ServerRowProps {
     onUpdate: ServerUpdateHandler;
 }
 
+/** Table cells drop the per-control labels: the column header is the label (ROK-1094). */
+type ControlProps<K extends keyof ServerRowProps> = Pick<ServerRowProps, K> & { inline?: boolean };
+
 function ServerName({ row }: { row: PelicanServerRowDto }) {
     return (
         <div className="min-w-0">
@@ -75,12 +78,12 @@ function useGameDraft(row: PelicanServerRowDto, onUpdate: ServerUpdateHandler) {
 }
 
 /** GameSearchInput, not GameFilterInput: the row's `gameName` names a game the registry may not list. */
-function GamePicker({ row, suggestions, onUpdate }: Omit<ServerRowProps, 'defaultTimezone'>) {
+function GamePicker({ row, suggestions, onUpdate, inline = false }: ControlProps<'row' | 'suggestions' | 'onUpdate'>) {
     const g = useGameDraft(row, onUpdate);
     return (
         <div onBlur={g.onBlur}>
             <GameSearchInput key={g.resetKey} id={`pelican-server-${row.id}-game`} value={g.value}
-                initialSuggestions={suggestions} onChange={g.onChange} onClear={g.onClear} />
+                initialSuggestions={suggestions} onChange={g.onChange} onClear={g.onClear} inline={inline} />
         </div>
     );
 }
@@ -92,11 +95,11 @@ function CalendarSwitch({ row, onUpdate }: Pick<ServerRowProps, 'row' | 'onUpdat
     );
 }
 
-function TimezoneControl({ row, defaultTimezone, onUpdate }: Omit<ServerRowProps, 'suggestions'>) {
+function TimezoneControl({ row, defaultTimezone, onUpdate, inline = false }: ControlProps<'row' | 'defaultTimezone' | 'onUpdate'>) {
     const inherited = row.timezone === null;
     return (
         <div className="space-y-1">
-            <PelicanTimezoneField key={row.timezone ?? 'inherit'} id={`pelican-server-${row.id}-tz`} label="Timezone"
+            <PelicanTimezoneField key={row.timezone ?? 'inherit'} id={`pelican-server-${row.id}-tz`} label="Timezone" hideLabel={inline}
                 testId={`pelican-server-${row.id}-tz-input`} value={row.timezone ?? defaultTimezone} inherited={inherited}
                 hint={inherited ? `Uses the panel default (${defaultTimezone}).` : 'Overrides the panel default.'}
                 onChange={(tz) => { if (tz !== row.timezone) onUpdate(row.id, { timezone: tz }); }} />
@@ -113,16 +116,20 @@ function LastSynced({ at }: { at: string | null }) {
     return <span className="text-sm text-secondary" title={date.toLocaleString()}>{formatDistanceToNow(date, { addSuffix: true })}</span>;
 }
 
-/** Desktop: one `<tr>` in the §4.21-idiom table. */
+/**
+ * Desktop: one `<tr>` in the §4.21-idiom table. Sized to fit the admin content
+ * box without inner scroll (~692px at a 1024px viewport, ~820px at 1280): the two
+ * pickers hold 10rem, every other column shrinks to its longest word.
+ */
 export function PelicanServerRow(p: ServerRowProps) {
     return (
         <tr data-testid={`pelican-server-row-${p.row.id}`} className="align-top">
-            <td className="px-3 py-3"><ServerName row={p.row} /></td>
-            <td className="px-3 py-3"><PelicanStateChip row={p.row} /></td>
-            <td className="px-3 py-3 min-w-[14rem]"><GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} /></td>
-            <td className="px-3 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
-            <td className="px-3 py-3 min-w-[14rem]"><TimezoneControl row={p.row} defaultTimezone={p.defaultTimezone} onUpdate={p.onUpdate} /></td>
-            <td className="px-3 py-3 whitespace-nowrap"><LastSynced at={p.row.lastSyncedAt} /></td>
+            <td className="px-2 py-3"><ServerName row={p.row} /></td>
+            <td className="px-2 py-3"><PelicanStateChip row={p.row} /></td>
+            <td className="px-2 py-3 min-w-[10rem]"><GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} inline /></td>
+            <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
+            <td className="px-2 py-3 min-w-[10rem]"><TimezoneControl row={p.row} defaultTimezone={p.defaultTimezone} onUpdate={p.onUpdate} inline /></td>
+            <td className="px-2 py-3"><LastSynced at={p.row.lastSyncedAt} /></td>
         </tr>
     );
 }

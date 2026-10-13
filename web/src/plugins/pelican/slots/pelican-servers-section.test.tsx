@@ -93,6 +93,31 @@ describe('PelicanServersSection — layout', () => {
         expect(screen.getByTestId('pelican-server-card-2')).toBeInTheDocument();
         expect(screen.queryByTestId('pelican-servers-table')).toBeNull();
     });
+
+    it('≥1024px: the column header is the label — per-row Game/Timezone labels are sr-only, controls stay named', async () => {
+        await renderSection([pelicanServerFixture]);
+        const row = within(screen.getByTestId('pelican-server-row-1'));
+        for (const name of ['Game', 'Timezone']) {
+            expect(row.getByText(name, { selector: 'label' })).toHaveClass('sr-only');
+            expect(row.getByRole('combobox', { name })).toBeInTheDocument();
+        }
+    });
+
+    it('≥1024px: a mapped row shows its game name once (in the picker, no repeat under it)', async () => {
+        await renderSection([pelicanServerFixture]);
+        const row = within(screen.getByTestId('pelican-server-row-1'));
+        expect(row.getByRole('combobox', { name: 'Game' })).toHaveValue('Valheim');
+        expect(row.queryAllByText('Valheim')).toHaveLength(0);
+    });
+
+    it('<1024px: cards keep the visible Game/Timezone labels', async () => {
+        setViewport(false);
+        await renderSection([pelicanServerFixture]);
+        const card = within(screen.getByTestId('pelican-server-card-1'));
+        for (const name of ['Game', 'Timezone']) {
+            expect(card.getByText(name, { selector: 'label' })).not.toHaveClass('sr-only');
+        }
+    });
 });
 
 describe('PelicanServersSection — row edits', () => {

@@ -35,24 +35,27 @@ function labelFor(options: ZoneOption[], id: string): ZoneOption {
     return options.find((o) => o.id === id) ?? { id, label: id };
 }
 
-/** Per-row reuse (ROK-1094 servers table) passes its own `id`, `label`, `hint` and `testId`. */
+/**
+ * Per-row reuse (ROK-1094 servers table) passes its own `id`, `label`, `hint` and
+ * `testId`; a table row also sets `hideLabel` (its column header is the label).
+ */
 export interface PelicanTimezoneFieldProps {
     value: string; onChange: (tz: string) => void; inherited: boolean;
-    id?: string; label?: string; hint?: string; testId?: string;
+    id?: string; label?: string; hint?: string; testId?: string; hideLabel?: boolean;
 }
 
 const DEFAULT_HINT = 'Pelican’s API doesn’t say which timezone a schedule uses. Raid Ledger reads schedules in this zone.';
 
 export function PelicanTimezoneField({
     value, onChange, inherited, id = 'pelicanDefaultTimezone', label = 'Default timezone', hint: hintText = DEFAULT_HINT,
-    testId = 'pelican-timezone-input',
+    testId = 'pelican-timezone-input', hideLabel = false,
 }: PelicanTimezoneFieldProps) {
     const options = useMemo(() => buildZoneOptions(), []);
     const selected = labelFor(options, value);
     const [text, setText] = useState(selected.label);
     const hint = hintText + (inherited && hintText === DEFAULT_HINT ? ' Prefilled from the community default.' : '');
     return (
-        <Field id={id} label={label} hint={hint}>
+        <Field id={id} label={label} hint={hint} hideLabel={hideLabel}>
             <Combobox<ZoneOption>
                 options={filterZones(options, text === selected.label ? '' : text)}
                 getKey={(o) => o.id} getLabel={(o) => o.label}

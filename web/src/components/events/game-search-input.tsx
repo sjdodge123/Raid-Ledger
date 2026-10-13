@@ -45,6 +45,12 @@ interface GameSearchInputProps {
      * from the `onChange(null)` that typing over the picked name emits.
      */
     onClear?: () => void;
+    /**
+     * ROK-1094 table rows: the column header names the box, so the "Game" label
+     * goes `sr-only` (it still names the combobox) and the selected-game line
+     * under the box is dropped — the box text already shows the name.
+     */
+    inline?: boolean;
 }
 
 function Cover({ game, w, h }: { game: IgdbGameDto; w: number; h: number }): JSX.Element {
@@ -127,11 +133,11 @@ function useGameSearchState({ value, onChange, initialSuggestions, onClear }: Ga
 }
 
 /** Game search combobox with the "Game" label, selected badge and clear button. */
-export function GameSearchInput({ value, onChange, onClear, error, initialSuggestions, id = 'game-search', autoFocus, testIds }: GameSearchInputProps): JSX.Element {
+export function GameSearchInput({ value, onChange, onClear, error, initialSuggestions, id = 'game-search', autoFocus, testIds, inline }: GameSearchInputProps): JSX.Element {
     const { inputRef, ...s } = useGameSearchState({ value, onChange, initialSuggestions, onClear });
     return (
         <div className="relative">
-            <label htmlFor={id} className="block text-sm font-medium text-secondary mb-2">Game</label>
+            <label htmlFor={id} className={inline ? 'sr-only' : 'block text-sm font-medium text-secondary mb-2'}>Game</label>
             {/* autoFocus (ROK-1416): the input receives focus when the form opens as the inert-binding repair target. */}
             <Combobox<IgdbGameDto>
                 ref={inputRef} id={id} label="Game" autoFocus={autoFocus} placeholder="Search for a game..."
@@ -149,7 +155,7 @@ export function GameSearchInput({ value, onChange, onClear, error, initialSugges
                 )}
             />
             {s.localSource && <LocalSourceWarning />}
-            {value && <SelectedGameBadge value={value} />}
+            {value && !inline && <SelectedGameBadge value={value} />}
             {error && <p className="mt-1 text-sm text-danger">{error}</p>}
         </div>
     );
