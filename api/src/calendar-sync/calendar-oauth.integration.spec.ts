@@ -176,7 +176,10 @@ describe('GET /users/me/calendars/oauth/:provider/start', () => {
   it('answers the consent URL and sets the httpOnly binding cookie', async () => {
     const s = await start();
     expect(s.url.host).toBe('accounts.google.com');
-    expect(s.url.searchParams.get('scope')).toBe(GOOGLE_CONNECT_SCOPES);
+    // ROK-1595 Q-A: the read scopes are asked for at first connect.
+    expect(s.url.searchParams.get('scope')).toBe(
+      [GOOGLE_CONNECT_SCOPES, ...GOOGLE_READ_SCOPES].join(' '),
+    );
     expect(s.url.searchParams.get('code_challenge_method')).toBe('S256');
     expect(s.url.searchParams.get('code_challenge')).toMatch(
       /^[A-Za-z0-9_-]{43}$/,
@@ -416,7 +419,10 @@ describe('OAuth with intent=primary (ROK-1596 D8)', () => {
       `${GOOGLE_CONNECT_SCOPES} ${GOOGLE_EVENTS_SCOPE}`,
     );
     const plain = await start();
-    expect(plain.url.searchParams.get('scope')).toBe(GOOGLE_CONNECT_SCOPES);
+    expect(plain.url.searchParams.get('scope')).toBe(
+      googleScopesFor('connect').join(' '),
+    );
+    expect(googleScopesFor('connect')).not.toContain(GOOGLE_EVENTS_SCOPE);
   });
 
   it('400s on an unknown intent', async () => {
@@ -662,7 +668,7 @@ describe('OAuth with intent=read (ROK-1593 D-R3)', () => {
     expect(await rowsOf(user.userId)).toEqual([before]);
   });
 
-  it('a connect-intent grant that carries the read scopes records access but never turns read on', async () => {
+  it('ROK-1595 Q-A: a first connect whose grant carries the read scopes turns read on, write fields untouched', async () => {
     const spy = stubGoogle(WITH_READ);
     const s = await start();
     expect(
@@ -671,11 +677,53 @@ describe('OAuth with intent=read (ROK-1593 D-R3)', () => {
     const [row] = nonEmpty(await rowsOf(user.userId), 'connection');
     expect(readAndWriteFields(row)).toEqual({
       readAccessGranted: true,
+      readEnabled: true,
+      writeEnabled: false,
+      writeTarget: 'dedicated',
+      dedicatedCalendarId: null,
+    });
+    expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
+  });
+
+  it('ROK-1595 Q-A: a first connect with the read boxes unticked still connects, write-only', async () => {
+    const spy = stubGoogle(OK);
+    const s = await start();
+    expect(
+      await land({ code: 'auth-code-r4', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const [row] = nonEmpty(await rowsOf(user.userId), 'connection');
+    expect(readAndWriteFields(row)).toEqual({
+      readAccessGranted: false,
       readEnabled: false,
       writeEnabled: false,
       writeTarget: 'dedicated',
       dedicatedCalendarId: null,
     });
     expect(formsSentTo(spy, GOOGLE_REVOKE_URL)).toEqual([]);
+  });
+
+  it('ROK-1595 Q-A: a reconnect keeps read off when the user turned it off', async () => {
+    await connectWith(OK);
+    jest.restoreAllMocks();
+    const [first] = nonEmpty(await rowsOf(user.userId), 'connection');
+    const id = first.id;
+    await testApp.db
+      .update(schema.calendarConnections)
+      .set({ readAccessGranted: true, readEnabled: false })
+      .where(eq(schema.calendarConnections.id, id));
+    stubGoogle(WITH_READ);
+    const s = await start();
+    expect(
+      await land({ code: 'auth-code-r5', state: s.state }, s.cookie),
+    ).toEqual({ connected: 'google', error: null });
+    const rows = await rowsOf(user.userId);
+    expect(rows.map((r) => r.id)).toEqual([id]);
+    expect(readAndWriteFields(rows[0])).toEqual({
+      readAccessGranted: true,
+      readEnabled: false,
+      writeEnabled: false,
+      writeTarget: 'dedicated',
+      dedicatedCalendarId: null,
+    });
   });
 });

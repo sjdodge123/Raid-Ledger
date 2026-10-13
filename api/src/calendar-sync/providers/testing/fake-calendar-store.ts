@@ -50,6 +50,8 @@ export class FakeCalendarStore {
   private readonly failures: Error[] = [];
   private readonly readOnly = new Set<string>();
   private readonly busy = new Map<string, BusyBlock[]>();
+  /** ROK-1595: blocks only one grant sees (owner key → calendar → blocks). */
+  private readonly ownedBusy = new Map<string, Map<string, BusyBlock[]>>();
   private readonly readFailures: Error[] = [];
   private calendarSerial = 0;
   private copySerial = 0;
@@ -94,12 +96,30 @@ export class FakeCalendarStore {
     }
   }
 
-  /** Foreign busy blocks on a calendar (never carry `ourId`). */
-  seedBusy(calendarId: string, blocks: readonly BusyBlock[]): void {
+  /**
+   * Foreign busy blocks on a calendar (never carry `ourId`). With `owner`
+   * (ROK-1595) only a fetch by that grant sees them — the DEMO seed's path,
+   * so one connection's seeds never leak into another's sync. Without it,
+   * every grant sees them (specs scripting "the user's calendar").
+   */
+  seedBusy(
+    calendarId: string,
+    blocks: readonly BusyBlock[],
+    owner?: string,
+  ): void {
     if (!this.calendars.has(calendarId))
       throw new NotFoundError('calendar_not_found');
-    const prior = this.busy.get(calendarId) ?? [];
-    this.busy.set(calendarId, [...prior, ...blocks]);
+    const bucket = owner === undefined ? this.busy : this.ownerBucket(owner);
+    const prior = bucket.get(calendarId) ?? [];
+    bucket.set(calendarId, [...prior, ...blocks]);
+  }
+
+  private ownerBucket(owner: string): Map<string, BusyBlock[]> {
+    const existing = this.ownedBusy.get(owner);
+    if (existing) return existing;
+    const created = new Map<string, BusyBlock[]>();
+    this.ownedBusy.set(owner, created);
+    return created;
   }
 
   /** Queue `err` for the next `fetchBusy` (FIFO; one error per call). */
@@ -126,9 +146,10 @@ export class FakeCalendarStore {
   /**
    * Busy blocks overlapping `range`: seeded foreign blocks plus the store's
    * OWN busy copies (`ourId` = copy id) — a real round-trip of what the
-   * write path stored. Free (tentative/bench) copies are not busy.
+   * write path stored. Free (tentative/bench) copies are not busy. `owner`
+   * adds the blocks seeded for that grant only (ROK-1595).
    */
-  busyIn(calendarId: string, range: TimeRange): BusyBlock[] {
+  busyIn(calendarId: string, range: TimeRange, owner?: string): BusyBlock[] {
     const overlaps = (b: { start: Date; end: Date }) =>
       b.start < range.end && b.end > range.start;
     const copies = this.copiesIn(calendarId)
@@ -139,7 +160,11 @@ export class FakeCalendarStore {
         allDay: false,
         ourId: c.copyId,
       }));
-    const seeded = this.busy.get(calendarId) ?? [];
+    const owned =
+      owner === undefined
+        ? []
+        : (this.ownedBusy.get(owner)?.get(calendarId) ?? []);
+    const seeded = [...(this.busy.get(calendarId) ?? []), ...owned];
     return [...seeded, ...copies].filter(overlaps).map((b) => ({ ...b }));
   }
 
@@ -147,6 +172,7 @@ export class FakeCalendarStore {
   removeCalendar(id: string): void {
     this.calendars.delete(id);
     this.busy.delete(id);
+    for (const bucket of this.ownedBusy.values()) bucket.delete(id);
     for (const copy of this.copiesIn(id)) this.copies.delete(copy.id);
   }
 

@@ -8,6 +8,13 @@
  * strings, so no timezone arithmetic is involved.
  */
 import type { GameTimeAbsence } from '@raid-ledger/contract';
+import type { AwaySource } from '../away/away-row.types';
+
+/**
+ * The strip's away days: a plain set (every day manual), or each day's source
+ * from {@link awaySourcesOfWeek} so a synced day gets the calendar tile (S2).
+ */
+export type AwayDays = ReadonlySet<number> | ReadonlyMap<number, AwaySource>;
 
 /** A local date as `YYYY-MM-DD`, the shape absences are stored in. */
 function localDateKey(date: Date): string {
@@ -59,4 +66,39 @@ export function awayDaysOfWeek(absences: readonly GameTimeAbsence[], today: Date
  */
 export function awayDatesInWeek(absences: readonly GameTimeAbsence[], weekStart: Date): Set<number> {
     return awaySet(absences, (d) => addDays(weekStart, d));
+}
+
+/**
+ * Which kind of absence covers the date, or null. Manual wins over calendar —
+ * the viewer's own booking is the stronger fact. No `source` = manual.
+ */
+function coverSource(absences: readonly GameTimeAbsence[], key: string): AwaySource | null {
+    let hit: AwaySource | null = null;
+    for (const a of absences) {
+        if (key < a.startDate || a.endDate < key) continue;
+        if ((a.source ?? 'manual') === 'manual') return 'manual';
+        hit = 'calendar';
+    }
+    return hit;
+}
+
+/**
+ * {@link awayDaysOfWeek} with each away day's source (ROK-1595 S2): the phone
+ * strip draws a synced day in the calendar style.
+ *
+ * @returns Day of the week (0 = Sunday) → `manual` | `calendar`, away days only.
+ */
+export function awaySourcesOfWeek(absences: readonly GameTimeAbsence[], today: Date): Map<number, AwaySource> {
+    const days = new Map<number, AwaySource>();
+    for (let d = 0; d < 7; d++) {
+        const source = coverSource(absences, localDateKey(addDays(today, (d - today.getDay() + 7) % 7)));
+        if (source) days.set(d, source);
+    }
+    return days;
+}
+
+/** A strip day's away source, or null when it is not away. A plain set means manual. */
+export function awaySourceOf(days: AwayDays | undefined, d: number): AwaySource | null {
+    if (!days?.has(d)) return null;
+    return 'get' in days ? days.get(d) ?? 'manual' : 'manual';
 }

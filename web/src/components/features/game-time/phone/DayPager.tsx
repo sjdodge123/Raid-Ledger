@@ -12,6 +12,8 @@ interface DayPagerProps {
      * the viewer's own free hours are not what that screen is about.
      */
     subtitle?: string | undefined;
+    /** Synced-calendar busy hours on this day (ROK-1595 S2) — " · Nh busy" in `text-busy` when > 0. */
+    busyHours?: number | undefined;
     /**
      * Paging past an end is a week step rather than a dead end (ROK-1580): the
      * caller re-fetches the neighbouring week, so both arrows stay live.
@@ -29,7 +31,7 @@ interface DayPagerProps {
  * of the week are visible instead of being discovered by tapping.
  */
 export function DayPager({
-    day, freeHours, subtitle, canWrap = false, onPrev, onNext,
+    day, freeHours, subtitle, busyHours = 0, canWrap = false, onPrev, onNext,
 }: DayPagerProps): JSX.Element {
     return (
         <div className="flex flex-none items-center justify-between gap-2 py-1" data-testid="phone-day-pager">
@@ -38,7 +40,12 @@ export function DayPager({
                 <div className="truncate text-base font-semibold text-foreground" data-testid="phone-day-title">
                     {FULL_DAYS[day]}
                 </div>
-                <div className="text-xs text-dim" data-testid="phone-day-free">{subtitle ?? dayFreeLabel(freeHours)}</div>
+                <div className="text-xs text-dim" data-testid="phone-day-free">
+                    {subtitle ?? dayFreeLabel(freeHours)}
+                    {subtitle === undefined && busyHours > 0 && (
+                        <span className="text-busy" data-testid="phone-day-busy">{` · ${busyHours}h busy`}</span>
+                    )}
+                </div>
             </div>
             <ArrowButton label="Next day" glyph="›" onClick={onNext} disabled={!canWrap && day >= 6} />
         </div>

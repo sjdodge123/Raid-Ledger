@@ -16,7 +16,8 @@ import { useSheetHeader } from '../../../../pages/scheduling/sheet-header-contex
 import { useGameTimeAbsences } from '../../../../hooks/use-game-time';
 import { nextAwayLabel } from '../away/away-panel.helpers';
 import { useToday } from '../away/use-today';
-import { awayDaysOfWeek } from './away-days';
+import { awaySourcesOfWeek } from './away-days';
+import type { AwaySource } from '../away/away-row.types';
 
 const NO_ABSENCES: GameTimeAbsence[] = [];
 const BACK_TEST_ID = 'away-back';
@@ -59,13 +60,13 @@ export function useAwayView(): AwayViewState {
     return { away, openAway, entryRef };
 }
 
-/** The strip's away days (next seven days) and the entry row's "next" line. */
-export function useAwaySummary(): { awayDays: Set<number>; nextLabel: string | null } {
+/** The strip's away days with their source (next seven days) and the entry row's "next" line. */
+export function useAwaySummary(): { awayDays: Map<number, AwaySource>; nextLabel: string | null } {
     const today = useToday();
     const { data } = useGameTimeAbsences();
     const absences = data ?? NO_ABSENCES;
     return useMemo(() => ({
-        awayDays: awayDaysOfWeek(absences, today),
+        awayDays: awaySourcesOfWeek(absences, today),
         nextLabel: nextAwayLabel(absences, today),
     }), [absences, today]);
 }

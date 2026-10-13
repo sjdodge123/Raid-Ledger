@@ -35,10 +35,12 @@
  * `game-time-check-copy.ts`. Every colour is a token.
  */
 import { useCallback, useMemo, useState, type JSX, type RefObject } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { gameTimeCheckPrompt } from '../game-time-check-copy';
 import { useGameTime } from '../../../../hooks/use-game-time';
+import { useTimezoneStore } from '../../../../stores/timezone-store';
+import { getTimezoneOffsetMinutes } from '../../../../lib/timezone-utils';
 import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
 import { PROFILE_BLOCK_PRESETS, type BlockPreset, type BlockPresetControl } from '../block-presets';
 import { PhoneWindowToggle } from './PhoneWindowToggle';
@@ -51,6 +53,7 @@ import { useReportSheetDirty } from '../sheet-dirty-context';
 
 /** Stable empty week — a new array each render would reset the draft. */
 const NO_SLOTS: GameTimeSlot[] = [];
+const NO_BUSY: GameTimeCalendarBusy[] = [];
 
 /**
  * The profile's Evening / Whole day chips, and the window negotiation behind
@@ -114,7 +117,11 @@ export function PhoneWeekCheckStep(props: PhoneWeekCheckStepProps): JSX.Element 
 
 /** The saved week as a draft, the window the day slot can show, and its presets. */
 function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: number) {
-    const { data } = useGameTime();
+    // ROK-1595: the PROFILE timezone, as the desktop editor asks
+    // (`use-game-time-editor.ts`) — the browser's offset drew busy hours late.
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
+    const { data } = useGameTime({ tzOffset });
     const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
     const draft = usePhoneWeekDraft(templateSlots);
     // ROK-1640: the drawer asks before a close throws this draft away.
@@ -123,7 +130,8 @@ function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: numb
     // that fits — the check's seven evening hours — comes back untouched.
     const hourWindow = useProfileWindow(hours, draft.slots, slotHeight);
     const presets = useProfilePresets(isCheck, hourWindow.expand);
-    return { draft, hourWindow, presets };
+    const calendarBusy = data?.calendarBusy ?? NO_BUSY;
+    return { draft, hourWindow, presets, calendarBusy };
 }
 
 /** "Same as last week" needs a last week; every viewer gets the away row. */
@@ -161,7 +169,7 @@ function WeekView({
     ageDays, hasSlots = false, onSkip, variant = 'check', hours = CHECK_HOURS, dims, slotHeight, hidden, onAway, entryRef,
 }: WeekViewProps): JSX.Element {
     const isCheck = variant === 'check';
-    const { draft, hourWindow, presets } = useWeekEditorState(hours, isCheck, slotHeight);
+    const { draft, hourWindow, presets, calendarBusy } = useWeekEditorState(hours, isCheck, slotHeight);
     const { awayDays, nextLabel } = useAwaySummary();
     return (
         <div data-testid="phone-week-view" hidden={hidden} className={hidden ? 'hidden' : 'flex h-full min-h-0 flex-col'}>
@@ -174,7 +182,7 @@ function WeekView({
                 <div className="min-h-0 flex-1">
                     <PhoneWeekEditorCore
                         slots={draft.slots} onChange={draft.setDraft} hours={hourWindow.hours}
-                        initialDay={new Date().getDay()} dims={dims} awayDays={awayDays}
+                        initialDay={new Date().getDay()} dims={dims} awayDays={awayDays} calendarBusy={calendarBusy}
                         inspectorPlacement="flow"
                         daySlotRef={hourWindow.slotRef} presets={presets}
                         gridHeader={<PhoneWindowToggle direction="earlier" band={hourWindow.earlier} />}

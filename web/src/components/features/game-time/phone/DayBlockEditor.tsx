@@ -1,10 +1,11 @@
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState, type JSX } from 'react';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { formatHour } from '../game-time-grid.utils';
 import { deriveBlocks } from '../slot-blocks.utils';
 import { useBlockEditor, type BlockEditorApi } from '../use-block-editor';
 import { SlotBlockLayer } from '../SlotBlockLayer';
+import { CalendarBusyLayer } from '../CalendarBusyLayer';
 import { SelectedBlockInspector } from '../SelectedBlockInspector';
 import { presetIndices, type BlockPreset, type BlockPresetControl } from '../block-presets';
 
@@ -33,6 +34,8 @@ interface DayBlockEditorProps {
     inspectorPlacement?: 'flow' | 'fixed' | undefined;
     /** Coarse block presets and the window negotiation behind them (ROK-1579). */
     presets?: BlockPresetControl | undefined;
+    /** The viewer's synced-calendar busy hours (ROK-1595 S2) — drawn as a band, never editable. */
+    calendarBusy?: readonly GameTimeCalendarBusy[] | undefined;
 }
 
 /**
@@ -51,7 +54,7 @@ interface DayBlockEditorProps {
 const FIXED_INSPECTOR = 'fixed inset-x-4 z-30 bottom-[calc(3.5rem+env(safe-area-inset-bottom)+0.5rem)]';
 
 export function DayBlockEditor({
-    slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow', presets,
+    slots, onChange, dayOfWeek, hours, dims, inspectorPlacement = 'flow', presets, calendarBusy,
 }: DayBlockEditorProps): JSX.Element {
     const cellRef = useRef<HTMLDivElement | null>(null);
     const measured = useMeasuredDims(cellRef, dims);
@@ -62,7 +65,7 @@ export function DayBlockEditor({
         <div className="flex h-full min-h-0 flex-col">
             <ScrollingDay
                 slots={slots} dayOfWeek={dayOfWeek} hours={hours}
-                editor={editor} dims={measured} cellRef={cellRef}
+                editor={editor} dims={measured} cellRef={cellRef} calendarBusy={calendarBusy}
             />
             {/* The shipped inspector (Remove + Start/End steppers — the precise,
                 accessible resize path). It takes a row UNDER the day: the day
@@ -126,9 +129,10 @@ function usePresetApply(
  * detached from their cells), against the content wrapper it is the full
  * scrollable day, and the blocks scroll with the hours they sit on.
  */
-function ScrollingDay({ slots, dayOfWeek, hours, editor, dims, cellRef }: {
+function ScrollingDay({ slots, dayOfWeek, hours, editor, dims, cellRef, calendarBusy }: {
     slots: GameTimeSlot[]; dayOfWeek: number; hours: number[];
     editor: BlockEditorApi; dims: GridDims; cellRef: React.RefObject<HTMLDivElement | null>;
+    calendarBusy?: readonly GameTimeCalendarBusy[] | undefined;
 }): JSX.Element {
     return (
         <div
@@ -145,6 +149,7 @@ function ScrollingDay({ slots, dayOfWeek, hours, editor, dims, cellRef }: {
                     hours={hours}
                     days={[dayOfWeek]}
                 />
+                <CalendarBusyLayer busy={calendarBusy} slots={slots} gridDims={dims} hours={hours} days={[dayOfWeek]} />
             </div>
         </div>
     );

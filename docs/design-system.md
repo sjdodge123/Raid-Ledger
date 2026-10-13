@@ -690,6 +690,16 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `flex-nowrap` or a fixed width. Segments never shrink below their longest word, so when a wrapped row would
   read badly, switch to `appearance="list"` below `sm` with `useMediaQuery('(min-width: 640px)')` (FeedbackDialog's
   four categories need ~327px against ~287px) rather than a sideways-scrolling row.
+- **Radio cards are the list `RadioGroup` in a grid, not a new control** (ROK-1595 K4 read mode, NP-2). When a
+  2–4 option choice needs room for a sentence each on desktop, keep `appearance="list"` and style the group
+  from outside: `[&>div]:grid [&>div]:grid-cols-3 [&>div]:gap-3`, each option a card via
+  `[&_label]:rounded-lg [&_label]:border [&_label]:border-edge [&_label]:bg-panel [&_label]:px-3`, and the
+  chosen card marked `[&_label:has(:checked)]:border-success` (the same full-strength ON edge as the segmented
+  toggle). The native radio stays visible, so the card is never the only state cue. To show "none chosen"
+  (e.g. reading turned off), widen the value type with a sentinel that has no option (`'off'`). Reference:
+  `CalendarReadRules.tsx` `DesktopCards`, classes in `calendar-sync/radio-cards.classes.ts` (`RADIO_CARDS`);
+  `SendEventsSettings` uses the same grid without the card edges. Rendered: `/dev/design-system` → *Pattern —
+  own-calendar busy band and radio cards*.
 - **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
   44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
   `formatValue` doubles as `aria-valuetext`.
@@ -878,10 +888,23 @@ seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day
   (`absolute inset-y-0 right-0 w-[30%]`, `:217-220`), on solid and two-tone bars alike — not a
   full-height overlay, not a dot.
 
+- **Away tile (ROK-1585, ROK-1595).** An away day replaces its bars with the 19px "away" word on a
+  dashed `border-edge-strong` tile (`bg-overlay/40`). A day away only because of a **synced calendar** is
+  the quiet variant — the same dashed border on **no fill** (`bg-transparent`) with an 8px calendar glyph
+  stacked over the word, `data-away-source="calendar"`, aria "…, away from calendar". Feed it
+  `awaySourcesOfWeek` (`phone/away-days.ts`); a plain `Set` still means manual. Manual wins when both cover a day.
+
 **DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
 exported for reuse), or change one map without the other.
 
-Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+**Synced away rows (ROK-1595 S1).** In the "I'm away" list (`away/AwayUpcomingList.tsx`), calendar-derived
+rows sit under a `border-edge-subtle` hairline reading "From your calendars" (left, `text-muted`) ·
+"Synced N min ago" (right, `text-dim`), and are **quiet**: `border-edge-subtle bg-transparent` with a
+`font-medium text-muted` title, versus the manual row's `border-edge bg-panel` + `font-semibold
+text-foreground`. Their action is **Ignore** (`text-muted`), never Remove.
+
+Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`) — the
+*Away tiles* frame (strip) and the *Away rows* frame (the real `AwayUpcomingList`, one manual + one synced row).
 
 ### 4.16 Busy marker + label grammar
 
@@ -897,11 +920,27 @@ The label is a **count clause**, never a standalone badge: the busy part is appe
 `grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
 free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
 
-**DON'T** paint a busy hour purple, drop the clause into a pill, or hand-write another `before:` edge.
+**DON'T** paint a busy hour purple **in a group view** (the poll heatmap, the group week, the group day), drop
+the clause into a pill, or hand-write another `before:` edge. The one exception is the viewer's OWN grid,
+below (operator ruling F-1, ROK-1595).
 Known drift: `GroupDayView.tsx:149` still declares a local `BUSY_EDGE` identical to `BUSY_EDGE_5` instead
 of importing it — reuse the export when you next touch that file.
 
 Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/src/dev/design-system/group-marks-section.tsx`).
+
+**Own-calendar busy band (NP-1, ROK-1595 S2).** On the viewer's OWN game-time grid (phone `DayBlockEditor`,
+desktop `GameTimeGrid` via `GridOverlayLayer`), each `calendarBusy` range from their synced calendar is a
+**band**, not an edge: `CalendarBusyLayer.tsx` draws a translucent `bg-busy/30` fill (spec F-1; 30% per operator R4, 2026-10-13) — only on hours inside the viewer's game time (`busyInsideGameTime`, operator R5) — with a `border-l-4
+border-busy` edge and the label "Busy · Google Calendar" (`busyBandLabel`, provider name from
+`PROVIDER_CALENDAR_NAME`). It sits above the slot blocks (`z-[9]`, over `SlotBlockLayer`'s `z-[8]`) so it reads
+over a free block, and is `pointer-events-none` throughout so editing is untouched. Positions come from the
+visible-hours index (`busyRunsForDays` in `calendar-busy.utils.ts`), so a window that wraps past midnight
+lines up; `dayOfWeek` is the display convention (0 = Sunday). The day header appends the same count clause
+grammar as above: `DayPager` reads `3h free · 1h busy` with ` · Nh busy` in `text-busy`. Why a fill here and
+an edge in group views: the group edge says "someone else is committed", layered over a heat fill that must
+stay readable; on your own grid there is no heat fill, and the band IS the information. Render exactly what
+`calendarBusy` says; own-copy dedupe is server-side. Rendered: `/dev/design-system` → *Pattern — own-calendar
+busy band and radio cards* (`calendar-busy-section.tsx`).
 
 ### 4.17 The hours window
 
