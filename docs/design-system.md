@@ -621,8 +621,8 @@ header shape (§4.10), not the page header.
 via `Header` / breadcrumb links.
 
 **Exception — phone sub-page back crumb (ROK-1596).** A settings sub-page that exists only below 1024px
-and is reached from a row on its parent (K5 "Send my events", `/profile/gaming/calendars/send/:id`, opened
-from Calendars' "Add events I sign up for" row) carries ONE back crumb to that parent, because the approved
+and is reached from a row on its parent (K5 "Send my events", `/profile/integrations/calendars/send/:id`, opened
+from the Calendars section's "Add events I sign up for" row on My Integrations) carries ONE back crumb to that parent, because the approved
 design draws it and the toolbar's back has no parent-row context: a `<Link>` with `ChevronLeftIcon` (h-5 w-5)
 + the parent's name, `-ml-2 inline-flex min-h-[44px] items-center gap-1 px-2 text-sm text-muted
 hover:text-foreground` (`components/features/calendar-sync/SendEventsPage.tsx::BackCrumb`). Not for

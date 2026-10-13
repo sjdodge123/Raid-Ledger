@@ -28,6 +28,11 @@ vi.mock('./use-auth', async (importOriginal) => ({
 vi.mock('./use-system-status', () => ({
     useSystemStatus: () => ({ data: { discordConfigured: true, steamConfigured: false } }),
 }));
+// ROK-1780: the integrations panel now renders Calendars behind this kill switch; off here.
+vi.mock('./use-calendar-sync', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./use-calendar-sync')>()),
+    useCalendarSyncEnabled: () => false,
+}));
 vi.mock('./use-onboarding', () => ({
     useOnboarding: () => ({ changePassword: { mutate: vi.fn(), isPending: false } }),
 }));

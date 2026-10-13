@@ -125,7 +125,7 @@ async function land(query: Record<string, string>, cookie?: string) {
   const res = await (cookie ? req.set('Cookie', cookie) : req);
   expect(res.status).toBe(302);
   const loc = new URL(String(res.headers.location));
-  expect(loc.pathname).toBe('/profile/gaming/calendars');
+  expect(loc.pathname).toBe('/profile/integrations');
   return {
     connected: loc.searchParams.get('connected'),
     error: loc.searchParams.get('error'),

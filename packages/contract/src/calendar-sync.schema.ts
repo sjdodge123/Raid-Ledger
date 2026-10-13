@@ -176,7 +176,7 @@ export type CalendarOAuthIntent = z.infer<typeof CalendarOAuthIntentSchema>;
 
 /**
  * `?error=<code>` on the OAuth callback's redirect to
- * `/profile/gaming/calendars` (ROK-1592 L10). A closed set, so the page maps
+ * `/profile/integrations` (ROK-1592 L10; moved by ROK-1780). A closed set, so the page maps
  * a code to copy and never echoes the query string.
  */
 export const CalendarOAuthErrorCodeSchema = z.enum([

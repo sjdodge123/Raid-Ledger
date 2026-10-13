@@ -9,6 +9,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IntegrationsPanel } from './integrations-panel';
 
 vi.mock('../../hooks/use-auth', () => ({
+    // ROK-1780: the inline Calendars section reads the token to gate its overview query.
+    getAuthToken: () => null,
     useAuth: () => ({
         user: {
             id: 1,

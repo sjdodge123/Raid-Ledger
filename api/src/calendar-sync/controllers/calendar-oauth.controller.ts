@@ -6,7 +6,7 @@
  *   cookie and answers `{ url }` for the consent screen.
  * - `GET /calendar-sync/oauth/:provider/callback` (public — the browser
  *   arrives from Google): verifies the state + cookie, exchanges the code and
- *   stores the connection, then 302s to `/profile/gaming/calendars` with
+ *   stores the connection, then 302s to `/profile/integrations` with
  *   `?connected=<provider>` or `?error=<CalendarOAuthErrorCode>` — never a
  *   500 (an unexpected error lands on `?error=unavailable`). A grant whose
  *   upsert fails is revoked best-effort.
@@ -77,8 +77,8 @@ import {
   upsertCalendarConnection,
 } from '../services/calendar-connect.helpers';
 
-/** Where every callback lands (L3: no `returnTo`, so no open redirect). */
-export const CALENDARS_PAGE_PATH = '/profile/gaming/calendars';
+/** Where every callback lands (L3: no `returnTo`, so no open redirect). Calendars render on My Integrations (ROK-1780). */
+export const CALENDARS_PAGE_PATH = '/profile/integrations';
 
 /** Browser-binding cookie key per provider (L4). Microsoft: ROK-1597. */
 const LINK_KEYS: Partial<Record<CalendarOAuthProvider, LinkStateProvider>> = {
