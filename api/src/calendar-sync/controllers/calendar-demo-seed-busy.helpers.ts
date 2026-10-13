@@ -3,9 +3,10 @@
  *
  * Writes foreign busy blocks for one connection straight into
  * `calendar_busy_blocks` (no queue, deterministic for the fleet plan and
- * ROK-1595's Playwright) AND into the Fake's `primary` calendar, so a later
- * sync of a `demo-fake:` row (cron, kill switch back on, `POST …/sync`) reads
- * the same blocks instead of erasing them. `readAccess` optionally flips the
+ * ROK-1595's Playwright) AND into the Fake's `primary` calendar for THIS
+ * connection's grant only, so a later sync of the row (cron, kill switch back
+ * on, `POST …/sync`) reads the same blocks instead of erasing them — and a
+ * sync of any other connection never sees them. `readAccess` optionally flips the
  * row's read grant: `granted` → read on, `active`; `missing` → read off.
  * ROK-1595 G-2: `derive: true` then runs the PR-B away-day derive for the
  * owner inline (the function the `derive` job calls), so all-day blocks
@@ -19,6 +20,7 @@ import * as schema from '../../drizzle/schema';
 import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-store';
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import type { BusyBlock } from '../providers/calendar-provider.interface';
+import { decryptCalendarCredentials } from '../services/calendar-credentials.helpers';
 import {
   runCalendarDerive,
   type CalendarDeriveResult,
@@ -107,6 +109,21 @@ async function deriveFor(
   );
 }
 
+async function findConnection(db: Db, connectionId: number) {
+  const conns = schema.calendarConnections;
+  const [conn] = await db
+    .select({
+      id: conns.id,
+      userId: conns.userId,
+      credentialsEncrypted: conns.credentialsEncrypted,
+    })
+    .from(conns)
+    .where(eq(conns.id, connectionId))
+    .limit(1);
+  if (!conn) throw new NotFoundException('connection_not_found');
+  return conn;
+}
+
 /**
  * Insert the blocks for the connection's owner; 404 on an unknown id. The
  * owner's cached game-time is dropped (as the sync processor does) so a
@@ -119,12 +136,7 @@ export async function seedDemoBusy(
   deps: SeedBusyDeps,
 ): Promise<SeedBusyResult> {
   const conns = schema.calendarConnections;
-  const [conn] = await db
-    .select({ id: conns.id, userId: conns.userId })
-    .from(conns)
-    .where(eq(conns.id, input.connectionId))
-    .limit(1);
-  if (!conn) throw new NotFoundException('connection_not_found');
+  const conn = await findConnection(db, input.connectionId);
   if (input.readAccess) {
     const set = { ...readAccessSet(input.readAccess), updatedAt: new Date() };
     await db.update(conns).set(set).where(eq(conns.id, conn.id));
@@ -133,7 +145,8 @@ export async function seedDemoBusy(
   await db
     .insert(schema.calendarBusyBlocks)
     .values(blocks.map((b) => toBlockRow(conn, b)));
-  fake.seedBusy(FAKE_PRIMARY_CALENDAR_ID, blocks);
+  const creds = decryptCalendarCredentials(conn.credentialsEncrypted);
+  fake.seedBusyFor(creds, FAKE_PRIMARY_CALENDAR_ID, blocks);
   const derived = input.derive
     ? await deriveFor(db, conn.userId, deps)
     : undefined;

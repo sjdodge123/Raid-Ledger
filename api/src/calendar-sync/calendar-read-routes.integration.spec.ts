@@ -439,6 +439,39 @@ describe('POST /admin/test/calendar/seed-busy', () => {
     ]);
   });
 
+  // ROK-1595: seeds once all went into ONE shared Fake calendar, so a sync
+  // of any connection pulled in every user's seeded blocks.
+  it("a sync of one connection reads only that connection's seeded blocks", async () => {
+    const other = await member('other');
+    const mine = await seedConnection();
+    const theirs = await seedConnection({ owner: other.userId });
+    const HOUR = 60 * 60 * 1000;
+    const at = (h: number) => new Date(Date.now() + h * HOUR).toISOString();
+    const myBlock = { start: at(48), end: at(49) };
+    const theirBlock = { start: at(51), end: at(53) };
+    for (const [connectionId, b] of [
+      [mine, myBlock],
+      [theirs, theirBlock],
+    ] as const) {
+      const res = await seedBusy({
+        connectionId,
+        blocks: [b],
+        readAccess: 'granted',
+      });
+      expect(res.status).toBe(201);
+    }
+    const data: CalendarReadJobData = { kind: 'sync', connectionId: mine };
+    expect(await processor.process(new Job(queue, 'sync', data))).toBe(
+      'synced',
+    );
+    const t = schema.calendarBusyBlocks;
+    const rows = await testApp.db
+      .select()
+      .from(t)
+      .where(eq(t.connectionId, mine));
+    expect(rows.map((r) => r.startsAt.toISOString())).toEqual([myBlock.start]);
+  });
+
   // ROK-1595 round 4: the controller passes `weekSent=false` when no `week`
   // is sent, and the service keys busy hours from the tz-shifted start.
   // Assumes a UTC server clock (CI/fleet), as `resolveWeekStart` does.
