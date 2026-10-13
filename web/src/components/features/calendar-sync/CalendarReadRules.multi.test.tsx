@@ -252,6 +252,17 @@ describe('operator rulings 2026-10-13 (R2, R3) and the grant CTA guard', () => {
         expect(within(cardOf(second)).getByTestId('calendar-connection-account')).toHaveTextContent('alt@example.com');
     });
 
+    it('R3: two unsynced connections → each card names its email exactly once', async () => {
+        const unsynced = (c: CalendarConnection): CalendarConnection => ({ ...c, lastSyncedAt: null });
+        renderPage([unsynced(first), unsynced(second)]);
+        await accountSwitch(second);
+        for (const c of [first, second]) {
+            const email = c.accountLabel ?? 'missing label';
+            const text = cardOf(c).textContent ?? '';
+            expect(text.split(email).length - 1, `${email} appears once on its card`).toBe(1);
+        }
+    });
+
     it('R3: one connection → no extra account line', async () => {
         renderPage([first]);
         await screen.findByRole('switch', { name: R.days.aria });

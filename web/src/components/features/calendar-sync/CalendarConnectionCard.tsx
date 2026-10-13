@@ -52,6 +52,8 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
     const showGrant = anyReadable && !broken && connection.status !== 'disconnecting' && !readGranted(connection);
+    // The account line already names the email; keep it out of the "Connected · <email>" fallback.
+    const statusInput = showAccount ? { ...connection, accountLabel: null } : connection;
     return (
         <div className="space-y-3">
             <div className={CALENDAR_ROW} data-testid="calendar-connection-card" data-connection-id={connection.id}>
@@ -62,7 +64,7 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
                         <p className="truncate text-xs text-muted" data-testid="calendar-connection-account">{connection.accountLabel}</p>
                     )}
                     <p className={`truncate text-xs ${TONE[connection.status]}`} data-testid="calendar-connection-status">
-                        {readStatusLine(connection, desktop)}
+                        {readStatusLine(statusInput, desktop)}
                     </p>
                 </div>
                 {broken && <FixButton />}
