@@ -116,6 +116,7 @@ describe('two accounts: the page switches set only the mode (operator 2026-10-13
         const days = await screen.findByRole('switch', { name: R.days.aria });
         expect(days, 'the page switches cannot both be off with 2+ accounts').toBeDisabled();
         expect(screen.getByTestId('calendar-read-keep-one')).toHaveTextContent(R.keepOne);
+        expect(days, 'the locked switch is described by the keep-one hint').toHaveAccessibleDescription(expect.stringContaining(R.keepOne));
         expect(screen.getByRole('switch', { name: R.hours.aria })).toBeEnabled();
         fireEvent.click(days);
         expect(patches, 'the page control never turns an account off').toEqual([]);

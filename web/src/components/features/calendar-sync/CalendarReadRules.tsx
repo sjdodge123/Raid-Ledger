@@ -21,9 +21,14 @@ import { RADIO_CARDS } from './radio-cards.classes';
 
 interface RulesProps { connections: readonly CalendarConnection[]; mode: CalendarReadMode; desktop: boolean }
 
-interface SwitchRowProps { copy: { title: string; sub: string; aria: string }; checked: boolean; disabled: boolean; testId: string; onChange: (on: boolean) => void }
+interface SwitchRowProps {
+    copy: { title: string; sub: string; aria: string }; checked: boolean; disabled: boolean; testId: string;
+    onChange: (on: boolean) => void;
+    /** Extra description (the keep-one hint) for a switch locked on. */
+    hintId?: string | undefined;
+}
 
-function SwitchRow({ copy, checked, disabled, testId, onChange }: SwitchRowProps): JSX.Element {
+function SwitchRow({ copy, checked, disabled, testId, onChange, hintId }: SwitchRowProps): JSX.Element {
     const subId = useId();
     return (
         <div className="flex items-start justify-between gap-3 py-2.5">
@@ -31,7 +36,7 @@ function SwitchRow({ copy, checked, disabled, testId, onChange }: SwitchRowProps
                 <p className="text-base text-foreground">{copy.title}</p>
                 <p id={subId} className="text-xs text-muted">{copy.sub}</p>
             </div>
-            <Switch checked={checked} onChange={onChange} label={copy.aria} aria-describedby={subId}
+            <Switch checked={checked} onChange={onChange} label={copy.aria} aria-describedby={hintId ? `${subId} ${hintId}` : subId}
                 disabled={disabled} testId={testId} />
         </div>
     );
@@ -58,13 +63,15 @@ function PhoneSwitches({ switches, disabled, multi, choose }: ControlProps): JSX
     const flip = (key: keyof ReadSwitches) => (on: boolean): void => choose(modeOf({ ...switches, [key]: on }));
     // 2+ accounts: the page switches set WHAT counts and cannot both be off (operator 2026-10-13).
     const keepOne = multi && switches.days !== switches.hours;
+    const keepOneId = useId();
+    const hintFor = (on: boolean): string | undefined => (keepOne && on ? keepOneId : undefined);
     return (
         <div>
             <SwitchRow copy={R.days} checked={switches.days} disabled={disabled || (keepOne && switches.days)}
-                testId="calendar-read-days" onChange={flip('days')} />
+                testId="calendar-read-days" onChange={flip('days')} hintId={hintFor(switches.days)} />
             <SwitchRow copy={R.hours} checked={switches.hours} disabled={disabled || (keepOne && switches.hours)}
-                testId="calendar-read-hours" onChange={flip('hours')} />
-            {keepOne && <p className="text-xs text-muted" data-testid="calendar-read-keep-one">{R.keepOne}</p>}
+                testId="calendar-read-hours" onChange={flip('hours')} hintId={hintFor(switches.hours)} />
+            {keepOne && <p id={keepOneId} className="text-xs text-muted" data-testid="calendar-read-keep-one">{R.keepOne}</p>}
             <LookAheadRow />
         </div>
     );
