@@ -61,6 +61,21 @@ export function busyRunsForDays(
 }
 
 /**
+ * Clip busy ranges to the viewer's game time (operator R5, 2026-10-13): a band
+ * draws only on hours the viewer marked free that day. A busy hour outside
+ * every free slot costs no game time, so it draws nothing. A range split by a
+ * gap in the game time becomes one range per free stretch.
+ */
+export function busyInsideGameTime(
+    busy: readonly GameTimeCalendarBusy[], slots: readonly GameTimeSlot[],
+): GameTimeCalendarBusy[] {
+    const free = new Set(slots.filter(isSlotActive).map((s) => `${s.dayOfWeek}:${s.hour}`));
+    return busy.flatMap((b) =>
+        contiguousRuns(rangeHours(b).filter((h) => free.has(`${b.dayOfWeek}:${h}`)))
+            .map(([startHour, endHour]) => ({ ...b, startHour, endHour })));
+}
+
+/**
  * "Nh busy" for the day header (spec S2: busy hours ∩ the day's slots): the
  * distinct visible hours of one day that the viewer marked free AND a synced
  * busy range covers. A busy hour outside every free slot is not counted —

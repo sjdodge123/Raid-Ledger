@@ -1,5 +1,5 @@
 import type { JSX } from 'react';
-import type { GameTimeCalendarBusy, GameTimeEventBlock } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeEventBlock, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims, GameTimePreviewBlock } from './game-time-grid.types';
 import {
     EventBlockOverlays, PreviewBlockOverlays,
@@ -16,15 +16,17 @@ interface GridOverlayLayerProps {
     hours?: number[] | undefined;
     /** ROK-1595 S2: the viewer's own synced busy hours (NP-1). */
     calendarBusy?: readonly GameTimeCalendarBusy[] | undefined;
+    /** The viewer's game time — busy bands draw only inside it (operator R5). */
+    slots: readonly GameTimeSlot[];
 }
 
 /** Renders all positioned overlays: own-calendar busy bands, events, previews */
 export function GridOverlayLayer(props: GridOverlayLayerProps): JSX.Element | null {
-    const { gridDims, rangeStart, rangeEnd, displayEvents, previewBlocks, hours, calendarBusy } = props;
+    const { gridDims, rangeStart, rangeEnd, displayEvents, previewBlocks, hours, calendarBusy, slots } = props;
 
     return (
         <>
-            {gridDims && hours && <CalendarBusyLayer busy={calendarBusy} gridDims={gridDims} hours={hours} />}
+            {gridDims && hours && <CalendarBusyLayer busy={calendarBusy} slots={slots} gridDims={gridDims} hours={hours} />}
             <EventsOverlay displayEvents={displayEvents} gridDims={gridDims} rangeStart={rangeStart} rangeEnd={rangeEnd} />
             <PreviewsOverlay previewBlocks={previewBlocks} displayEvents={displayEvents} gridDims={gridDims} rangeStart={rangeStart} rangeEnd={rangeEnd} />
         </>

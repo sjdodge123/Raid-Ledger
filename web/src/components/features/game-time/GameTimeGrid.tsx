@@ -97,7 +97,7 @@ export function GameTimeGrid(props: GameTimeGridProps): JSX.Element {
                     isDayAllActive={isInteractive ? isDayAllActive : undefined}
                     awayDays={props.awayDays}
                 />
-                <GridOverlayLayer gridDims={gridDims} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} previewBlocks={previewBlocks} hours={vis.HOURS} calendarBusy={props.calendarBusy} />
+                <GridOverlayLayer gridDims={gridDims} rangeStart={vis.rangeStart} rangeEnd={vis.rangeEnd} displayEvents={displayEvents} previewBlocks={previewBlocks} hours={vis.HOURS} calendarBusy={props.calendarBusy} slots={slots} />
                 {isInteractive && gridDims && (
                     <SlotBlockLayer
                         blocks={blocks} editor={editor} gridDims={gridDims} hours={vis.HOURS}

@@ -7,7 +7,7 @@
  * `RADIO_CARDS` classes. Nothing is a hand-drawn approximation.
  */
 import { useState, type JSX } from 'react';
-import type { CalendarReadMode, GameTimeCalendarBusy } from '@raid-ledger/contract';
+import type { CalendarReadMode, GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import { CalendarBusyLayer } from '../../components/features/game-time/CalendarBusyLayer';
 import { DayPager } from '../../components/features/game-time/phone/DayPager';
 import { RadioGroup } from '../../components/ui/radio-group';
@@ -18,6 +18,8 @@ import { Section, StateFrame } from './design-system-bits';
 const HOURS = [18, 19, 20, 21, 22];
 const DIMS = { colWidth: 200, rowHeight: 36, headerHeight: 0, colStartLeft: 0 };
 const BUSY: GameTimeCalendarBusy[] = [{ dayOfWeek: 2, startHour: 20, endHour: 21, provider: 'google' }];
+/** The sample's 7–10 PM free block — the band draws only inside game time (R5). */
+const FREE: GameTimeSlot[] = [19, 20, 21].map((hour) => ({ dayOfWeek: 2, hour, status: 'available' }));
 const noop = (): void => undefined;
 
 /** A sample day: plain cells, a success free block, and the busy band over it. */
@@ -26,7 +28,7 @@ function SampleDay(): JSX.Element {
         <div className="relative w-[200px]" data-testid="ds-calendar-busy-day">
             {HOURS.map((h) => <div key={h} className="h-9 border-t border-edge bg-surface" />)}
             <div className="absolute inset-x-0 rounded-sm bg-success/30" style={{ top: 37, height: 106 }} />
-            <CalendarBusyLayer busy={BUSY} gridDims={DIMS} hours={HOURS} days={[2]} />
+            <CalendarBusyLayer busy={BUSY} slots={FREE} gridDims={DIMS} hours={HOURS} days={[2]} />
         </div>
     );
 }

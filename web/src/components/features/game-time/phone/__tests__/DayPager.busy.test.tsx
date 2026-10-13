@@ -40,13 +40,14 @@ describe('PhoneWeekEditorCore — busy hours from calendarBusy', () => {
         expect(screen.getByText('Busy · Google Calendar')).toBeInTheDocument();
     });
 
-    it('does not count a busy hour outside every slot, but still draws its band', () => {
+    // Operator R5 (2026-10-13): a busy hour outside the game time draws no band either.
+    it('does not count a busy hour outside every slot, and draws no band for it', () => {
         const early: GameTimeCalendarBusy[] = [{ dayOfWeek: 2, startHour: 17, endHour: 19, provider: 'google' }];
         render(<PhoneWeekEditorCore slots={avail(2, [19, 20, 21])} onChange={vi.fn()} hours={EVENING}
             initialDay={2} dims={DIMS} calendarBusy={early} />);
         expect(screen.getByTestId('phone-day-free')).toHaveTextContent(/^3h free$/);
         expect(screen.queryByTestId('phone-day-busy')).not.toBeInTheDocument();
-        expect(screen.getByText('Busy · Google Calendar')).toBeInTheDocument();
+        expect(screen.queryByText('Busy · Google Calendar'), '5–7 PM busy sits outside the 7–10 PM game time').not.toBeInTheDocument();
     });
 
     it('counts only the busy hours that overlap a slot', () => {

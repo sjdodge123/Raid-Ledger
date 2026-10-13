@@ -1,13 +1,15 @@
 import { useMemo, type JSX } from 'react';
-import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
+import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from './game-time-grid.types';
-import { busyBandLabel, busyRunsForDays, type BusyRun } from './calendar-busy.utils';
+import { busyBandLabel, busyInsideGameTime, busyRunsForDays, type BusyRun } from './calendar-busy.utils';
 
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 interface CalendarBusyLayerProps {
     /** `GameTimeResponse.calendarBusy`; absent or empty draws nothing. */
     busy?: readonly GameTimeCalendarBusy[] | undefined;
+    /** The viewer's game time: a band draws only on its free hours (operator R5). */
+    slots: readonly GameTimeSlot[];
     gridDims: GridDims;
     /** Visible hours, in the grid's order (the block layer's index space). */
     hours: number[];
@@ -19,14 +21,17 @@ interface CalendarBusyLayerProps {
  * The viewer's own synced-calendar busy hours, drawn over their game time
  * (ROK-1595 S2, design-system NP-1 "own-calendar busy band").
  *
- * A translucent `bg-busy` band with a solid `border-busy` left edge and the
+ * A translucent `bg-busy/30` band (operator R4: 30%, was 20%) with a solid `border-busy` left edge and the
  * label "Busy · Google Calendar". It sits ABOVE the slot blocks so it reads over
  * a free block, and is `pointer-events-none` throughout, so every tap and drag
  * falls through to the block editor underneath. Renders exactly what
- * `calendarBusy` says: own-copy dedupe is the server's job (D6).
+ * `calendarBusy` says, clipped to the viewer's free hours (operator R5): a busy
+ * hour outside their game time draws nothing. Own-copy dedupe is the server's job (D6).
  */
-export function CalendarBusyLayer({ busy, gridDims, hours, days = ALL_DAYS }: CalendarBusyLayerProps): JSX.Element | null {
-    const runs = useMemo(() => busyRunsForDays(busy ?? [], days, hours), [busy, days, hours]);
+export function CalendarBusyLayer({ busy, slots, gridDims, hours, days = ALL_DAYS }: CalendarBusyLayerProps): JSX.Element | null {
+    const runs = useMemo(
+        () => busyRunsForDays(busyInsideGameTime(busy ?? [], slots), days, hours), [busy, slots, days, hours],
+    );
     if (runs.length === 0) return null;
     return (
         <div className="pointer-events-none absolute inset-0 z-[9]" data-testid="calendar-busy-layer">
@@ -46,7 +51,7 @@ function BusyBand({ run, gridDims, col, startHour }: {
     const label = busyBandLabel(run.provider);
     return (
         <div
-            className="pointer-events-none absolute overflow-hidden rounded-sm border-l-4 border-busy bg-busy/20 px-1.5 py-0.5"
+            className="pointer-events-none absolute overflow-hidden rounded-sm border-l-4 border-busy bg-busy/30 px-1.5 py-0.5"
             style={{
                 top: gridDims.headerHeight + run.startIndex * gridDims.rowHeight + 1,
                 left: gridDims.colStartLeft + col * (gridDims.colWidth + 1),

@@ -10,7 +10,7 @@ import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from './game-time-grid.types';
 import { CalendarBusyLayer } from './CalendarBusyLayer';
 import { DayBlockEditor } from './phone/DayBlockEditor';
-import { busyHourCount, busyRunsForDays } from './calendar-busy.utils';
+import { busyHourCount, busyInsideGameTime, busyRunsForDays } from './calendar-busy.utils';
 
 const DIMS: GridDims = { colWidth: 100, rowHeight: 40, headerHeight: 0, colStartLeft: 52 };
 const EVENING = [17, 18, 19, 20, 21, 22, 23];
@@ -18,17 +18,19 @@ const busy = (dayOfWeek: number, startHour: number, endHour: number): GameTimeCa
     ({ dayOfWeek, startHour, endHour, provider: 'google' });
 const free = (dayOfWeek: number, hours: number[]): GameTimeSlot[] =>
     hours.map((hour) => ({ dayOfWeek, hour, status: 'available' }));
+/** Every hour of every day free, for tests about placement rather than the R5 clip. */
+const ALL_FREE: GameTimeSlot[] = [0, 1, 2, 3, 4, 5, 6].flatMap((d) => free(d, Array.from({ length: 24 }, (_, h) => h)));
 
 describe('CalendarBusyLayer', () => {
     it('draws one band per calendarBusy entry on the days shown', () => {
-        render(<CalendarBusyLayer busy={[busy(2, 18, 20), busy(4, 21, 22)]} gridDims={DIMS} hours={EVENING} />);
+        render(<CalendarBusyLayer busy={[busy(2, 18, 20), busy(4, 21, 22)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.getAllByText('Busy · Google Calendar')).toHaveLength(2);
         expect(screen.getByTestId('calendar-busy-band-2-18')).toBeInTheDocument();
         expect(screen.getByTestId('calendar-busy-band-4-21')).toBeInTheDocument();
     });
 
     it('places a band on its own day column and hour rows', () => {
-        render(<CalendarBusyLayer busy={[busy(2, 18, 20)]} gridDims={DIMS} hours={EVENING} />);
+        render(<CalendarBusyLayer busy={[busy(2, 18, 20)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         const band = screen.getByTestId('calendar-busy-band-2-18');
         expect(band.style.left).toBe(`${52 + 2 * 101}px`);
         expect(band.style.top).toBe(`${1 * 40 + 1}px`);
@@ -36,9 +38,9 @@ describe('CalendarBusyLayer', () => {
     });
 
     it('paints with the busy token only and never takes a pointer event', () => {
-        render(<CalendarBusyLayer busy={[busy(2, 18, 20)]} gridDims={DIMS} hours={EVENING} />);
+        render(<CalendarBusyLayer busy={[busy(2, 18, 20)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         const band = screen.getByTestId('calendar-busy-band-2-18');
-        expect(band.className).toMatch(/\bbg-busy\b/);
+        expect(band.className, 'R4: the fill is the busy token at 30%').toMatch(/\bbg-busy\/30\b/);
         expect(band.className).toMatch(/\bborder-busy\b/);
         expect(band.className).not.toMatch(/#[0-9a-f]{3,6}|purple|violet/i);
         expect(band.className).toContain('pointer-events-none');
@@ -46,21 +48,21 @@ describe('CalendarBusyLayer', () => {
     });
 
     it('draws nothing when calendarBusy is absent or empty', () => {
-        const { rerender } = render(<CalendarBusyLayer busy={undefined} gridDims={DIMS} hours={EVENING} />);
+        const { rerender } = render(<CalendarBusyLayer busy={undefined} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.queryByTestId('calendar-busy-layer')).not.toBeInTheDocument();
-        rerender(<CalendarBusyLayer busy={[]} gridDims={DIMS} hours={EVENING} />);
+        rerender(<CalendarBusyLayer busy={[]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.queryByTestId('calendar-busy-layer')).not.toBeInTheDocument();
     });
 
     it('skips a range entirely outside the visible hours', () => {
-        render(<CalendarBusyLayer busy={[busy(2, 9, 11)]} gridDims={DIMS} hours={EVENING} />);
+        render(<CalendarBusyLayer busy={[busy(2, 9, 11)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.queryByText('Busy · Google Calendar')).not.toBeInTheDocument();
     });
 });
 
 describe('DayBlockEditor — busy band on the phone day (S2)', () => {
     const renderDay = (dayOfWeek: number, calendarBusy?: GameTimeCalendarBusy[]) => render(
-        <DayBlockEditor slots={[]} onChange={vi.fn()} dayOfWeek={dayOfWeek} hours={EVENING} dims={DIMS}
+        <DayBlockEditor slots={ALL_FREE} onChange={vi.fn()} dayOfWeek={dayOfWeek} hours={EVENING} dims={DIMS}
             calendarBusy={calendarBusy} />,
     );
 
@@ -127,8 +129,26 @@ describe('busyRunsForDays — overlapping ranges (review #3)', () => {
     });
 
     it('draws two calendars busy at the same hour as ONE band, not a stacked pair', () => {
-        render(<CalendarBusyLayer busy={[busy(2, 20, 21), busy(2, 20, 22)]} gridDims={DIMS} hours={EVENING} />);
+        render(<CalendarBusyLayer busy={[busy(2, 20, 21), busy(2, 20, 22)]} slots={ALL_FREE} gridDims={DIMS} hours={EVENING} />);
         expect(screen.getAllByText('Busy · Google Calendar')).toHaveLength(1);
         expect(screen.getByTestId('calendar-busy-band-2-20').style.height).toBe(`${2 * 40 - 2}px`);
+    });
+});
+
+describe('busy bands only inside the viewer\'s game time (operator R5)', () => {
+    it('clips a range to the free hours of its day, one range per free stretch', () => {
+        const slots = [...free(2, [18, 19, 21]), { dayOfWeek: 2, hour: 20, status: 'blocked' as const }];
+        expect(busyInsideGameTime([busy(2, 17, 23)], slots)).toEqual([busy(2, 18, 20), busy(2, 21, 22)]);
+    });
+
+    it('drops a range on a day with no game time, and never borrows another day\'s hours', () => {
+        expect(busyInsideGameTime([busy(3, 18, 20)], free(2, [18, 19]))).toEqual([]);
+    });
+
+    it('draws no band on a busy hour outside the game time, and draws the one inside it', () => {
+        render(<CalendarBusyLayer busy={[busy(2, 17, 19), busy(4, 20, 21)]} slots={free(2, [18, 19])} gridDims={DIMS} hours={EVENING} />);
+        expect(screen.queryByTestId('calendar-busy-band-2-17'), 'the 5 PM busy hour is outside game time').not.toBeInTheDocument();
+        expect(screen.getByTestId('calendar-busy-band-2-18'), 'the 6 PM busy hour is inside game time').toBeInTheDocument();
+        expect(screen.queryByTestId('calendar-busy-band-4-20'), 'Thursday has no game time').not.toBeInTheDocument();
     });
 });

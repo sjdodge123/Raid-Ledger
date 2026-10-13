@@ -124,7 +124,8 @@ describe('GameTimeWidget — part 1', () => {
 
     it('modal draws the viewer\'s own-calendar busy band (ROK-1595 AC 8)', () => {
         mockEditorData({
-            slots: [{ dayOfWeek: 1, hour: 19, status: 'available' }],
+            // The band draws only inside game time (operator R5), so 8–10 PM is free.
+            slots: [19, 20, 21].map((hour) => ({ dayOfWeek: 1, hour, status: 'available' as const })),
             calendarBusy: [{ dayOfWeek: 1, startHour: 20, endHour: 22, provider: 'google' }],
         });
 

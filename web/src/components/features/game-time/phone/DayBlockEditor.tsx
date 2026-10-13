@@ -149,7 +149,7 @@ function ScrollingDay({ slots, dayOfWeek, hours, editor, dims, cellRef, calendar
                     hours={hours}
                     days={[dayOfWeek]}
                 />
-                <CalendarBusyLayer busy={calendarBusy} gridDims={dims} hours={hours} days={[dayOfWeek]} />
+                <CalendarBusyLayer busy={calendarBusy} slots={slots} gridDims={dims} hours={hours} days={[dayOfWeek]} />
             </div>
         </div>
     );
