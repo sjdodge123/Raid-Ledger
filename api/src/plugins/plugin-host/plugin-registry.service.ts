@@ -21,14 +21,19 @@ import {
   cleanupPluginSettings,
   validateDependencies,
 } from './plugin-registry.helpers';
+import {
+  PluginAdapterStore,
+  type AdapterRegistrationOptions,
+} from './plugin-adapter-store';
 
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
   private manifests = new Map<string, PluginManifest>();
   private activeSlugs = new Set<string>();
-  private adapters = new Map<string, Map<string, unknown>>();
-  private multiAdapters = new Map<string, Map<string, unknown[]>>();
+  private readonly store = new PluginAdapterStore((id) =>
+    this.activeSlugs.has(id),
+  );
 
   constructor(
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
@@ -177,6 +182,8 @@ export class PluginRegistryService implements OnModuleInit {
       .set({ active: true, updatedAt: new Date() })
       .where(eq(plugins.slug, slug));
     await this.refreshActiveCache();
+    // Restore before the emit so ACTIVATED listeners see the adapters (ROK-268).
+    this.store.restoreAdaptersOwnedBy(slug);
     this.eventEmitter.emit(PLUGIN_EVENTS.ACTIVATED, { slug });
     this.logger.log(`Plugin activated: ${slug}`);
   }
@@ -195,73 +202,61 @@ export class PluginRegistryService implements OnModuleInit {
       .update(plugins)
       .set({ active: false, updatedAt: new Date() })
       .where(eq(plugins.slug, slug));
+    await this.refreshActiveCache();
+    // Owned adapters first, so one keyed by a game slug is suspended (and
+    // restored on activate) rather than hard-deleted below (ROK-268).
+    this.store.suspendAdaptersOwnedBy(slug);
     const manifest = this.manifests.get(slug);
     if (manifest) this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
-    await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
   }
 
+  /** `opts.ownerPluginId` ties the adapter to a plugin's activate/deactivate (ROK-268). */
   registerAdapter<T>(
     extensionPoint: string,
     gameSlug: string,
     adapter: T,
+    opts?: AdapterRegistrationOptions,
   ): void {
-    let slugMap = this.adapters.get(extensionPoint);
-    if (!slugMap) {
-      slugMap = new Map<string, unknown>();
-      this.adapters.set(extensionPoint, slugMap);
-    }
-    slugMap.set(gameSlug, adapter);
+    this.store.registerAdapter(extensionPoint, gameSlug, adapter, opts);
     this.logger.debug(
       `Registered adapter: ${extensionPoint} for game slug "${gameSlug}"`,
     );
   }
 
   getAdapter<T>(extensionPoint: string, gameSlug: string): T | undefined {
-    return this.adapters.get(extensionPoint)?.get(gameSlug) as T | undefined;
+    return this.store.getAdapter<T>(extensionPoint, gameSlug);
   }
 
   getAdaptersForExtensionPoint<T>(extensionPoint: string): Map<string, T> {
-    const slugMap = this.adapters.get(extensionPoint);
-    if (!slugMap) return new Map<string, T>();
-    return new Map(slugMap) as Map<string, T>;
+    return this.store.getAdaptersForExtensionPoint<T>(extensionPoint);
   }
 
+  /** Idempotent per instance. `opts.ownerPluginId` as for registerAdapter. */
   registerMultiAdapter<T>(
     extensionPoint: string,
     gameSlug: string,
     adapter: T,
+    opts?: AdapterRegistrationOptions,
   ): void {
-    let slugMap = this.multiAdapters.get(extensionPoint);
-    if (!slugMap) {
-      slugMap = new Map<string, unknown[]>();
-      this.multiAdapters.set(extensionPoint, slugMap);
-    }
-    let adapters = slugMap.get(gameSlug);
-    if (!adapters) {
-      adapters = [];
-      slugMap.set(gameSlug, adapters);
-    }
-    adapters.push(adapter);
+    const total = this.store.registerMultiAdapter(
+      extensionPoint,
+      gameSlug,
+      adapter,
+      opts,
+    );
     this.logger.debug(
-      `Registered multi-adapter: ${extensionPoint} for game slug "${gameSlug}" (${adapters.length} total)`,
+      `Registered multi-adapter: ${extensionPoint} for game slug "${gameSlug}" (${total} total)`,
     );
   }
 
   getMultiAdapters<T>(extensionPoint: string, gameSlug: string): T[] {
-    const slugMap = this.multiAdapters.get(extensionPoint);
-    if (!slugMap) return [];
-    return (slugMap.get(gameSlug) ?? []) as T[];
+    return this.store.getMultiAdapters<T>(extensionPoint, gameSlug);
   }
 
   removeAdaptersForPlugin(gameSlugs: string[] = []): void {
-    for (const [, slugMap] of this.adapters) {
-      for (const slug of gameSlugs) slugMap.delete(slug);
-    }
-    for (const [, slugMap] of this.multiAdapters) {
-      for (const slug of gameSlugs) slugMap.delete(slug);
-    }
+    this.store.removeByKeys(gameSlugs);
     this.logger.debug(
       `Removed adapters for game slugs: ${gameSlugs.join(', ')}`,
     );
@@ -289,5 +284,7 @@ export class PluginRegistryService implements OnModuleInit {
         this.activeSlugs = new Set<string>();
       } else throw error;
     }
+    // Adapters registered before their owner was known active (ROK-268).
+    this.store.restoreActiveOwners();
   }
 }
