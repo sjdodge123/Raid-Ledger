@@ -140,7 +140,7 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
     admin('/users/:userId', demoUser),
     admin('/community-lineup/:id', activeLineup),
     admin('/community-lineup/:lineupId/schedule/:matchId', scheduleMatch),
-    ...['avatar', 'integrations', 'preferences', 'notifications', 'gaming/game-time', 'gaming/calendars',
+    ...['avatar', 'integrations', 'preferences', 'notifications', 'gaming/game-time',
         'gaming/characters', 'gaming/watched-games', 'account'].map(profile),
     ...['general', 'general/roles', 'general/data', 'general/cron-jobs', 'general/backups', 'general/logs', 'discord',
         'discord/auth', 'discord/connection', 'discord/channels', 'discord/features', 'integrations/igdb',
@@ -163,6 +163,9 @@ export const SKIPPED_ROUTES: readonly SkippedRoute[] = [
     ...['preferences/appearance', 'preferences/timezone'].map((s) => redirect(`/profile/${s}`, '/profile/preferences')),
     redirect('/profile/preferences/notifications', '/profile/notifications'),
     redirect('/profile/gaming', '/profile/gaming/game-time'),
+    // ROK-1780: Calendars render inline on My Integrations (audited there while Calendar Sync is on).
+    redirect('/profile/gaming/calendars', '/profile/integrations'),
+    redirect('/profile/gaming/calendars/send/:connectionId', '/profile/integrations/calendars/send/:connectionId'),
     redirect('/profile/danger/delete-account', '/profile/account'),
     ...['general/lineup', 'appearance'].map((s) => redirect(`/admin/settings/${s}`, '/admin/settings/general')),
     ...['integrations', 'integrations/discord', 'integrations/plugin/discord/*']

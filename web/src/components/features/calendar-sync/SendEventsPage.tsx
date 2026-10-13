@@ -1,6 +1,6 @@
 /**
  * K5 "Send my events" (ROK-1596 W1b) — its own phone page with a back crumb
- * to Calendars, reached from K2's "Add events I sign up for" row. The body is
+ * to My Integrations (ROK-1780: Calendars render inline there), reached from K2's "Add events I sign up for" row. The body is
  * W1's `SendEventsSettings` without its card heading (the page title stands in).
  * No tentative toggle (spec AC11 ruling — tentative always syncs).
  */
@@ -8,9 +8,8 @@ import type { JSX } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeftIcon } from '@heroicons/react/24/outline';
 import { useCalendarsOverview } from '../../../hooks/use-calendar-sync';
-import { CALENDARS_PATH } from '../../profile/profile-nav-data';
 import { ProviderTile } from './CalendarProviderRow';
-import { CALENDAR_ROW } from './calendar-sync-row';
+import { CALENDARS_PATH, CALENDAR_ROW } from './calendar-sync-row';
 import { SendEventsSettings } from './SendEventsSettings';
 import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S, connectionStatusLine } from './calendar-sync.copy';
 

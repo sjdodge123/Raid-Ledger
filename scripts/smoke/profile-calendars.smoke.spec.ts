@@ -1,5 +1,6 @@
 /**
- * Profile → Calendars smoke (ROK-1594) — desktop AND mobile projects.
+ * Profile → Calendars smoke (ROK-1594) — desktop AND mobile projects. Since
+ * ROK-1780 the Calendars page renders inline on Profile → My Integrations.
  *
  * No live Google: a DEMO_MODE seed inserts a fake-provider connection for the
  * signed-in admin, the spec drives Manage → Disconnect → confirm on it, and
@@ -14,7 +15,7 @@ import { apiDelete, apiPost, apiPut, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 import { isPhoneLayout } from './helpers';
 
-const PAGE = '/profile/gaming/calendars';
+const PAGE = '/profile/integrations';
 const SETTINGS = '/admin/settings/calendar-sync';
 
 /** DEMO_MODE + admin: `{ accountLabel? }` → 201 `{ id }`, a `demo-fake:` row owned by the caller. */
@@ -65,7 +66,7 @@ test('?error=state lands on an inline banner and the param is stripped', async (
     await page.goto(`${PAGE}?error=state`);
     const banner = page.getByTestId('calendar-oauth-error');
     await expect(banner).toHaveAttribute('data-error-code', 'state');
-    await expect(page).toHaveURL(/\/profile\/gaming\/calendars$/);
+    await expect(page).toHaveURL(/\/profile\/integrations$/);
 });
 
 // ---------------------------------------------------------------------------

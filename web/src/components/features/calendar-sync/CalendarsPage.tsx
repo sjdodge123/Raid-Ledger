@@ -1,9 +1,9 @@
 /**
- * Profile → Calendars (ROK-1594): connect Google (K1), the connected card(s)
+ * Calendars (ROK-1594), a section of Profile → My Integrations since ROK-1780: connect Google (K1), the connected card(s)
  * with Manage → Disconnect (K2), and the K4 desktop shell — the same cards in
  * a two-column grid from 1024px, plus the read rules (ROK-1595: K2 switches
  * on phone, K4 radio cards on desktop). Nothing renders but a notice when the admin
- * kill switch is off; the nav entries hide on the same flag.
+ * kill switch is off; My Integrations hides the whole section on the same flag.
  */
 import type { JSX, ReactNode } from 'react';
 import type { CalendarConnection, CalendarReadMode, CalendarsOverview } from '@raid-ledger/contract';
@@ -43,7 +43,7 @@ function OAuthErrorBanner({ code, onDismiss }: { code: string; onDismiss: () => 
 
 function PageFrame({ lede, children }: { lede?: string; children: ReactNode }): JSX.Element {
     return (
-        <div className="space-y-6 pb-8" data-testid="calendars-page">
+        <div id="calendars" className="space-y-6 pb-8" data-testid="calendars-page">
             <header className="space-y-1">
                 <h2 className="text-xl font-semibold text-foreground">{C.title}</h2>
                 {lede && <p className="text-sm text-muted">{lede}</p>}

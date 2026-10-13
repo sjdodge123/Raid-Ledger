@@ -98,8 +98,8 @@ function GoogleClientSteps() {
             <Step title="Turn it on.">
                 Switch on <strong>Enable Calendar Sync</strong> above and click{' '}
                 <strong>Save Configuration</strong>. Members then connect from{' '}
-                <Link to="/profile/gaming/calendars" className="underline hover:text-foreground">
-                    Profile → Gaming → Calendars
+                <Link to="/profile/integrations" className="underline hover:text-foreground">
+                    Profile → My Integrations
                 </Link>.
             </Step>
         </>
