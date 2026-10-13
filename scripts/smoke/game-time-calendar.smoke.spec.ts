@@ -19,7 +19,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPost, apiPut, getAdminToken } from './api-helpers';
+import { API_BASE, apiDelete, apiGet, apiPost, apiPut, getAdminToken } from './api-helpers';
 import { signInContextAs } from './browser-session';
 import { isPhoneLayout } from './helpers';
 import { seedFixtureVoter } from './scheduling-poll-fixtures';
@@ -60,6 +60,16 @@ async function disconnectAll(jwt: string): Promise<void> {
     for (const c of overview?.connections ?? []) await apiDelete(jwt, `/users/me/calendars/${c.id}`).catch(() => undefined);
 }
 
+/** `PUT /users/me/calendars/settings` answers 204 No Content — assert the status, never parse a body. */
+async function putReadSettings(jwt: string, body: Record<string, unknown>): Promise<void> {
+    const res = await fetch(`${API_BASE}/users/me/calendars/settings`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+        body: JSON.stringify(body),
+    });
+    expect(res.status, `PUT /users/me/calendars/settings: ${await res.text()}`).toBe(204);
+}
+
 async function calendarAbsences(jwt: string): Promise<AbsenceRow[]> {
     const res = (await apiGet(jwt, '/users/me/game-time/absences?tzOffset=0')) as { data?: AbsenceRow[] } | AbsenceRow[] | null;
     const rows = Array.isArray(res) ? res : (res?.data ?? []);
@@ -76,7 +86,7 @@ test.beforeAll(async ({}, testInfo) => {
     const jwt = res.jwt;
     viewer = { userId: res.userId, jwt };
     await disconnectAll(viewer.jwt);
-    await apiPut(viewer.jwt, '/users/me/calendars/settings', { mode: 'both' });
+    await putReadSettings(viewer.jwt, { mode: 'both' });
     // Free 19:00–23:00 today, so the 20:00 busy hour overlaps a slot ("· 1h busy").
     await apiPut(viewer.jwt, '/users/me/game-time', {
         slots: [19, 20, 21, 22].map((hour) => ({ dayOfWeek: TODAY, hour })),
