@@ -9,7 +9,8 @@
  * on/off (`readSwitch`); one account is switched by the page's read rules (F-2).
  * An account without read access while another account reads (`anyReadable`)
  * shows "Grant read access" on its own card (spec §4) — when none reads, the
- * read-rules section carries that CTA instead.
+ * read-rules section carries that CTA instead. With two or more Google
+ * connections the account email sits under the title (`showAccount`, R3).
  */
 import type { JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
@@ -40,9 +41,13 @@ function FixButton(): JSX.Element {
     );
 }
 
-interface CardProps { connection: CalendarConnection; readSwitch?: boolean; anyReadable?: boolean }
+interface CardProps {
+    connection: CalendarConnection; readSwitch?: boolean; anyReadable?: boolean;
+    /** 2+ Google connections: the account email sits under the title (operator R3). */
+    showAccount?: boolean;
+}
 
-export function CalendarConnectionCard({ connection, readSwitch = false, anyReadable = false }: CardProps): JSX.Element {
+export function CalendarConnectionCard({ connection, readSwitch = false, anyReadable = false, showAccount = false }: CardProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
@@ -53,6 +58,9 @@ export function CalendarConnectionCard({ connection, readSwitch = false, anyRead
                 <ProviderTile label={C.google.tile} />
                 <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-foreground">{C.google.name}</p>
+                    {showAccount && connection.accountLabel && (
+                        <p className="truncate text-xs text-muted" data-testid="calendar-connection-account">{connection.accountLabel}</p>
+                    )}
                     <p className={`truncate text-xs ${TONE[connection.status]}`} data-testid="calendar-connection-status">
                         {readStatusLine(connection, desktop)}
                     </p>

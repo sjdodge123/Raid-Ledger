@@ -229,3 +229,43 @@ describe('desktop picker', () => {
         await waitFor(() => expect(screen.getAllByTestId('calendar-picker')).toHaveLength(2));
     });
 });
+
+describe('operator rulings 2026-10-13 (R2, R3) and the grant CTA guard', () => {
+    it('R2: every card read off → the quiet "not reading any account" line, in the muted token', async () => {
+        renderPage([readOff(first), readOff(second)]);
+        const line = await screen.findByTestId('calendar-reading-none');
+        expect(line).toHaveTextContent(R.notReadingAny);
+        expect(line.className, 'muted, never a warning colour').toMatch(/\btext-muted\b/);
+        expect(line.className).not.toMatch(/warning|danger/);
+    });
+
+    it('R2: one card still reads → no "not reading any account" line', async () => {
+        renderPage([first, readOff(second)]);
+        await accountSwitch(second);
+        expect(screen.queryByTestId('calendar-reading-none')).toBeNull();
+    });
+
+    it('R3: two connections → each card shows its own account email under the title', async () => {
+        renderPage([first, second]);
+        await accountSwitch(second);
+        expect(within(cardOf(first)).getByTestId('calendar-connection-account')).toHaveTextContent(first.accountLabel ?? 'missing label');
+        expect(within(cardOf(second)).getByTestId('calendar-connection-account')).toHaveTextContent('alt@example.com');
+    });
+
+    it('R3: one connection → no extra account line', async () => {
+        renderPage([first]);
+        await screen.findByRole('switch', { name: R.days.aria });
+        expect(screen.queryByTestId('calendar-connection-account')).toBeNull();
+    });
+
+    it.each([
+        ['broken (needs_reconnect)', { status: 'needs_reconnect', errorCode: 'auth' }],
+        ['disconnecting', { status: 'disconnecting' }],
+    ] as const)('a write-only card that is %s does not offer "Grant read access"', async (_label, state) => {
+        const card: CalendarConnection = { ...second, readAccess: 'missing', ...state };
+        renderPage([first, card]);
+        await screen.findAllByTestId('calendar-connection-card');
+        await waitFor(() => expect(cardOf(card)).toBeInTheDocument());
+        expect(within(cardOf(card)).queryByTestId('calendar-read-grant-button'), 'no grant CTA on a broken or disconnecting card').toBeNull();
+    });
+});

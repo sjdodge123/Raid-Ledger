@@ -18,7 +18,7 @@ import { SendEventsEntryRow } from './SendEventsEntryRow';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useCalendarOAuthFeedback } from './use-calendar-oauth-feedback';
-import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S, oauthErrorMessage } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S, oauthErrorMessage } from './calendar-sync.copy';
 
 function Section({ heading, children }: { heading: string; children: ReactNode }): JSX.Element {
     return (
@@ -101,13 +101,19 @@ function PhoneWriteSection({ connections }: { connections: CalendarConnection[] 
 /** The K2 column / K4 two-card grid: Connected, (phone) Read + Write, Add a calendar. */
 function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
     const google = data.connections.filter((c) => c.provider === 'google');
-    const readable = readableConnections(google).length;
-    const readSwitch = readable > 1;
+    const readable = readableConnections(google);
+    const readSwitch = readable.length > 1;
+    // R2: every card's "Read this account" is off — say so quietly, no warning tone.
+    const readingNone = readSwitch && readable.every((c) => !c.read.enabled);
     return (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {google.length > 0 && (
                 <Section heading={C.connectedHeading}>
-                    {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch} anyReadable={readable > 0} />)}
+                    {google.map((c) => (
+                        <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch}
+                            anyReadable={readable.length > 0} showAccount={google.length > 1} />
+                    ))}
+                    {readingNone && <p className="text-xs text-muted" data-testid="calendar-reading-none">{R.notReadingAny}</p>}
                 </Section>
             )}
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow={false} />

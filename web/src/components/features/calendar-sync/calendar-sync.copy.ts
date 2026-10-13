@@ -165,6 +165,8 @@ export const READ_COPY = {
     /** 2+ accounts: the last page switch on is locked (operator 2026-10-13). */
     keepOne: 'One stays on. To stop reading an account, turn it off on its card.',
     /** Per-account read on/off, shown on each card once two or more accounts can read (review r2). */
+    /** Every card's "Read this account" off: a quiet muted line under the cards (operator R2, 2026-10-13). */
+    notReadingAny: 'Not reading any account. Busy hours and away days won\'t update.',
     accountRead: { title: 'Read this account', sub: 'Its busy times count', aria: (label: string) => `Read busy times from ${label}` },
     pickerLabel: 'Calendars to check',
     pickerLoading: 'Loading calendars…',
