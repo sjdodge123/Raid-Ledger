@@ -315,6 +315,11 @@ describe('Game-server calendar + status endpoints (ROK-268, integration)', () =>
       expect(serverNames(status.body)).toEqual(['Alpha']);
       expect(fakeB.calendarCalls).toHaveLength(0);
       expect(fakeB.statusCalls).toHaveLength(0);
+      // The isActive filter alone would pass the above; prove B left the registry.
+      expect(getMultiAdapters()).not.toContain(fakeB);
+
+      await registry.activate(SLUG_B);
+      expect(getMultiAdapters().filter((p) => p === fakeB)).toHaveLength(1);
     });
 
     it('skips a still-registered provider whose plugin row is inactive (isActive filter)', async () => {
