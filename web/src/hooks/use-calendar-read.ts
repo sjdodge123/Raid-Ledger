@@ -9,13 +9,20 @@ import { ProviderCalendarSchema, type CalendarReadMode, type ProviderCalendar } 
 import { getAuthToken } from './use-auth';
 import { fetchApi, fetchWithAuth } from '../lib/api/fetch-api';
 import {
-    invalidateReadDependents, optimisticOverview, patchConnectionRead, patchReadMode, responseError,
+    connectionReadChange, invalidateReadDependents, optimisticOverview, readModeChange, responseError,
     restoreOverview, retryAfterOf, type OverviewSnapshot, type ReadPatch, type SyncNowResult,
 } from './calendar-read.helpers';
 import { freshLastSynced, refreshWhenSynced, SYNC_LAND_DELAY_MS } from './calendar-sync-now.helpers';
 
 const BASE = '/users/me/calendars';
 const ProviderCalendarListSchema = ProviderCalendarSchema.array();
+
+/**
+ * Every read on/off and read-mode save carries this key, so the page-level
+ * mode control and the per-card switches can stay disabled while any of them
+ * is saving (`useIsMutating`) instead of racing each other (review r2).
+ */
+export const READ_SAVE_KEY = ['calendars', 'read-save'] as const;
 
 export const providerCalendarsKey = (connectionId: number) => ['calendars', 'provider-calendars', connectionId] as const;
 
@@ -34,24 +41,26 @@ export function useProviderCalendars(connectionId: number, enabled = true) {
 export function useUpdateReadSettings() {
     const qc = useQueryClient();
     return useMutation<void, Error, CalendarReadMode, OverviewSnapshot>({
+        mutationKey: [...READ_SAVE_KEY],
         mutationFn: async (mode) => {
             await fetchApi<unknown>(`${BASE}/settings`, { method: 'PUT', body: JSON.stringify({ mode }) });
         },
-        onMutate: (mode) => optimisticOverview(qc, (o) => patchReadMode(o, mode)),
+        onMutate: (mode) => optimisticOverview(qc, (o) => readModeChange(o, mode)),
         onError: (_error, _mode, snapshot) => restoreOverview(qc, snapshot),
         onSettled: () => invalidateReadDependents(qc),
     });
 }
 
 /** `PATCH /users/me/calendars/:id` → 204 with a `read` body, optimistic on the overview. */
-function useReadPatch<V extends { id: number }>(toPatch: (vars: V) => ReadPatch) {
+function useReadPatch<V extends { id: number }>(toPatch: (vars: V) => ReadPatch, mutationKey?: readonly string[]) {
     const qc = useQueryClient();
     return useMutation<void, Error, V, OverviewSnapshot>({
+        ...(mutationKey ? { mutationKey: [...mutationKey] } : {}),
         mutationFn: async (vars) => {
             const body = JSON.stringify({ read: toPatch(vars) });
             await fetchApi<unknown>(`${BASE}/${vars.id}`, { method: 'PATCH', body });
         },
-        onMutate: (vars) => optimisticOverview(qc, (o) => patchConnectionRead(o, vars.id, toPatch(vars))),
+        onMutate: (vars) => optimisticOverview(qc, (o) => connectionReadChange(o, vars.id, toPatch(vars))),
         onError: (_error, _vars, snapshot) => restoreOverview(qc, snapshot),
         onSettled: () => invalidateReadDependents(qc),
     });
@@ -62,7 +71,7 @@ export interface SetReadCalendarsInput { id: number; calendarIds: string[] }
 
 /** Read on/off for one connection (F-2: both K2 switches off → `enabled:false`). */
 export function useSetReadEnabled() {
-    return useReadPatch<SetReadEnabledInput>(({ enabled }) => ({ enabled }));
+    return useReadPatch<SetReadEnabledInput>(({ enabled }) => ({ enabled }), READ_SAVE_KEY);
 }
 
 /** The picker: which calendars to read (`[]` = primary only). */

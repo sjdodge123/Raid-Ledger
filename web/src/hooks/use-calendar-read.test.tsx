@@ -246,3 +246,28 @@ describe('useSyncNow — the "before" stamp', () => {
         expect(reads, 'refreshed only once THIS sync landed (fresh read + 2 re-reads), not on the cron sync').toBe(3);
     });
 });
+
+describe('parallel read saves — each reverts only its own slice (review r2)', () => {
+    it('two cards save at once and the first fails: only the first reverts, the second keeps its change', async () => {
+        const a = readConnectionFixture;
+        const b: CalendarConnection = { ...readConnectionFixture, id: readConnectionFixture.id + 1 };
+        const { qc, wrapper } = setup(a);
+        qc.setQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY], calendarsOverviewFixture({ connections: [a, b] }));
+        const held = holdOpen();
+        server.use(http.patch(CALENDAR_CONNECTION_URL, async ({ params }) => {
+            if (Number(params['id']) !== a.id) return new HttpResponse(null, { status: 204 });
+            await held.gate;
+            return calendarErrorResponse(500, 'boom');
+        }));
+        const { result } = renderHook(() => ({ first: useSetReadEnabled(), second: useSetReadEnabled() }), { wrapper });
+        let firstSave: Promise<unknown> = Promise.resolve();
+        act(() => { firstSave = result.current.first.mutateAsync({ id: a.id, enabled: false }).catch(() => undefined); });
+        // The second save's optimistic write lands on top of the first's.
+        await act(async () => { await result.current.second.mutateAsync({ id: b.id, enabled: false }); });
+        held.release();
+        await act(async () => { await firstSave; });
+        const enabled = Object.fromEntries((overviewOf(qc)?.connections ?? []).map((c) => [c.id, c.read.enabled]));
+        expect(enabled, 'the failed save reverts its own account only; the other keeps its saved "off"')
+            .toEqual({ [a.id]: true, [b.id]: false });
+    });
+});

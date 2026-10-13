@@ -59,24 +59,60 @@ export function patchReadMode(overview: CalendarsOverview, mode: CalendarReadMod
     return { ...overview, readSettings: { ...overview.readSettings, mode } };
 }
 
-/** Mutation context: the overview as it was before the optimistic write. */
+/**
+ * Mutation context: how to put back ONLY the slice this write changed. Saves
+ * run in parallel (one per account card), so restoring a whole-overview
+ * snapshot would also wipe a sibling save that landed meanwhile (review r2).
+ */
 export interface OverviewSnapshot {
-    previous: CalendarsOverview | undefined;
+    undo: ((current: CalendarsOverview) => CalendarsOverview) | undefined;
 }
 
-/** Rewrite the cached overview now; returns the snapshot `restoreOverview` puts back. */
+/** What one optimistic write does to the overview, and how to take only that back. */
+export interface OverviewChange {
+    next: CalendarsOverview;
+    undo: (current: CalendarsOverview) => CalendarsOverview;
+}
+
+/** Rewrite the cached overview now; returns the snapshot `restoreOverview` reverts with. */
 export async function optimisticOverview(
     qc: QueryClient,
-    patch: (overview: CalendarsOverview) => CalendarsOverview,
+    change: (overview: CalendarsOverview) => OverviewChange,
 ): Promise<OverviewSnapshot> {
     await qc.cancelQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
     const previous = qc.getQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY]);
-    if (previous) qc.setQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY], patch(previous));
-    return { previous };
+    if (!previous) return { undo: undefined };
+    const { next, undo } = change(previous);
+    qc.setQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY], next);
+    return { undo };
 }
 
+/** Take back this write's slice of the CURRENT cache; sibling writes stay. */
 export function restoreOverview(qc: QueryClient, snapshot: OverviewSnapshot | undefined): void {
-    if (snapshot?.previous) qc.setQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY], snapshot.previous);
+    const current = qc.getQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY]);
+    if (current && snapshot?.undo) qc.setQueryData<CalendarsOverview>([...CALENDARS_OVERVIEW_KEY], snapshot.undo(current));
+}
+
+/** The prior values of exactly the fields `patch` touches on connection `id` (`{}` when absent). */
+function readBefore(overview: CalendarsOverview, id: number, patch: ReadPatch): ReadPatch {
+    const read = overview.connections.find((c) => c.id === id)?.read;
+    if (!read) return {};
+    return {
+        ...(patch.enabled !== undefined ? { enabled: read.enabled } : {}),
+        ...(patch.calendarIds !== undefined ? { calendarIds: read.calendarIds } : {}),
+    };
+}
+
+/** A read PATCH on one connection, undone on that connection's touched fields only. */
+export function connectionReadChange(overview: CalendarsOverview, id: number, patch: ReadPatch): OverviewChange {
+    const before = readBefore(overview, id, patch);
+    return { next: patchConnectionRead(overview, id, patch), undo: (current) => patchConnectionRead(current, id, before) };
+}
+
+/** A read-mode PUT, undone on the mode only. */
+export function readModeChange(overview: CalendarsOverview, mode: CalendarReadMode): OverviewChange {
+    const before = overview.readSettings.mode;
+    return { next: patchReadMode(overview, mode), undo: (current) => patchReadMode(current, before) };
 }
 
 /**

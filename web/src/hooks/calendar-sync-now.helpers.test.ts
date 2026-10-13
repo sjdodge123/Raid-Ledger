@@ -13,7 +13,7 @@ import { CALENDARS_OVERVIEW_URL, calendarsOverviewFixture, readConnectionFixture
 vi.mock('./use-auth', () => ({ getAuthToken: () => 'test-token' }));
 
 import { CALENDARS_OVERVIEW_KEY } from './use-calendar-sync';
-import { SYNC_LAND_MAX_TRIES, refreshWhenSynced } from './calendar-sync-now.helpers';
+import { SYNC_LAND_MAX_TRIES, freshLastSynced, refreshWhenSynced } from './calendar-sync-now.helpers';
 
 /** The sync never lands: every read returns the same `lastSyncedAt`. */
 function countReads(): { reads: () => number } {
@@ -52,5 +52,14 @@ describe('refreshWhenSynced — one loop per connection', () => {
         await refreshWhenSynced(qc, readConnectionFixture.id, before, 1);
         await refreshWhenSynced(qc, readConnectionFixture.id, before, 1);
         expect(counter.reads(), 'two sequential clicks, two full loops').toBe(SYNC_LAND_MAX_TRIES * 2);
+    });
+});
+
+describe('freshLastSynced — the "before" stamp for Sync now', () => {
+    it('the fresh overview read fails → falls back to the cached stamp instead of rejecting', async () => {
+        server.use(http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        const { qc } = setup();
+        await expect(freshLastSynced(qc, readConnectionFixture.id), 'a failed fresh read must not block Sync now')
+            .resolves.toBe(readConnectionFixture.lastSyncedAt);
     });
 });
