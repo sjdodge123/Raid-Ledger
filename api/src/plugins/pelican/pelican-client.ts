@@ -126,7 +126,12 @@ export class PelicanClient {
   /** Logs host, path, status and kind only — never the key or a body. */
   private fail<T>(path: string, error: PelicanClientError): PelicanResult<T> {
     const status = error.status === undefined ? '' : ` HTTP ${error.status}`;
-    const route = `/api/client${path.split('?')[0] ?? ''}`;
+    // D9 / ruling Q6: a server id never reaches the log.
+    const bare = (path.split('?')[0] ?? '').replace(
+      /\/servers\/[^/]+/,
+      '/servers/{id}',
+    );
+    const route = `/api/client${bare}`;
     this.logger.warn(
       `Pelican ${this.host}${route} failed: ${error.kind}${status}`,
     );

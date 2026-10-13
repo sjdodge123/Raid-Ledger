@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PelicanConfigUpdateSchema } from '@raid-ledger/contract';
-import type { PelicanConfig, PelicanTestResult } from '@raid-ledger/contract';
+import type {
+  PelicanConfig,
+  PelicanSyncResult,
+  PelicanTestResult,
+} from '@raid-ledger/contract';
 import { AdminGuard } from '../../auth/admin.guard';
 import {
   PluginActiveGuard,
@@ -19,6 +23,9 @@ import {
 } from '../plugin-host/plugin-active.guard';
 import { PELICAN_PLUGIN_ID } from './pelican.constants';
 import { PelicanConfigService } from './pelican-config.service';
+import { PelicanStatusService } from './pelican-status.service';
+import { PelicanSyncService } from './pelican-sync.service';
+import { toPelicanSyncResult } from './pelican-sync-result.helpers';
 
 /**
  * Pelican admin routes (ROK-121). Admin-only and 403 while the plugin is
@@ -28,7 +35,11 @@ import { PelicanConfigService } from './pelican-config.service';
 @UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
 @RequirePlugin(PELICAN_PLUGIN_ID)
 export class PelicanAdminController {
-  constructor(private readonly config: PelicanConfigService) {}
+  constructor(
+    private readonly config: PelicanConfigService,
+    private readonly sync: PelicanSyncService,
+    private readonly status: PelicanStatusService,
+  ) {}
 
   /** GET /admin/plugins/pelican/config — URL, `apiKeySet`, timezone. */
   @Get('config')
@@ -52,5 +63,19 @@ export class PelicanAdminController {
   @HttpCode(HttpStatus.OK)
   testConnection(): Promise<PelicanTestResult> {
     return this.config.testConnection();
+  }
+
+  /**
+   * POST /admin/plugins/pelican/sync — "Sync now" (ROK-1772); always 200.
+   * A run already in flight answers `in_progress`. A successful sync is
+   * followed by one status poll (ruling Q5).
+   */
+  @Post('sync')
+  @HttpCode(HttpStatus.OK)
+  async syncNow(): Promise<PelicanSyncResult> {
+    const outcome = await this.sync.syncServers();
+    const status =
+      outcome.code === 'ok' ? await this.status.pollStatuses() : null;
+    return toPelicanSyncResult(outcome, status);
   }
 }
