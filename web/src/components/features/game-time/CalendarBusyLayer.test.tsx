@@ -141,6 +141,12 @@ describe('busy bands only inside the viewer\'s game time (operator R5)', () => {
         expect(busyInsideGameTime([busy(2, 17, 23)], slots)).toEqual([busy(2, 18, 20), busy(2, 21, 22)]);
     });
 
+    it('counts a committed hour as game time: the band draws and the header counts it (Lead ruling)', () => {
+        const slots = [...free(2, [18]), { dayOfWeek: 2, hour: 19, status: 'committed' as const }];
+        expect(busyInsideGameTime([busy(2, 18, 21)], slots)).toEqual([busy(2, 18, 20)]);
+        expect(busyHourCount([busy(2, 18, 21)], slots, 2, EVENING)).toBe(2);
+    });
+
     it('drops a range on a day with no game time, and never borrows another day\'s hours', () => {
         expect(busyInsideGameTime([busy(3, 18, 20)], free(2, [18, 19]))).toEqual([]);
     });

@@ -61,15 +61,24 @@ export function busyRunsForDays(
 }
 
 /**
+ * An hour that counts as the viewer's game time for the busy band: a free slot,
+ * or one already committed to an event (Lead ruling 2026-10-13). Blocked hours
+ * do not count.
+ */
+function isGameTimeHour(s: GameTimeSlot): boolean {
+    return isSlotActive(s) || s.status === 'committed';
+}
+
+/**
  * Clip busy ranges to the viewer's game time (operator R5, 2026-10-13): a band
- * draws only on hours the viewer marked free that day. A busy hour outside
+ * draws only on hours the viewer marked free (or committed) that day. A busy hour outside
  * every free slot costs no game time, so it draws nothing. A range split by a
  * gap in the game time becomes one range per free stretch.
  */
 export function busyInsideGameTime(
     busy: readonly GameTimeCalendarBusy[], slots: readonly GameTimeSlot[],
 ): GameTimeCalendarBusy[] {
-    const free = new Set(slots.filter(isSlotActive).map((s) => `${s.dayOfWeek}:${s.hour}`));
+    const free = new Set(slots.filter(isGameTimeHour).map((s) => `${s.dayOfWeek}:${s.hour}`));
     return busy.flatMap((b) =>
         contiguousRuns(rangeHours(b).filter((h) => free.has(`${b.dayOfWeek}:${h}`)))
             .map(([startHour, endHour]) => ({ ...b, startHour, endHour })));
@@ -86,7 +95,7 @@ export function busyHourCount(
     dayOfWeek: number, hours: readonly number[],
 ): number {
     const visible = new Set(hours);
-    const free = new Set(slots.filter((s) => s.dayOfWeek === dayOfWeek && isSlotActive(s)).map((s) => s.hour));
+    const free = new Set(slots.filter((s) => s.dayOfWeek === dayOfWeek && isGameTimeHour(s)).map((s) => s.hour));
     const covered = new Set(
         busy.filter((b) => b.dayOfWeek === dayOfWeek).flatMap(rangeHours).filter((h) => visible.has(h) && free.has(h)),
     );
