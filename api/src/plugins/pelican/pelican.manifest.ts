@@ -15,7 +15,8 @@ export const PELICAN_SETTING_KEYS = [
 /**
  * Pelican game-server panel plugin (ROK-121). Registered only — never
  * auto-installed, so an uninstall sticks across restarts (Lead ruling Q1).
- * Capabilities are display strings; S2 registers no adapter or cron yet.
+ * Capabilities are display strings. S3a (ROK-1772) registers a cron
+ * registrar and a game-server provider, both owned by this plugin id.
  */
 export const PELICAN_MANIFEST: PluginManifest = {
   id: PELICAN_PLUGIN_ID,

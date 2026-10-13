@@ -69,6 +69,7 @@ export * from './blizzard.schema.js';
 export * from './plugins.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
+export * from './pelican-servers.schema.js';
 
 // Game servers (ROK-268)
 export * from './game-servers.schema.js';
