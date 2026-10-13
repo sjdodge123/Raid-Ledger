@@ -15,6 +15,7 @@ const GOOGLE_SETUP_LINKS = {
     calendarApi: `${CONSOLE}/apis/library/calendar-json.googleapis.com`,
     authOverview: `${CONSOLE}/auth/overview`,
     audience: `${CONSOLE}/auth/audience`,
+    verification: `${CONSOLE}/auth/verification`,
     createClient: `${CONSOLE}/auth/clients/create`,
 } as const;
 
@@ -51,10 +52,10 @@ function GoogleProjectSteps() {
                 click <strong>Get started</strong>. Enter &quot;Raid Ledger&quot; as the app name and your
                 email where it asks, choose <strong>External</strong>, agree, and click <strong>Create</strong>.
             </Step>
-            <Step title="Add the people who can connect.">
+            <Step title="Let any member connect.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.audience}>Audience</ExtLink>, click{' '}
-                <strong>Add users</strong> under Test users, and enter the Google email of every member
-                who will connect a calendar, yourself included (up to 100).
+                <strong>Publish app</strong> and confirm. Members then connect their own calendars: there
+                is no list of emails to keep.
             </Step>
         </>
     );
@@ -98,11 +99,15 @@ export function CalendarSyncInstructions() {
                 <GoogleProjectSteps />
                 <GoogleClientSteps />
             </ol>
-            <p className="text-xs text-muted">
-                <strong className="text-secondary">Good to know:</strong> while the Google app is in Testing,
-                only the people added in step 4 can connect, and Google asks them to reconnect every 7 days.
-                To lift both limits, click <strong>Publish app</strong> on the Audience page. Google may ask
-                you to verify the app first, because it writes to members&apos; calendars.
+            <p className="text-xs text-muted" data-testid="calendar-sync-unverified-note">
+                <strong className="text-secondary">Good to know:</strong> until Google verifies your app,
+                members see a &quot;Google hasn&apos;t verified this app&quot; screen when they connect. It
+                appears because the app is your own rather than one Google has reviewed: they click{' '}
+                <strong>Advanced</strong>, then <strong>Go to Raid Ledger (unsafe)</strong>. An unverified app
+                can be connected by up to 100 people in total. To remove the screen and the limit, submit the
+                app from the <ExtLink href={GOOGLE_SETUP_LINKS.verification}>Verification Center</ExtLink>;
+                Google asks for your site&apos;s domain and a privacy policy link, and review can take a few weeks.
+            </p>
             </p>
         </div>
     );

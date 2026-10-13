@@ -15,6 +15,7 @@ describe('CalendarSyncInstructions', () => {
             ['Google Auth Platform', `${CONSOLE}/auth/overview`],
             ['Audience', `${CONSOLE}/auth/audience`],
             ['Create OAuth client', `${CONSOLE}/auth/clients/create`],
+            ['Verification Center', `${CONSOLE}/auth/verification`],
         ];
         for (const [name, href] of cases) {
             const link = within(box).getByRole('link', { name });
@@ -28,6 +29,14 @@ describe('CalendarSyncInstructions', () => {
         renderWithProviders(<CalendarSyncInstructions />);
         expect(screen.getByRole('link', { name: /Profile → Gaming → Calendars/ }))
             .toHaveAttribute('href', '/profile/gaming/calendars');
+    });
+
+    it('has the admin publish the app instead of listing members as test users', () => {
+        renderWithProviders(<CalendarSyncInstructions />);
+        const box = screen.getByTestId('calendar-sync-instructions');
+        expect(within(box).getByText('Publish app')).toBeInTheDocument();
+        expect(box).not.toHaveTextContent(/test users/i);
+        expect(screen.getByTestId('calendar-sync-unverified-note')).toHaveTextContent(/up to 100 people/);
     });
 
     it('lists seven steps', () => {
