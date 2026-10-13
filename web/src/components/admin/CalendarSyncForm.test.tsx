@@ -169,6 +169,15 @@ describe('CalendarSyncPanel — redirect URIs', () => {
             .toHaveValue(calendarSyncSettingsFixture.redirectUris.microsoft);
     });
 
+    it('shows the Google JavaScript origin (the redirect URI origin) and no Microsoft one', async () => {
+        await renderPanel(calendarSyncSettingsFixture);
+        const origin = new URL(calendarSyncSettingsFixture.redirectUris.google).origin;
+        const field = screen.getByRole('textbox', { name: 'Google JavaScript origin' });
+        expect(field).toHaveValue(origin);
+        expect(field).toHaveAttribute('readonly');
+        expect(screen.queryByRole('textbox', { name: 'Microsoft JavaScript origin' })).not.toBeInTheDocument();
+    });
+
     it('Copy puts the redirect URI on the clipboard', async () => {
         await renderPanel(calendarSyncSettingsFixture);
         fireEvent.click(screen.getByRole('button', { name: 'Copy Microsoft redirect URI' }));

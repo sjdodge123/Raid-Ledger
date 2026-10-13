@@ -66,9 +66,11 @@ function GoogleClientSteps() {
         <>
             <Step title="Create the OAuth client.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.createClient}>Create OAuth client</ExtLink>. Set
-                Application type to <strong>Web application</strong>. Under Authorized redirect URIs click{' '}
-                <strong>Add URI</strong>, paste the <strong>Google redirect URI</strong> shown below (click
-                it to copy), then click <strong>Create</strong>.
+                Application type to <strong>Web application</strong>. Under Authorized JavaScript origins click{' '}
+                <strong>Add URI</strong> and paste the <strong>Google JavaScript origin</strong> shown below.
+                Under Authorized redirect URIs click <strong>Add URI</strong> and paste the{' '}
+                <strong>Google redirect URI</strong> shown below (click either to copy). Then click{' '}
+                <strong>Create</strong>.
             </Step>
             <Step title="Paste the keys here.">
                 Google shows a <strong>Client ID</strong> and a <strong>Client secret</strong>. Copy each
@@ -107,7 +109,6 @@ export function CalendarSyncInstructions() {
                 can be connected by up to 100 people in total. To remove the screen and the limit, submit the
                 app from the <ExtLink href={GOOGLE_SETUP_LINKS.verification}>Verification Center</ExtLink>;
                 Google asks for your site&apos;s domain and a privacy policy link, and review can take a few weeks.
-            </p>
             </p>
         </div>
     );

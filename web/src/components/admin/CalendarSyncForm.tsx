@@ -77,6 +77,27 @@ function SecretField({ provider, draft, hasSecret, onChange }: {
     );
 }
 
+/** The site origin Google's "Authorized JavaScript origins" needs: the redirect URI's scheme + host. */
+function originOf(uri: string): string | null {
+    try {
+        return new URL(uri).origin;
+    } catch {
+        return null;
+    }
+}
+
+function JavaScriptOriginField({ redirectUri }: { redirectUri: string }) {
+    const origin = originOf(redirectUri);
+    if (!origin) return null;
+    return (
+        <div>
+            <p className="text-sm font-medium text-foreground mb-1">Google JavaScript origin</p>
+            <CopyableInput value={origin} onCopied="JavaScript origin copied" label="Google JavaScript origin" />
+            <p className="text-xs text-dim mt-1.5">Click to copy. Add it under Authorized JavaScript origins.</p>
+        </div>
+    );
+}
+
 function ProviderSection({ provider, draft, settings, onChange }: {
     provider: CalendarSyncFormProvider; draft: ProviderDraft;
     settings: AdminCalendarSyncSettings; onChange: (next: ProviderDraft) => void;
@@ -94,6 +115,7 @@ function ProviderSection({ provider, draft, settings, onChange }: {
                     label={`${copy.name} redirect URI`} />
                 <p className="text-xs text-dim mt-1.5">Click to copy. Add it to {copy.console}.</p>
             </div>
+            {provider === 'google' && <JavaScriptOriginField redirectUri={settings.redirectUris.google} />}
         </section>
     );
 }
