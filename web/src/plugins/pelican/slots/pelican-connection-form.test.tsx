@@ -44,6 +44,8 @@ const urlInput = () => screen.getByLabelText('Panel URL') as HTMLInputElement;
 const keyInput = () => screen.getByLabelText('Client API key', { selector: 'input' }) as HTMLInputElement;
 const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save Configuration' }));
 const testButton = () => screen.queryByRole('button', { name: 'Test Connection' });
+/** getByRole throws when the button is missing — no `as HTMLElement` over a nullable query. */
+const clickTest = () => fireEvent.click(screen.getByRole('button', { name: 'Test Connection' }));
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -111,7 +113,8 @@ describe('PelicanPluginContent — editing and saving', () => {
     it('a PUT 400 toasts the server message and keeps the draft', async () => {
         await renderPanel(pelicanConfigFixture);
         server.use(http.put(PELICAN_CONFIG_URL, () =>
-            HttpResponse.json({ message: 'Panel URL must start with http:// or https://' }, { status: 400 })));
+            // Nest's BadRequestException(string[]) body shape: `message` is an array.
+            HttpResponse.json({ message: ['Panel URL must start with http:// or https://'] }, { status: 400 })));
         fireEvent.change(urlInput(), { target: { value: 'ftp://x' } });
         save();
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Panel URL must start with http:// or https://'));
@@ -125,14 +128,14 @@ describe('PelicanPluginContent — Test Connection banners', () => {
         server.use(http.post(PELICAN_TEST_URL, () => HttpResponse.json({
             success: true, code: 'ok', message: 'OK — 3 server(s) visible to this key.', serverCount: 3,
         })));
-        fireEvent.click(testButton() as HTMLElement);
+        clickTest();
         expect(await screen.findByText('OK — 3 server(s) visible to this key.')).toHaveClass('text-success');
     });
 
     it.each(PELICAN_ERROR_KINDS)('%s shows its own danger banner', async (code) => {
         await renderPanel(pelicanConfiguredFixture);
         server.use(http.post(PELICAN_TEST_URL, () => HttpResponse.json({ success: false, code, message: `message for ${code}` })));
-        fireEvent.click(testButton() as HTMLElement);
+        clickTest();
         expect(await screen.findByText(`message for ${code}`)).toHaveClass('text-danger');
     });
 });

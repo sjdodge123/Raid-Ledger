@@ -22,7 +22,10 @@ import * as schema from '../../drizzle/schema';
 import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from './pelican.constants';
+import {
+  PELICAN_INTEGRATION_KEY,
+  PELICAN_PLUGIN_ID,
+} from './pelican.constants';
 import { PELICAN_SETTING_KEYS } from './pelican.manifest';
 import { PelicanModule } from './pelican.module';
 
@@ -107,17 +110,15 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  // Restore the pre-file state (Pelican NOT installed) inside the spec's own
+  // lifecycle — the shared integration-setup afterAll closes the DB before a
+  // file-level afterAll would run. Deactivating first drops 'pelican' from the
+  // registry's in-memory active set; the truncate then deletes its plugins and
+  // settings rows, so no later file depends on this one having run.
+  if (registry().isActive(PELICAN_PLUGIN_ID)) {
+    await registry().deactivate(PELICAN_PLUGIN_ID);
+  }
   testApp.seed = await truncateAllTables(testApp.db);
-  settings().invalidateCache(true);
-});
-
-afterAll(async () => {
-  // Leave Pelican installed + active with no settings for the next file.
-  await registry().ensureInstalled(PELICAN_PLUGIN_ID);
-  await registry().activate(PELICAN_PLUGIN_ID);
-  await testApp.db
-    .delete(schema.appSettings)
-    .where(inArray(schema.appSettings.key, [...PELICAN_SETTING_KEYS]));
   settings().invalidateCache(true);
 });
 
@@ -140,6 +141,39 @@ describe('GET /admin/plugins/pelican/config (ROK-121)', () => {
       defaultTimezone: 'America/Chicago',
       timezoneInherited: true,
     });
+  });
+});
+
+describe('GET /admin/plugins Pelican integration status (ROK-121 AC2)', () => {
+  type ListedIntegration = { key: string; configured: boolean };
+  async function pelicanIntegrations(): Promise<ListedIntegration[]> {
+    const list = await testApp.request
+      .get('/admin/plugins')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(list.status).toBe(200);
+    const listed = list.body.data as {
+      slug: string;
+      integrations: ListedIntegration[];
+    }[];
+    const pelican = listed.find((p) => p.slug === PELICAN_PLUGIN_ID);
+    if (!pelican) throw new Error('pelican missing from GET /admin/plugins');
+    return pelican.integrations;
+  }
+  const configured = async () =>
+    (await pelicanIntegrations()).find(
+      (i) => i.key === PELICAN_INTEGRATION_KEY,
+    );
+
+  it('stays Not Configured until both the URL and the key are saved', async () => {
+    expect((await configured())?.configured).toBe(false);
+
+    const urlOnly = await putConfig({ panelUrl: 'https://panel.example.com' });
+    expect(urlOnly.status).toBe(200);
+    expect((await configured())?.configured).toBe(false);
+
+    const withKey = await putConfig({ apiKey: FAKE_CLIENT_KEY });
+    expect(withKey.status).toBe(200);
+    expect((await configured())?.configured).toBe(true);
   });
 });
 
