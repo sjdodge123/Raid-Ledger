@@ -17,16 +17,10 @@ export interface WarnLogger {
 }
 
 /** Rejects after `ms` unless `work` settles first; the timer is always cleared. */
-export async function withTimeout<T>(
-  work: Promise<T>,
-  ms: number,
-): Promise<T> {
+export async function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new Error(`timed out after ${ms}ms`)),
-      ms,
-    );
+    timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
   });
   try {
     return await Promise.race([work, timeout]);
