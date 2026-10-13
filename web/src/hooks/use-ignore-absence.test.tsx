@@ -76,4 +76,16 @@ describe('useIgnoreAbsence', () => {
         expect(absenceIds()).toEqual([manualAbsenceFixture.id, calendarAbsenceFixture.id]);
         expect(httpStatusOf(result.current.error)).toBe(404);
     });
+
+    it("a refused Ignore runs the caller's onError at once, while the list refetches are still pending", async () => {
+        server.use(absenceIgnoreErrorHandlers.notCalendar());
+        const { invalidate, result, absenceIds } = setup();
+        // Hold every refetch open: onError must not wait for them.
+        invalidate.mockImplementation(() => new Promise<void>(() => {}));
+        const onError = vi.fn();
+        act(() => result.current.mutate(manualAbsenceFixture.id, { onError }));
+        await waitFor(() => expect(onError, 'the error toast must not wait for the refetches').toHaveBeenCalledTimes(1));
+        expect(invalidate, 'the refetches were started, just not awaited').toHaveBeenCalled();
+        expect(absenceIds()).toEqual([manualAbsenceFixture.id, calendarAbsenceFixture.id]);
+    });
 });

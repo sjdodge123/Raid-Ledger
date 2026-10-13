@@ -145,10 +145,12 @@ export function useIgnoreAbsence() {
         onError: (_error, _id, context) => {
             if (context?.previous) queryClient.setQueryData<GameTimeAbsence[]>(GAME_TIME_ABSENCES_KEY, context.previous);
         },
-        onSettled: () => Promise.all([
-            queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY }),
-            queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY }),
-            queryClient.invalidateQueries({ queryKey: ['scheduling'] }),
-        ]),
+        // Fire-and-forget: TanStack v5 runs a caller's per-call onError only after this
+        // resolves, so awaiting three refetches here would hold the error toast back.
+        onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+            void queryClient.invalidateQueries({ queryKey: ['scheduling'] });
+        },
     });
 }
