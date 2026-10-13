@@ -131,5 +131,11 @@ export async function signInOnboardedMember(page: Page, userId: number): Promise
     if (!done.ok()) {
         throw new Error(`[browser-session] POST /users/me/complete-onboarding for user ${userId} → ${done.status()}: ${await done.text()}`);
     }
+    // The boot above cached the NOT-onboarded user (`raid_ledger_user_cache`), and the next
+    // boot renders from that cache before `/auth/me` lands — wizard first, then a bounce to
+    // /calendar. Let one boot settle on the fresh user: the wizard redirects to /calendar only
+    // once `/auth/me` reports `onboardingCompletedAt`, and that fetch rewrites the cache first.
+    await page.goto('/onboarding');
+    await page.waitForURL(/\/calendar(?:[?#]|$)/, { timeout: 15_000 });
     return jwt;
 }
