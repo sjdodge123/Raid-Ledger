@@ -44,6 +44,7 @@ if (_cachedUser && getAuthMethod() && !_magicLinkToken) {
 import './plugins/wow/register';
 import './plugins/discord/register';
 import './plugins/ai/register';
+import './plugins/pelican/register';
 import './App.css';
 
 /** Scroll to top on PUSH navigations */

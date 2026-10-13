@@ -1,6 +1,6 @@
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../hooks/use-auth';
 import { useSystemStatus } from '../hooks/use-system-status';
 import { API_BASE_URL } from '../lib/config';
@@ -134,6 +134,9 @@ export function LoginPage(): JSX.Element {
                     <FirstRunBanner isFirstRun={isFirstRun} />
                 </div>
                 <p className="mt-6 text-center text-sm text-dim">Coordinate raids. Track attendance. Conquer together.</p>
+                <p className="mt-2 text-center text-xs">
+                    <Link to="/privacy" className="text-dim underline hover:text-secondary">Privacy policy</Link>
+                </p>
             </div>
         </div>
     );

@@ -20,6 +20,7 @@ import {
 } from '@raid-ledger/contract';
 import { getAuthToken } from './use-auth';
 import { fetchApi, fetchWithAuth } from '../lib/api/fetch-api';
+import { GAME_TIME_ABSENCES_KEY, GAME_TIME_QUERY_KEY } from './use-game-time';
 
 export const CALENDARS_OVERVIEW_KEY = ['calendars', 'overview'] as const;
 const BASE = '/users/me/calendars';
@@ -100,7 +101,10 @@ export function useDisconnectCalendar() {
         },
         onSuccess: () => {
             void queryClient.invalidateQueries({ queryKey: [...CALENDARS_OVERVIEW_KEY] });
-            void queryClient.invalidateQueries({ queryKey: ['game-time'] });
+            // Disconnect drops busy hours + synced away days server-side (ROK-1593).
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+            void queryClient.invalidateQueries({ queryKey: ['scheduling'] });
         },
     });
 }

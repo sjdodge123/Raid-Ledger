@@ -1,6 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useGameTime, useSaveGameTime, useSaveGameTimeOverrides } from './use-game-time';
-import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { GameTimeAbsence, GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import { toast } from '../lib/toast';
 import { useTimezoneStore } from '../stores/timezone-store';
 import { getTimezoneAbbr, getTimezoneOffsetMinutes } from '../lib/timezone-utils';
@@ -23,8 +23,12 @@ export interface UseGameTimeEditorReturn {
     isSaving: boolean;
     tzLabel: string;
     overrides: Array<{ date: string; hour: number; status: string }>;
-    absences: Array<{ id: number; startDate: string; endDate: string; reason: string | null }>;
+    absences: GameTimeAbsence[];
+    /** Synced-calendar busy hours (ROK-1595 S2); empty when reading is off. */
+    calendarBusy: GameTimeCalendarBusy[];
 }
+
+const NO_BUSY: GameTimeCalendarBusy[] = [];
 
 const PRESET_HOUR_RANGES: Record<GameTimePreset, [number, number]> = {
     morning: [6, 12],
@@ -121,6 +125,7 @@ export function useGameTimeEditor(options?: UseGameTimeEditorOptions): UseGameTi
         applyPreset, save, clear: useCallback(() => setEditSlots([]), []), discard: useCallback(() => setEditSlots(null), []),
         isSaving: saveGameTime.isPending || saveOverrides.isPending, tzLabel,
         overrides: (gameTimeData?.overrides as Array<{ date: string; hour: number; status: string }>) ?? [],
-        absences: (gameTimeData?.absences as Array<{ id: number; startDate: string; endDate: string; reason: string | null }>) ?? [],
+        absences: gameTimeData?.absences ?? [],
+        calendarBusy: gameTimeData?.calendarBusy ?? NO_BUSY,
     };
 }

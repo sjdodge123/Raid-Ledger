@@ -31,6 +31,8 @@ export const SETTING_KEYS = {
   RELAY_TOKEN: 'relay_token',
   COMMUNITY_NAME: 'community_name',
   COMMUNITY_LOGO_PATH: 'community_logo_path',
+  /** ROK-1778: optional contact email for the public /privacy page. */
+  PRIVACY_CONTACT_EMAIL: 'privacy_contact_email',
   /** Legacy (TDB:991): no reader or writer; kept so clearBranding deletes the stale row. */
   COMMUNITY_ACCENT_COLOR: 'community_accent_color',
   GITHUB_PAT: 'github_pat',
@@ -207,6 +209,12 @@ export const SETTING_KEYS = {
   /** ROK-1771: Spotlight rotation memory — JSON array of ≤4
    *  `{ week: 'YYYY-Www', kind }`, newest first. Internal; no admin UI. */
   WEEKLY_DIGEST_SPOTLIGHT_HISTORY: 'weekly_digest_spotlight_history',
+  /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
+  PELICAN_PANEL_URL: 'pelican_panel_url',
+  /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
+  PELICAN_CLIENT_API_KEY: 'pelican_client_api_key',
+  /** ROK-121: IANA tz for Pelican schedules; unset ⇒ community default_timezone. */
+  PELICAN_DEFAULT_TIMEZONE: 'pelican_default_timezone',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

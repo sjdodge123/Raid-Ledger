@@ -14,7 +14,9 @@ const GOOGLE_SETUP_LINKS = {
     createProject: `${CONSOLE}/projectcreate`,
     calendarApi: `${CONSOLE}/apis/library/calendar-json.googleapis.com`,
     authOverview: `${CONSOLE}/auth/overview`,
+    branding: `${CONSOLE}/auth/branding`,
     audience: `${CONSOLE}/auth/audience`,
+    verification: `${CONSOLE}/auth/verification`,
     createClient: `${CONSOLE}/auth/clients/create`,
 } as const;
 
@@ -31,6 +33,23 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
         <li>
             <strong className="text-foreground">{title}</strong> {children}
         </li>
+    );
+}
+
+/** ROK-1778: Publish app stays off until the Branding page is saved. */
+function BrandingStep() {
+    return (
+        <Step title="Fill in the Branding page.">
+            Publish stays off until this page is saved. Open{' '}
+            <ExtLink href={GOOGLE_SETUP_LINKS.branding}>Branding</ExtLink>. For User support email, pick your
+            email. <strong>Skip the App logo: adding one sends your branding to Google for review.</strong> Under
+            App domain, paste the <strong>Google JavaScript origin</strong> shown below (your Raid Ledger
+            address) into Application home page, and the <strong>Privacy policy link</strong> shown below into
+            Application privacy policy link; leave the terms of service link empty. Under Authorized domains
+            click <strong>Add domain</strong> and enter your site&apos;s domain without https:// (for
+            raid.example.com, enter example.com). Enter your email as the developer contact and
+            click <strong>Save</strong>.
+        </Step>
     );
 }
 
@@ -51,10 +70,11 @@ function GoogleProjectSteps() {
                 click <strong>Get started</strong>. Enter &quot;Raid Ledger&quot; as the app name and your
                 email where it asks, choose <strong>External</strong>, agree, and click <strong>Create</strong>.
             </Step>
-            <Step title="Add the people who can connect.">
+            <BrandingStep />
+            <Step title="Let any member connect.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.audience}>Audience</ExtLink>, click{' '}
-                <strong>Add users</strong> under Test users, and enter the Google email of every member
-                who will connect a calendar, yourself included (up to 100).
+                <strong>Publish app</strong> and confirm. Members then connect their own calendars: there
+                is no list of emails to keep.
             </Step>
         </>
     );
@@ -65,9 +85,11 @@ function GoogleClientSteps() {
         <>
             <Step title="Create the OAuth client.">
                 Open <ExtLink href={GOOGLE_SETUP_LINKS.createClient}>Create OAuth client</ExtLink>. Set
-                Application type to <strong>Web application</strong>. Under Authorized redirect URIs click{' '}
-                <strong>Add URI</strong>, paste the <strong>Google redirect URI</strong> shown below (click
-                it to copy), then click <strong>Create</strong>.
+                Application type to <strong>Web application</strong>. Under Authorized JavaScript origins click{' '}
+                <strong>Add URI</strong> and paste the <strong>Google JavaScript origin</strong> shown below.
+                Under Authorized redirect URIs click <strong>Add URI</strong> and paste the{' '}
+                <strong>Google redirect URI</strong> shown below (click either to copy). Then click{' '}
+                <strong>Create</strong>.
             </Step>
             <Step title="Paste the keys here.">
                 Google shows a <strong>Client ID</strong> and a <strong>Client secret</strong>. Copy each
@@ -98,11 +120,14 @@ export function CalendarSyncInstructions() {
                 <GoogleProjectSteps />
                 <GoogleClientSteps />
             </ol>
-            <p className="text-xs text-muted">
-                <strong className="text-secondary">Good to know:</strong> while the Google app is in Testing,
-                only the people added in step 4 can connect, and Google asks them to reconnect every 7 days.
-                To lift both limits, click <strong>Publish app</strong> on the Audience page. Google may ask
-                you to verify the app first, because it writes to members&apos; calendars.
+            <p className="text-xs text-muted" data-testid="calendar-sync-unverified-note">
+                <strong className="text-secondary">Good to know:</strong> until Google verifies your app,
+                members see a &quot;Google hasn&apos;t verified this app&quot; screen when they connect. It
+                appears because the app is your own rather than one Google has reviewed: they click{' '}
+                <strong>Advanced</strong>, then <strong>Go to Raid Ledger (unsafe)</strong>. An unverified app
+                can be connected by up to 100 people in total. To remove the screen and the limit, submit the
+                app from the <ExtLink href={GOOGLE_SETUP_LINKS.verification}>Verification Center</ExtLink>;
+                Google asks for your site&apos;s domain and the privacy policy link above, and review can take a few weeks.
             </p>
         </div>
     );

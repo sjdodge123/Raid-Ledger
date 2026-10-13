@@ -19,7 +19,7 @@ vi.mock('../../hooks/use-branding', () => ({
     useBranding: () => ({
         brandingQuery: {
             isLoading: false,
-            data: { communityName: 'Night Raiders', communityLogoUrl: null },
+            data: { communityName: 'Night Raiders', communityLogoUrl: null, privacyContactEmail: null },
         },
         ...mocks,
     }),
@@ -41,6 +41,25 @@ describe('BrandingSection — community name', () => {
         expect(input).toHaveValue('Night Raiders');
         expect(input).toHaveAttribute('maxLength', '60');
         expect(input).toHaveAccessibleDescription('13/60');
+    });
+});
+
+describe('BrandingSection — privacy contact email (ROK-1778)', () => {
+    it('is an email field with the /privacy hint, saved on its own', async () => {
+        const user = userEvent.setup();
+        render(<BrandingSection />);
+        const input = screen.getByRole('textbox', { name: 'Privacy contact email' });
+        expect(input).toHaveValue('');
+        expect(input).toHaveAttribute('type', 'email');
+        expect(input).toHaveAccessibleDescription(
+            'Shown on your public privacy page (/privacy). Leave empty to tell members to ask an admin in Discord.',
+        );
+
+        await user.type(input, ' privacy@guild.example ');
+        await user.click(screen.getByRole('button', { name: 'Save Changes' }));
+
+        expect(mocks.updateBranding.mutate).toHaveBeenCalledTimes(1);
+        expect(mocks.updateBranding.mutate.mock.calls[0]?.[0]).toEqual({ privacyContactEmail: 'privacy@guild.example' });
     });
 });
 

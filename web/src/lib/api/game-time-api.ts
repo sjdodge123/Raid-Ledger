@@ -90,6 +90,17 @@ export async function deleteGameTimeAbsence(
 }
 
 /**
+ * Ignore a synced calendar absence (ROK-1593/1595 S1) → 204. A manual one is
+ * 409 `not_calendar`; a missing or foreign id is 404. Synced rows are never
+ * deleted: a later sync would only re-derive them.
+ */
+export async function ignoreAbsence(id: number): Promise<void> {
+    await fetchApi(`/users/me/game-time/absences/${id}/ignore`, {
+        method: 'POST',
+    });
+}
+
+/**
  * List current + future absences for the current user (ROK-1427).
  * Sends the browser timezone offset so "expired" is evaluated in the user's
  * local day, not raw UTC.

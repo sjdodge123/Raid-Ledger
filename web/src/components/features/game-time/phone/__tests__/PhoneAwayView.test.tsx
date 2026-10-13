@@ -15,7 +15,9 @@ vi.mock('../../../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: m.mutateAsync, mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutate: vi.fn(), isPending: false }),
     useGameTimeAbsences: () => ({ data: m.absences }),
+    useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
+vi.mock('../../../../../hooks/use-calendar-sync', () => ({ useCalendarsOverview: () => ({ data: undefined }) }));
 vi.mock('../../../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 beforeEach(() => {

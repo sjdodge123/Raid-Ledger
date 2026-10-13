@@ -21,8 +21,10 @@ vi.mock('../lib/api-client', async (importOriginal) => ({
 }));
 
 import {
-    COPY_POLL_MAX_MS, COPY_POLL_MS, copyPollInterval, useCalendarsOverview, useEventCalendarCopy, useUpdateConnection,
+    COPY_POLL_MAX_MS, COPY_POLL_MS, copyPollInterval, useCalendarsOverview, useDisconnectCalendar, useEventCalendarCopy,
+    useUpdateConnection,
 } from './use-calendar-sync';
+import { GAME_TIME_ABSENCES_KEY, GAME_TIME_QUERY_KEY } from './use-game-time';
 import { useCancelSignup, useSignup } from './use-signups';
 
 function wrapper({ children }: { children: ReactNode }) {
@@ -116,5 +118,20 @@ describe('useUpdateConnection', () => {
         expect(result.current.update.isPending, 'mutation settled before the refetch landed').toBe(true);
         releaseRefetch();
         await waitFor(() => expect(result.current.update.isSuccess).toBe(true));
+    });
+});
+
+describe('useDisconnectCalendar', () => {
+    it('refreshes game time and absences, so busy hours and synced away days leave the screen (ROK-1595)', async () => {
+        server.use(http.delete(`${API_BASE}/users/me/calendars/:id`, () => new HttpResponse(null, { status: 204 })));
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+        const invalidate = vi.spyOn(client, 'invalidateQueries');
+        const own = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client }, children);
+        const { result } = renderHook(() => useDisconnectCalendar(), { wrapper: own });
+        result.current.mutate(7);
+        await waitFor(() => expect(result.current.isSuccess).toBe(true));
+        const keys = invalidate.mock.calls.map(([filters]) => filters?.queryKey);
+        expect(keys).toContainEqual(GAME_TIME_QUERY_KEY);
+        expect(keys).toContainEqual(GAME_TIME_ABSENCES_KEY);
     });
 });

@@ -68,13 +68,13 @@ export const BASELINE_KB = {
 const LAZY_NAMED = [
   { name: 'CategoricalChart', kb: 75.37, why: 'recharts core, shared by every chart' },
   { name: 'SocialGraphCanvas', kb: 56.55, why: 'react-force-graph-2d (insights)' },
-  { name: 'use-auth', kb: 43.0, why: 'shared app core, modulepreloaded; +0.9 KB ROK-1754 in-memory token store, boot gate, cross-tab auth, nativeFetch' },
+  { name: 'use-auth', kb: 44.0, why: 'shared app core, modulepreloaded; +0.9 KB ROK-1754 in-memory token store, boot gate, cross-tab auth, nativeFetch; +1.0 KB ROK-121 Pelican plugin registration (pelican.schema in the contract barrel)' },
   { name: 'lineup-detail-page', kb: 27.51, why: 'route' },
   { name: 'BarChart', kb: 26.64, why: 'recharts bar chart' },
   { name: 'games-page', kb: 19.7, why: 'route' },
   { name: 'scheduling-poll-page', kb: 16.29, why: 'route' },
   { name: 'SchedulingWireframesPage', kb: 16.18, why: 'DEMO_MODE dev route' },
-  { name: 'DesignSystemPage', kb: 15.44, why: 'DEMO_MODE dev route' },
+  { name: 'DesignSystemPage', kb: 15.7, why: 'DEMO_MODE dev route; +0.26 KB ROK-1595 busy band, radio cards, away rows (their components are already shared chunks, so a lazy split measured +0.2 KB, not less)' },
   { name: 'SimplifyWireframesPage', kb: 14.61, why: 'DEMO_MODE dev route' },
   {
     pattern: /^chunk-[A-Z0-9]{8}$/,

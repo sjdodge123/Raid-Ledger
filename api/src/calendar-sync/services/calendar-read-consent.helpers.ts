@@ -7,6 +7,7 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import type { CalendarOAuthIntent } from '@raid-ledger/contract';
 import type { CalendarProviderKey } from '../providers/calendar-provider.interface';
 import { hasGoogleReadScopes } from '../providers/google/google-oauth.helpers';
 
@@ -35,4 +36,32 @@ export async function applyReadConsent(
     .set({ readAccessGranted: true, readEnabled: true, updatedAt: new Date() })
     .where(eq(conn.id, connectionId));
   return 'read';
+}
+
+export interface FirstConnectReadInput {
+  intent: CalendarOAuthIntent;
+  /** The upsert inserted the row (first connect), not a reconnect. */
+  created: boolean;
+  connectionId: number;
+  provider: CalendarProviderKey;
+  grantedScopes: readonly string[];
+}
+
+/**
+ * ROK-1595 G-3 (operator ruling Q-A): the connect consent now asks for the
+ * read scopes, so a FIRST connect whose grant carries them turns read on
+ * (`applyReadConsent`: read flags only, write settings never touched). A
+ * reconnect keeps the user's read choice — the upsert has already
+ * recomputed `read_access_granted` — and a grant without the read boxes
+ * stays write-only. `intent=read` is `applyConsentIntent`'s own branch.
+ * Answers whether read was turned on (the caller queues the first sync).
+ */
+export async function applyFirstConnectRead(
+  db: Db,
+  input: FirstConnectReadInput,
+): Promise<boolean> {
+  if (input.intent === 'read' || !input.created) return false;
+  if (!grantAllowsRead(input.provider, input.grantedScopes)) return false;
+  await applyReadConsent(db, input.connectionId);
+  return true;
 }

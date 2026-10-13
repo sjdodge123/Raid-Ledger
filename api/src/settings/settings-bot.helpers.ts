@@ -78,11 +78,16 @@ export async function bothExist(
 
 /** Get community branding settings. */
 export async function getBranding(svc: SettingsCore): Promise<BrandingConfig> {
-  const [name, logo] = await Promise.all([
+  const [name, logo, privacyEmail] = await Promise.all([
     svc.get(SETTING_KEYS.COMMUNITY_NAME),
     svc.get(SETTING_KEYS.COMMUNITY_LOGO_PATH),
+    svc.get(SETTING_KEYS.PRIVACY_CONTACT_EMAIL),
   ]);
-  return { communityName: name, communityLogoPath: logo };
+  return {
+    communityName: name,
+    communityLogoPath: logo,
+    privacyContactEmail: privacyEmail,
+  };
 }
 
 /**
@@ -94,6 +99,7 @@ export async function clearBranding(svc: SettingsCore): Promise<void> {
   await Promise.all([
     svc.delete(SETTING_KEYS.COMMUNITY_NAME),
     svc.delete(SETTING_KEYS.COMMUNITY_LOGO_PATH),
+    svc.delete(SETTING_KEYS.PRIVACY_CONTACT_EMAIL),
     svc.delete(SETTING_KEYS.COMMUNITY_ACCENT_COLOR),
   ]);
 }

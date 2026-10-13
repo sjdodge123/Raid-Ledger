@@ -112,6 +112,7 @@ export {
     confirmMyGameTime,
     createGameTimeAbsence,
     deleteGameTimeAbsence,
+    ignoreAbsence,
     getGameTimeAbsences,
 } from './api/game-time-api';
 

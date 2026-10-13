@@ -18,6 +18,10 @@ import * as fs from 'fs';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { bestEffortInit } from '../common/lifecycle.util';
+import {
+  parsePrivacyContactEmail,
+  savePrivacyContactEmail,
+} from './branding-privacy.helpers';
 
 /** Allowed MIME types and their magic bytes for logo validation */
 const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
@@ -141,6 +145,7 @@ export class BrandingController implements OnModuleInit {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : null,
+      privacyContactEmail: branding.privacyContactEmail ?? null,
     };
   }
 
@@ -151,13 +156,26 @@ export class BrandingController implements OnModuleInit {
    */
   @Patch()
   @UseGuards(AuthGuard('jwt'), AdminGuard)
-  async updateBranding(@Body() body: { communityName?: string }) {
+  async updateBranding(
+    @Body() body: { communityName?: string; privacyContactEmail?: unknown },
+  ) {
+    // Validate every field before writing any, so a 400 never leaves a partial save.
+    if (body.privacyContactEmail !== undefined) {
+      parsePrivacyContactEmail(body.privacyContactEmail);
+    }
     if (body.communityName !== undefined) {
       const trimmed = body.communityName.trim();
       if (trimmed.length === 0 || trimmed.length > 60) {
         throw new BadRequestException('Community name must be 1-60 characters');
       }
       await this.settingsService.setCommunityName(trimmed);
+    }
+    // ROK-1778: '' / null clears it; anything else must be a valid email.
+    if (body.privacyContactEmail !== undefined) {
+      await savePrivacyContactEmail(
+        this.settingsService,
+        body.privacyContactEmail,
+      );
     }
 
     this.logger.log('Branding settings updated');
@@ -226,6 +244,10 @@ export class BrandingController implements OnModuleInit {
     await this.settingsService.clearBranding();
     this.logger.log('Branding reset to defaults');
 
-    return { communityName: null, communityLogoUrl: null };
+    return {
+      communityName: null,
+      communityLogoUrl: null,
+      privacyContactEmail: null,
+    };
   }
 }

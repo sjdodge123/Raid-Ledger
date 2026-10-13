@@ -300,7 +300,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `radio-group.tsx` → `RadioGroup` (ROK-1646) | Native radios sharing one `name` in a `<fieldset role="radiogroup">` named by its legend — the browser's Tab/arrow model. `list`: a 44px row per option. `segmented`: `sr-only` radios in a `bg-panel border-edge rounded-lg` track, ON = `bg-overlay border-success text-foreground`, OFF = `text-muted` on a `border-transparent` (no shift); the full-strength `success` border is the ON indicator (WCAG 1.4.11: ≥4.06:1 on `bg-panel` in all 15 themes — `bg-overlay` alone is 1.13:1 in default-light, ROK-1688); the focus ring sits on `ring-offset-2 ring-offset-panel` so focused-and-ON shows two edges; the track `flex-wrap`s, so a set wider than its container takes a second row instead of overflowing it. | One choice from 2–6 options. `segmented` for short pill toggles (duration picker, import mode, scope) — never buttons with no radio semantics. A filter with an "All" option maps a sentinel value to `null` (§4.11) | `label`, `hideLabel`, `options: {value,label,description?,disabled?}[]`, `value`, `onChange(value)`, `appearance` `'list'` (default) / `'segmented'`, `name`, `disabled`, `className`, `invalid`, `error` (inline `role="alert"`), `aria-describedby` — merged with a surrounding `Field`; `aria-invalid` sits on the radiogroup; ref → the `<fieldset>` |
 | `slider.tsx` → `Slider` (ROK-1646) | Labelled native range, `appearance-none` so the thumb sizing applies: label left, a 44px (`h-11`) hit area over a 6px `bg-edge` track filled in `success` to the value, a 20px `bg-success` thumb, `font-mono` `<output aria-live="off">` readout right. Replaces the duplicated `SLIDER_CLS`. | Any bounded numeric filter/threshold — and every sibling in that filter family (§4.11 DON'T) | `label`, `hideLabel`, `value: number`, `onChange(number)`, `min`/`max`/`step`, `formatValue` (readout + `aria-valuetext`), `showValue` (default true), `wrapperClassName`, ref → the input. Renders its own label — don't wrap it in `Field` |
 | `search-input.tsx` → `SearchInput` (ROK-1646) | `Input` with `type="search"` (role `searchbox`), a decorative leading magnifier, and — while there is text — a 44px `Button ghost iconOnly` named "Clear search" (the `sm` Button on `fieldSize="sm"`, so it fits the 36px frame from `lg`) that empties the box, refocuses it and fires `onSearch('')` at once. The browser's own cancel glyph is hidden. | Every search/filter text box — list pages, picker modals, toolbars. Replaces `ModalSearchInput` (migration: ROK-1647) | `value`, `onChange(string)`, `label` (→ `aria-label`; omit inside `Field`), `onSearch` (debounced, never on mount), `debounceMs` (default 300), `onClear`, plus `Input` props (`fieldSize`, `invalid`, …), forwarded ref |
-| `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` (ref forwarded) with `role="combobox"` / `aria-expanded` / `aria-controls` (only while open) / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` at `Z_INDEX.MODAL + 1`, portalled into the surrounding `[role="dialog"]` (so `aria-modal` doesn't hide it) or else `<body>`. Keys are ignored during IME composition; an external reset of `value` to `null` clears the text; one persistent `role="status"` region announces loading / empty / error. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select`. Free-text adopter: the realm picker (`plugins/wow/components/realm-autocomplete.tsx`, ROK-1654) passes `inputValue` + `onInputChange` so a typed realm that isn't in the list still reaches the parent, and `value` = the option whose name matches the text exactly (else `null`) | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `portalContainer` (overrides the portal target), `className`, `trailing` (interactive slot at the input's right edge, e.g. a 44px clear `Button ghost iconOnly`), `openOnFocus` (open on focus with nothing highlighted, to offer suggestions before typing), `testIds` (`{ input, popup, option }` → `data-testid` on the input, the popup and every `role="option"` row) |
+| `combobox.tsx` → `Combobox` (+ `use-combobox.ts`, `use-anchored-popup.ts`, `combobox-popup.tsx`) (ROK-1646) | **The** autocomplete, in-house WAI-ARIA 1.2: an `Input` (ref forwarded) with `role="combobox"` / `aria-expanded` / `aria-controls` (only while open) / `aria-activedescendant` (focus never leaves it) and a `role="listbox"` at `Z_INDEX.MODAL + 1`, portalled into the surrounding `[role="dialog"]` (so `aria-modal` doesn't hide it) or else `<body>`. Keys are ignored during IME composition; an external reset of `value` to `null` clears the text; one persistent `role="status"` region announces loading / empty / error. Keys: ↑/↓ open then move (wrapping), Home/End jump, Enter picks, Esc closes (a second Esc clears text + value), Tab commits the active option. Closes on an outside press; keeps the active row in view. | Type-to-pick from a long or async list (game search, realm). A short fixed list is a `Select`. Free-text adopter: the realm picker (`plugins/wow/components/realm-autocomplete.tsx`, ROK-1654) passes `inputValue` + `onInputChange` so a typed realm that isn't in the list still reaches the parent, and `value` = the option whose name matches the text exactly (else `null`). The Pelican default-timezone picker (`plugins/pelican/slots/pelican-timezone-field.tsx`, ROK-121) is the same controlled-text shape over every IANA zone, curated zones first, with `openOnFocus` | `options`, `getKey`, `getLabel`, `value`, `onChange(option \| null)`, `label` (or `Field`, which also names the listbox), `inputValue` + `onInputChange` (controlled text; omit to let it own the text), `renderOption(option, { active, selected })`, `loading` + `loadingText`, `emptyText` (default "No results"), `errorText`, `placeholder`, `disabled`, `invalid`, `fieldSize`, `portalContainer` (overrides the portal target), `className`, `trailing` (interactive slot at the input's right edge, e.g. a 44px clear `Button ghost iconOnly`), `openOnFocus` (open on focus with nothing highlighted, to offer suggestions before typing), `testIds` (`{ input, popup, option }` → `data-testid` on the input, the popup and every `role="option"` row) |
 | `file-picker.tsx` → `FilePicker` (ROK-1655) | A `Button` (default `secondary`) that opens a hidden native `<input type="file" tabIndex={-1}>`. The input's value resets after every pick, so the same file fires twice; `loading` / `disabled` disable both. | Every file upload (avatar, logo, import). Plan ruling 1: a primitive, not a guard exemption for a raw `<input type="file">` | `children` (the trigger's name), `onFiles(File[])` (never empty), `accept`, `multiple`, `loading` + `loadingLabel`, `disabled`, `variant`, `size`, `fullWidth`, `className`, `inputProps` (e.g. `data-testid`), ref → the native input (a drop zone calls `ref.current.click()`) |
 | `color-input.tsx` → `ColorInput` (ROK-1655) | A native `<input type="color">` well (44px, `rounded-lg border-edge`, the shared focus ring) named "<label> colour picker", beside a `mono` hex `Input`. The hex field keeps a draft: only a complete `#rrggbb` is reported (lowercased); anything else is `aria-invalid` and reverts on blur. Controlled only. | Any user-chosen colour — the value is caller data, never a theme colour. **No production caller since TDB:991** removed the community accent (BrandingSection was the only one); kept as the inventory primitive (demoed in `/dev/design-system` Forms) for the next user-chosen colour rather than re-invented | `value` (`#rrggbb`), `onChange(hex)`, `label`, `disabled`, `invalid`. Inside a `Field` the hex field takes the Field's id / label / hint / error |
 | `form-classes.ts` → `FIELD_FRAME`, `FIELD_FRAME_BASE`, `FIELD_PAD`, `FOCUS_RING`, `DISABLED` (ROK-1646) | The class strings the form primitives share | Building the next form primitive (`Select`, `Textarea`, `SearchInput`…) — never re-type the frame | — |
@@ -690,6 +690,16 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   `flex-nowrap` or a fixed width. Segments never shrink below their longest word, so when a wrapped row would
   read badly, switch to `appearance="list"` below `sm` with `useMediaQuery('(min-width: 640px)')` (FeedbackDialog's
   four categories need ~327px against ~287px) rather than a sideways-scrolling row.
+- **Radio cards are the list `RadioGroup` in a grid, not a new control** (ROK-1595 K4 read mode, NP-2). When a
+  2–4 option choice needs room for a sentence each on desktop, keep `appearance="list"` and style the group
+  from outside: `[&>div]:grid [&>div]:grid-cols-3 [&>div]:gap-3`, each option a card via
+  `[&_label]:rounded-lg [&_label]:border [&_label]:border-edge [&_label]:bg-panel [&_label]:px-3`, and the
+  chosen card marked `[&_label:has(:checked)]:border-success` (the same full-strength ON edge as the segmented
+  toggle). The native radio stays visible, so the card is never the only state cue. To show "none chosen"
+  (e.g. reading turned off), widen the value type with a sentinel that has no option (`'off'`). Reference:
+  `CalendarReadRules.tsx` `DesktopCards`, classes in `calendar-sync/radio-cards.classes.ts` (`RADIO_CARDS`);
+  `SendEventsSettings` uses the same grid without the card edges. Rendered: `/dev/design-system` → *Pattern —
+  own-calendar busy band and radio cards*.
 - **Sliders are `Slider`**: `appearance-none` with a painted `bg-edge` track, `success` fill and 20px thumb in a
   44px hit area, a `font-medium` label left and a `font-mono` readout right (`aria-live="off"`);
   `formatValue` doubles as `aria-valuetext`.
@@ -717,7 +727,9 @@ disabled:cursor-not-allowed`, and `aria-[invalid=true]:border-danger`.
   Test Permissions (Discord Bot) and Set as Active (AI providers). No per-integration `ringColor` or `*_RING`
   constant remains.
 - **Write-only secrets with a saved state** (Calendar Sync client secrets, ROK-1591; the row is
-  `components/admin/saved-secret-status.tsx` → `SavedSecretStatus`, used by `CalendarSyncForm.tsx`):
+  `components/admin/saved-secret-status.tsx` → `SavedSecretStatus`, used by `CalendarSyncForm.tsx` and the
+  Pelican panel's client API key, `plugins/pelican/slots/pelican-connection-form.tsx`, ROK-121 — whose read
+  shape carries only `apiKeySet`, never the key):
   the `PasswordInput` is never prefilled. Under it, a saved secret shows a `Saved` chip (the §4.21 success
   tone, tokens only: `rounded-full border border-success/30 bg-success/10 text-success text-xs`) and a ghost
   `sm` "Remove saved secret" `Button`; pressing it swaps the row to a `text-warning` "will be removed when you
@@ -878,10 +890,23 @@ seven-day-at-a-glance picker. Each day is **three bands** (`STRIP_BANDS` — day
   (`absolute inset-y-0 right-0 w-[30%]`, `:217-220`), on solid and two-tone bars alike — not a
   full-height overlay, not a dot.
 
+- **Away tile (ROK-1585, ROK-1595).** An away day replaces its bars with the 19px "away" word on a
+  dashed `border-edge-strong` tile (`bg-overlay/40`). A day away only because of a **synced calendar** is
+  the quiet variant — the same dashed border on **no fill** (`bg-transparent`) with an 8px calendar glyph
+  stacked over the word, `data-away-source="calendar"`, aria "…, away from calendar". Feed it
+  `awaySourcesOfWeek` (`phone/away-days.ts`); a plain `Set` still means manual. Manual wins when both cover a day.
+
 **DON'T** introduce a second colour language for the same data, hand-write an rgba gradient (the maps are
 exported for reuse), or change one map without the other.
 
-Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`).
+**Synced away rows (ROK-1595 S1).** In the "I'm away" list (`away/AwayUpcomingList.tsx`), calendar-derived
+rows sit under a `border-edge-subtle` hairline reading "From your calendars" (left, `text-muted`) ·
+"Synced N min ago" (right, `text-dim`), and are **quiet**: `border-edge-subtle bg-transparent` with a
+`font-medium text-muted` title, versus the manual row's `border-edge bg-panel` + `font-semibold
+text-foreground`. Their action is **Ignore** (`text-muted`), never Remove.
+
+Rendered: `/dev/design-system` → *Pattern — week strip* (`web/src/dev/design-system/week-strip-section.tsx`) — the
+*Away tiles* frame (strip) and the *Away rows* frame (the real `AwayUpcomingList`, one manual + one synced row).
 
 ### 4.16 Busy marker + label grammar
 
@@ -897,11 +922,27 @@ The label is a **count clause**, never a standalone badge: the busy part is appe
 `grid-cell.utils.ts:84-99`) and rendered in `<b className="font-medium text-busy">` beside the foreground
 free count (`GroupWeekCell.tsx:27`, `GroupDayView.tsx:196`). It reads `2 free · 1 busy`.
 
-**DON'T** paint a busy hour purple, drop the clause into a pill, or hand-write another `before:` edge.
+**DON'T** paint a busy hour purple **in a group view** (the poll heatmap, the group week, the group day), drop
+the clause into a pill, or hand-write another `before:` edge. The one exception is the viewer's OWN grid,
+below (operator ruling F-1, ROK-1595).
 Known drift: `GroupDayView.tsx:149` still declares a local `BUSY_EDGE` identical to `BUSY_EDGE_5` instead
 of importing it — reuse the export when you next touch that file.
 
 Rendered: `/dev/design-system` → *Pattern — group marks and legend* (`web/src/dev/design-system/group-marks-section.tsx`).
+
+**Own-calendar busy band (NP-1, ROK-1595 S2).** On the viewer's OWN game-time grid (phone `DayBlockEditor`,
+desktop `GameTimeGrid` via `GridOverlayLayer`), each `calendarBusy` range from their synced calendar is a
+**band**, not an edge: `CalendarBusyLayer.tsx` draws a translucent `bg-busy/30` fill (spec F-1; 30% per operator R4, 2026-10-13) — only on hours inside the viewer's game time (`busyInsideGameTime`, operator R5) — with a `border-l-4
+border-busy` edge and the label "Busy · Google Calendar" (`busyBandLabel`, provider name from
+`PROVIDER_CALENDAR_NAME`). It sits above the slot blocks (`z-[9]`, over `SlotBlockLayer`'s `z-[8]`) so it reads
+over a free block, and is `pointer-events-none` throughout so editing is untouched. Positions come from the
+visible-hours index (`busyRunsForDays` in `calendar-busy.utils.ts`), so a window that wraps past midnight
+lines up; `dayOfWeek` is the display convention (0 = Sunday). The day header appends the same count clause
+grammar as above: `DayPager` reads `3h free · 1h busy` with ` · Nh busy` in `text-busy`. Why a fill here and
+an edge in group views: the group edge says "someone else is committed", layered over a heat fill that must
+stay readable; on your own grid there is no heat fill, and the band IS the information. Render exactly what
+`calendarBusy` says; own-copy dedupe is server-side. Rendered: `/dev/design-system` → *Pattern — own-calendar
+busy band and radio cards* (`calendar-busy-section.tsx`).
 
 ### 4.17 The hours window
 

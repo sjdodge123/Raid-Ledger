@@ -276,6 +276,7 @@ function describeSystemController() {
       expect(result).toEqual({
         communityName: 'My Guild',
         communityLogoUrl: null,
+        privacyContactEmail: null,
       });
     });
 

@@ -1,5 +1,8 @@
 import type { CSSProperties, JSX } from 'react';
+import { CalendarIcon } from '@heroicons/react/24/solid';
 import type { GameTimeSlot } from '@raid-ledger/contract';
+import type { AwaySource } from '../away/away-row.types';
+import { awaySourceOf, type AwayDays } from './away-days';
 import { FULL_DAYS } from '../game-time-grid.utils';
 import {
     bandKind, bandShares, dayStripLabel, freeHourCount, STRIP_BANDS, type StripBand,
@@ -50,9 +53,10 @@ interface WeekStripProps {
     groupBands?: GroupBandShare[][] | undefined;
     /**
      * Days of the week the viewer is away (ROK-1585, Q1) — from
-     * `awayDaysOfWeek`. Each reads as a dashed "away" tile; ignored in group mode.
+     * `awayDaysOfWeek`, or `awaySourcesOfWeek` (ROK-1595) so a synced day reads
+     * in the calendar style. Each reads as a dashed "away" tile; ignored in group mode.
      */
-    awayDays?: ReadonlySet<number> | undefined;
+    awayDays?: AwayDays | undefined;
     /**
      * GROUP mode (ROK-1587): poll slots starting on each day of the displayed
      * week, index 0 = Sunday — from `slotCountsByDay`. Read only with `groupBands`.
@@ -67,11 +71,12 @@ function votesClause(count: number): string {
 }
 
 /** The accessible name of one strip column, whichever mode it is in. */
-function columnLabel(props: WeekStripProps, d: number, away: boolean): string {
+function columnLabel(props: WeekStripProps, d: number, awaySource: AwaySource | null): string {
     const { slots, hours, groupBands, groupVotes } = props;
     if (groupBands) return groupStripLabel(d, groupBands[d] ?? []) + votesClause(groupVotes?.[d] ?? 0);
     const label = dayStripLabel(d, freeHourCount(slots, d, hours));
-    return away ? `${label}, away` : label;
+    if (awaySource === 'calendar') return `${label}, away from calendar`;
+    return awaySource ? `${label}, away` : label;
 }
 
 /**
@@ -92,14 +97,14 @@ export function WeekStrip(props: WeekStripProps): JSX.Element {
         <div className="grid flex-none grid-cols-7 gap-1 pt-2" data-testid="phone-week-strip">
             {FULL_DAYS.map((name, d) => {
                 // Away is the viewer's own fact — the group's week never shows it.
-                const away = !groupBands && Boolean(awayDays?.has(d));
+                const awaySource = groupBands ? null : awaySourceOf(awayDays, d);
                 return (
                     <StripColumn
                         key={name}
                         dayOfWeek={d}
                         active={d === day}
-                        away={away}
-                        label={columnLabel(props, d, away)}
+                        awaySource={awaySource}
+                        label={columnLabel(props, d, awaySource)}
                         bars={groupBands ? groupBars(groupBands[d] ?? []) : viewerBars(slots, d)}
                         votes={groupBands ? (groupVotes?.[d] ?? 0) : undefined}
                         onPick={onPick}
@@ -114,20 +119,25 @@ export function WeekStrip(props: WeekStripProps): JSX.Element {
  * The column's border + fill. Only `border-*` / `bg-*` classes may differ
  * between columns (ROK-1579: every column is the same size). An away day is
  * dashed; a selected away day keeps the selected colours on the dashed border.
+ * A synced (calendar) away day is the quiet variant (ROK-1595 S2, F-6): the
+ * same dashed border on no fill, like the quiet synced rows in the away list.
  */
-function columnTone(active: boolean, away: boolean): string {
-    if (active) return `${away ? 'border-dashed ' : ''}border-success bg-success/10`;
-    return away ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
+function columnTone(active: boolean, awaySource: AwaySource | null): string {
+    const dashed = awaySource ? 'border-dashed ' : '';
+    if (active) return `${dashed}border-success bg-success/10`;
+    if (awaySource === 'calendar') return 'border-dashed border-edge-strong bg-transparent';
+    return awaySource ? 'border-dashed border-edge-strong bg-overlay/40' : 'border-edge bg-panel';
 }
 
 /**
  * One day's column: its three band bars (or the "away" label), its letter and,
  * in group mode, the "● N" vote marker under the letter (`votes` given).
  */
-function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
-    dayOfWeek: number; active: boolean; away: boolean; label: string; bars: BarSpec[];
+function StripColumn({ dayOfWeek, active, awaySource, label, bars, votes, onPick }: {
+    dayOfWeek: number; active: boolean; awaySource: AwaySource | null; label: string; bars: BarSpec[];
     votes?: number | undefined; onPick: (dayOfWeek: number) => void;
 }): JSX.Element {
+    const away = awaySource !== null;
     return (
         <button
             type="button"
@@ -136,9 +146,10 @@ function StripColumn({ dayOfWeek, active, away, label, bars, votes, onPick }: {
             onClick={() => onPick(dayOfWeek)}
             data-testid={`phone-week-strip-day-${dayOfWeek}`}
             data-away={away ? 'true' : undefined}
-            className={`flex flex-col gap-0.5 rounded-md border p-1 ${columnTone(active, away)}`}
+            data-away-source={awaySource ?? undefined}
+            className={`flex flex-col gap-0.5 rounded-md border p-1 ${columnTone(active, awaySource)}`}
         >
-            {away ? <AwayLabel /> : STRIP_BANDS.map((band, i) => (
+            {away ? <AwayLabel calendar={awaySource === 'calendar'} /> : STRIP_BANDS.map((band, i) => (
                 <BandBar
                     key={band.id}
                     band={band}
@@ -174,15 +185,16 @@ function VotesMarker({ votes }: { votes: number }): JSX.Element {
 /**
  * The word that stands in for an away day's three bars (ROK-1585 artboard).
  * 19px tall — three 5px bars plus two 2px gaps — so the tile keeps the height of
- * its neighbours.
+ * its neighbours. A synced day (ROK-1595 S2) stacks an 8px calendar glyph over
+ * a 9px word plus a 2px gap: still 19px, and no wider than the word.
  */
-function AwayLabel(): JSX.Element {
+function AwayLabel({ calendar }: { calendar: boolean }): JSX.Element {
+    const word = 'block text-center text-[9px] font-semibold uppercase text-muted';
+    if (!calendar) return <span data-testid="phone-week-strip-away" className={`${word} leading-[19px]`}>away</span>;
     return (
-        <span
-            data-testid="phone-week-strip-away"
-            className="block text-center text-[9px] font-semibold uppercase leading-[19px] text-muted"
-        >
-            away
+        <span data-testid="phone-week-strip-away" className="flex h-[19px] flex-col items-center gap-0.5">
+            <CalendarIcon data-testid="phone-week-strip-away-calendar" aria-hidden="true" className="h-2 w-2 shrink-0 text-muted" />
+            <span className={`${word} leading-[9px]`}>away</span>
         </span>
     );
 }
