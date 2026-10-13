@@ -21,3 +21,38 @@ export function jsonResponse(body: unknown, status = 200): Response {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+/** Fake server `n` for page builders: uuid, identifier and name derive from n. */
+export function fakeServer(n: number): {
+  uuid: string;
+  identifier: string;
+  name: string;
+} {
+  const hex = n.toString(16).padStart(8, '0');
+  return {
+    uuid: `${hex}-0000-4000-8000-${hex.padStart(12, '0')}`,
+    identifier: hex,
+    name: `Fake Server ${n}`,
+  };
+}
+
+/** A `GET /api/client` page body in Pelican's envelope. */
+export function serverPageBody(
+  servers: { uuid: string; identifier: string; name: string }[],
+  currentPage: number,
+  totalPages: number,
+): unknown {
+  return {
+    object: 'list',
+    data: servers.map((attributes) => ({ object: 'server', attributes })),
+    meta: {
+      pagination: {
+        total: servers.length,
+        count: servers.length,
+        per_page: 100,
+        current_page: currentPage,
+        total_pages: totalPages,
+      },
+    },
+  };
+}
