@@ -11,6 +11,10 @@ import { PelicanConfigService } from './pelican-config.service';
 import { PelicanClientFactory } from './pelican-client.factory';
 import { PelicanServersRepository } from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
+import { PelicanStatusService } from './pelican-status.service';
+import { PelicanCronRegistrar } from './pelican-cron.registrar';
+import { PelicanGameServerProvider } from './pelican-game-server.provider';
+import { PelicanAdapterRegistration } from './pelican-adapters';
 
 type UninstalledPayload = { slug: string };
 
@@ -26,8 +30,17 @@ type UninstalledPayload = { slug: string };
     PelicanClientFactory,
     PelicanServersRepository,
     PelicanSyncService,
+    PelicanStatusService,
+    PelicanCronRegistrar,
+    PelicanGameServerProvider,
+    PelicanAdapterRegistration,
   ],
-  exports: [PelicanClientFactory, PelicanServersRepository, PelicanSyncService],
+  exports: [
+    PelicanClientFactory,
+    PelicanServersRepository,
+    PelicanSyncService,
+    PelicanStatusService,
+  ],
 })
 export class PelicanModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PelicanModule.name);
