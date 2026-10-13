@@ -71,6 +71,31 @@ export interface FakeTaskSpec {
 }
 
 const FIXTURE_STAMP = '2025-12-01T12:00:00+00:00';
+/** Every fake schedule fires daily at 04:00. */
+const FAKE_CRON = {
+  day_of_week: '*',
+  day_of_month: '*',
+  month: '*',
+  hour: '4',
+  minute: '0',
+};
+
+function fakeTask(id: number, sequenceId: number, t: FakeTaskSpec): unknown {
+  return {
+    object: 'schedule_task',
+    attributes: {
+      id,
+      sequence_id: sequenceId,
+      action: t.action,
+      payload: t.payload,
+      time_offset: t.offset,
+      is_queued: false,
+      continue_on_failure: false,
+      created_at: FIXTURE_STAMP,
+      updated_at: FIXTURE_STAMP,
+    },
+  };
+}
 
 /**
  * A `server_schedule` list item in Pelican's envelope (ROK-1773). Tasks run
@@ -86,13 +111,7 @@ export function fakeSchedule(
     attributes: {
       id,
       name,
-      cron: {
-        day_of_week: '*',
-        day_of_month: '*',
-        month: '*',
-        hour: '4',
-        minute: '0',
-      },
+      cron: FAKE_CRON,
       is_active: true,
       is_processing: false,
       only_when_online: false,
@@ -103,20 +122,7 @@ export function fakeSchedule(
       relationships: {
         tasks: {
           object: 'list',
-          data: tasks.map((t, i) => ({
-            object: 'schedule_task',
-            attributes: {
-              id: id * 100 + i,
-              sequence_id: i + 1,
-              action: t.action,
-              payload: t.payload,
-              time_offset: t.offset,
-              is_queued: false,
-              continue_on_failure: false,
-              created_at: FIXTURE_STAMP,
-              updated_at: FIXTURE_STAMP,
-            },
-          })),
+          data: tasks.map((t, i) => fakeTask(id * 100 + i, i + 1, t)),
         },
       },
     },

@@ -98,10 +98,7 @@ async function schedules(panel: FakePanel, uuid: string): Promise<Response> {
   return jsonResponse(reply.body, reply.status);
 }
 
-async function route(
-  panel: FakePanel,
-  input: FetchArgs[0],
-): Promise<Response> {
+async function route(panel: FakePanel, input: FetchArgs[0]): Promise<Response> {
   const url = requestUrl(input);
   if (url.pathname === '/api/client') {
     return listingPage(panel, Number(url.searchParams.get('page') ?? '1'));
