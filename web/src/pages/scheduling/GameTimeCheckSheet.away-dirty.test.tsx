@@ -25,6 +25,7 @@ vi.mock('../../hooks/use-game-time', () => ({
   useCreateAbsence: () => ({ mutateAsync: m.mutateAsync, isPending: false }),
   useDeleteAbsence: () => ({ mutate: vi.fn(), isPending: false }),
   useGameTimeAbsences: () => ({ data: [] }),
+  useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 

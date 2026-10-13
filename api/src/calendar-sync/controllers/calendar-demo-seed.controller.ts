@@ -44,6 +44,7 @@ import {
 import {
   SeedBusySchema,
   seedDemoBusy,
+  type SeedBusyResult,
 } from './calendar-demo-seed-busy.helpers';
 
 const SeedConnectionSchema = z
@@ -109,12 +110,14 @@ export class CalendarDemoSeedController {
 
   /** Foreign busy blocks for one connection (+ the Fake), no queue. */
   @Post('seed-busy')
-  async seedBusy(@Body() body: unknown): Promise<{ inserted: number }> {
+  async seedBusy(@Body() body: unknown): Promise<SeedBusyResult> {
     const fake = await this.assertDemoMode();
     const input = parseDemoBody(SeedBusySchema, body ?? {});
-    return seedDemoBusy(this.db, fake, input, (u) =>
-      this.gameTime.invalidateUserCache(u),
-    );
+    return seedDemoBusy(this.db, fake, input, {
+      invalidateUser: (u) => this.gameTime.invalidateUserCache(u),
+      defaultTimezone: async () =>
+        (await this.settings.getDefaultTimezone()) ?? 'UTC',
+    });
   }
 
   /** Request-time gate, same checks as `DemoTestCoreController`. */

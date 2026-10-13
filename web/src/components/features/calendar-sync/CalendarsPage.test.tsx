@@ -94,7 +94,7 @@ describe('CalendarsPage — switch off / not configured / available', () => {
         try {
             useOverview(calendarsOverviewVariants.available);
             renderPage();
-            expect(await screen.findByText(C.lede)).toBeInTheDocument();
+            expect(await screen.findByText(C.ledeDesktop)).toBeInTheDocument(); // K4 lede from 1024px (ROK-1595)
             expect(screen.getByTestId('calendar-provider-google-hint')).toHaveTextContent(C.google.hint);
             fireEvent.click(screen.getByTestId('calendar-connect-google'));
             await waitFor(() => expect(assign).toHaveBeenCalledWith(GOOGLE_CONSENT_URL_FIXTURE));

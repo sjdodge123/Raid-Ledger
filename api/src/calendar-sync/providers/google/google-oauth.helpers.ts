@@ -29,7 +29,10 @@ export const GOOGLE_CONNECT_SCOPES = `openid email ${GOOGLE_CALENDAR_APP_CREATED
  */
 export const GOOGLE_EVENTS_SCOPE =
   'https://www.googleapis.com/auth/calendar.events';
-/** ROK-1593 D-R3: read busy blocks. Sensitive — requested only by `intent=read`. */
+/**
+ * ROK-1593 D-R3: read busy blocks. Sensitive. Requested by `intent=read`
+ * and, since ROK-1595 Q-A, at first connect too.
+ */
 export const GOOGLE_EVENTS_READONLY_SCOPE =
   'https://www.googleapis.com/auth/calendar.events.readonly';
 /** ROK-1593 D-R3: list the user's calendars (the read picker). */
@@ -103,15 +106,17 @@ export function buildGoogleAuthUrl(p: GoogleAuthUrlParams): string {
 }
 
 /**
- * The scope list for a consent intent: `primary` adds events (D8); `read`
- * is `openid email` + the read scopes (ROK-1593 D-R3) — the earlier grant
+ * The scope list for a consent intent: `connect` asks for the read scopes
+ * too (ROK-1595, operator ruling Q-A: read at first connect; unticking them
+ * still connects write-only); `primary` adds events (D8); `read` is
+ * `openid email` + the read scopes (ROK-1593 D-R3) — the earlier grant
  * rides along via `include_granted_scopes`.
  */
 export function googleScopesFor(intent: CalendarOAuthIntent): string[] {
   const scopes = GOOGLE_CONNECT_SCOPES.split(' ');
   if (intent === 'primary') return [...scopes, GOOGLE_EVENTS_SCOPE];
   if (intent === 'read') return ['openid', 'email', ...GOOGLE_READ_SCOPES];
-  return scopes;
+  return [...scopes, ...GOOGLE_READ_SCOPES];
 }
 
 /**

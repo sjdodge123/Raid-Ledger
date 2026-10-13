@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { GameTimeTemplateInput } from '@raid-ledger/contract';
-import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, confirmMyGameTime, createGameTimeAbsence, deleteGameTimeAbsence, getGameTimeAbsences } from '../lib/api-client';
+import type { GameTimeAbsence, GameTimeTemplateInput } from '@raid-ledger/contract';
+import { getMyGameTime, saveMyGameTime, saveMyGameTimeOverrides, confirmMyGameTime, createGameTimeAbsence, deleteGameTimeAbsence, getGameTimeAbsences, ignoreAbsence } from '../lib/api-client';
 
 export const GAME_TIME_QUERY_KEY = ['me', 'game-time'];
 export const GAME_TIME_ABSENCES_KEY = ['me', 'game-time', 'absences-all'];
@@ -116,6 +116,41 @@ export function useDeleteAbsence() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
             queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+        },
+    });
+}
+
+/** Mutation context for {@link useIgnoreAbsence}: the list before the row was hidden. */
+interface IgnoreAbsenceContext {
+    previous: GameTimeAbsence[] | undefined;
+}
+
+/**
+ * Ignore a synced calendar absence (ROK-1595 S1; F-9: no Undo). The row
+ * leaves the absences list at once and comes back if the call fails; the
+ * game-time composite, the list and ['scheduling'] refetch either way.
+ * Errors carry the status (`httpStatusOf`): 409 `not_calendar`, 404.
+ */
+export function useIgnoreAbsence() {
+    const queryClient = useQueryClient();
+
+    return useMutation<void, Error, number, IgnoreAbsenceContext>({
+        mutationFn: (id) => ignoreAbsence(id),
+        onMutate: async (id) => {
+            await queryClient.cancelQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+            const previous = queryClient.getQueryData<GameTimeAbsence[]>(GAME_TIME_ABSENCES_KEY);
+            if (previous) queryClient.setQueryData<GameTimeAbsence[]>(GAME_TIME_ABSENCES_KEY, previous.filter((a) => a.id !== id));
+            return { previous };
+        },
+        onError: (_error, _id, context) => {
+            if (context?.previous) queryClient.setQueryData<GameTimeAbsence[]>(GAME_TIME_ABSENCES_KEY, context.previous);
+        },
+        // Fire-and-forget: TanStack v5 runs a caller's per-call onError only after this
+        // resolves, so awaiting three refetches here would hold the error toast back.
+        onSettled: () => {
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: GAME_TIME_ABSENCES_KEY });
+            void queryClient.invalidateQueries({ queryKey: ['scheduling'] });
         },
     });
 }

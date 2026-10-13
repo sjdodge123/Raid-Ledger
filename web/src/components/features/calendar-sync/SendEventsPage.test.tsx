@@ -18,7 +18,7 @@ import { CALENDARS_PATH } from '../../profile/profile-nav-data';
 import { CalendarsPage } from './CalendarsPage';
 import { SendEventsPage } from './SendEventsPage';
 import { sendEventsPath } from './calendar-sync-row';
-import { CALENDARS_COPY as C, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
+import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S } from './calendar-sync.copy';
 import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 
 const realMatchMedia = window.matchMedia;
@@ -71,13 +71,13 @@ describe('K5 Send my events — phone sub-page', () => {
         expect(screen.queryByTestId('calendars-page')).toBeNull();
     });
 
-    it('K2 order on phone: connection → "Write · send…" section with the row → "Add a calendar"', async () => {
+    it('K2 order on phone: connection → "Read · when…" → "Write · send…" section with the row → "Add a calendar"', async () => {
         setDesktop(false);
         renderAt(CALENDARS_PATH);
         const entry = await screen.findByTestId('send-events-entry');
         const page = screen.getByTestId('calendars-page');
         const sections = Array.from(page.querySelectorAll('section > h3'), (h) => h.textContent);
-        expect(sections).toEqual([C.connectedHeading, S.writeHeading, C.addHeading]);
+        expect(sections).toEqual([C.connectedHeading, R.phoneHeading, S.writeHeading, C.addHeading]);
         const writeSection = screen.getByRole('heading', { name: S.writeHeading }).closest('section');
         expect(writeSection).toContainElement(entry);
         const card = screen.getByTestId('calendar-connection-card');

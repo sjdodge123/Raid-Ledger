@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { CalendarsOverview } from '@raid-ledger/contract';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import { AwayPanel } from '../AwayPanel';
 import { AwayUpcomingList } from '../AwayUpcomingList';
@@ -10,6 +11,8 @@ import type { AwayRowItem } from '../away-row.types';
  * clock is frozen to the same Thursday because the presets are relative.
  */
 const m = vi.hoisted(() => ({
+    ignoreMutate: vi.fn(),
+    overview: undefined as CalendarsOverview | undefined,
     mutateAsync: vi.fn(), createMutate: vi.fn(), delMutate: vi.fn(), isPending: false,
     absences: [] as Array<{ id: number; startDate: string; endDate: string; reason: string | null }>,
 }));
@@ -17,7 +20,9 @@ vi.mock('../../../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: m.mutateAsync, mutate: m.createMutate, isPending: m.isPending }),
     useDeleteAbsence: () => ({ mutate: m.delMutate, isPending: false }),
     useGameTimeAbsences: () => ({ data: m.absences }),
+    useIgnoreAbsence: () => ({ mutate: m.ignoreMutate, isPending: false }),
 }));
+vi.mock('../../../../../hooks/use-calendar-sync', () => ({ useCalendarsOverview: () => ({ data: m.overview }) }));
 vi.mock('../../../../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const THURSDAY = new Date(2026, 7, 27, 12, 0, 0); // 2026-08-27
@@ -33,6 +38,7 @@ beforeEach(() => {
     vi.clearAllMocks();
     m.isPending = false;
     m.absences = [];
+    m.overview = undefined;
     m.mutateAsync.mockResolvedValue({ id: 1, startDate: '', endDate: '', reason: null });
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -217,7 +223,7 @@ describe('AwayPanel (inline, D1)', () => {
 });
 
 describe('AwayUpcomingList — calendar seam', () => {
-    const cal: AwayRowItem = { key: 'cal-1', id: null, startDate: '2026-09-25', endDate: '2026-09-25', reason: 'Dentist', source: 'calendar' };
+    const cal: AwayRowItem = { key: 'cal-1', id: null, startDate: '2026-09-25', endDate: '2026-09-25', reason: 'Dentist', source: 'calendar', provider: null };
 
     it('groups calendar rows under "From your calendars" with Ignore', () => {
         const onIgnore = vi.fn();

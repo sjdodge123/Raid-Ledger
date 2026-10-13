@@ -17,6 +17,7 @@ import { SemanticTokensSection } from './semantic-tokens-section';
 import { HeroSection } from './hero-section';
 import { WeekStripSection } from './week-strip-section';
 import { GroupMarksSection } from './group-marks-section';
+import { CalendarBusySection } from './calendar-busy-section';
 import { FormsSection } from './forms-section';
 import { SchemeSwitcher, SideBySideToggle } from './scheme-controls';
 import { useForcedDarkRoot } from './scheme-hooks';
@@ -33,6 +34,7 @@ const NAV = [
     { id: 'hero', label: 'Hero' },
     { id: 'week-strip', label: 'Week strip' },
     { id: 'group-marks', label: 'Group marks' },
+    { id: 'calendar-busy', label: 'Own busy band' },
 ];
 
 function useDemoMode(): { ready: boolean; allowed: boolean } {
@@ -76,6 +78,7 @@ function Sections(): JSX.Element {
             <HeroSection />
             <WeekStripSection />
             <GroupMarksSection />
+            <CalendarBusySection />
         </>
     );
 }

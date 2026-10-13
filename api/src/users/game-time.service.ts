@@ -17,7 +17,10 @@ import {
 } from './game-time-absence.helpers';
 import { stampGameTimeConfirmedAt } from './game-time-confirmation.helpers';
 import { defined } from '../common/defined.helpers';
-import { fetchCalendarBusyHours } from '../calendar-sync/read/calendar-busy-query.helpers';
+import {
+  calendarBusyWeekStart,
+  fetchCalendarBusyHours,
+} from '../calendar-sync/read/calendar-busy-query.helpers';
 import type { GameTimeCalendarBusy } from '@raid-ledger/contract';
 import {
   CALENDAR_READ_QUEUE,
@@ -294,8 +297,9 @@ export class GameTimeService {
     userId: number,
     weekStart: Date,
     tzOffset = 0,
+    weekSent = true,
   ): Promise<CompositeViewWithCalendar> {
-    const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}`;
+    const cacheKey = `game-time:${userId}:${weekStart.toISOString()}:${tzOffset}:${weekSent}`;
     const cached = this.getCached<CompositeViewWithCalendar>(cacheKey);
     if (cached) return cached;
     const view = await buildCompositeViewResult(
@@ -306,12 +310,13 @@ export class GameTimeService {
       tzOffset,
     );
     // ROK-1593 D15: a separate field — never folded into slot status.
-    const weekEnd = new Date(weekStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const busyStart = calendarBusyWeekStart(weekStart, tzOffset, weekSent);
+    const busyEnd = new Date(busyStart.getTime() + 7 * 24 * 60 * 60 * 1000);
     const calendarBusy = await fetchCalendarBusyHours(
       this.db,
       userId,
-      weekStart,
-      weekEnd,
+      busyStart,
+      busyEnd,
       tzOffset,
     );
     const result = calendarBusy.length > 0 ? { ...view, calendarBusy } : view;

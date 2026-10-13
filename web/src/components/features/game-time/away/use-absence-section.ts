@@ -3,16 +3,20 @@
  *
  * Split so each piece stays small: `useAwayForm` owns the draft range + note,
  * `useAwayMutations` owns create / delete and their Undo toasts, and
+ * `useAwayIgnore` dismisses a synced calendar row (ROK-1595 S1), and
  * `useAbsenceSection` joins them with the upcoming rows. There is no `show`
  * flag — the panel is always open wherever it is mounted.
  */
-import { useCallback, useMemo, useState } from 'react';
-import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences } from '../../../../hooks/use-game-time';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCreateAbsence, useDeleteAbsence, useGameTimeAbsences, useIgnoreAbsence } from '../../../../hooks/use-game-time';
+import { useCalendarsOverview } from '../../../../hooks/use-calendar-sync';
 import { useToday } from './use-today';
 import { toast } from '../../../../lib/toast';
 import { quickRange, spanDays, spanLabel } from '../absence-dates.utils';
-import { awayRangeLabel, upcomingAbsences, type AwayPick } from './away-panel.helpers';
-import { toManualRows, type AwayRowItem } from './away-row.types';
+import { awayRangeLabel, newestReadSync, upcomingAbsences, type AwayPick } from './away-panel.helpers';
+import { READ_COPY } from '../../calendar-sync/calendar-sync.copy';
+import { syncedAgo } from '../../../../lib/synced-ago';
+import { toAwayRows, type AwayRowItem } from './away-row.types';
 
 /** The add form's draft. */
 export interface AwayFormState {
@@ -82,13 +86,49 @@ function useAwayMutations() {
     return { add, remove, isPending: create.isPending, isDeleting: del.isPending };
 }
 
+/**
+ * Ignore a synced calendar row (ROK-1595 S1). Calendar days are never Removed
+ * (DELETE is a 409 `use_ignore`). `useIgnoreAbsence` hides the row at once and
+ * restores it on failure; F-9: no Undo — there is no un-ignore route.
+ */
+function useAwayIgnore() {
+    const ignoreAbsence = useIgnoreAbsence();
+    return useCallback((row: AwayRowItem) => {
+        if (row.id === null || row.source !== 'calendar') return;
+        const label = awayRangeLabel(row.startDate, row.endDate);
+        ignoreAbsence.mutate(row.id, {
+            onSuccess: () => { toast.success(`Ignored ${label}`); },
+            onError: () => { toast.error('Could not ignore that day'); },
+        });
+    }, [ignoreAbsence]);
+}
+
+/**
+ * "Synced N min ago" for the calendar group; null with the kill switch off or
+ * no sync yet. `now` is read on mount and re-read once a minute while there is
+ * a sync time to age (render stays pure).
+ */
+function useCalendarSyncedText(): string | null {
+    const { data } = useCalendarsOverview();
+    const newest = newestReadSync(data);
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        if (!newest) return undefined;
+        const timer = setInterval(() => setNow(Date.now()), 60_000);
+        return () => clearInterval(timer);
+    }, [newest]);
+    return newest ? READ_COPY.synced(syncedAgo(newest, now)) : null;
+}
+
 /** Form + mutations + upcoming rows for the away panel. */
 export function useAbsenceSection() {
     const today = useToday();
     const { form, patch, pick, reset } = useAwayForm(today);
     const { add, remove, isPending, isDeleting } = useAwayMutations();
+    const ignore = useAwayIgnore();
+    const syncedText = useCalendarSyncedText();
     const { data } = useGameTimeAbsences();
-    const rows = useMemo(() => toManualRows(upcomingAbsences(data ?? [], today)), [data, today]);
+    const rows = useMemo(() => toAwayRows(upcomingAbsences(data ?? [], today)), [data, today]);
 
     const span = spanDays(form.startDate, form.endDate);
     const canSubmit = span > 0 && !isPending;
@@ -100,7 +140,7 @@ export function useAbsenceSection() {
 
     return {
         form, patch, pick, span, spanText: spanLabel(form.startDate, form.endDate),
-        canSubmit, submit, remove, isPending, isDeleting, rows, today,
+        canSubmit, submit, remove, ignore, syncedText, isPending, isDeleting, rows, today,
     };
 }
 

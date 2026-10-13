@@ -246,9 +246,47 @@ export function toBusyRanges(
 }
 
 /**
+ * The instant busy hours key from (ROK-1595). `blockHourKeys` needs the
+ * viewer's LOCAL Sunday 00:00. A client-sent `week` already is one; with no
+ * `week` the server resolves Sunday 00:00Z, so shift it by `tzOffset`.
+ * Fixed offset: a DST change inside the week is not re-applied (as composite events).
+ */
+export function calendarBusyWeekStart(
+  weekStart: Date,
+  tzOffset: number,
+  weekSent: boolean,
+): Date {
+  if (weekSent) return weekStart;
+  return new Date(weekStart.getTime() + tzOffset * MINUTE_MS);
+}
+
+/** Key blocks to the local week starting `weekStart`, collapsed into runs. */
+export function busyRangesForBlocks(
+  blocks: CalendarBusyBlock[],
+  weekStart: Date,
+  weekEnd: Date,
+  tzOffset: number,
+): GameTimeCalendarBusy[] {
+  const hours = new Map<string, Set<number>>();
+  for (const block of blocks) {
+    for (const [day, hour] of blockHourKeys(
+      block,
+      weekStart,
+      weekEnd,
+      tzOffset,
+    )) {
+      const key = `${block.provider}|${day}`;
+      hours.set(key, (hours.get(key) ?? new Set<number>()).add(hour));
+    }
+  }
+  return toBusyRanges(hours);
+}
+
+/**
  * The viewer's OWN calendar busy hours for the composite week (D15). Only
  * `userId`'s blocks are read, so another member's view never carries them.
  *
+ * @param weekStart - The viewer's LOCAL Sunday 00:00 (`calendarBusyWeekStart`).
  * @param tzOffset - Viewer `getTimezoneOffset()` minutes; 0 = UTC.
  */
 export async function fetchCalendarBusyHours(
@@ -264,17 +302,5 @@ export async function fetchCalendarBusyHours(
     weekStart,
     weekEnd,
   );
-  const hours = new Map<string, Set<number>>();
-  for (const block of blocks) {
-    for (const [day, hour] of blockHourKeys(
-      block,
-      weekStart,
-      weekEnd,
-      tzOffset,
-    )) {
-      const key = `${block.provider}|${day}`;
-      hours.set(key, (hours.get(key) ?? new Set<number>()).add(hour));
-    }
-  }
-  return toBusyRanges(hours);
+  return busyRangesForBlocks(blocks, weekStart, weekEnd, tzOffset);
 }

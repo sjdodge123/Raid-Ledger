@@ -7,7 +7,8 @@
  * one-line change in `CALENDARS_COPY.lede` below.
  */
 
-import type { CalendarOAuthErrorCode } from '@raid-ledger/contract';
+import type { CalendarConnection, CalendarOAuthErrorCode } from '@raid-ledger/contract';
+import { syncedAgo } from '../../../lib/synced-ago';
 
 /** Approved K1 lede (describes read sync). */
 const LEDE_APPROVED = 'Connect a calendar and Raid Ledger fills in your time away for you.';
@@ -17,6 +18,8 @@ export const LEDE_WRITE_FIRST = 'Connect a calendar and Raid Ledger adds your si
 export const CALENDARS_COPY = {
     title: 'Calendars',
     lede: LEDE_APPROVED,
+    /** K4 desktop lede (ROK-1595), verbatim. */
+    ledeDesktop: 'Connect a calendar and Raid Ledger keeps your time away up to date. Only busy times are read.',
     noteTitle: 'Only busy times.',
     noteBody: 'Raid Ledger never sees event titles, places or who is invited, only when you are busy. Disconnect any time and the synced days disappear.',
     connectedHeading: 'Connected',
@@ -130,3 +133,59 @@ export const EVENT_CALENDAR_COPY = {
     undoFailed: 'Could not remove the calendar copy. Try again.',
     icsFailed: 'Could not download the calendar file. Try again.',
 } as const;
+
+/**
+ * Read sync (ROK-1595): K2 phone switches, K4 desktop radio cards, the
+ * calendar picker, the connection status and "Sync now". Canvas copy is
+ * verbatim; lines marked (lane) are not on the canvas.
+ */
+export const READ_COPY = {
+    phoneHeading: 'Read · when a calendar says you are busy',
+    desktopHeading: 'When a calendar says you are busy',
+    days: { title: 'Whole days → I\'m away', sub: 'All-day events, and days busy through all your game time', aria: 'Whole days become away' },
+    hours: { title: 'Busy hours → busy', sub: 'Shown in purple; polls stop counting you as free', aria: 'Busy hours become busy' },
+    lookAhead: 'Look ahead',
+    lookAheadSub: 'How far forward we check',
+    lookAheadTag: (weeks: number) => `${weeks} weeks`,
+    modes: {
+        days: { label: 'Whole days only', description: 'All-day events and fully booked evenings become "I\'m away". Busy hours are ignored.' },
+        hours: { label: 'Busy hours only', description: 'Every busy hour inside your game time turns purple. No away days are added.' },
+        both: { label: 'Both (default)', description: 'Whole days become away; single busy hours turn purple.' },
+    },
+    synced: (ago: string) => `Synced ${ago}`,
+    syncedCount: (ago: string, count: number) => `Synced ${ago} · ${count} ${count === 1 ? 'calendar' : 'calendars'}`,
+    /* (lane) from here on. */
+    reconnect: 'Access was revoked · reconnect',
+    fix: 'Fix',
+    fixFailed: 'Could not start the Google sign-in. Try again.',
+    grantTitle: 'Let Raid Ledger see when you are busy',
+    grant: 'Grant read access',
+    granting: 'Opening Google…',
+    saveFailed: 'Could not save. Try again.',
+    /** 2+ accounts: the last page switch on is locked (operator 2026-10-13). */
+    keepOne: 'One stays on. To stop reading an account, turn it off on its card.',
+    /** Every card's "Read this account" off: a quiet muted line under the cards (operator R2, 2026-10-13). */
+    notReadingAny: 'Not reading any account. Busy hours and away days won\'t update.',
+    /** Per-account read on/off, shown on each card once two or more accounts can read (review r2). */
+    accountRead: { title: 'Read this account', sub: 'Its busy times count', aria: (label: string) => `Read busy times from ${label}` },
+    pickerLabel: 'Calendars to check',
+    pickerLoading: 'Loading calendars…',
+    pickerError: 'Could not load your calendars. Try again.',
+    pickerEmpty: 'No calendars found in this account.',
+    syncNow: 'Sync now',
+    syncing: 'Syncing your calendar…',
+    throttled: 'Synced a moment ago. Try again in a few minutes.',
+    syncNeedsRead: 'Turn on reading for this calendar first.',
+    syncFailed: 'Could not sync. Try again.',
+} as const;
+
+/** The status line under the account name; `desktop` drops the calendar count (K4). */
+type StatusInput = Pick<CalendarConnection, 'status' | 'accountLabel' | 'lastSyncedAt' | 'read'>;
+
+export function readStatusLine(c: StatusInput, desktop: boolean, now: number = Date.now()): string {
+    if (c.status === 'needs_reconnect') return READ_COPY.reconnect;
+    if (c.status !== 'active' || !c.lastSyncedAt) return connectionStatusLine(c);
+    const ago = syncedAgo(c.lastSyncedAt, now);
+    if (desktop || !c.read.enabled) return READ_COPY.synced(ago);
+    return READ_COPY.syncedCount(ago, c.read.calendarIds.length || 1);
+}

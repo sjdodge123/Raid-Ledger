@@ -70,6 +70,7 @@ import {
   type VerifiedCalendarOAuthState,
 } from '../services/calendar-oauth-state.helpers';
 import * as intents from '../services/calendar-oauth-intent.helpers';
+import { applyFirstConnectRead } from '../services/calendar-read-consent.helpers';
 import { enqueuePendingWriteOff } from '../write/calendar-write-off.helpers';
 import {
   revokeUnstoredGrant,
@@ -211,7 +212,7 @@ export class CalendarOAuthController {
     if (!intents.grantCoversIntent(intent, target.key, scopes)) {
       return intent === 'read' ? 'read_scopes' : 'scopes';
     }
-    const { id } = await upsertCalendarConnection(this.db, {
+    const { id, outcome } = await upsertCalendarConnection(this.db, {
       userId,
       provider: target.key,
       result,
@@ -220,7 +221,8 @@ export class CalendarOAuthController {
       await revokeUnstoredGrant(target.provider, result.credentials);
       throw err;
     });
-    return this.applyIntent(intent, id, userId, target.key, scopes);
+    const created = outcome === 'created';
+    return this.applyIntent(intent, id, userId, target.key, scopes, created);
   }
 
   /** Review m4: the grant IS saved — a failure here is not an `exchange`. */
@@ -230,16 +232,20 @@ export class CalendarOAuthController {
     userId: number,
     provider: CalendarOAuthProvider,
     grantedScopes: readonly string[],
+    created: boolean,
   ): Promise<'connected' | 'unavailable'> {
     // The contract has no dedicated code; `unavailable` + Sentry it is.
-    const applied = await this.runConsentIntent({
-      intent,
-      connectionId,
-      userId,
-      provider,
-      grantedScopes,
-      queue: this.writeQueue,
-    });
+    const applied = await this.runConsentIntent(
+      {
+        intent,
+        connectionId,
+        userId,
+        provider,
+        grantedScopes,
+        queue: this.writeQueue,
+      },
+      created,
+    );
     if (applied === 'failed') return 'unavailable';
     if (applied === 'other_account') {
       this.logger.warn('primary consent landed on a non-writing account');
@@ -250,6 +256,7 @@ export class CalendarOAuthController {
   /** The consent intent + any interrupted write-off; a throw → `failed`. */
   private runConsentIntent(
     input: Parameters<typeof intents.applyConsentIntent>[1],
+    created: boolean,
   ) {
     return intents
       .applyConsentIntent(this.db, input)
@@ -257,8 +264,15 @@ export class CalendarOAuthController {
         // Pipe review m3: a write-off an auth error interrupted resumes now.
         const deps = this.enqueueDeps();
         await enqueuePendingWriteOff(this.db, deps, input.connectionId);
+        // ROK-1595 G-3 (Q-A): a first connect with the read boxes reads too.
+        const firstRead = await applyFirstConnectRead(this.db, {
+          ...input,
+          created,
+        });
         // ROK-1593 §3.2: a fresh read grant syncs at once.
-        if (outcome === 'read') await this.enqueueReadSync(input.connectionId);
+        if (outcome === 'read' || firstRead) {
+          await this.enqueueReadSync(input.connectionId);
+        }
         return outcome;
       })
       .catch((err: unknown) => {

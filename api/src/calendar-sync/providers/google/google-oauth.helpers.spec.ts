@@ -106,7 +106,9 @@ describe('read scopes (ROK-1593 D-R3)', () => {
           scopes: googleScopesFor(intent),
         }),
       ).searchParams.get('scope');
-    expect(scopeOf('connect')).toBe(`openid email ${G}calendar.app.created`);
+    expect(scopeOf('connect')).toBe(
+      `openid email ${G}calendar.app.created ${G}calendar.events.readonly ${G}calendar.calendarlist.readonly`,
+    );
     expect(scopeOf('primary')).toBe(
       `openid email ${G}calendar.app.created ${G}calendar.events`,
     );
@@ -139,10 +141,14 @@ describe('buildGoogleAuthUrl', () => {
         '&redirect_uri=https%3A%2F%2Fslot-1.gamernight.net%2Fapi%2Fcalendar-sync%2Foauth%2Fgoogle%2Fcallback' +
         '&response_type=code' +
         '&scope=openid+email+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.app.created' +
+        '+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.events.readonly' +
+        '+https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcalendar.calendarlist.readonly' +
         '&access_type=offline&prompt=consent&include_granted_scopes=true' +
         '&state=st.ate&code_challenge=chal_lenge-1&code_challenge_method=S256',
     );
-    expect(new URL(url).searchParams.get('scope')).toBe(GOOGLE_CONNECT_SCOPES);
+    expect(new URL(url).searchParams.get('scope')).toBe(
+      [GOOGLE_CONNECT_SCOPES, ...GOOGLE_READ_SCOPES].join(' '),
+    );
   });
 });
 
@@ -348,14 +354,17 @@ describe('consent intent scopes (ROK-1596 D8)', () => {
   };
   const scopeOf = (url: string) => new URL(url).searchParams.get('scope');
 
-  it('connect requests exactly the ruled set — never calendar.events (F13)', () => {
+  it('connect requests the ruled set + the read scopes (Q-A) — never calendar.events (F13)', () => {
     const url = buildGoogleAuthUrl({
       ...base,
       scopes: googleScopesFor('connect'),
     });
     expect(scopeOf(url)).toBe(
-      'openid email https://www.googleapis.com/auth/calendar.app.created',
+      'openid email https://www.googleapis.com/auth/calendar.app.created' +
+        ' https://www.googleapis.com/auth/calendar.events.readonly' +
+        ' https://www.googleapis.com/auth/calendar.calendarlist.readonly',
     );
+    expect(googleScopesFor('connect')).not.toContain(GOOGLE_EVENTS_SCOPE);
   });
 
   it('primary requests the connect set plus calendar.events', () => {

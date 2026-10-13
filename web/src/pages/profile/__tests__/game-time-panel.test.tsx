@@ -36,6 +36,9 @@ vi.mock('../../../hooks/use-media-query', () => ({
 }));
 vi.mock('../../../hooks/use-auth', () => ({
     useAuth: () => ({ isAuthenticated: true }),
+    // ROK-1595: the away card's synced-ago line reads the real `useCalendarsOverview`, gated on
+    // `getAuthToken()`. No token → the query stays disabled, i.e. no calendar connected.
+    getAuthToken: () => null,
 }));
 const navigate = vi.fn();
 vi.mock('react-router-dom', async () => {
@@ -52,6 +55,7 @@ vi.mock('../../../hooks/use-game-time', () => ({
     useCreateAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useDeleteAbsence: () => ({ mutateAsync: vi.fn(), mutate: vi.fn(), isPending: false }),
     useGameTimeAbsences: () => ({ data: gameTime.absences }),
+    useIgnoreAbsence: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
 // The real editor only enables Save after a pointer-painted draft (jsdom has no
