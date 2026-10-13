@@ -61,6 +61,17 @@ describe('ROK-1778 — privacy contact email', () => {
     expect(await settings.get(SETTING_KEYS.PRIVACY_CONTACT_EMAIL)).toBeNull();
   });
 
+  it('PATCH with a valid name and an invalid email saves neither', async () => {
+    const settings = testApp.app.get(SettingsService);
+    const before = await settings.get(SETTING_KEYS.COMMUNITY_NAME);
+    const res = await patch({
+      communityName: 'Should Not Save',
+      privacyContactEmail: 'nope',
+    });
+    expect(res.status).toBe(400);
+    expect(await settings.get(SETTING_KEYS.COMMUNITY_NAME)).toBe(before);
+  });
+
   it('PATCH with only a community name leaves the email untouched', async () => {
     await patch({ privacyContactEmail: 'privacy@guild.example' });
     const res = await patch({ communityName: 'Night Raiders' });

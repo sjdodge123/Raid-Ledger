@@ -18,7 +18,10 @@ import * as fs from 'fs';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
 import { bestEffortInit } from '../common/lifecycle.util';
-import { savePrivacyContactEmail } from './branding-privacy.helpers';
+import {
+  parsePrivacyContactEmail,
+  savePrivacyContactEmail,
+} from './branding-privacy.helpers';
 
 /** Allowed MIME types and their magic bytes for logo validation */
 const ALLOWED_TYPES: Record<string, { ext: string; magic: number[] }> = {
@@ -156,6 +159,10 @@ export class BrandingController implements OnModuleInit {
   async updateBranding(
     @Body() body: { communityName?: string; privacyContactEmail?: unknown },
   ) {
+    // Validate every field before writing any, so a 400 never leaves a partial save.
+    if (body.privacyContactEmail !== undefined) {
+      parsePrivacyContactEmail(body.privacyContactEmail);
+    }
     if (body.communityName !== undefined) {
       const trimmed = body.communityName.trim();
       if (trimmed.length === 0 || trimmed.length > 60) {
