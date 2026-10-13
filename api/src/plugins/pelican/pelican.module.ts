@@ -40,6 +40,7 @@ type UninstalledPayload = { slug: string };
   ],
   exports: [
     PelicanClientFactory,
+    PelicanConfigService,
     PelicanServersRepository,
     PelicanSyncService,
     PelicanStatusService,

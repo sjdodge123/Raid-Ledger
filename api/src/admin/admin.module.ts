@@ -17,6 +17,8 @@ import { DemoTestThreadMirrorController } from './demo-test-thread-mirror.contro
 import { DemoTestScheduledEventsController } from './demo-test-scheduled-events.controller';
 import { DemoTestSignupsController } from './demo-test-signups.controller';
 import { DemoTestGamesController } from './demo-test-games.controller';
+import { DemoTestPelicanController } from './demo-test-pelican.controller';
+import { PelicanModule } from '../plugins/pelican/pelican.module';
 import { DemoTestLineupController } from './demo-test-lineup.controller';
 import { DemoTestAiSuggestionsController } from './demo-test-ai-suggestions.controller';
 import { DemoTestGraceController } from './demo-test-grace.controller';
@@ -72,6 +74,9 @@ import { UsersModule } from '../users/users.module';
     BackupModule,
     VersionModule,
     CooptimusModule,
+    // Pelican fixture endpoint (ROK-1094). PelicanModule imports only
+    // SettingsModule — no path back to AdminModule.
+    PelicanModule,
     AuthModule,
     IgdbModule,
     LineupsModule,
@@ -114,6 +119,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestScheduledEventsController,
     DemoTestSignupsController,
     DemoTestGamesController,
+    DemoTestPelicanController,
     DemoTestLineupController,
     DemoTestAiSuggestionsController,
     DemoTestGraceController,
