@@ -11,6 +11,8 @@ import { PelicanConfigService } from './pelican-config.service';
 import { PelicanClientFactory } from './pelican-client.factory';
 import { PelicanServersRepository } from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
+import { PelicanSchedulesRepository } from './pelican-schedules.repository';
+import { PelicanScheduleSyncService } from './pelican-schedule-sync.service';
 import { PelicanStatusService } from './pelican-status.service';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
@@ -29,6 +31,8 @@ type UninstalledPayload = { slug: string };
     PelicanConfigService,
     PelicanClientFactory,
     PelicanServersRepository,
+    PelicanSchedulesRepository,
+    PelicanScheduleSyncService,
     PelicanSyncService,
     PelicanStatusService,
     PelicanCronRegistrar,
@@ -38,6 +42,7 @@ type UninstalledPayload = { slug: string };
   exports: [
     PelicanClientFactory,
     PelicanServersRepository,
+    PelicanSchedulesRepository,
     PelicanSyncService,
     PelicanStatusService,
   ],

@@ -8,20 +8,16 @@ import {
   notInArray,
   sql,
 } from 'drizzle-orm';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
-import * as schema from '../../drizzle/schema';
+import { pelicanServers, type PelicanServerRow } from '../../drizzle/schema';
 import {
-  pelicanServers,
-  plugins,
-  type PelicanServerRow,
-} from '../../drizzle/schema';
-import { PELICAN_PLUGIN_ID } from './pelican.constants';
+  lockActivePlugin,
+  type PelicanDb as Db,
+  type PelicanExecutor as Executor,
+} from './pelican-plugin-lock.helpers';
 import type { ListedServer } from './pelican-sync.helpers';
 
-type Db = PostgresJsDatabase<typeof schema>;
-export type PelicanTx = Parameters<Parameters<Db['transaction']>[0]>[0];
-type Executor = Db | PelicanTx;
+export type { PelicanTx } from './pelican-plugin-lock.helpers';
 
 /** Counts written by one complete listing. */
 export interface PelicanListingCounts {
@@ -53,7 +49,7 @@ export class PelicanServersRepository {
     now: Date,
   ): Promise<PelicanListingCounts | null> {
     return this.db.transaction(async (tx) => {
-      if (!(await this.lockActivePlugin(tx))) return null;
+      if (!(await lockActivePlugin(tx))) return null;
       const restored = await this.countMissing(tx, servers);
       const upserted = await this.upsertListed(tx, servers, now);
       const markedMissing = await this.markMissing(
@@ -63,14 +59,6 @@ export class PelicanServersRepository {
       );
       return { upserted, markedMissing, restored };
     });
-  }
-
-  /** `SELECT … FOR SHARE` on the active Pelican `plugins` row. */
-  private async lockActivePlugin(tx: Executor): Promise<boolean> {
-    const rows = await tx.execute(
-      sql`select 1 from ${plugins} where ${plugins.slug} = ${PELICAN_PLUGIN_ID} and ${plugins.active} = true for share`,
-    );
-    return Array.isArray(rows) && rows.length > 0;
   }
 
   /**
