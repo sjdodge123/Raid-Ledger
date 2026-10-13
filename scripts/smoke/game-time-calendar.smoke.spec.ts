@@ -10,23 +10,25 @@
  *     timed block 20:00–21:00 local TODAY (the S2 band for this week).
  *
  * Read mode, absences and game time are PER USER and the projects run at the
- * same time, so each project drives its OWN fixture user (slots 8 and 9 — no
- * other smoke spec seeds them) — never the shared admin, whose game time other
- * specs paint. `beforeAll` disconnects whatever a crashed run left on it.
+ * same time, so each worker's `beforeAll` seeds a FRESH member
+ * (`seed-non-guild-user`, quiet DMs, onboarded via its own boot refresh) —
+ * never the shared admin, whose game time other specs paint, and never a
+ * fixture slot: an Ignore is permanent (`calendar_ignored_days`), so a reused
+ * user would refuse to re-derive the away days on the next run or retry.
+ * `afterAll` deletes the member, and with it its connection, blocks and ignores.
  *
- * Tablet takes the identical phone path as mobile (`isPhoneLayout`), and there
- * are only two unused fixture slots, so tablet skips this file — see `VIEWER_SLOT`.
+ * Tablet takes the identical phone path as mobile (`isPhoneLayout`), so it
+ * skips this file — see `PROJECTS`.
  */
-import type { Page } from '@playwright/test';
+import type { Browser, Page } from '@playwright/test';
 import { test, expect } from './base';
 import { API_BASE, apiDelete, apiGet, apiPost, apiPut, getAdminToken } from './api-helpers';
-import { signInContextAs } from './browser-session';
+import { signInContextAs, signInOnboardedMember } from './browser-session';
 import { isPhoneLayout } from './helpers';
-import { seedFixtureVoter } from './scheduling-poll-fixtures';
 
 const PAGE = '/profile/gaming/game-time';
-/** Free fixture slots (scheduling specs own 2–7, event-calendar 4–6). */
-const VIEWER_SLOT: Readonly<Record<string, number>> = { desktop: 8, mobile: 9 };
+/** Projects that run this file (tablet repeats mobile's phone path). */
+const PROJECTS: ReadonlySet<string> = new Set(['desktop', 'mobile']);
 const BUSY_HOUR = 20;
 
 interface Viewer { userId: number; jwt: string }
@@ -55,11 +57,6 @@ const TODAY = new Date().getDay();
 const AWAY_FIRST = isoDaysOut(14);
 const AWAY_LAST = isoDaysOut(15);
 
-async function disconnectAll(jwt: string): Promise<void> {
-    const overview = (await apiGet(jwt, '/users/me/calendars')) as { connections?: { id: number }[] } | null;
-    for (const c of overview?.connections ?? []) await apiDelete(jwt, `/users/me/calendars/${c.id}`).catch(() => undefined);
-}
-
 /** `PUT /users/me/calendars/settings` answers 204 No Content — assert the status, never parse a body. */
 async function putReadSettings(jwt: string, body: Record<string, unknown>): Promise<void> {
     const res = await fetch(`${API_BASE}/users/me/calendars/settings`, {
@@ -76,19 +73,29 @@ async function calendarAbsences(jwt: string): Promise<AbsenceRow[]> {
     return rows.filter((r) => r.source === 'calendar');
 }
 
-test.beforeAll(async ({}, testInfo) => {
-    const slot = VIEWER_SLOT[testInfo.project.name];
-    if (slot === undefined) return; // tablet: skipped per test, see the header
+/** A fresh, onboarded member and its access JWT (from a throwaway context's boot refresh). */
+async function seedViewer(browser: Browser): Promise<Viewer> {
+    const user = (await apiPost(token, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
+    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
+    const userId = user.userId;
+    viewer = { userId, jwt: '' }; // claimed before anything can throw, so afterAll deletes it
+    const context = await browser.newContext({ storageState: { cookies: [], origins: [] } });
+    try {
+        return { userId, jwt: await signInOnboardedMember(await context.newPage(), userId) };
+    } finally {
+        await context.close();
+    }
+}
+
+test.beforeAll(async ({ browser }, testInfo) => {
+    if (!PROJECTS.has(testInfo.project.name)) return; // tablet: skipped per test, see the header
     token = await getAdminToken();
     await apiPut(token, '/admin/settings/calendar-sync', { enabled: true });
-    const res = (await seedFixtureVoter(token, slot)) as Partial<Viewer> | null;
-    if (typeof res?.userId !== 'number' || typeof res.jwt !== 'string') throw new Error(`seed-fixture-user(slot ${slot}) returned no user`);
-    const jwt = res.jwt;
-    viewer = { userId: res.userId, jwt };
-    await disconnectAll(viewer.jwt);
-    await putReadSettings(viewer.jwt, { mode: 'both' });
+    viewer = await seedViewer(browser);
+    const jwt = viewer.jwt;
+    await putReadSettings(jwt, { mode: 'both' });
     // Free 19:00–23:00 today, so the 20:00 busy hour overlaps a slot ("· 1h busy").
-    await apiPut(viewer.jwt, '/users/me/game-time', {
+    await apiPut(jwt, '/users/me/game-time', {
         slots: [19, 20, 21, 22].map((hour) => ({ dayOfWeek: TODAY, hour })),
     });
     const conn = (await apiPost(token, '/admin/test/calendar/seed-connection', {
@@ -119,13 +126,13 @@ test.beforeAll(async ({}, testInfo) => {
 });
 
 test.afterAll(async () => {
-    if (viewer) await disconnectAll(viewer.jwt);
+    if (viewer) await apiDelete(token, `/users/${viewer.userId}`).catch(() => undefined);
+    viewer = null;
     connectionId = null;
 });
 
 test.beforeEach(async ({ page }, testInfo) => {
-    test.skip(VIEWER_SLOT[testInfo.project.name] === undefined,
-        'tablet renders the same phone layout mobile covers, and only fixture slots 8 + 9 are free');
+    test.skip(!PROJECTS.has(testInfo.project.name), 'tablet renders the same phone layout mobile covers');
     if (!viewer) throw new Error('beforeAll seeded no viewer');
     await signInContextAs(page.context(), viewer.userId);
 });

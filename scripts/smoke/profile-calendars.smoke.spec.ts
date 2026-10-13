@@ -11,7 +11,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, apiPut, getAdminToken } from './api-helpers';
-import { signInContextAs } from './browser-session';
+import { signInOnboardedMember } from './browser-session';
 import { isPhoneLayout } from './helpers';
 
 const PAGE = '/profile/gaming/calendars';
@@ -121,7 +121,8 @@ async function removeMember(userId: number): Promise<void> {
 }
 
 async function openAs(page: Page, member: Member) {
-    await signInContextAs(page.context(), member.userId);
+    // A fresh member has not onboarded, and AuthGuard would detour PAGE to the wizard.
+    await signInOnboardedMember(page, member.userId);
     await page.goto(PAGE);
     // The read rules are per USER (one section for the page, not bound to a connection); the
     // member's own connection card proves the page is showing this member's account.
