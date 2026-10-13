@@ -24,6 +24,7 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
+import { PelicanServersRepository } from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
 import { fakeServer } from './testing/pelican-fixtures';
 import {
@@ -231,6 +232,12 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
     expect((await patchServer(unmapped.id, { gameId: null })).status).toBe(200);
 
     expect(await memberStatusKeys(token)).toEqual([String(kept.id)]);
+    // The repository filter itself, not only the later status-feed filter:
+    // dropping either `isNotNull(gameId)` or `showOnCalendar` must go red.
+    const pollable = await testApp.app
+      .get(PelicanServersRepository)
+      .listPollable();
+    expect(pollable.map((r) => r.id)).toEqual([kept.id]);
     expect(await reload(unmapped.id)).toMatchObject({ gameId: null });
     expect(await reload(hidden.id)).toMatchObject({ showOnCalendar: false });
   });
