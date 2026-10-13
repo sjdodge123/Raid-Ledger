@@ -95,7 +95,9 @@ async function getStatus(token: string, query = '') {
     .set('Authorization', `Bearer ${token}`);
   expect(res.status).toBe(200);
   const body = GameServerStatusResponseSchema.parse(res.body);
-  const pelican = body.data.filter((d) => d.provider === PELICAN_PROVIDER_LABEL);
+  const pelican = body.data.filter(
+    (d) => d.provider === PELICAN_PROVIDER_LABEL,
+  );
   return { res, pelican };
 }
 
@@ -279,9 +281,7 @@ describe('Pelican uninstall — server rows (ROK-1772 D13)', () => {
 
     // The uninstall listener is fire-and-forget; wait for the rows to go.
     await waitFor(async () => {
-      expect(await testApp.db.select().from(schema.pelicanServers)).toEqual(
-        [],
-      );
+      expect(await testApp.db.select().from(schema.pelicanServers)).toEqual([]);
     });
     expect(await testApp.db.select().from(schema.pelicanSchedules)).toEqual([]);
   });

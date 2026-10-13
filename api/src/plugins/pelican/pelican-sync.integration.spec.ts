@@ -154,7 +154,9 @@ describe('PelicanSyncService.syncServers — upsert and missing (ROK-1772)', () 
     expect((await rowFor(S1.uuid)).missingSince).toBeInstanceOf(Date);
     expect((await rowFor(S2.uuid)).missingSince).toBeNull();
   });
+});
 
+describe('PelicanSyncService.syncServers — partial listing (ROK-1772 D3)', () => {
   it('a failed page writes nothing and marks nothing missing (D3)', async () => {
     const panel = createFakePanel([S1, S2, S3]);
     stubPanel(testApp, panel);
@@ -164,10 +166,7 @@ describe('PelicanSyncService.syncServers — upsert and missing (ROK-1772)', () 
     // Page 1 now lists only S1 (page size 1); page 2 fails.
     panel.pageSize = 1;
     panel.failPage = 2;
-    panel.servers = [
-      { ...S1, name: 'Renamed While Failing' },
-      S2,
-    ];
+    panel.servers = [{ ...S1, name: 'Renamed While Failing' }, S2];
     const outcome = await syncService().syncServers();
     expect(outcome.code).not.toBe('ok');
     expect(outcome).toMatchObject({
@@ -244,8 +243,9 @@ describe('PelicanSyncService.syncServers — guards (ROK-1772)', () => {
     stubPanel(testApp, panel);
 
     const first = syncService().syncServers();
-    await waitFor(async () => {
+    await waitFor(() => {
       expect(panel.fetchImpl).toHaveBeenCalledTimes(1);
+      return Promise.resolve();
     });
     const second = await syncService().syncServers();
     expect(second.code).toBe('in_progress');
@@ -257,15 +257,15 @@ describe('PelicanSyncService.syncServers — guards (ROK-1772)', () => {
   });
 });
 
-describe('POST /admin/plugins/pelican/sync (ROK-1772)', () => {
-  function captureLogs(): () => string {
-    const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map(
-      (level) => jest.spyOn(Logger.prototype, level),
-    );
-    return () =>
-      spies.map((s) => JSON.stringify(s.mock.calls)).join('\n');
-  }
+/** Every Logger line written from here on, as one string. */
+function captureLogs(): () => string {
+  const spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map(
+    (level) => jest.spyOn(Logger.prototype, level),
+  );
+  return () => spies.map((s) => JSON.stringify(s.mock.calls)).join('\n');
+}
 
+describe('POST /admin/plugins/pelican/sync (ROK-1772)', () => {
   it('syncs for an admin and returns a schema-valid body with no key or uuid', async () => {
     const panel = createFakePanel([S1, S2]);
     stubPanel(testApp, panel);

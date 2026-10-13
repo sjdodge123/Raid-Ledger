@@ -102,7 +102,9 @@ export function createFakePanel(servers: FakeListedServer[]): FakePanel {
 
 /** Paths the panel was asked for, in call order. */
 export function requestedPaths(panel: FakePanel): string[] {
-  return panel.fetchImpl.mock.calls.map(([input]) => requestUrl(input).pathname);
+  return panel.fetchImpl.mock.calls.map(
+    ([input]) => requestUrl(input).pathname,
+  );
 }
 
 /** How many listing pages (`GET /api/client`) were requested. */
@@ -155,7 +157,8 @@ export async function memberToken(
   const res = await testApp.request
     .post('/auth/local')
     .send({ email, password: 'TestPassword123!' });
-  return res.body.access_token as string;
+  const body = res.body as { access_token: string };
+  return body.access_token;
 }
 
 /** A deferred gate: hold every panel request until `release()`. */
