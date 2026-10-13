@@ -20,6 +20,8 @@ describe('stateChipView', () => {
 
     it('a suspended server reads Suspended (danger) even though its member state is offline', () => {
         expect(stateChipView({ state: 'offline', isSuspended: true })).toMatchObject({ tone: 'danger', label: 'Suspended' });
+        // A stale suspended row (>6 min, `unknown`) shows Unknown — what members see.
+        expect(stateChipView({ state: 'unknown', isSuspended: true })).toMatchObject({ tone: 'neutral', label: 'Unknown' });
     });
 });
 

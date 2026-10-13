@@ -5,9 +5,12 @@ export type ChipTone = 'success' | 'warning' | 'danger' | 'neutral';
 
 export interface StateChipView { tone: ChipTone; label: string; title: string }
 
-/** Member state → chip. A suspended server reports `offline`; `isSuspended` wins (ruling Q8). */
+/**
+ * Member state → chip. A fresh suspended server reports `offline`, where `isSuspended`
+ * wins (ruling Q8); a stale row (`unknown`) stays Unknown, as members see it.
+ */
 export function stateChipView(row: Pick<PelicanServerRowDto, 'state' | 'isSuspended'>): StateChipView {
-    if (row.isSuspended) return { tone: 'danger', label: 'Suspended', title: 'Suspended on the panel — members see it as offline' };
+    if (row.isSuspended && row.state === 'offline') return { tone: 'danger', label: 'Suspended', title: 'Suspended on the panel — members see it as offline' };
     switch (row.state) {
         case 'running': return { tone: 'success', label: 'Running', title: 'The server is running' };
         case 'starting': return { tone: 'warning', label: 'Starting', title: 'The server is starting' };
@@ -48,6 +51,18 @@ export function applyServerPatch(
             gameId: patch.gameId,
             gameName: patch.gameId === null ? null : gameName ?? row.gameName,
         }),
+    };
+}
+
+/** Undo a failed `patch` on `row` from `prev` — only the fields it touched, so other saved edits survive. */
+export function restoreServerFields(
+    row: PelicanServerRowDto, prev: PelicanServerRowDto, patch: PelicanServerUpdate,
+): PelicanServerRowDto {
+    return {
+        ...row,
+        ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: prev.showOnCalendar }),
+        ...(patch.timezone === undefined ? {} : { timezone: prev.timezone }),
+        ...(patch.gameId === undefined ? {} : { gameId: prev.gameId, gameName: prev.gameName }),
     };
 }
 
