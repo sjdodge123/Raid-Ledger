@@ -195,3 +195,18 @@ describe('PelicanStatusService guards and logging', () => {
     }
   });
 });
+
+describe('PelicanStatusService.pollStatuses — in flight', () => {
+  it('flags alreadyRunning when a poll is in flight', async () => {
+    const { service } = build([pelicanRow(1)]);
+    // The first call claims the flag synchronously, before its first await.
+    const first = service.pollStatuses();
+    await expect(service.pollStatuses()).resolves.toEqual({
+      polled: 0,
+      failed: 0,
+      skipped: 0,
+      alreadyRunning: true,
+    });
+    await expect(first).resolves.toEqual({ polled: 1, failed: 0, skipped: 0 });
+  });
+});

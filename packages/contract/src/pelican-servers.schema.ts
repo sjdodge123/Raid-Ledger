@@ -20,9 +20,18 @@ export type PelicanSyncCode = z.infer<typeof PelicanSyncCodeSchema>;
 
 const count = z.number().int().nonnegative();
 
-/** What the status poll after a successful sync did (ruling Q5). */
+/**
+ * What the status poll after a successful sync did (ruling Q5).
+ * `alreadyRunning` is set when the poll was skipped because another poll
+ * (usually the cron tick) was in flight; the counts are then all zero.
+ */
 export const PelicanStatusPollSummarySchema = z
-  .object({ polled: count, failed: count, skipped: count })
+  .object({
+    polled: count,
+    failed: count,
+    skipped: count,
+    alreadyRunning: z.literal(true).optional(),
+  })
   .strict();
 export type PelicanStatusPollSummary = z.infer<
   typeof PelicanStatusPollSummarySchema

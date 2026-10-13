@@ -11,11 +11,13 @@ import {
 
 const POLL = { polled: 3, failed: 1, skipped: 2 };
 
-function build(outcome: PelicanSyncOutcome) {
+type Poll = typeof POLL & { alreadyRunning?: true };
+
+function build(outcome: PelicanSyncOutcome, poll: Poll = POLL) {
   const syncServers = jest.fn<Promise<PelicanSyncOutcome>, []>(() =>
     Promise.resolve(outcome),
   );
-  const pollStatuses = jest.fn(() => Promise.resolve({ ...POLL }));
+  const pollStatuses = jest.fn(() => Promise.resolve({ ...poll }));
   const controller = new PelicanAdminController(
     {} as PelicanConfigService,
     { syncServers } as unknown as PelicanSyncService,
@@ -77,5 +79,32 @@ describe('PelicanAdminController.syncNow (ROK-1772)', () => {
     expect(result).toMatchObject({ code, status: null, upserted: 0 });
     expect(result.message).not.toBe('');
     expect(PelicanSyncResultSchema.safeParse(result).success).toBe(true);
+  });
+});
+
+describe('PelicanAdminController.syncNow — poll already running', () => {
+  it('says the status check was skipped when a poll was already running', async () => {
+    const ok = {
+      code: 'ok' as const,
+      upserted: 5,
+      markedMissing: 0,
+      restored: 0,
+    };
+    const skipped = {
+      polled: 0,
+      failed: 0,
+      skipped: 0,
+      alreadyRunning: true as const,
+    };
+    const { controller } = build(ok, skipped);
+
+    const result = await controller.syncNow();
+
+    expect(result.status).toEqual(skipped);
+    expect(result.message).toContain(
+      'Status check skipped: a status poll was already running.',
+    );
+    expect(result.message).not.toContain('Status checked for 0');
+    expect(PelicanSyncResultSchema.parse(result)).toEqual(result);
   });
 });

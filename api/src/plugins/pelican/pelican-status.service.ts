@@ -11,11 +11,15 @@ import { PelicanClientFactory } from './pelican-client.factory';
 import { PelicanServersRepository } from './pelican-servers.repository';
 import { runPool } from './pelican-pool.helpers';
 
-/** What one poll did. All zero when skipped (inactive, unconfigured, in flight). */
+/**
+ * What one poll did. All zero when skipped (inactive, unconfigured, in
+ * flight); `alreadyRunning` marks the in-flight skip.
+ */
 export interface PelicanPollOutcome {
   polled: number;
   failed: number;
   skipped: number;
+  alreadyRunning?: true;
 }
 
 const NONE: PelicanPollOutcome = { polled: 0, failed: 0, skipped: 0 };
@@ -48,7 +52,7 @@ export class PelicanStatusService {
 
   /** Never throws. */
   async pollStatuses(): Promise<PelicanPollOutcome> {
-    if (this.running) return { ...NONE };
+    if (this.running) return { ...NONE, alreadyRunning: true };
     this.running = true;
     try {
       return await this.run();

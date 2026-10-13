@@ -6,6 +6,14 @@ import type {
 import type { PelicanSyncOutcome } from './pelican-sync.helpers';
 import { pelicanTestMessage } from './pelican-test-messages';
 
+function statusNote(status: PelicanStatusPollSummary | null): string {
+  if (status === null) return '';
+  if (status.alreadyRunning === true) {
+    return ' Status check skipped: a status poll was already running.';
+  }
+  return ` Status checked for ${status.polled}.`;
+}
+
 /** Admin-facing copy for one "Sync now" outcome (ROK-1772). */
 export function pelicanSyncMessage(
   outcome: PelicanSyncOutcome,
@@ -14,9 +22,7 @@ export function pelicanSyncMessage(
   const code: PelicanSyncCode = outcome.code;
   switch (code) {
     case 'ok': {
-      const polled =
-        status === null ? '' : ` Status checked for ${status.polled}.`;
-      return `Synced ${outcome.upserted} server(s): ${outcome.markedMissing} newly missing, ${outcome.restored} restored.${polled}`;
+      return `Synced ${outcome.upserted} server(s): ${outcome.markedMissing} newly missing, ${outcome.restored} restored.${statusNote(status)}`;
     }
     case 'in_progress':
       return 'A sync is already running. Try again in a moment.';
