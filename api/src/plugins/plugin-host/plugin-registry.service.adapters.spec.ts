@@ -507,4 +507,25 @@ describe('PluginRegistryService — owner-scoped adapters (ROK-268)', () => {
     expect(seenAtEmit).toEqual([provider]);
     expect(service.getMultiAdapters(POINT, KEY)).toEqual([provider]);
   });
+
+  it('an owned adapter under a game-slug key survives deactivate → activate exactly once', async () => {
+    const gameManifest: PluginManifest = {
+      ...noGameManifest,
+      id: 'game-plugin',
+      gameSlugs: ['wow'],
+    };
+    const provider = { pluginSlug: 'game-plugin' };
+    service.registerManifest(gameManifest);
+    service.registerMultiAdapter(POINT, 'wow', provider, {
+      ownerPluginId: 'game-plugin',
+    });
+    selectResults = [{ slug: 'game-plugin', active: true }];
+    await service.deactivate('game-plugin');
+    expect(service.getMultiAdapters(POINT, 'wow')).toEqual([]);
+
+    selectResults = [{ slug: 'game-plugin', active: false }];
+    await service.activate('game-plugin');
+
+    expect(service.getMultiAdapters(POINT, 'wow')).toEqual([provider]);
+  });
 });

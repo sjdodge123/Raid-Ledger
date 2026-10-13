@@ -200,10 +200,11 @@ export class PluginRegistryService implements OnModuleInit {
       .update(plugins)
       .set({ active: false, updatedAt: new Date() })
       .where(eq(plugins.slug, slug));
+    // Owned adapters first, so one keyed by a game slug is suspended (and
+    // restored on activate) rather than hard-deleted below (ROK-268).
+    this.store.suspendAdaptersOwnedBy(slug);
     const manifest = this.manifests.get(slug);
     if (manifest) this.removeAdaptersForPlugin(manifest.gameSlugs ?? []);
-    // By owning plugin id — covers `gameSlugs: []` plugins (ROK-268).
-    this.store.suspendAdaptersOwnedBy(slug);
     await this.refreshActiveCache();
     this.eventEmitter.emit(PLUGIN_EVENTS.DEACTIVATED, { slug });
     this.logger.log(`Plugin deactivated: ${slug}`);
