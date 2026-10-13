@@ -41,9 +41,8 @@ export function PelicanServersSection({ defaultTimezone }: { defaultTimezone: st
         onSuccess: showSyncToast,
         onError: (err) => toast.error(errorMessage(err, 'Failed to sync Pelican servers')),
     });
-    const onUpdate: ServerUpdateHandler = (id, patch, gameName) => update.mutate({ id, patch, gameName }, {
-        onError: (err) => toast.error(errorMessage(err, 'Failed to update the server')),
-    });
+    // The failure toast lives in the hook's onError, so every failing edit toasts.
+    const onUpdate: ServerUpdateHandler = (id, patch, gameName) => update.mutate({ id, patch, gameName });
     return (
         <section className="space-y-4 pt-6" aria-labelledby="pelican-servers-title">
             <h3 id="pelican-servers-title" className="text-lg font-semibold text-foreground border-b border-edge pb-2">Servers</h3>

@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { PelicanServerRowDto, PelicanServerUpdate, PelicanSyncResult } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
@@ -37,13 +38,13 @@ const suspended: PelicanServerRowDto = {
     gameId: null, gameName: null, showOnCalendar: false, timezone: 'Europe/Berlin', lastSyncedAt: null, missing: true,
 };
 
-interface ServeOpts { failPatch?: boolean; hold?: Promise<void> }
+interface ServeOpts { failPatch?: boolean; hold?: Promise<void>; registry?: { id: number; name: string; coverUrl: null }[] }
 
 /** Serves the list and records every PATCH body; `failPatch` answers 500; `hold` delays the PATCH reply. */
-function serveServers(rows: PelicanServerRowDto[], { failPatch = false, hold }: ServeOpts = {}): PelicanServerUpdate[] {
+function serveServers(rows: PelicanServerRowDto[], { failPatch = false, hold, registry = [] }: ServeOpts = {}): PelicanServerUpdate[] {
     const patches: PelicanServerUpdate[] = [];
     server.use(
-        http.get('http://localhost:3000/games/configured', () => HttpResponse.json({ data: [] })),
+        http.get('http://localhost:3000/games/configured', () => HttpResponse.json({ data: registry, meta: { total: registry.length } })),
         http.get(PELICAN_SERVERS_URL, () => HttpResponse.json({ data: rows })),
         http.patch(PELICAN_SERVER_URL, async ({ request, params }) => {
             const body = (await request.json()) as PelicanServerUpdate;
@@ -124,6 +125,54 @@ describe('PelicanServersSection — row edits', () => {
     it('clearing the game PATCHes only gameId: null', async () => {
         const patches = await renderSection([pelicanServerFixture]);
         fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+        await waitFor(() => expect(patches).toEqual([{ gameId: null }]));
+    });
+
+    it('a failed PATCH rolls back only its own row, and every failure toasts', async () => {
+        let release = () => {};
+        const hold = new Promise<void>((resolve) => { release = resolve; });
+        const second: PelicanServerRowDto = { ...pelicanServerFixture, id: 3, name: 'Palworld' };
+        await renderSection([pelicanServerFixture, second]);
+        server.use(http.patch(PELICAN_SERVER_URL, async ({ params }) => {
+            if (params.id === '1') { await hold; return HttpResponse.json({ message: 'Panel said no' }, { status: 500 }); }
+            return HttpResponse.json({ ...second, name: 'Palworld (saved)', showOnCalendar: false });
+        }));
+        fireEvent.click(screen.getByTestId('pelican-server-1-calendar'));
+        fireEvent.click(screen.getByTestId('pelican-server-3-calendar'));
+        // Row 3's PATCH has saved (its reply is in the cache) before row 1's fails.
+        await screen.findByText('Palworld (saved)');
+        release();
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Panel said no'));
+        expect(screen.getByTestId('pelican-server-1-calendar')).toHaveAttribute('aria-checked', 'true');
+        expect(screen.getByTestId('pelican-server-3-calendar')).toHaveAttribute('aria-checked', 'false');
+        expect(screen.getByText('Palworld (saved)')).toBeInTheDocument();
+    });
+});
+
+describe('PelicanServersSection — game picker (review MAJOR)', () => {
+    const gameBox = () => screen.getByRole('combobox', { name: 'Game' });
+
+    it('typing over the game sends no PATCH, and leaving without a pick puts the game back', async () => {
+        const patches = await renderSection([pelicanServerFixture]);
+        await userEvent.type(gameBox(), 'ab');
+        await userEvent.click(screen.getByTestId('pelican-server-1-calendar'));
+        await waitFor(() => expect(patches).toContainEqual({ showOnCalendar: false }));
+        expect(patches).toEqual([{ showOnCalendar: false }]);
+        expect(gameBox()).toHaveValue('Valheim');
+    });
+
+    it('picking a replacement game PATCHes only that gameId', async () => {
+        const patches = await renderSection([pelicanServerFixture], { registry: [{ id: 42, name: 'Hades', coverUrl: null }] });
+        await userEvent.clear(gameBox());
+        await userEvent.type(gameBox(), 'H');
+        await userEvent.click(await screen.findByRole('option', { name: 'Hades' }));
+        await waitFor(() => expect(patches).toEqual([{ gameId: 42 }]));
+    });
+
+    it('emptying the box and leaving it PATCHes only gameId: null', async () => {
+        const patches = await renderSection([pelicanServerFixture]);
+        await userEvent.clear(gameBox());
+        await userEvent.click(screen.getByText('Valheim — Main'));
         await waitFor(() => expect(patches).toEqual([{ gameId: null }]));
     });
 });

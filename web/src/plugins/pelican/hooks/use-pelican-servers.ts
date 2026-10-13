@@ -14,7 +14,8 @@ import {
 } from '@raid-ledger/contract';
 import { getAuthToken } from '../../../hooks/use-auth';
 import { adminFetch } from '../../../hooks/admin/admin-fetch';
-import { applyServerPatch } from '../slots/pelican-servers.helpers';
+import { toast } from '../../../lib/toast';
+import { applyServerPatch, errorMessage, restoreServerFields } from '../slots/pelican-servers.helpers';
 
 export const PELICAN_SERVERS_PATH = '/admin/plugins/pelican/servers';
 export const PELICAN_SYNC_PATH = '/admin/plugins/pelican/sync';
@@ -32,9 +33,13 @@ export function usePelicanServers() {
 
 /** `patch` carries ONLY the changed field; `gameName` is for the optimistic row. */
 export interface ServerUpdateVars { id: number; patch: PelicanServerUpdate; gameName?: string | null | undefined }
-type Rollback = { previous: PelicanServerRowDto[] | undefined };
+type Rollback = { previousRow: PelicanServerRowDto | undefined };
 
-/** Optimistic: the cache shows the edit at once, and is restored if the PATCH fails. */
+/**
+ * Optimistic: the cache shows the edit at once. A failed PATCH toasts (here, so every
+ * failing call toasts, not only the latest `mutate`) and restores only the fields it
+ * touched on its own row, so another row's saved edit survives.
+ */
 export function useUpdatePelicanServer() {
     const qc = useQueryClient();
     const key = [...PELICAN_SERVERS_KEY];
@@ -44,12 +49,18 @@ export function useUpdatePelicanServer() {
         }, 'Failed to update the server')),
         onMutate: async ({ id, patch, gameName }) => {
             await qc.cancelQueries({ queryKey: key });
-            const previous = qc.getQueryData<PelicanServerRowDto[]>(key);
+            const previousRow = qc.getQueryData<PelicanServerRowDto[]>(key)?.find((r) => r.id === id);
             qc.setQueryData<PelicanServerRowDto[]>(key, (rows) =>
                 rows?.map((r) => (r.id === id ? applyServerPatch(r, patch, gameName) : r)));
-            return { previous };
+            return { previousRow };
         },
-        onError: (_err, _vars, ctx) => { if (ctx) qc.setQueryData(key, ctx.previous); },
+        onError: (err, { id, patch }, ctx) => {
+            toast.error(errorMessage(err, 'Failed to update the server'));
+            const prev = ctx?.previousRow;
+            if (!prev) return;
+            qc.setQueryData<PelicanServerRowDto[]>(key, (rows) =>
+                rows?.map((r) => (r.id === id ? restoreServerFields(r, prev, patch) : r)));
+        },
         onSuccess: (row) => {
             qc.setQueryData<PelicanServerRowDto[]>(key, (rows) => rows?.map((r) => (r.id === row.id ? row : r)));
         },
