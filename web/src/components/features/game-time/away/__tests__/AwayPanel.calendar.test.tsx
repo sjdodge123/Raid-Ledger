@@ -128,8 +128,8 @@ describe('AwayPanel — synced calendar days (ROK-1595 S1)', () => {
         release();
         // The post-error refetch is still held: the row is back from the rollback alone.
         await waitFor(() => expect(screen.queryByText(SYNCED), 'rolled back before the list refetch lands').not.toBeNull());
-        // The per-call onError toast runs only after the hook's onSettled, which awaits the
-        // invalidation refetches (TanStack v5 order), so the refetch must land before it fires.
+        // The hook's onSettled no longer awaits its refetches, so the toast does not depend
+        // on the held refetch; releasing it lets the list settle before the test ends.
         releaseRefetch();
         await waitFor(() => expect(t.error).toHaveBeenCalledWith('Could not ignore that day'));
     });
