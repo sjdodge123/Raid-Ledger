@@ -26,7 +26,12 @@ function build(outcome: PelicanSyncOutcome) {
 
 describe('PelicanAdminController.syncNow (ROK-1772)', () => {
   it('polls status once after a successful sync and returns both', async () => {
-    const ok = { code: 'ok' as const, upserted: 5, markedMissing: 1, restored: 2 };
+    const ok = {
+      code: 'ok' as const,
+      upserted: 5,
+      markedMissing: 1,
+      restored: 2,
+    };
     const { controller, syncServers, pollStatuses } = build(ok);
 
     const result = await controller.syncNow();

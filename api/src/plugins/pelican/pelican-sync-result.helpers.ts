@@ -14,7 +14,8 @@ export function pelicanSyncMessage(
   const code: PelicanSyncCode = outcome.code;
   switch (code) {
     case 'ok': {
-      const polled = status === null ? '' : ` Status checked for ${status.polled}.`;
+      const polled =
+        status === null ? '' : ` Status checked for ${status.polled}.`;
       return `Synced ${outcome.upserted} server(s): ${outcome.markedMissing} newly missing, ${outcome.restored} restored.${polled}`;
     }
     case 'in_progress':
