@@ -20,6 +20,8 @@ import { toast } from '../../lib/toast';
 const refetch = vi.fn();
 
 vi.mock('../../hooks/use-auth', () => ({
+    // ROK-1780: the inline Calendars section reads the token to gate its overview query.
+    getAuthToken: () => null,
     useAuth: () => ({
         user: { id: 1, username: 'TestUser', discordId: '123', avatar: null, customAvatarUrl: null },
         isLoading: false,
