@@ -169,6 +169,16 @@ describe('PelicanServersSection — game picker (review MAJOR)', () => {
         await waitFor(() => expect(patches).toEqual([{ gameId: 42 }]));
     });
 
+    it('a failed pick rolls the box back to the row\'s game and toasts the error', async () => {
+        const patches = await renderSection([pelicanServerFixture], { failPatch: true, registry: [{ id: 42, name: 'Hades', coverUrl: null }] });
+        await userEvent.clear(gameBox());
+        await userEvent.type(gameBox(), 'H');
+        await userEvent.click(await screen.findByRole('option', { name: 'Hades' }));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Panel said no'));
+        expect(patches).toEqual([{ gameId: 42 }]);
+        await waitFor(() => expect(gameBox()).toHaveValue('Valheim'));
+    });
+
     it('emptying the box and leaving it PATCHes only gameId: null', async () => {
         const patches = await renderSection([pelicanServerFixture]);
         await userEvent.clear(gameBox());

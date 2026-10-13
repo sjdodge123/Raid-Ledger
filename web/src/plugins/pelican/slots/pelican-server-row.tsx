@@ -3,7 +3,7 @@
  * same controls in both (ROK-1094). Every control applies immediately and its
  * PATCH carries only the field it changed — the game only once one is picked.
  */
-import { useState, type FocusEvent } from 'react';
+import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { IgdbGameDto, PelicanServerRowDto, PelicanServerUpdate } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
@@ -41,17 +41,29 @@ function rowGame(row: PelicanServerRowDto): IgdbGameDto | null {
  * `{gameId}`, and `{gameId:null}` comes from Clear selection or from leaving the box
  * empty. Leaving unpicked text puts the row's game back. The shown value stays the
  * row's game while typing, so the input (and its clear button) never remounts mid-edit.
+ * When the row settles on a game other than the id last sent (a failed PATCH rolled
+ * back), the input remounts so its text shows the row's game again.
  */
 function useGameDraft(row: PelicanServerRowDto, onUpdate: ServerUpdateHandler) {
     const [dirty, setDirty] = useState(false);
     const [resetKey, setResetKey] = useState(0);
+    const sent = useRef(row.gameId);
+    useEffect(() => {
+        if (row.gameId === sent.current) return;
+        sent.current = row.gameId;
+        setResetKey((k) => k + 1);
+    }, [row]); // the row object, not gameId: a fast failure can coalesce pick + rollback into one render
     const onChange = (game: IgdbGameDto | null): void => {
         setDirty(game === null);
-        if (game !== null && game.id !== row.gameId) onUpdate(row.id, { gameId: game.id }, game.name);
+        if (game === null || game.id === row.gameId) return;
+        sent.current = game.id;
+        onUpdate(row.id, { gameId: game.id }, game.name);
     };
     const onClear = (): void => {
         setDirty(false);
-        if (row.gameId !== null) onUpdate(row.id, { gameId: null }, null);
+        if (row.gameId === null) return;
+        sent.current = null;
+        onUpdate(row.id, { gameId: null }, null);
     };
     const onBlur = (e: FocusEvent<HTMLDivElement>): void => {
         if (!dirty || (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget))) return;

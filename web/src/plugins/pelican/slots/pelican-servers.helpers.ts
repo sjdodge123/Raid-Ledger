@@ -16,7 +16,7 @@ export function stateChipView(row: Pick<PelicanServerRowDto, 'state' | 'isSuspen
         case 'starting': return { tone: 'warning', label: 'Starting', title: 'The server is starting' };
         case 'stopping': return { tone: 'warning', label: 'Stopping', title: 'The server is stopping' };
         case 'offline': return { tone: 'danger', label: 'Offline', title: 'The server is offline' };
-        default: return { tone: 'neutral', label: 'Unknown', title: 'Not checked recently — needs a game and Show on calendar' };
+        default: return { tone: 'neutral', label: 'Unknown', title: 'Not checked recently' };
     }
 }
 
