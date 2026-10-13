@@ -7,6 +7,9 @@
  * From 1024px the K4 "Calendars to check" picker sits under the row. With two
  * or more accounts that can read, the card also carries this account's read
  * on/off (`readSwitch`); one account is switched by the page's read rules (F-2).
+ * An account without read access while another account reads (`anyReadable`)
+ * shows "Grant read access" on its own card (spec §4) — when none reads, the
+ * read-rules section carries that CTA instead.
  */
 import type { JSX } from 'react';
 import type { CalendarConnection } from '@raid-ledger/contract';
@@ -20,6 +23,7 @@ import { CalendarManageMenu } from './CalendarManageMenu';
 import { CalendarPicker } from './CalendarPicker';
 import { CalendarConnectionRead } from './CalendarConnectionRead';
 import { readGranted } from './use-read-rules';
+import { GrantRead } from './CalendarGrantRead';
 import { CALENDARS_COPY as C, READ_COPY as R, readStatusLine } from './calendar-sync.copy';
 
 const TONE: Record<CalendarConnection['status'], string> = {
@@ -36,12 +40,13 @@ function FixButton(): JSX.Element {
     );
 }
 
-interface CardProps { connection: CalendarConnection; readSwitch?: boolean }
+interface CardProps { connection: CalendarConnection; readSwitch?: boolean; anyReadable?: boolean }
 
-export function CalendarConnectionCard({ connection, readSwitch = false }: CardProps): JSX.Element {
+export function CalendarConnectionCard({ connection, readSwitch = false, anyReadable = false }: CardProps): JSX.Element {
     const desktop = useMediaQuery(DESKTOP_MQ);
     const broken = connection.status === 'needs_reconnect';
     const showPicker = desktop && !broken && connection.read.enabled && readGranted(connection);
+    const showGrant = anyReadable && !broken && connection.status !== 'disconnecting' && !readGranted(connection);
     return (
         <div className="space-y-3">
             <div className={CALENDAR_ROW} data-testid="calendar-connection-card" data-connection-id={connection.id}>
@@ -56,6 +61,7 @@ export function CalendarConnectionCard({ connection, readSwitch = false }: CardP
                 <CalendarManageMenu connection={connection} />
             </div>
             {readSwitch && readGranted(connection) && <CalendarConnectionRead connection={connection} />}
+            {showGrant && <GrantRead />}
             {showPicker && <CalendarPicker connection={connection} />}
         </div>
     );

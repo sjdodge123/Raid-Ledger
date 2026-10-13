@@ -101,12 +101,13 @@ function PhoneWriteSection({ connections }: { connections: CalendarConnection[] 
 /** The K2 column / K4 two-card grid: Connected, (phone) Read + Write, Add a calendar. */
 function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
     const google = data.connections.filter((c) => c.provider === 'google');
-    const readSwitch = readableConnections(google).length > 1;
+    const readable = readableConnections(google).length;
+    const readSwitch = readable > 1;
     return (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {google.length > 0 && (
                 <Section heading={C.connectedHeading}>
-                    {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch} />)}
+                    {google.map((c) => <CalendarConnectionCard key={c.id} connection={c} readSwitch={readSwitch} anyReadable={readable > 0} />)}
                 </Section>
             )}
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow={false} />

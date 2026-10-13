@@ -73,6 +73,12 @@ const readOff = (c: CalendarConnection): CalendarConnection => ({ ...c, read: { 
 
 const accountSwitch = (c: CalendarConnection) => screen.findByRole('switch', { name: R.accountRead.aria(c.accountLabel ?? '') });
 
+const cardOf = (c: CalendarConnection): HTMLElement => {
+    const row = screen.getAllByTestId('calendar-connection-card').find((n) => n.dataset.connectionId === String(c.id));
+    if (!row?.parentElement) throw new Error(`no card for connection ${c.id}`);
+    return row.parentElement;
+};
+
 beforeEach(() => { setAccessToken('test-token'); setDesktop(false); });
 afterEach(() => {
     clearAccessToken();
@@ -103,7 +109,34 @@ describe('the per-user mode control', () => {
     it('first account write-only, second reads → the mode controls, not "Grant read access"', async () => {
         renderPage([{ ...first, readAccess: 'missing' }, second]);
         expect(await screen.findByRole('switch', { name: R.days.aria })).toHaveAttribute('aria-checked', 'true');
-        expect(screen.queryByTestId('calendar-read-grant')).toBeNull();
+        expect(within(screen.getByTestId('calendar-read-rules')).queryByTestId('calendar-read-grant'), 'the page section keeps the mode controls').toBeNull();
+    });
+
+    it('one account reads, one is write-only → the write-only card shows "Grant read access"; the readable card keeps its status (AC3)', async () => {
+        const missing: CalendarConnection = { ...second, readAccess: 'missing' };
+        renderPage([first, missing]);
+        await screen.findByRole('switch', { name: R.days.aria });
+        expect(within(cardOf(missing)).getByTestId('calendar-read-grant-button'), 'the account without read access offers the grant').toHaveTextContent(R.grant);
+        expect(within(cardOf(first)).queryByTestId('calendar-read-grant-button'), 'the readable account needs no grant').toBeNull();
+        expect(screen.getAllByTestId('calendar-read-grant-button'), 'one CTA — none duplicated on the page section').toHaveLength(1);
+    });
+
+    it('two accounts read, a third is write-only → the readable cards keep their read switches; only the third offers the grant', async () => {
+        const missing: CalendarConnection = { ...third, readAccess: 'missing' };
+        renderPage([first, second, missing]);
+        await accountSwitch(first);
+        expect(within(cardOf(first)).getByRole('switch', { name: R.accountRead.aria(first.accountLabel ?? '') })).toHaveAttribute('aria-checked', 'true');
+        expect(within(cardOf(second)).getByRole('switch', { name: R.accountRead.aria(second.accountLabel ?? '') })).toBeInTheDocument();
+        expect(within(cardOf(missing)).getByTestId('calendar-read-grant-button')).toHaveTextContent(R.grant);
+        expect(within(cardOf(missing)).queryByTestId('calendar-connection-read'), 'no read switch for an account that cannot read').toBeNull();
+        expect(screen.getAllByTestId('calendar-read-grant-button')).toHaveLength(1);
+    });
+
+    it('one write-only account alone → only the page section offers "Grant read access" (no duplicate on the card)', async () => {
+        renderPage([{ ...first, readAccess: 'missing' }]);
+        const section = await screen.findByTestId('calendar-read-rules');
+        expect(within(section).getByTestId('calendar-read-grant-button')).toBeInTheDocument();
+        expect(screen.getAllByTestId('calendar-read-grant-button')).toHaveLength(1);
     });
 
 });

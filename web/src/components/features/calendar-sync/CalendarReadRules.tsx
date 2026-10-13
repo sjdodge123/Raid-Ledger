@@ -11,10 +11,9 @@
  */
 import { useId, type JSX } from 'react';
 import { CALENDAR_LOOK_AHEAD_WEEKS, type CalendarConnection, type CalendarReadMode } from '@raid-ledger/contract';
-import { Button } from '../../ui/button';
 import { Switch } from '../../ui/switch';
 import { RadioGroup } from '../../ui/radio-group';
-import { useStartOAuth } from '../../../hooks/use-calendar-sync';
+import { GrantRead } from './CalendarGrantRead';
 import { readableConnections, switchesOf, modeOf, useReadMode, type ReadSwitches } from './use-read-rules';
 import { READ_COPY as R } from './calendar-sync.copy';
 import { RADIO_CARDS } from './radio-cards.classes';
@@ -86,20 +85,6 @@ function DesktopCards({ mode, enabled, disabled, choose }: ControlProps): JSX.El
         <RadioGroup<CalendarReadMode | 'off'> label={R.desktopHeading} hideLabel options={options}
             value={enabled ? mode : 'off'} onChange={(m) => choose(m === 'off' ? null : m)} disabled={disabled}
             className={RADIO_CARDS} />
-    );
-}
-
-function GrantRead(): JSX.Element {
-    const grant = useStartOAuth('read');
-    return (
-        <div className="flex flex-wrap items-center justify-between gap-3" data-testid="calendar-read-grant">
-            <p className="text-sm text-secondary">{R.grantTitle}</p>
-            <Button variant="secondary" loading={grant.isPending} loadingLabel={R.granting} onClick={() => grant.mutate()}
-                data-testid="calendar-read-grant-button">
-                {R.grant}
-            </Button>
-            {grant.isError && <p role="alert" className="w-full text-sm text-danger">{R.fixFailed}</p>}
-        </div>
     );
 }
 
