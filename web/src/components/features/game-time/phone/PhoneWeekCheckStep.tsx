@@ -39,6 +39,8 @@ import type { GameTimeCalendarBusy, GameTimeSlot } from '@raid-ledger/contract';
 import type { GridDims } from '../game-time-grid.types';
 import { gameTimeCheckPrompt } from '../game-time-check-copy';
 import { useGameTime } from '../../../../hooks/use-game-time';
+import { useTimezoneStore } from '../../../../stores/timezone-store';
+import { getTimezoneOffsetMinutes } from '../../../../lib/timezone-utils';
 import { PhoneWeekEditorCore } from './PhoneWeekEditorCore';
 import { PROFILE_BLOCK_PRESETS, type BlockPreset, type BlockPresetControl } from '../block-presets';
 import { PhoneWindowToggle } from './PhoneWindowToggle';
@@ -115,7 +117,11 @@ export function PhoneWeekCheckStep(props: PhoneWeekCheckStepProps): JSX.Element 
 
 /** The saved week as a draft, the window the day slot can show, and its presets. */
 function useWeekEditorState(hours: number[], isCheck: boolean, slotHeight?: number) {
-    const { data } = useGameTime();
+    // ROK-1595: the PROFILE timezone, as the desktop editor asks
+    // (`use-game-time-editor.ts`) — the browser's offset drew busy hours late.
+    const resolved = useTimezoneStore((s) => s.resolved);
+    const tzOffset = useMemo(() => getTimezoneOffsetMinutes(resolved), [resolved]);
+    const { data } = useGameTime({ tzOffset });
     const templateSlots = useMemo(() => toTemplateSlots(data?.slots ?? NO_SLOTS), [data?.slots]);
     const draft = usePhoneWeekDraft(templateSlots);
     // ROK-1640: the drawer asks before a close throws this draft away.

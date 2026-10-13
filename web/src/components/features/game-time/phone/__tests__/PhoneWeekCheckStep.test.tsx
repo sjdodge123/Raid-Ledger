@@ -19,6 +19,8 @@ import { SheetHeaderContext } from '../../../../../pages/scheduling/sheet-header
 import { PhoneWeekCheckStep } from '../PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../phone-week-check.helpers';
 import { PROFILE_WINDOW_KEY, readProfileWindow } from '../phone-window.helpers';
+import { useTimezoneStore } from '../../../../../stores/timezone-store';
+import { getTimezoneOffsetMinutes } from '../../../../../lib/timezone-utils';
 
 const ROW = 26;
 const DIMS: GridDims = { colWidth: 300, rowHeight: ROW, headerHeight: 0, colStartLeft: 52 };
@@ -30,9 +32,14 @@ let serverSlots: GameTimeSlot[] = [];
 let stale = true;
 
 let absences: Array<{ id: number; startDate: string; endDate: string; reason: string | null }> = [];
+/** Every `useGameTime` options object the step asked with. */
+const gameTimeCalls: unknown[] = [];
 
 vi.mock('../../../../../hooks/use-game-time', () => ({
-    useGameTime: () => ({ data: { slots: serverSlots, gameTimeStale: stale } }),
+    useGameTime: (options?: unknown) => {
+        gameTimeCalls.push(options);
+        return { data: { slots: serverSlots, gameTimeStale: stale } };
+    },
     useConfirmGameTime: () => ({ mutate: confirmMutate, isPending: false }),
     useSaveGameTime: () => ({ mutate: saveMutate, isPending: false }),
     useGameTimeAbsences: () => ({ data: absences }),
@@ -59,6 +66,7 @@ function paintSunday19(): void {
 
 beforeEach(() => {
     vi.clearAllMocks();
+    gameTimeCalls.length = 0;
     serverSlots = [];
     absences = [];
     stale = true;
@@ -556,5 +564,22 @@ describe('PhoneWeekCheckStep — the away entry swaps the drawer (ROK-1585)', ()
         fireEvent.click(entry());
         unmount();
         expect(setHeader).toHaveBeenLastCalledWith(null);
+    });
+});
+
+describe('PhoneWeekCheckStep — busy hours in the profile timezone (ROK-1595)', () => {
+    const PROFILE_TZ = 'Pacific/Kiritimati'; // UTC+14: never the browser's zone on CI (UTC) or the fleet (Denver)
+    let previous = '';
+    beforeEach(() => { previous = useTimezoneStore.getState().resolved; useTimezoneStore.setState({ resolved: PROFILE_TZ }); });
+    afterEach(() => { useTimezoneStore.setState({ resolved: previous }); });
+
+    it('asks for game time with the PROFILE timezone offset, not the browser one', () => {
+        const profileOffset = getTimezoneOffsetMinutes(PROFILE_TZ);
+        expect(profileOffset, 'precondition: the profile zone differs from the browser').not.toBe(new Date().getTimezoneOffset());
+        renderStep();
+        expect(gameTimeCalls.length).toBeGreaterThan(0);
+        expect(gameTimeCalls, 'every useGameTime call carries the profile offset').toEqual(
+            gameTimeCalls.map(() => expect.objectContaining({ tzOffset: profileOffset })),
+        );
     });
 });
