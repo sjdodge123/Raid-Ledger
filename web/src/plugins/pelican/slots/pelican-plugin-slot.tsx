@@ -5,6 +5,7 @@
  * integration card renders — keeping the entry chunk inside its budget.
  */
 import { Suspense } from 'react';
+import { LoadingSpinner } from '../../../components/ui/loading-spinner';
 import { lazyWithRetry } from '../../../lazy-routes';
 import { isPelicanSlot } from './pelican-slot.helpers';
 
@@ -15,7 +16,7 @@ const PelicanPanel = lazyWithRetry(() =>
 export function PelicanPluginSlot({ pluginSlug, integrationKey }: { pluginSlug?: string; integrationKey?: string }) {
     if (!isPelicanSlot(pluginSlug, integrationKey)) return null;
     return (
-        <Suspense fallback={null}>
+        <Suspense fallback={<LoadingSpinner />}>
             <PelicanPanel />
         </Suspense>
     );
