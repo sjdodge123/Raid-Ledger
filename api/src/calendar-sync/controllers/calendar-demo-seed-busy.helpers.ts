@@ -82,6 +82,24 @@ function readAccessSet(access: SeedBusyInput['readAccess']) {
   return { readAccessGranted: false, readEnabled: false };
 }
 
+/**
+ * The connection columns a seed sets. `lastSyncedAt` is stamped only when the
+ * account reads after the seed (its read toggle on) — an account that does not
+ * read never synced, so it must not read "Synced …" (ROK-1595 review).
+ */
+export function seedConnectionSet(
+  readAccess: SeedBusyInput['readAccess'],
+  readEnabled: boolean,
+  now: number,
+) {
+  const access = readAccess ? readAccessSet(readAccess) : {};
+  const reads = readAccess ? readAccess === 'granted' : readEnabled;
+  const synced = reads
+    ? { lastSyncedAt: new Date(now - SEEDED_SYNC_AGE_MS) }
+    : {};
+  return { ...access, ...synced, updatedAt: new Date(now) };
+}
+
 function toBlockRow(conn: { id: number; userId: number }, b: BusyBlock) {
   return {
     connectionId: conn.id,
@@ -125,6 +143,7 @@ async function findConnection(db: Db, connectionId: number) {
       id: conns.id,
       userId: conns.userId,
       credentialsEncrypted: conns.credentialsEncrypted,
+      readEnabled: conns.readEnabled,
     })
     .from(conns)
     .where(eq(conns.id, connectionId))
@@ -147,9 +166,7 @@ export async function seedDemoBusy(
   const conns = schema.calendarConnections;
   const conn = await findConnection(db, input.connectionId);
   const now = Date.now();
-  const access = input.readAccess ? readAccessSet(input.readAccess) : {};
-  const lastSyncedAt = new Date(now - SEEDED_SYNC_AGE_MS);
-  const set = { ...access, lastSyncedAt, updatedAt: new Date(now) };
+  const set = seedConnectionSet(input.readAccess, conn.readEnabled, now);
   await db.update(conns).set(set).where(eq(conns.id, conn.id));
   const blocks = input.blocks.map(toBusyBlock);
   await db
