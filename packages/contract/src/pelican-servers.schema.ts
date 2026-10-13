@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { PELICAN_ERROR_KINDS } from './pelican.schema.js';
+import { GameServerStateSchema } from './game-servers.schema.js';
+import { PELICAN_ERROR_KINDS, isValidIanaTimezone } from './pelican.schema.js';
 
 /**
  * Pelican server mirror — admin "Sync now" (ROK-1772).
@@ -49,3 +50,58 @@ export const PelicanSyncResultSchema = z
   })
   .strict();
 export type PelicanSyncResult = z.infer<typeof PelicanSyncResultSchema>;
+
+/* ── Admin servers table (ROK-1094) ─────────────────────────────────── */
+
+const isoOrNull = z.iso.datetime({ offset: true }).nullable();
+
+/**
+ * One row of `GET /admin/plugins/pelican/servers`. `.strict()` so a leaked
+ * `panelUuid` / `identifier` fails the server's own response parse — no
+ * uuid, identifier, node or address ever leaves the API.
+ */
+export const PelicanServerRowSchema = z
+  .object({
+    id: z.number().int().positive(),
+    name: z.string().max(200),
+    state: GameServerStateSchema,
+    isSuspended: z.boolean(),
+    gameId: z.number().int().positive().nullable(),
+    gameName: z.string().nullable(),
+    showOnCalendar: z.boolean(),
+    /** `null` = inherits the plugin's default timezone. */
+    timezone: z.string().nullable(),
+    lastSyncedAt: isoOrNull,
+    statusCheckedAt: isoOrNull,
+    /** The last complete listing did not include this server. */
+    missing: z.boolean(),
+  })
+  .strict();
+export type PelicanServerRowDto = z.infer<typeof PelicanServerRowSchema>;
+
+export const PelicanServerListResponseSchema = z
+  .object({ data: z.array(PelicanServerRowSchema) })
+  .strict();
+export type PelicanServerListResponse = z.infer<
+  typeof PelicanServerListResponseSchema
+>;
+
+/** `PATCH /admin/plugins/pelican/servers/:id` — omitted = unchanged, `timezone: ''` = inherit. */
+export const PelicanServerUpdateSchema = z
+  .object({
+    gameId: z.number().int().positive().nullable(),
+    showOnCalendar: z.boolean(),
+    timezone: z
+      .string()
+      .trim()
+      .max(64)
+      .refine((v) => v === '' || isValidIanaTimezone(v), {
+        message: 'Unknown timezone',
+      }),
+  })
+  .partial()
+  .strict()
+  .refine((o) => Object.keys(o).length > 0, {
+    message: 'Nothing to update',
+  });
+export type PelicanServerUpdate = z.infer<typeof PelicanServerUpdateSchema>;
