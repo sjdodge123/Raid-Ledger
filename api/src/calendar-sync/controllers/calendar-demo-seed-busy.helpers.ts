@@ -8,6 +8,7 @@
  * on, `POST …/sync`) reads the same blocks instead of erasing them — and a
  * sync of any other connection never sees them. `readAccess` optionally flips the
  * row's read grant: `granted` → read on, `active`; `missing` → read off.
+ * Every seed stamps `last_synced_at` (`SEEDED_SYNC_AGE_MS` ago).
  * ROK-1595 G-2: `derive: true` then runs the PR-B away-day derive for the
  * owner inline (the function the `derive` job calls), so all-day blocks
  * become `source='calendar'` absences before the response.
@@ -21,6 +22,7 @@ import { FAKE_PRIMARY_CALENDAR_ID } from '../providers/testing/fake-calendar-sto
 import type { FakeCalendarProvider } from '../providers/testing/fake-calendar.provider';
 import type { BusyBlock } from '../providers/calendar-provider.interface';
 import { decryptCalendarCredentials } from '../services/calendar-credentials.helpers';
+import { MANUAL_SYNC_THROTTLE_MS } from '../services/calendar-read-settings.helpers';
 import {
   runCalendarDerive,
   type CalendarDeriveResult,
@@ -56,6 +58,13 @@ export const SeedBusySchema = z
 export type SeedBusyInput = z.infer<typeof SeedBusySchema>;
 
 type SeedBlock = SeedBusyInput['blocks'][number];
+
+/**
+ * ROK-1595: the `last_synced_at` a seed stamps, just past the manual-sync
+ * throttle — the page reads "Synced …" at once, yet Sync now still queues
+ * (the profile smoke taps it right after seeding and expects a 202).
+ */
+export const SEEDED_SYNC_AGE_MS = MANUAL_SYNC_THROTTLE_MS + 60_000;
 
 function toBusyBlock(b: SeedBlock): BusyBlock {
   const base = { start: new Date(b.start), end: new Date(b.end) };
@@ -137,10 +146,11 @@ export async function seedDemoBusy(
 ): Promise<SeedBusyResult> {
   const conns = schema.calendarConnections;
   const conn = await findConnection(db, input.connectionId);
-  if (input.readAccess) {
-    const set = { ...readAccessSet(input.readAccess), updatedAt: new Date() };
-    await db.update(conns).set(set).where(eq(conns.id, conn.id));
-  }
+  const now = Date.now();
+  const access = input.readAccess ? readAccessSet(input.readAccess) : {};
+  const lastSyncedAt = new Date(now - SEEDED_SYNC_AGE_MS);
+  const set = { ...access, lastSyncedAt, updatedAt: new Date(now) };
+  await db.update(conns).set(set).where(eq(conns.id, conn.id));
   const blocks = input.blocks.map(toBusyBlock);
   await db
     .insert(schema.calendarBusyBlocks)

@@ -412,7 +412,10 @@ describe('POST /admin/test/calendar/seed-busy', () => {
     expect(await rowOf(id)).toMatchObject({
       readAccessGranted: true,
       readEnabled: true,
+      lastSyncedAt: expect.any(Date),
     });
+    // Stamped past the manual-sync throttle: Sync now still queues.
+    expect((await postSync(id)).status).toBe(202);
   });
 
   it("drops the owner's cached game-time so the busy hours show at once", async () => {
