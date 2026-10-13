@@ -126,10 +126,12 @@ describe('AwayPanel — synced calendar days (ROK-1595 S1)', () => {
         fireEvent.click(within(rowOf(SYNCED)).getByRole('button', { name: `Ignore ${SYNCED}` }));
         await waitFor(() => expect(screen.queryByText(SYNCED)).toBeNull());
         release();
-        await waitFor(() => expect(t.error).toHaveBeenCalledWith('Could not ignore that day'));
         // The post-error refetch is still held: the row is back from the rollback alone.
         await waitFor(() => expect(screen.queryByText(SYNCED), 'rolled back before the list refetch lands').not.toBeNull());
+        // The per-call onError toast runs only after the hook's onSettled, which awaits the
+        // invalidation refetches (TanStack v5 order), so the refetch must land before it fires.
         releaseRefetch();
+        await waitFor(() => expect(t.error).toHaveBeenCalledWith('Could not ignore that day'));
     });
 });
 
