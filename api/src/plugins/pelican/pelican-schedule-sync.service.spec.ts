@@ -1,5 +1,8 @@
 import { Logger } from '@nestjs/common';
-import type { NewPelicanSchedule, PelicanServerRow } from '../../drizzle/schema';
+import type {
+  NewPelicanSchedule,
+  PelicanServerRow,
+} from '../../drizzle/schema';
 import type { PelicanSchedule, PelicanTask } from './pelican-api.schemas';
 import type { PelicanClient, PelicanResult } from './pelican-client';
 import { PelicanScheduleSyncService } from './pelican-schedule-sync.service';
@@ -62,9 +65,8 @@ function build(
   const client = { listSchedules: jest.fn(respond) };
   const servers = { listPollable: jest.fn(() => Promise.resolve(rows)) };
   const schedules = {
-    replaceForServer: jest.fn(
-      (_id: number, _rows: NewPelicanSchedule[]): Promise<boolean> =>
-        Promise.resolve(true),
+    replaceForServer: jest.fn<Promise<boolean>, [number, NewPelicanSchedule[]]>(
+      () => Promise.resolve(true),
     ),
   };
   const service = new PelicanScheduleSyncService(
@@ -111,12 +113,12 @@ describe('PelicanScheduleSyncService.syncSchedules', () => {
     expect(outcome).toEqual({ synced: 2, failed: 0, skipped: 2 });
     expect(replacedIds(schedules)).toEqual([1, 2]);
     const [, written] = schedules.replaceForServer.mock.calls[0] ?? [0, []];
-    expect(written.map((r) => [r.serverId, r.panelScheduleId, r.effect])).toEqual(
-      [
-        [expect.any(Number), 1, 'restart'],
-        [expect.any(Number), 2, 'command'],
-      ],
-    );
+    expect(
+      written.map((r) => [r.serverId, r.panelScheduleId, r.effect]),
+    ).toEqual([
+      [expect.any(Number), 1, 'restart'],
+      [expect.any(Number), 2, 'command'],
+    ]);
     expect(JSON.stringify(schedules.replaceForServer.mock.calls)).not.toContain(
       SENTINEL,
     );

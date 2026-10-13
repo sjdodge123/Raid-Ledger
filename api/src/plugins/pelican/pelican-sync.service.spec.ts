@@ -189,7 +189,8 @@ describe('PelicanSyncService.syncServers — schedule phase (ROK-1773 D2)', () =
       expect.objectContaining({ host: 'panel.example.test' }),
     );
     const applyOrder = repo.applyListing.mock.invocationCallOrder[0];
-    const scheduleOrder = scheduleSync.syncSchedules.mock.invocationCallOrder[0];
+    const scheduleOrder =
+      scheduleSync.syncSchedules.mock.invocationCallOrder[0];
     expect(applyOrder).toBeLessThan(scheduleOrder ?? 0);
   });
 

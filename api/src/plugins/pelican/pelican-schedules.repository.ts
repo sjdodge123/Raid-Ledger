@@ -61,7 +61,10 @@ export class PelicanSchedulesRepository {
         serverTimezone: pelicanServers.timezone,
       })
       .from(pelicanSchedules)
-      .innerJoin(pelicanServers, eq(pelicanSchedules.serverId, pelicanServers.id))
+      .innerJoin(
+        pelicanServers,
+        eq(pelicanSchedules.serverId, pelicanServers.id),
+      )
       .where(
         and(
           isNotNull(pelicanServers.gameId),
