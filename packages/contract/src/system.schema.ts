@@ -33,6 +33,9 @@ export const SystemStatusSchema = z.object({
     communityName: z.string().optional(),
     /** Community logo URL path (ROK-271) */
     communityLogoUrl: z.string().optional(),
+    /** ROK-1778: optional contact email shown on the public /privacy page.
+     *  Null/absent = members are told to ask an admin in Discord. */
+    privacyContactEmail: z.string().email().nullable().optional(),
     /** True when admin onboarding wizard has been completed (ROK-204) */
     onboardingCompleted: z.boolean().optional(),
     /** Available authentication providers (ROK-267) */
