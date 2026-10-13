@@ -1,0 +1,9 @@
+{
+  "errors": [
+    {
+      "code": "AccessDeniedHttpException",
+      "status": "403",
+      "detail": "This IP address (192.0.2.10) does not have permission to access the API using these credentials."
+    }
+  ]
+}

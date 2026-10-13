@@ -23,6 +23,7 @@ import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
 import { DiscordModule } from './plugins/discord';
+import { PelicanModule } from './plugins/pelican';
 import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
 import { RelayModule } from './relay/relay.module';
@@ -96,6 +97,7 @@ import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
     CooptimusModule,
     LogsModule,
     AiModule,
+    PelicanModule,
     SchedulingModule,
     LineupsModule,
     StandalonePollModule,

@@ -22,6 +22,7 @@ vi.mock('./components/ui/ThemeParticles', () => ({ ThemeParticles: () => null })
 vi.mock('./plugins/wow/register', () => ({}));
 vi.mock('./plugins/discord/register', () => ({}));
 vi.mock('./plugins/ai/register', () => ({}));
+vi.mock('./plugins/pelican/register', () => ({}));
 vi.mock('./stores/connectivity-store', () => ({
     useConnectivityStore: (sel: (s: { startPolling: () => () => void }) => unknown) =>
         sel({ startPolling: () => () => {} }),

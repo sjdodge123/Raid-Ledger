@@ -11,6 +11,7 @@ import { lfgHandlers } from './lfg-handlers';
 import { discordThreadHandlers } from './discord-thread-handlers';
 import { communityInsightsHandlers } from './community-insights-handlers';
 import { calendarSyncHandlers } from './calendar-sync-handlers';
+import { pelicanHandlers } from './pelican-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
 const API_BASE = 'http://localhost:3000';
@@ -22,6 +23,8 @@ export const handlers = [
     ...discordThreadHandlers,
     // Admin Calendar Sync (ROK-1591) — off, no ids, no secrets.
     ...calendarSyncHandlers,
+    // Pelican plugin admin (ROK-121) — nothing stored.
+    ...pelicanHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
     // POST /auth/refresh before settling on logged-out. Default to 401 (no
     // refresh cookie) so component tests resolve the probe deterministically.

@@ -1,0 +1,49 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server",
+      "attributes": {
+        "server_owner": true,
+        "identifier": "11111111",
+        "internal_id": 1,
+        "uuid": "11111111-1111-4111-8111-111111111111",
+        "name": "Example Server 1",
+        "node": "Example Node",
+        "is_node_under_maintenance": false,
+        "description": "",
+        "status": null,
+        "is_suspended": false,
+        "is_installing": false,
+        "is_transferring": false
+      }
+    },
+    {
+      "object": "server",
+      "attributes": {
+        "server_owner": false,
+        "identifier": "22222222",
+        "internal_id": 2,
+        "uuid": "22222222-2222-4222-8222-222222222222",
+        "name": "Example Server 2",
+        "node": "Example Node",
+        "is_node_under_maintenance": false,
+        "description": "",
+        "status": null,
+        "is_suspended": false,
+        "is_installing": false,
+        "is_transferring": false
+      }
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "total": 2,
+      "count": 2,
+      "per_page": 50,
+      "current_page": 1,
+      "total_pages": 1,
+      "links": {}
+    }
+  }
+}
