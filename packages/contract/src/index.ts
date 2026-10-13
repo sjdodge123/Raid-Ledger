@@ -70,6 +70,9 @@ export * from './plugins.schema.js';
 // Pelican game-server panel plugin (ROK-121)
 export * from './pelican.schema.js';
 
+// Game servers (ROK-268)
+export * from './game-servers.schema.js';
+
 // Feedback (ROK-186)
 export * from './feedback.schema.js';
 
