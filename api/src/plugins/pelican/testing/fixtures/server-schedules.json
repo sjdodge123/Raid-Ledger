@@ -1,0 +1,65 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "server_schedule",
+      "attributes": {
+        "id": 1,
+        "name": "Nightly restart",
+        "cron": { "day_of_week": "*", "day_of_month": "*", "month": "*", "hour": "4", "minute": "0" },
+        "is_active": true,
+        "is_processing": false,
+        "only_when_online": false,
+        "last_run_at": "2026-01-01T04:00:00+00:00",
+        "next_run_at": "2026-01-02T04:00:00+00:00",
+        "created_at": "2025-12-01T12:00:00+00:00",
+        "updated_at": "2025-12-01T12:00:00+00:00",
+        "relationships": {
+          "tasks": {
+            "object": "list",
+            "data": [
+              {
+                "object": "schedule_task",
+                "attributes": {
+                  "id": 10, "sequence_id": 1, "action": "power", "payload": "restart",
+                  "time_offset": 0, "is_queued": false, "continue_on_failure": false,
+                  "created_at": "2025-12-01T12:00:00+00:00", "updated_at": "2025-12-01T12:00:00+00:00"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "object": "server_schedule",
+      "attributes": {
+        "id": 2,
+        "name": "Weekend announcement",
+        "cron": { "day_of_week": "6", "day_of_month": "*", "month": "*", "hour": "18", "minute": "30" },
+        "is_active": false,
+        "is_processing": false,
+        "only_when_online": true,
+        "last_run_at": null,
+        "next_run_at": null,
+        "created_at": "2025-12-01T12:00:00+00:00",
+        "updated_at": "2025-12-01T12:00:00+00:00",
+        "relationships": {
+          "tasks": {
+            "object": "list",
+            "data": [
+              {
+                "object": "schedule_task",
+                "attributes": {
+                  "id": 20, "sequence_id": 1, "action": "command", "payload": "say example",
+                  "time_offset": 0, "is_queued": false, "continue_on_failure": true,
+                  "created_at": "2025-12-01T12:00:00+00:00", "updated_at": "2025-12-01T12:00:00+00:00"
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

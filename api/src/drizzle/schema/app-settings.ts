@@ -209,6 +209,12 @@ export const SETTING_KEYS = {
   /** ROK-1771: Spotlight rotation memory — JSON array of ≤4
    *  `{ week: 'YYYY-Www', kind }`, newest first. Internal; no admin UI. */
   WEEKLY_DIGEST_SPOTLIGHT_HISTORY: 'weekly_digest_spotlight_history',
+  /** ROK-121: Pelican panel base URL (admin-supplied; server-side fetch). */
+  PELICAN_PANEL_URL: 'pelican_panel_url',
+  /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
+  PELICAN_CLIENT_API_KEY: 'pelican_client_api_key',
+  /** ROK-121: IANA tz for Pelican schedules; unset ⇒ community default_timezone. */
+  PELICAN_DEFAULT_TIMEZONE: 'pelican_default_timezone',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
