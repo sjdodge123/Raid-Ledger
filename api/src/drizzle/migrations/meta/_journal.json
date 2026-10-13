@@ -1471,6 +1471,13 @@
       "when": 1791915921696,
       "tag": "0210_pelican_servers_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 211,
+      "version": "7",
+      "when": 1791934935414,
+      "tag": "0211_pelican_schedules_offset_check",
+      "breakpoints": true
     }
   ]
 }
