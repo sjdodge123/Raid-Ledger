@@ -1,11 +1,11 @@
 import { and, asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../drizzle/schema';
+import * as schema from '../../drizzle/schema';
 import {
   games,
   pelicanServers,
   type NewPelicanServer,
-} from '../drizzle/schema';
+} from '../../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
 

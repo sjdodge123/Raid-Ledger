@@ -5,20 +5,20 @@
  * (403 without DEMO_MODE is the shared DemoModeGuard's own spec.)
  */
 import { PelicanServerListResponseSchema } from '@raid-ledger/contract';
-import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
   truncateAllTables,
-} from '../common/testing/integration-helpers';
-import * as schema from '../drizzle/schema';
-import { SettingsService } from '../settings/settings.service';
-import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from '../plugins/pelican/pelican.constants';
+} from '../../common/testing/integration-helpers';
+import * as schema from '../../drizzle/schema';
+import { SettingsService } from '../../settings/settings.service';
+import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import { PELICAN_PLUGIN_ID } from './pelican.constants';
 import {
   DEMO_PELICAN_API_KEY,
   DEMO_PELICAN_PANEL_URL,
   type PelicanSeedResult,
-} from './demo-test-pelican.helpers';
+} from './pelican-demo-seed.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/pelican/seed-servers';

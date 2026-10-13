@@ -17,6 +17,7 @@ import { PelicanStatusService } from './pelican-status.service';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
 import { PelicanAdapterRegistration } from './pelican-adapters';
+import { PelicanDemoSeedController } from './pelican-demo-seed.controller';
 
 type UninstalledPayload = { slug: string };
 
@@ -26,7 +27,13 @@ type UninstalledPayload = { slug: string };
  */
 @Module({
   imports: [SettingsModule],
-  controllers: [PelicanAdminController, PelicanServersAdminController],
+  controllers: [
+    PelicanAdminController,
+    PelicanServersAdminController,
+    // DEMO_MODE fixture (ROK-1094) — NOT plugin-gated: it installs + activates
+    // the plugin itself, so it must answer while Pelican is inactive.
+    PelicanDemoSeedController,
+  ],
   providers: [
     PelicanConfigService,
     PelicanClientFactory,
@@ -40,7 +47,6 @@ type UninstalledPayload = { slug: string };
   ],
   exports: [
     PelicanClientFactory,
-    PelicanConfigService,
     PelicanServersRepository,
     PelicanSyncService,
     PelicanStatusService,
