@@ -129,6 +129,8 @@ async function openAs(page: Page, member: Member) {
         .toBeVisible({ timeout: 15_000 });
     const rules = page.getByTestId('calendar-read-rules');
     await expect(rules).toBeVisible({ timeout: 15_000 });
+    // One account: the page switches are its on/off (F-2), so no per-card "Read this account".
+    await expect(page.getByTestId('calendar-connection-read')).toHaveCount(0);
     return rules;
 }
 
@@ -184,6 +186,8 @@ test('read rules: K2 switches on the phone layout, K4 radio cards + picker on de
 });
 
 test('Sync now (Manage menu): first tap queues a sync, a second tap is throttled', async ({ page }, testInfo) => {
+    // CI's default is 30s (playwright.config.ts) and the land-poll below alone may take 60s.
+    test.setTimeout(120_000);
     const member = await seedMember(testInfo.project.name, 'granted');
     try {
         await openAs(page, member);
