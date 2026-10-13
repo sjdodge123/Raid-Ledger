@@ -24,7 +24,9 @@ describe('PelicanServersRepository.upsertListed', () => {
   it('updates only identifier, name, last_synced_at, missing_since on conflict', async () => {
     const { db, repo } = build();
     db.returning.mockResolvedValueOnce([{ id: 1 }, { id: 2 }]);
-    expect(await repo.upsertListed(db as never, [listed(1), listed(2)], NOW)).toBe(2);
+    expect(
+      await repo.upsertListed(db as never, [listed(1), listed(2)], NOW),
+    ).toBe(2);
     const arg = db.onConflictDoUpdate.mock.calls[0]?.[0] as {
       set: Record<string, unknown>;
     };
@@ -56,7 +58,9 @@ describe('PelicanServersRepository.markMissing', () => {
   it('stamps only present rows absent from the listing', async () => {
     const { db, repo } = build();
     db.returning.mockResolvedValueOnce([{ id: 7 }]);
-    expect(await repo.markMissing(db as never, ['uuid-1', 'uuid-2'], NOW)).toBe(1);
+    expect(await repo.markMissing(db as never, ['uuid-1', 'uuid-2'], NOW)).toBe(
+      1,
+    );
     expect(db.set).toHaveBeenCalledWith({ missingSince: NOW });
     const q = render(db.where.mock.calls[0]?.[0]);
     expect(q.sql).toBe(
@@ -76,9 +80,7 @@ describe('PelicanServersRepository.markMissing', () => {
 describe('PelicanServersRepository.applyListing', () => {
   it('counts restored rows, upserts, then marks missing in one transaction', async () => {
     const { db, repo } = build();
-    db.where
-      .mockReturnValueOnce(Promise.resolve([{ id: 3 }]))
-      .mockReturnThis();
+    db.where.mockReturnValueOnce(Promise.resolve([{ id: 3 }])).mockReturnThis();
     db.returning
       .mockResolvedValueOnce([{ id: 1 }, { id: 3 }])
       .mockResolvedValueOnce([{ id: 9 }]);

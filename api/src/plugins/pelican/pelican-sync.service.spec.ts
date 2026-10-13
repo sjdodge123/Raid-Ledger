@@ -8,6 +8,7 @@ import type { PluginRegistryService } from '../plugin-host/plugin-registry.servi
 import {
   fakeServer,
   jsonResponse,
+  requestUrl,
   serverPageBody,
 } from './testing/pelican-fixtures';
 
@@ -15,9 +16,12 @@ const KEY = 'pacc_FAKEKEYfortests0123456789';
 type FetchArgs = Parameters<typeof fetch>;
 type Respond = (page: number) => Promise<Response>;
 
-function build(respond: Respond, opts: { active?: boolean; conn?: boolean } = {}) {
+function build(
+  respond: Respond,
+  opts: { active?: boolean; conn?: boolean } = {},
+) {
   const fetchImpl = jest.fn<Promise<Response>, FetchArgs>((input) =>
-    respond(Number(new URL(String(input)).searchParams.get('page'))),
+    respond(Number(requestUrl(input).searchParams.get('page'))),
   );
   const client = new PelicanClient({
     baseUrl: 'https://panel.example.test',
@@ -43,9 +47,7 @@ function build(respond: Respond, opts: { active?: boolean; conn?: boolean } = {}
 }
 
 const twoPages: Respond = (page) =>
-  Promise.resolve(
-    jsonResponse(serverPageBody([fakeServer(page)], page, 2)),
-  );
+  Promise.resolve(jsonResponse(serverPageBody([fakeServer(page)], page, 2)));
 
 let logged: string[];
 beforeEach(() => {
@@ -88,10 +90,14 @@ describe('PelicanSyncService.syncServers', () => {
       expect.any(Date),
     );
   });
+});
 
+describe('PelicanSyncService.syncServers — failures and overlap', () => {
   it('writes nothing and marks nothing missing when page 2 fails', async () => {
     const { service, repo } = build((page) =>
-      page === 1 ? twoPages(1) : Promise.resolve(new Response('', { status: 503 })),
+      page === 1
+        ? twoPages(1)
+        : Promise.resolve(new Response('', { status: 503 })),
     );
     const outcome = await service.syncServers();
     expect(outcome).toEqual({
@@ -130,7 +136,9 @@ describe('PelicanSyncService.syncServers', () => {
     const ok = build(twoPages);
     await ok.service.syncServers();
     const failing = build((page) =>
-      page === 1 ? twoPages(1) : Promise.resolve(new Response('', { status: 500 })),
+      page === 1
+        ? twoPages(1)
+        : Promise.resolve(new Response('', { status: 500 })),
     );
     await failing.service.syncServers();
     expect(logged.length).toBeGreaterThan(0);

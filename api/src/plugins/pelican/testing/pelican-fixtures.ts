@@ -56,3 +56,9 @@ export function serverPageBody(
     },
   };
 }
+
+/** The URL a fake `fetch` was called with. */
+export function requestUrl(input: Parameters<typeof fetch>[0]): URL {
+  if (input instanceof URL) return input;
+  return new URL(typeof input === 'string' ? input : input.url);
+}

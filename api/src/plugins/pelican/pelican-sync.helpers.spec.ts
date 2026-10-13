@@ -10,16 +10,16 @@ import {
 import {
   fakeServer,
   jsonResponse,
+  requestUrl,
   serverPageBody,
 } from './testing/pelican-fixtures';
 
 type FetchArgs = Parameters<typeof fetch>;
 
 /** A client whose fetch serves `pages[n-1]` for `?page=n`. */
-function clientServing(pages: (number | unknown)[]) {
+function clientServing(pages: unknown[]) {
   const fetchImpl = jest.fn<Promise<Response>, FetchArgs>((input) => {
-    const url = new URL(String(input));
-    const page = Number(url.searchParams.get('page'));
+    const page = Number(requestUrl(input).searchParams.get('page'));
     const body = pages[page - 1];
     if (typeof body === 'number') {
       return Promise.resolve(new Response('', { status: body }));
@@ -35,8 +35,8 @@ function clientServing(pages: (number | unknown)[]) {
 }
 
 const pagesRequested = (fetchImpl: jest.Mock) =>
-  fetchImpl.mock.calls.map(([input]) =>
-    new URL(String(input)).searchParams.get('page'),
+  fetchImpl.mock.calls.map(([input]: FetchArgs) =>
+    requestUrl(input).searchParams.get('page'),
   );
 
 beforeEach(() => {
@@ -62,8 +62,8 @@ describe('fetchAllServers', () => {
   it('requests the maximum page size', async () => {
     const { client, fetchImpl } = clientServing([serverPageBody([], 1, 1)]);
     await fetchAllServers(client);
-    const url = new URL(String(fetchImpl.mock.calls[0]?.[0]));
-    expect(url.searchParams.get('per_page')).toBe('100');
+    const [input] = fetchImpl.mock.calls[0] ?? [];
+    expect(input && requestUrl(input).searchParams.get('per_page')).toBe('100');
   });
 
   it('accepts an empty-but-successful listing (total_pages 0)', async () => {
@@ -71,7 +71,9 @@ describe('fetchAllServers', () => {
     expect(await fetchAllServers(client)).toEqual({ ok: true, servers: [] });
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
+});
 
+describe('fetchAllServers — failures', () => {
   it('returns the failure kind and no servers when a later page fails', async () => {
     const { client, fetchImpl } = clientServing([
       serverPageBody([fakeServer(1)], 1, 3),
