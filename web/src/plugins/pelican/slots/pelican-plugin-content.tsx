@@ -9,10 +9,10 @@ import { usePelicanConfig } from '../hooks/use-pelican-config';
 import { PelicanConnectionForm } from './pelican-connection-form';
 import { PelicanSetupSteps } from './pelican-setup-steps';
 import { isPelicanConfigured } from './pelican-form.helpers';
+import { isPelicanSlot } from './pelican-slot.helpers';
 
-export const PELICAN_INTEGRATION_KEY = 'pelican-panel';
-
-function PelicanPanel() {
+/** Loaded lazily by `PelicanPluginSlot` (the entry-chunk gate registered in the slot). */
+export function PelicanPanel() {
     const { data: config, isLoading, isError } = usePelicanConfig();
     return (
         <IntegrationCard title="Pelican" description="Game-server panel connection" icon={null}
@@ -33,7 +33,6 @@ function PelicanPanel() {
 }
 
 export function PelicanPluginContent({ pluginSlug, integrationKey }: { pluginSlug?: string; integrationKey?: string }) {
-    if (pluginSlug !== 'pelican') return null;
-    if (integrationKey && integrationKey !== PELICAN_INTEGRATION_KEY) return null;
+    if (!isPelicanSlot(pluginSlug, integrationKey)) return null;
     return <PelicanPanel />;
 }

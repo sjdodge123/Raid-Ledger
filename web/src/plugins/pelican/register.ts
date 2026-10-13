@@ -1,5 +1,5 @@
 import { registerPlugin } from '../plugin-registry';
-import { PelicanPluginContent } from './slots/pelican-plugin-content';
+import { PelicanPluginSlot } from './slots/pelican-plugin-slot';
 
 /** Pelican game-server panel plugin (ROK-121). Neutral registry colour — no brand mark (spec Q7). */
 const pelican = registerPlugin('pelican', {
@@ -8,4 +8,5 @@ const pelican = registerPlugin('pelican', {
     label: 'Pelican',
 });
 
-pelican.registerSlot('admin-settings:plugin-content', PelicanPluginContent);
+// Gate + lazy panel: the panel's code stays out of the entry chunk (bundle budget).
+pelican.registerSlot('admin-settings:plugin-content', PelicanPluginSlot);
