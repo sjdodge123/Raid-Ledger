@@ -19,6 +19,8 @@ import type {
   CharacterEquipmentDto,
   CreateCharacterDto,
   ForeverTalentsDto,
+  GameServerCalendarItemDto,
+  GameServerStatusDto,
   UpdateCharacterDto,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
@@ -198,6 +200,24 @@ export interface CharacterIdentityProvider {
   ): void;
 }
 
+/** A plugin that knows about game servers (Pelican, GPortal, ...) — ROK-268. Core never imports a provider. */
+export interface GameServerProvider {
+  /** Owning plugin id — core skips the provider while that plugin is inactive. */
+  readonly pluginSlug: string;
+  /** Human label stamped onto every item/status, e.g. "Pelican". */
+  readonly providerLabel: string;
+  /** Windows + markers overlapping [from, to). `gameIds` undefined = all mapped games. */
+  getCalendarItems(
+    range: { from: Date; to: Date },
+    gameIds?: number[],
+  ): Promise<GameServerCalendarItemDto[]>;
+  /** Current state per mapped server. `gameIds` undefined = all mapped games. */
+  getStatuses(gameIds?: number[]): Promise<GameServerStatusDto[]>;
+}
+
+/** Multi-adapter key every game-server provider registers under (providers are not per-game). */
+export const GAME_SERVER_PROVIDER_KEY = '*';
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -208,4 +228,5 @@ export const EXTENSION_POINTS = {
   CRON_REGISTRAR: 'cron-registrar',
   AUTH_PROVIDER: 'auth-provider',
   CHARACTER_IDENTITY: 'character-identity',
+  GAME_SERVER_PROVIDER: 'game-server-provider',
 } as const;
