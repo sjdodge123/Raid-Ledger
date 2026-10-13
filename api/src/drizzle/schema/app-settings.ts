@@ -204,6 +204,9 @@ export const SETTING_KEYS = {
   WEEKLY_DIGEST_DAY: 'weekly_digest_day',
   /** ROK-1435: Hour to post, '0'–'23', community timezone. Default '9'. */
   WEEKLY_DIGEST_HOUR: 'weekly_digest_hour',
+  /** ROK-1771: Spotlight rotation memory — JSON array of ≤4
+   *  `{ week: 'YYYY-Www', kind }`, newest first. Internal; no admin UI. */
+  WEEKLY_DIGEST_SPOTLIGHT_HISTORY: 'weekly_digest_spotlight_history',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];

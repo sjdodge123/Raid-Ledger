@@ -44,6 +44,24 @@ async function writeCache(
   }
 }
 
+// ─── Shared predicates ───────────────────────────────────────────────────────
+
+/**
+ * "At its all-time low" — the ONE server-side definition of best price
+ * (ROK-803; shared with the weekly digest by ROK-1771). Mirrors the web badge
+ * `getPriceBadgeTypeFromScalars` in `price-badge.helpers.ts`.
+ */
+export const bestPriceCondition = () =>
+  and(
+    gt(schema.games.itadCurrentCut, 0),
+    // Explicit null guards required: cut > 0 doesn't guarantee price
+    // columns are non-null — a row could have a cut value from a previous
+    // sync while prices were cleared by stale-pricing cleanup.
+    isNotNull(schema.games.itadCurrentPrice),
+    isNotNull(schema.games.itadLowestPrice),
+    lte(schema.games.itadCurrentPrice, schema.games.itadLowestPrice),
+  );
+
 // ─── Public fetch functions ─────────────────────────────────────────────────
 
 /**
@@ -185,14 +203,8 @@ async function queryBestPrice(db: Db): Promise<GameDetailDto[]> {
     )
     .where(
       and(
-        gt(schema.games.itadCurrentCut, 0),
         isNotNull(schema.games.itadGameId),
-        // Explicit null guards required: cut > 0 doesn't guarantee price
-        // columns are non-null — a row could have a cut value from a previous
-        // sync while prices were cleared by stale-pricing cleanup.
-        isNotNull(schema.games.itadCurrentPrice),
-        isNotNull(schema.games.itadLowestPrice),
-        lte(schema.games.itadCurrentPrice, schema.games.itadLowestPrice),
+        bestPriceCondition(),
         VISIBILITY_FILTER(),
       ),
     )

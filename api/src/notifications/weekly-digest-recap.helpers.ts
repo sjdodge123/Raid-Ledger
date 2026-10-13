@@ -24,6 +24,11 @@ export const RECAP_WINDOW_DAYS = 7;
 export interface WeeklyRecapOptions {
   /** Drop members whose `show_activity` preference is `false`. Default `true`. */
   respectActivityOptOut?: boolean;
+  /**
+   * Shift the window back this many whole days (ROK-1771 C1). `0` (default) is
+   * `[NOW()-7d, NOW()]`; `7` is the prior week `[NOW()-14d, NOW()-7d]`.
+   */
+  endOffsetDays?: number;
 }
 
 /**
@@ -45,7 +50,21 @@ export interface WeeklyRecap {
   attendances: number;
 }
 
-const WINDOW = sql.raw(`INTERVAL '${RECAP_WINDOW_DAYS} days'`);
+/** `NOW()` shifted back `days` whole days, as raw SQL (no bound params). */
+function nowMinusDays(days: number): SQL {
+  return days === 0
+    ? sql.raw('NOW()')
+    : sql.raw(`(NOW() - INTERVAL '${days} days')`);
+}
+
+/** Validate the offset: a non-negative whole number of days. */
+function windowOffset(endOffsetDays: number | undefined): number {
+  const offset = endOffsetDays ?? 0;
+  if (!Number.isInteger(offset) || offset < 0) {
+    throw new Error(`endOffsetDays must be a non-negative integer: ${offset}`);
+  }
+  return offset;
+}
 
 /**
  * `e.duration && tsrange(...)` lets the planner use `idx_events_duration_gist`;
@@ -53,30 +72,56 @@ const WINDOW = sql.raw(`INTERVAL '${RECAP_WINDOW_DAYS} days'`);
  * Members who left the guild (deactivated), were banned or were kicked drop
  * out via `ACTIVE_MEMBER_SQL_AND` on the `users` join.
  */
-const ATTENDED_CTE = sql`
+/**
+ * The one definition of "attended an event" for the digest: an `attended`
+ * signup by a linked user on an event that was not cancelled. Aliases:
+ * `s` = event_signups, `e` = events. Window bounds are the caller's.
+ */
+export const ATTENDED_SIGNUP_SQL = sql`s.attendance_status = 'attended'
+      AND s.user_id IS NOT NULL
+      AND e.cancelled_at IS NULL`;
+
+function attendedCte(endOffsetDays: number): SQL {
+  const end = nowMinusDays(endOffsetDays);
+  const start = nowMinusDays(endOffsetDays + RECAP_WINDOW_DAYS);
+  return sql`
   attended AS (
     SELECT s.user_id, e.id AS event_id
     FROM event_signups s
     INNER JOIN events e ON e.id = s.event_id
     INNER JOIN users u ON u.id = s.user_id
-    WHERE s.attendance_status = 'attended'
-      AND s.user_id IS NOT NULL
-      AND e.cancelled_at IS NULL
-      AND e.duration && tsrange((NOW() - ${WINDOW})::timestamp, NOW()::timestamp, '[]')
-      AND upper(e.duration) >= (NOW() - ${WINDOW})
-      AND upper(e.duration) <= NOW()${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
+    WHERE ${ATTENDED_SIGNUP_SQL}
+      AND e.duration && tsrange(${start}::timestamp, ${end}::timestamp, '[]')
+      AND upper(e.duration) >= ${start}
+      AND upper(e.duration) <= ${end}${sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd())}
   )`;
+}
 
-// Same predicate as the `filtered` CTE in igdb-discover-community-playing.helpers.ts.
+/** A bare `alias.column` reference — `SHOWS_ACTIVITY_SQL` inlines it raw. */
+const USER_ID_REF = /^[a-z_][a-z0-9_]*\.[a-z_][a-z0-9_]*$/;
+
+/**
+ * The digest's one privacy rule (ROK-1435 Decision 4a, ROK-1771 AC10): true
+ * unless the member set `show_activity = false`. `userIdRef` is the qualified
+ * user-id column of the row being filtered, e.g. `'a.user_id'`. Same predicate
+ * as the `filtered` CTE in igdb-discover-community-playing.helpers.ts.
+ */
+export function SHOWS_ACTIVITY_SQL(userIdRef: string): SQL {
+  if (!USER_ID_REF.test(userIdRef)) {
+    throw new Error(`SHOWS_ACTIVITY_SQL: not a column reference: ${userIdRef}`);
+  }
+  return sql`NOT EXISTS (
+      SELECT 1 FROM user_preferences sa_pref
+      WHERE sa_pref.user_id = ${sql.raw(userIdRef)}
+        AND sa_pref.key = 'show_activity'
+        AND sa_pref.value = 'false'::jsonb
+    )`;
+}
+
 const OPT_OUT_FILTERED_CTE = sql`
   filtered AS (
     SELECT a.* FROM attended a
-    WHERE NOT EXISTS (
-      SELECT 1 FROM user_preferences p
-      WHERE p.user_id = a.user_id
-        AND p.key = 'show_activity'
-        AND p.value = 'false'::jsonb
-    )
+    WHERE ${SHOWS_ACTIVITY_SQL('a.user_id')}
   )`;
 
 const UNFILTERED_CTE = sql`
@@ -88,8 +133,9 @@ const UNFILTERED_CTE = sql`
 export function buildWeeklyRecapQuery(options: WeeklyRecapOptions = {}): SQL {
   const respect = options.respectActivityOptOut ?? true;
   const filtered = respect ? OPT_OUT_FILTERED_CTE : UNFILTERED_CTE;
+  const attended = attendedCte(windowOffset(options.endOffsetDays));
   return sql`
-    WITH ${ATTENDED_CTE},
+    WITH ${attended},
     ${filtered}
     SELECT COUNT(DISTINCT event_id)::int AS events_run,
            COUNT(DISTINCT user_id)::int  AS players_attended,

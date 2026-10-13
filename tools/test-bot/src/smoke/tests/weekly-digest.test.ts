@@ -8,11 +8,13 @@
  * setting → bot default channel), the empty-week skip, the ISO-week dedup
  * claim and the send.
  *
- *  1. Raise an LFG hand so the week is guaranteed non-empty.
+ *  1. Raise an LFG hand so the week is guaranteed non-empty, and schedule a
+ *     (non ad-hoc) event inside the 7-day window so Coming up has a row.
  *  2. Trigger with `resetWeek: true` (gives back this week's dedup claim).
  *  3. Assert the embed lands in the default channel (no digest channel is
  *     configured, so this is the fallback) with the digest chrome, the LFG
- *     section, no message content and no mention markup.
+ *     section, the v2 Coming up section (ROK-1771), no message content and no
+ *     mention markup anywhere in the embed (title, description, every field).
  *  4. Trigger again without the reset: the fixture reports `duplicate` and no
  *     second digest appears.
  */
@@ -21,6 +23,9 @@ import { pollForEmbed } from '../../helpers/polling.js';
 import {
   assertConditionNeverMet,
   awaitProcessing,
+  createEvent,
+  deleteEvent,
+  futureTime,
   postLfgIntent,
   withdrawLfgIntent,
 } from '../fixtures.js';
@@ -29,6 +34,12 @@ import { resolveConfiguredGame } from '../configured-game.js';
 import type { SmokeTest, TestContext } from '../types.js';
 
 const LFG_FIELD = '\u{1F50E} Looking for group';
+/** Must equal `DIGEST_FIELD_NAMES.upcoming` (api weekly-digest-embed-sections.helpers.ts). */
+const UPCOMING_FIELD = '\u{1F4C5} Coming up';
+/** User and role mentions plus the two mass pings. */
+const MENTION_RE = /<@[!&]?\d|@everyone|@here/;
+/** Starts the Coming up fixture a day out — inside the 7-day window. */
+const UPCOMING_START_MIN = 24 * 60;
 const TITLE_RE = /^Week in review — /;
 
 interface DigestOutcome {
@@ -77,9 +88,33 @@ function assertDigestShape(msg: SimpleMessage, gameName: string): void {
   if (msg.content !== '') {
     throw new Error(`Digest must carry no message content, got "${msg.content}"`);
   }
-  if (/<@[!&]?\d/.test(embedText(msg)) || embedText(msg).includes('@everyone')) {
-    throw new Error('Digest embed contains mention markup');
+  if (MENTION_RE.test(embedText(msg))) {
+    throw new Error(`Digest embed contains mention markup: ${embedText(msg)}`);
   }
+  assertComingUp(msg);
+}
+
+/** ROK-1771: the scheduled fixture guarantees a Coming up field with a Discord timestamp. */
+function assertComingUp(msg: SimpleMessage): void {
+  const fields = msg.embeds[0]?.fields ?? [];
+  const upcoming = fields.find((f) => f.name === UPCOMING_FIELD);
+  if (!upcoming) {
+    throw new Error(
+      `Digest has no "${UPCOMING_FIELD}" field: ${JSON.stringify(fields.map((f) => f.name))}`,
+    );
+  }
+  if (!/<t:\d+:f>/.test(upcoming.value)) {
+    throw new Error(`Coming up value has no <t:UNIX:f> timestamp: ${upcoming.value}`);
+  }
+}
+
+async function createUpcomingEvent(ctx: TestContext, gameId: number): Promise<number> {
+  const ev = await createEvent(ctx.api, 'digest-upcoming', {
+    gameId,
+    startTime: futureTime(UPCOMING_START_MIN),
+    endTime: futureTime(UPCOMING_START_MIN + 120),
+  });
+  return ev.id;
 }
 
 async function assertPostedOnce(ctx: TestContext, gameName: string) {
@@ -104,6 +139,36 @@ async function assertPostedOnce(ctx: TestContext, gameName: string) {
   return msg;
 }
 
+/** LFG hand up → post once → duplicate never re-posts; the hand always comes down. */
+async function runWithLfgHand(
+  ctx: TestContext,
+  game: { id: number; name: string },
+): Promise<void> {
+  await postLfgIntent(ctx.api, game.id);
+  try {
+    await awaitProcessing(ctx.api);
+    const posted = await assertPostedOnce(ctx, game.name);
+
+    const again = await triggerDigest(ctx.api, false);
+    if (again.status !== 'duplicate') {
+      throw new Error(`Second trigger in one week: expected "duplicate", got ${JSON.stringify(again)}`);
+    }
+    await assertConditionNeverMet(
+      async () => {
+        const msgs = await readLastMessages(ctx.defaultChannelId, 25);
+        return msgs.some(
+          (m) => isDigest(m) && m.id !== posted.id && m.timestamp >= posted.timestamp,
+        );
+      },
+      6_000,
+      'A second weekly digest was posted in the same ISO week',
+      { intervalMs: 2000 },
+    );
+  } finally {
+    await withdrawLfgIntent(ctx.api, game.id);
+  }
+}
+
 const digestPostsOncePerWeek: SmokeTest = {
   name: 'Weekly digest posts to the default channel once per week (ROK-1435)',
   category: 'embed',
@@ -112,28 +177,12 @@ const digestPostsOncePerWeek: SmokeTest = {
     // a named precondition — never a hollow PASS.
     const game = await resolveConfiguredGame(ctx);
     console.log(`    ROK-1435: digest game id=${game.id} name="${game.name}"`);
-    await postLfgIntent(ctx.api, game.id);
+    // Claim the fixture id before anything else can throw.
+    const upcomingId = await createUpcomingEvent(ctx, game.id);
     try {
-      await awaitProcessing(ctx.api);
-      const posted = await assertPostedOnce(ctx, game.name);
-
-      const again = await triggerDigest(ctx.api, false);
-      if (again.status !== 'duplicate') {
-        throw new Error(`Second trigger in one week: expected "duplicate", got ${JSON.stringify(again)}`);
-      }
-      await assertConditionNeverMet(
-        async () => {
-          const msgs = await readLastMessages(ctx.defaultChannelId, 25);
-          return msgs.some(
-            (m) => isDigest(m) && m.id !== posted.id && m.timestamp >= posted.timestamp,
-          );
-        },
-        6_000,
-        'A second weekly digest was posted in the same ISO week',
-        { intervalMs: 2000 },
-      );
+      await runWithLfgHand(ctx, game);
     } finally {
-      await withdrawLfgIntent(ctx.api, game.id);
+      await deleteEvent(ctx.api, upcomingId);
     }
   },
 };
