@@ -7,6 +7,11 @@ import {
 } from './pelican.constants';
 import { classifyApiKey, normalisePanelUrl } from './pelican-url.helpers';
 import {
+  discardBody,
+  fetchErrorKind,
+  readBoundedJson,
+} from './pelican-client.helpers';
+import {
   PelicanErrorBodySchema,
   PelicanScheduleListSchema,
   PelicanServerPageSchema,
@@ -45,7 +50,8 @@ export class PelicanClient {
   private readonly logger = new Logger(PelicanClient.name);
   private readonly baseUrl: string;
   private readonly host: string;
-  private readonly apiKey: string;
+  /** ES private: not enumerable, so `JSON.stringify`/`inspect` skip it. */
+  readonly #apiKey: string;
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
 
@@ -54,7 +60,7 @@ export class PelicanClient {
     if (!normalised.ok) throw new Error('Invalid Pelican panel URL');
     this.baseUrl = normalised.url;
     this.host = new URL(normalised.url).host;
-    this.apiKey = opts.apiKey.trim();
+    this.#apiKey = opts.apiKey.trim();
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.timeoutMs = opts.timeoutMs ?? PELICAN_HTTP_TIMEOUT_MS;
   }
@@ -88,29 +94,33 @@ export class PelicanClient {
     path: string,
     schema: z.ZodType<T>,
   ): Promise<PelicanResult<T>> {
-    if (classifyApiKey(this.apiKey) === 'application') {
+    if (classifyApiKey(this.#apiKey) === 'application') {
       return this.fail(path, { kind: 'application_key' });
     }
-    let res: Response;
+    const signal = AbortSignal.timeout(this.timeoutMs);
     try {
-      res = await this.fetchImpl(`${this.baseUrl}/api/client${path}`, {
+      const res = await this.fetchImpl(`${this.baseUrl}/api/client${path}`, {
         method: 'GET',
         headers: {
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.#apiKey}`,
           Accept: 'application/json',
         },
         redirect: 'error',
-        signal: AbortSignal.timeout(this.timeoutMs),
+        signal,
       });
+      if (!res.ok) return this.fail(path, await httpError(res, signal));
+      const body = await readBoundedJson(res, signal);
+      const parsed = body.ok ? schema.safeParse(body.value) : null;
+      if (!parsed?.success) {
+        return this.fail(path, { kind: 'bad_response', status: res.status });
+      }
+      return { ok: true, data: parsed.data };
     } catch (err) {
-      return this.fail(path, { kind: fetchErrorKind(err) });
+      // Our own deadline fired (during connect OR body read) -> timeout,
+      // whatever shape the rejection took.
+      const kind = signal.aborted ? 'timeout' : fetchErrorKind(err);
+      return this.fail(path, { kind });
     }
-    if (!res.ok) return this.fail(path, await httpError(res));
-    const parsed = schema.safeParse(await readJson(res));
-    if (!parsed.success) {
-      return this.fail(path, { kind: 'bad_response', status: res.status });
-    }
-    return { ok: true, data: parsed.data };
   }
 
   /** Logs host, path, status and kind only — never the key or a body. */
@@ -124,31 +134,17 @@ export class PelicanClient {
   }
 }
 
-/** Map a `fetch` rejection to a kind without touching its `cause` chain. */
-export function fetchErrorKind(err: unknown): PelicanErrorKind {
-  const name = errorField(err, 'name');
-  if (name === 'TimeoutError' || name === 'AbortError') return 'timeout';
-  // undici: TypeError('fetch failed') with cause Error('unexpected redirect').
-  const cause = err instanceof Error ? err.cause : undefined;
-  const causeMessage = errorField(cause, 'message');
-  if (causeMessage !== undefined && /redirect/i.test(causeMessage)) {
-    return 'redirect';
+async function httpError(
+  res: Response,
+  signal: AbortSignal,
+): Promise<PelicanClientError> {
+  if (res.status !== 403) {
+    await discardBody(res);
+    if (res.status === 401) return { kind: 'unauthorized', status: 401 };
+    return { kind: 'http', status: res.status };
   }
-  return 'network';
-}
-
-function errorField(value: unknown, key: 'name' | 'message') {
-  if (typeof value !== 'object' || value === null || !(key in value)) {
-    return undefined;
-  }
-  const field: unknown = Reflect.get(value, key);
-  return typeof field === 'string' ? field : undefined;
-}
-
-async function httpError(res: Response): Promise<PelicanClientError> {
-  if (res.status === 401) return { kind: 'unauthorized', status: 401 };
-  if (res.status !== 403) return { kind: 'http', status: res.status };
-  const body = PelicanErrorBodySchema.safeParse(await readJson(res));
+  const read = await readBoundedJson(res, signal);
+  const body = PelicanErrorBodySchema.safeParse(read.ok ? read.value : null);
   const ipNotAllowed =
     body.success &&
     body.data.errors.some(
@@ -157,12 +153,4 @@ async function httpError(res: Response): Promise<PelicanClientError> {
         /IP address .* does not have permission/i.test(e.detail ?? ''),
     );
   return { kind: 'forbidden', status: 403, ipNotAllowed };
-}
-
-async function readJson(res: Response): Promise<unknown> {
-  try {
-    return (await res.json()) as unknown;
-  } catch {
-    return undefined;
-  }
 }
