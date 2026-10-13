@@ -4,7 +4,8 @@
  * screen links here and its reviewers open it logged out.
  *
  * Copy lives in `privacy/privacy-copy.tsx`. The community name comes from the
- * public system status; it falls back to "this community".
+ * public system status (falls back to "this community"), and so does the
+ * optional admin-set contact email; without one, the page points at the Discord.
  */
 import type { JSX } from 'react';
 import { useSystemStatus } from '../hooks/use-system-status';
@@ -41,7 +42,8 @@ export function PrivacyPage(): JSX.Element {
     const { data: status } = useSystemStatus();
     const name = status?.communityName?.trim();
     const community = name ? name : COMMUNITY_FALLBACK;
-    const sections = buildPrivacySections({ community, contactEmail: null }, PUBLIC_FEATURES);
+    const contactEmail = status?.privacyContactEmail ?? null;
+    const sections = buildPrivacySections({ community, contactEmail }, PUBLIC_FEATURES);
     return (
         <div className="px-4 py-8 sm:py-12">
             <article className="max-w-prose mx-auto bg-surface border border-edge rounded-lg p-5 sm:p-8 text-sm sm:text-base text-secondary leading-relaxed break-words"

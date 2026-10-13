@@ -359,3 +359,21 @@ describe('Regression: ROK-1661 — a chromeless page keeps the root canvas on --
         expect(html).not.toHaveAttribute('data-chromeless');
     });
 });
+
+/** ROK-1778: the public privacy policy renders without app chrome, like /p/*. */
+describe('ROK-1778 — /privacy is a chromeless public page', () => {
+    afterEach(() => document.documentElement.removeAttribute('data-chromeless'));
+
+    it('renders in the chromeless shell: a flex-column main and <html data-chromeless>', () => {
+        const { container, unmount } = renderLayout('/privacy');
+        expect(container.querySelector('main#main-content')).toHaveClass('flex-1', 'flex', 'flex-col');
+        expect(document.documentElement).toHaveAttribute('data-chromeless');
+        unmount();
+        expect(document.documentElement).not.toHaveAttribute('data-chromeless');
+    });
+
+    it('does not treat a longer path that merely starts with /privacy as chromeless', () => {
+        renderLayout('/privacy-settings');
+        expect(document.documentElement).not.toHaveAttribute('data-chromeless');
+    });
+});
