@@ -77,6 +77,36 @@ function SecretField({ provider, draft, hasSecret, onChange }: {
     );
 }
 
+/** The site origin Google's "Authorized JavaScript origins" needs: the redirect URI's scheme + host. */
+function originOf(uri: string): string | null {
+    try {
+        return new URL(uri).origin;
+    } catch {
+        return null;
+    }
+}
+
+/** A copy-only value Google asks for, derived from the redirect URI's origin plus `path`. */
+const ORIGIN_FIELDS = [
+    { path: '', label: 'Google JavaScript origin', onCopied: 'JavaScript origin copied',
+        hint: 'Click to copy. Add it under Authorized JavaScript origins, and as the Application home page on the Branding page.' },
+    // ROK-1778: the public policy page (`/privacy`) the Branding page needs.
+    { path: '/privacy', label: 'Privacy policy link', onCopied: 'Privacy policy link copied',
+        hint: 'Click to copy. Paste it as the Application privacy policy link on the Branding page.' },
+] as const;
+
+function OriginCopyField({ redirectUri, field }: { redirectUri: string; field: (typeof ORIGIN_FIELDS)[number] }) {
+    const origin = originOf(redirectUri);
+    if (!origin) return null;
+    return (
+        <div>
+            <p className="text-sm font-medium text-foreground mb-1">{field.label}</p>
+            <CopyableInput value={`${origin}${field.path}`} onCopied={field.onCopied} label={field.label} />
+            <p className="text-xs text-dim mt-1.5">{field.hint}</p>
+        </div>
+    );
+}
+
 function ProviderSection({ provider, draft, settings, onChange }: {
     provider: CalendarSyncFormProvider; draft: ProviderDraft;
     settings: AdminCalendarSyncSettings; onChange: (next: ProviderDraft) => void;
@@ -94,6 +124,9 @@ function ProviderSection({ provider, draft, settings, onChange }: {
                     label={`${copy.name} redirect URI`} />
                 <p className="text-xs text-dim mt-1.5">Click to copy. Add it to {copy.console}.</p>
             </div>
+            {provider === 'google' && ORIGIN_FIELDS.map((field) => (
+                <OriginCopyField key={field.label} redirectUri={settings.redirectUris.google} field={field} />
+            ))}
         </section>
     );
 }

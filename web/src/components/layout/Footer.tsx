@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { useVersionInfo } from '../../hooks/use-version';
 
 /**
@@ -19,6 +20,7 @@ export function Footer() {
                             v{versionInfo.version}
                         </span>
                     )}
+                    <Link to="/privacy" className="text-dim hover:text-secondary transition-colors text-sm">Privacy</Link>
                     <a
                         href="https://github.com/sjdodge123/Raid-Ledger"
                         target="_blank"

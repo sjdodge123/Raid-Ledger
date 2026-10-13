@@ -31,6 +31,8 @@ export const SETTING_KEYS = {
   RELAY_TOKEN: 'relay_token',
   COMMUNITY_NAME: 'community_name',
   COMMUNITY_LOGO_PATH: 'community_logo_path',
+  /** ROK-1778: optional contact email for the public /privacy page. */
+  PRIVACY_CONTACT_EMAIL: 'privacy_contact_email',
   /** Legacy (TDB:991): no reader or writer; kept so clearBranding deletes the stale row. */
   COMMUNITY_ACCENT_COLOR: 'community_accent_color',
   GITHUB_PAT: 'github_pat',
