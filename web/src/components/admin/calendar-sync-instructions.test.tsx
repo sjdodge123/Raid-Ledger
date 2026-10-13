@@ -26,10 +26,10 @@ describe('CalendarSyncInstructions', () => {
         }
     });
 
-    it('points members at the profile Calendars page', () => {
+    it('points members at Profile → My Integrations, where Calendars render (ROK-1780)', () => {
         renderWithProviders(<CalendarSyncInstructions />);
-        expect(screen.getByRole('link', { name: /Profile → Gaming → Calendars/ }))
-            .toHaveAttribute('href', '/profile/gaming/calendars');
+        expect(screen.getByRole('link', { name: /Profile → My Integrations/ }))
+            .toHaveAttribute('href', '/profile/integrations');
     });
 
     it('has the admin publish the app instead of listing members as test users', () => {
