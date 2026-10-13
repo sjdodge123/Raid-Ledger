@@ -35,6 +35,10 @@ export const JoinPage = lazyWithRetry(() =>
 export const PollSharePage = lazyWithRetry(() =>
     import('./pages/poll-share-page').then((m) => ({ default: m.PollSharePage })),
 );
+/** ROK-1778: public privacy policy (`/privacy`), linked from Google's consent screen. */
+export const PrivacyPage = lazyWithRetry(() =>
+    import('./pages/privacy-page').then((m) => ({ default: m.PrivacyPage })),
+);
 export const InvitePage = lazyWithRetry(() =>
     import('./pages/invite-page').then((m) => ({ default: m.InvitePage })),
 );

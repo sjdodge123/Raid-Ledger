@@ -34,10 +34,11 @@ const BARE_PATHS: ReadonlySet<string> = new Set(['/dev/viewport-probe']);
  * for sharing with non-members. Skip Header/Footer/TabBar/Drawer/banners
  * so the page reads like a standalone card, not a teaser of the auth'd
  * app. Path-prefix match keeps the rule extensible for future /p/*
- * surfaces.
+ * surfaces. ROK-1778: the public `/privacy` page is chromeless too (kept at
+ * `/privacy`, not `/p/privacy`, because Google's consent screen links it).
  */
 function isChromelessPath(pathname: string): boolean {
-    return pathname.startsWith('/p/');
+    return pathname.startsWith('/p/') || pathname === '/privacy';
 }
 
 interface LayoutProps {
