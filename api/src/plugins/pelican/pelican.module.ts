@@ -9,6 +9,8 @@ import { PELICAN_MANIFEST, PELICAN_SETTING_KEYS } from './pelican.manifest';
 import { PelicanAdminController } from './pelican-admin.controller';
 import { PelicanConfigService } from './pelican-config.service';
 import { PelicanClientFactory } from './pelican-client.factory';
+import { PelicanServersRepository } from './pelican-servers.repository';
+import { PelicanSyncService } from './pelican-sync.service';
 
 type UninstalledPayload = { slug: string };
 
@@ -19,8 +21,13 @@ type UninstalledPayload = { slug: string };
 @Module({
   imports: [SettingsModule],
   controllers: [PelicanAdminController],
-  providers: [PelicanConfigService, PelicanClientFactory],
-  exports: [PelicanClientFactory],
+  providers: [
+    PelicanConfigService,
+    PelicanClientFactory,
+    PelicanServersRepository,
+    PelicanSyncService,
+  ],
+  exports: [PelicanClientFactory, PelicanServersRepository, PelicanSyncService],
 })
 export class PelicanModule implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PelicanModule.name);
@@ -32,6 +39,7 @@ export class PelicanModule implements OnModuleInit, OnModuleDestroy {
     private readonly pluginRegistry: PluginRegistryService,
     private readonly eventEmitter: EventEmitter2,
     private readonly settings: SettingsService,
+    private readonly servers: PelicanServersRepository,
   ) {}
 
   onModuleInit(): void {
@@ -49,16 +57,26 @@ export class PelicanModule implements OnModuleInit, OnModuleDestroy {
   /**
    * Uninstall deletes the rows with raw SQL (`cleanupPluginSettings`), which
    * leaves `SettingsService`'s cache serving the decrypted key. Evict each
-   * Pelican key through the service so the cache drops it too (D13).
+   * Pelican key through the service so the cache drops it too. Then empty
+   * `pelican_servers` (the FK cascade empties `pelican_schedules`) —
+   * ROK-1772 D13. Errors are logged by name only.
    */
   async handleUninstalled(payload: UninstalledPayload): Promise<void> {
     if (payload.slug !== PELICAN_PLUGIN_ID) return;
     try {
       for (const key of PELICAN_SETTING_KEYS) await this.settings.delete(key);
     } catch (err) {
-      const reason = err instanceof Error ? err.name : 'unknown error';
-      this.logger.error(`Pelican settings eviction failed: ${reason}`);
+      this.logger.error(`Pelican settings eviction failed: ${errName(err)}`);
       this.settings.invalidateCache(true);
     }
+    try {
+      await this.servers.deleteAll();
+    } catch (err) {
+      this.logger.error(`Pelican server rows cleanup failed: ${errName(err)}`);
+    }
   }
+}
+
+function errName(err: unknown): string {
+  return err instanceof Error ? err.name : 'unknown error';
 }
