@@ -41,6 +41,7 @@ describe('TDB:991 — branding accent colour removed', () => {
     expect(res.body).toEqual({
       communityName: 'Night Raiders',
       communityLogoUrl: null,
+      privacyContactEmail: null,
     });
     const settings = testApp.app.get(SettingsService);
     expect(await settings.get(SETTING_KEYS.COMMUNITY_ACCENT_COLOR)).toBeNull();
@@ -71,7 +72,11 @@ describe('TDB:991 — branding accent colour removed', () => {
       .post('/admin/branding/reset')
       .set('Authorization', `Bearer ${adminToken}`);
     expect(reset.status).toBe(201);
-    expect(reset.body).toEqual({ communityName: null, communityLogoUrl: null });
+    expect(reset.body).toEqual({
+      communityName: null,
+      communityLogoUrl: null,
+      privacyContactEmail: null,
+    });
     expect(await settings.get(SETTING_KEYS.COMMUNITY_ACCENT_COLOR)).toBeNull();
   });
 });

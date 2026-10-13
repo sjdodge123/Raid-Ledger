@@ -211,6 +211,7 @@ describe('branding — dropped accent colour (TDB:991)', () => {
     expect(branding).toEqual({
       communityName: 'Night Raiders',
       communityLogoPath: null,
+      privacyContactEmail: null,
     });
     expect(branding).not.toHaveProperty('communityAccentColor');
   });

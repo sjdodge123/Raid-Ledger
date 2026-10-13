@@ -3,6 +3,7 @@ import * as path from 'path';
 import { UsersService } from '../users/users.service';
 import { SettingsService } from '../settings/settings.service';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
+import type { BrandingConfig } from '../settings/settings.types';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   EXTENSION_POINTS,
@@ -45,10 +46,7 @@ export class SystemController {
     discordConfigured: boolean,
     blizzardConfigured: boolean,
     steamConfigured: boolean,
-    branding: {
-      communityName: string | null;
-      communityLogoPath: string | null;
-    },
+    branding: BrandingConfig,
     onboardingCompletedRaw: string | null,
     demoMode: boolean,
     adapterEntries: [string, AuthProvider][],
@@ -65,6 +63,7 @@ export class SystemController {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : undefined,
+      privacyContactEmail: branding.privacyContactEmail ?? undefined,
       onboardingCompleted: onboardingCompletedRaw === 'true',
       authProviders: this.buildAuthProviders(adapterEntries, adapterConfigured),
     };
@@ -96,6 +95,7 @@ export class SystemController {
       communityLogoUrl: branding.communityLogoPath
         ? `/uploads/branding/${path.basename(branding.communityLogoPath)}`
         : null,
+      privacyContactEmail: branding.privacyContactEmail ?? null,
     };
   }
 

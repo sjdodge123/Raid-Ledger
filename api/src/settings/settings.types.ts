@@ -28,6 +28,8 @@ export interface BlizzardConfig {
 export interface BrandingConfig {
   communityName: string | null;
   communityLogoPath: string | null;
+  /** ROK-1778: optional contact email for the public /privacy page. */
+  privacyContactEmail?: string | null;
 }
 
 export interface DiscordBotConfig {
