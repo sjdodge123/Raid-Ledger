@@ -23,6 +23,9 @@ export const PELICAN_TEST_URL = `${API_BASE}/admin/plugins/pelican/test`;
 export const PELICAN_SERVERS_URL = `${API_BASE}/admin/plugins/pelican/servers`;
 export const PELICAN_SERVER_URL = `${PELICAN_SERVERS_URL}/:id`;
 export const PELICAN_SYNC_URL = `${API_BASE}/admin/plugins/pelican/sync`;
+/* Core game-server endpoints the Pelican calendar layer reads (ROK-1774). */
+export const GAME_SERVERS_CALENDAR_URL = `${API_BASE}/game-servers/calendar`;
+export const GAME_SERVERS_STATUS_URL = `${API_BASE}/game-servers/status`;
 
 /** A mapped, running server — specs build variants with `{ ...pelicanServerFixture, ... }`. */
 export const pelicanServerFixture: PelicanServerRowDto = {
@@ -102,4 +105,7 @@ export const pelicanHandlers = [
         });
     }),
     http.post(PELICAN_SYNC_URL, () => HttpResponse.json(pelicanSyncOkResult)),
+    /* Calendar layer (ROK-1774): nothing scheduled by default, so unrelated calendar specs stay quiet. */
+    http.get(GAME_SERVERS_CALENDAR_URL, () => HttpResponse.json({ data: [] })),
+    http.get(GAME_SERVERS_STATUS_URL, () => HttpResponse.json({ data: [] })),
 ];
