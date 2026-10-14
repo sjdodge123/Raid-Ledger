@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
 import { Calendar, dateFnsLocalizer, Views, type View } from 'react-big-calendar';
-import { format, parse, startOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
+import { format, parse, startOfWeek, endOfWeek, getDay, addMonths, subMonths, addWeeks, subWeeks, addDays, subDays } from 'date-fns';
 import { enUS } from 'date-fns/locale';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useEvents } from '../../hooks/use-events';
@@ -24,6 +24,7 @@ import { useCalendarLayerData, type CalendarLayerData } from './layers/use-calen
 import { CalendarLayerGrid } from './layers/CalendarLayerGrid';
 import { LayerWindowLabel } from './layers/LayerWindowLabel';
 import { LayerDayColumnWrapper } from './layers/LayerDayColumnWrapper';
+import { LayerBackgroundEventWrapper } from './layers/LayerBackgroundEventWrapper';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
 import './layers/calendar-layers.css';
@@ -94,6 +95,20 @@ function useCalendarViewSync(searchParams: URLSearchParams, setSearchParams: (fn
     }, [calendarView]); // eslint-disable-line react-hooks/exhaustive-deps
 
     return { view, setView };
+}
+
+/**
+ * ROK-1774: layer query range — the visible days' wall-clock bounds anchored in the
+ * SELECTED timezone, not the browser's, so items near a day boundary are not dropped.
+ * Week/day only draw layers; month passes its week (layers are disabled there).
+ */
+function useZonedLayerRange(currentDate: Date, view: View, tz: string) {
+    return useMemo(() => {
+        const [first, last] = view === Views.DAY ? [currentDate, currentDate] : [startOfWeek(currentDate), endOfWeek(currentDate)];
+        const from = TZDate.tz(tz, first.getFullYear(), first.getMonth(), first.getDate());
+        const to = TZDate.tz(tz, last.getFullYear(), last.getMonth(), last.getDate(), 23, 59, 59, 999);
+        return { from: new Date(from.getTime()).toISOString(), to: new Date(to.getTime()).toISOString() };
+    }, [currentDate, view, tz]);
 }
 
 function useCalendarEvents(eventsData: ReturnType<typeof useEvents>['data'], selectedGames?: Set<string>, resolved?: string) {
@@ -192,7 +207,7 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                     onSelectEvent={handleSelectEvent}
                     onDrillDown={(date) => { s.setCurrentDate(date); s.setView(Views.DAY); onCalendarViewChange?.('day'); }}
                     drilldownView={Views.DAY} eventPropGetter={eventPropGetter}
-                    components={{ month: { event: wrappers.MonthEventWrapper }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, dayColumnWrapper: LayerDayColumnWrapper, toolbar: () => null }}
+                    components={{ month: { event: wrappers.MonthEventWrapper }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, dayColumnWrapper: LayerDayColumnWrapper, eventWrapper: LayerBackgroundEventWrapper, toolbar: () => null }}
                     getNow={() => new TZDate(Date.now(), s.resolved)} allDayAccessor={() => false} popup selectable
                     onSelectSlot={(slotInfo) => {
                         if (slotInfo.action === 'doubleClick' || (window.innerWidth < 768 && slotInfo.action === 'click' && s.view === Views.MONTH)) {
@@ -255,7 +270,8 @@ export function CalendarView({
     const eventOverlapsGameTime = useGameTimeOverlap(gameTimeSlots);
     const { handleSelectEvent, eventPropGetter, wrappers } = useCalendarInteractions(s, onCalendarViewChange, eventOverlapsGameTime);
     const layerViewEnabled = !s.isScheduleView && (s.view === Views.WEEK || s.view === Views.DAY);
-    const layer = useCalendarLayerData({ from: s.startAfter, to: s.endBefore, selectedGames, viewEnabled: layerViewEnabled, tz: s.resolved });
+    const layerRange = useZonedLayerRange(s.currentDate, s.view, s.resolved);
+    const layer = useCalendarLayerData({ ...layerRange, selectedGames, viewEnabled: layerViewEnabled, tz: s.resolved });
 
     if (s.isScheduleView) {
         return (
