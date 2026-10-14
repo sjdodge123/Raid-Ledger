@@ -2,7 +2,6 @@ import type { GuildMember, VoiceBasedChannel } from 'discord.js';
 import type { SpawnClearance } from '../services/ad-hoc-spawn-clearance';
 import {
   buildMemberInfo,
-  requiresConfirmedPlay,
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
@@ -106,24 +105,7 @@ function trackChannelMembers(
 }
 
 /**
- * ROK-1782 ruling (b): whether a member counts toward (and is rostered into) a
- * game-voice-monitor binding. Without a guild member there is nothing to
- * detect, so the pre-1782 behaviour (count them) is kept.
- */
-export async function countsTowardBinding(
-  deps: VoiceHandlerDeps,
-  binding: ResolvedBinding,
-  guildMember?: GuildMember,
-): Promise<boolean> {
-  if (!requiresConfirmedPlay(binding) || !guildMember) return true;
-  const detected = await deps.presenceDetector.detectGameForMember(guildMember);
-  return detected.gameId === binding.gameId;
-}
-
-/**
- * Roster the members of a game-specific channel for threshold spawn — every
- * human, except that a fixed-game monitor without Just Chatting rosters only
- * the members playing its game (ROK-1782 ruling (b)).
+ * Roster ALL members in a game-specific channel for threshold spawn.
  *
  * `resolvedGameId` (ROK-1394): `undefined` → mint the sticky bind game
  * (unchanged); `null` → deliberate degrade to a null-game session when the
@@ -146,7 +128,6 @@ export async function handleGameSpecificGroupRoster(
   let handled = false;
   for (const [memberId, guildMember] of channel.members) {
     if (isBotMember(guildMember)) continue;
-    if (!(await countsTowardBinding(deps, binding, guildMember))) continue;
     const rlUser = await deps.usersService.findByDiscordId(memberId);
     const memberInfo = buildMemberInfo(
       memberId,

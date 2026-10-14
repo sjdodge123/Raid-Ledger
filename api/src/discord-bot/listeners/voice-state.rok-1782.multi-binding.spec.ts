@@ -5,8 +5,6 @@
  *
  * Rulings under test:
  *  (a) a general lobby on the channel wins — its per-game groups decide;
- *  (b) a fixed-game monitor counts/rosters only members on its game and never
- *      degrades to a no-game event unless the binding allows Just Chatting;
  *  (c) presence updates are evaluated against EVERY binding on the channel.
  */
 import {
@@ -85,40 +83,5 @@ describe('ROK-1782 (a) — no duplicate event when both bindings match', () => {
     await h.advanceSpawnDelay();
     expect(h.eventKeys()).toEqual(['bind-gl:1']);
     expect(joinsFor('bind-game')).toEqual([]);
-  });
-});
-
-describe('ROK-1782 (b) — a fixed-game monitor counts only its own players', () => {
-  it('spawns nothing when nobody plays its game (Just Chatting off)', async () => {
-    h = await setupRok1445Harness(monitor());
-    await h.joinMember({ id: 'u1', ...VALHEIM });
-    await h.joinMember({ id: 'u2', ...VALHEIM });
-    await h.joinMember({ id: 'u3', gameId: null });
-    await h.joinMember({ id: 'u4', gameId: null });
-    await h.advanceSpawnDelay();
-    expect(h.eventKeys()).toEqual([]);
-    expect(joinsFor('bind-game')).toEqual([]);
-  });
-
-  it('rosters only the members on its game, now and on later joins', async () => {
-    h = await setupRok1445Harness(monitor());
-    await h.joinMember({ id: 'u3', gameId: null });
-    await h.joinMember({ id: 'u4', ...VALHEIM });
-    await h.joinMember({ id: 'u1', ...BG3 });
-    await h.joinMember({ id: 'u2', ...BG3 });
-    await h.joinMember({ id: 'u5', gameId: null });
-    await h.advanceSpawnDelay();
-    const rostered = joinsFor('bind-game').map((c) => c.memberId);
-    expect([...new Set(rostered)].sort()).toEqual(['u1', 'u2']);
-  });
-
-  it('keeps the presence-null degrade when Just Chatting is on', async () => {
-    h = await setupRok1445Harness(
-      gameBinding({ config: { minPlayers: 2, allowJustChatting: true } }),
-    );
-    await h.joinMember({ id: 'u1', gameId: null });
-    await h.joinMember({ id: 'u2', gameId: null });
-    await h.advanceSpawnDelay();
-    expect(h.eventKeys()).toEqual(['bind-game:null']);
   });
 });

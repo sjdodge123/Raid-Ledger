@@ -160,7 +160,6 @@ async function dispatchBindingJoin(
     dm,
     monitorSpawnFns(ctx, chId, b),
     isBotMember(gm),
-    gm,
   );
 }
 

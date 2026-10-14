@@ -376,32 +376,3 @@ describe('ROK-1782 — single-binding channels behave as before', () => {
     expect(await rosterOf(event.id)).toEqual(['u1', 'u2']);
   });
 });
-
-// ── (b) — pending operator re-confirmation; drop this block if overruled ─
-
-describe('(b) pending re-confirmation — a fixed-game monitor counts only its own players', () => {
-  it('nobody on its game, Just Chatting off → no event at all', async () => {
-    await seedBinding({ purpose: 'game-voice-monitor', gameId: games.bg3 });
-    await join('u1', VALHEIM);
-    await join('u2', VALHEIM);
-    await join('u3', null);
-    await join('u4', null);
-    await settleSpawns();
-
-    expect(await adHocEvents()).toEqual([]);
-  });
-
-  it('≥min on its game → only those members are rostered', async () => {
-    await seedBinding({ purpose: 'game-voice-monitor', gameId: games.bg3 });
-    await join('u3', null);
-    await join('u4', VALHEIM);
-    await join('u1', BG3);
-    await join('u2', BG3);
-    await join('u5', null);
-    await settleSpawns();
-
-    const event = await onlyEvent();
-    expect(event.title).toBe(`${BG3} — Quick Play`);
-    expect(await rosterOf(event.id)).toEqual(['u1', 'u2']);
-  });
-});

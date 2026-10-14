@@ -8,7 +8,6 @@ import {
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import {
-  countsTowardBinding,
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
@@ -38,12 +37,8 @@ export async function handleGameBindingJoin(
   dm: DiscordMemberInfo,
   spawnFns?: GameSpawnFns,
   isBot = false,
-  guildMember?: GuildMember,
 ): Promise<void> {
-  if (
-    !isBot &&
-    (await trackAndJoinExisting(deps, channelId, binding, dm, guildMember))
-  )
+  if (!isBot && (await trackAndJoinExisting(deps, channelId, binding, dm)))
     return;
   await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
 }
@@ -56,28 +51,27 @@ export async function handleGameBindingJoin(
  * have keyed it under `bindingId:null`. Look it up regardless of game key and
  * reconcile the join into that event (keep it as-is — no game upgrade) so a
  * later game confirmation never mints a second, sticky-game event.
- *
- * ROK-1782 (b): a member not playing a fixed-game monitor's game (Just
- * Chatting off) is not rostered into its event. Voice→activity tracking
- * (ROK-591/604) is unchanged — it never depended on the spawn gate.
  */
 async function trackAndJoinExisting(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   dm: DiscordMemberInfo,
-  guildMember?: GuildMember,
 ): Promise<boolean> {
   const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
   const uid = rlUser?.id ?? null;
-  const name = binding.gameName ?? '';
-  startVoiceGameTracking(deps, dm.discordUserId, binding.gameId, name, uid);
+  startVoiceGameTracking(
+    deps,
+    dm.discordUserId,
+    binding.gameId,
+    binding.gameName ?? '',
+    uid,
+  );
   const existing = deps.adHocEventService.getActiveBindingEventGameId(
     binding.bindingId,
   );
   if (!existing) return false;
-  if (await countsTowardBinding(deps, binding, guildMember))
-    await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
+  await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
   return true;
 }
 
