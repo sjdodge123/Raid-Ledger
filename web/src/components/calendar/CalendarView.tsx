@@ -19,8 +19,14 @@ import { MonthEventComponent } from './MonthEventComponent';
 import { VIEW_MAP, viewToStr, computeDateRange, shouldRenderInCalendar } from './calendar-view.utils';
 import type { CalendarViewMode } from './calendar-mobile-toolbar';
 import type { EventResponseDto } from '@raid-ledger/contract';
+import { isLayerEvent, type LayerWindowEvent } from './layers/calendar-layer-events';
+import { useCalendarLayerData, type CalendarLayerData } from './layers/use-calendar-layer-data';
+import { CalendarLayerGrid } from './layers/CalendarLayerGrid';
+import { LayerWindowLabel } from './layers/LayerWindowLabel';
+import { LayerDayColumnWrapper } from './layers/LayerDayColumnWrapper';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import './calendar-styles.css';
+import './layers/calendar-layers.css';
 
 const locales = { 'en-US': enUS };
 const localizer = dateFnsLocalizer({ format, parse, startOfWeek, getDay, locales });
@@ -32,6 +38,9 @@ export interface CalendarEvent {
     end: Date;
     resource: EventResponseDto;
 }
+
+/** ROK-1774: the grid also carries plugin layer windows as background events. */
+type GridEvent = CalendarEvent | LayerWindowEvent;
 
 interface CalendarViewProps {
     className?: string;
@@ -156,19 +165,19 @@ function useCalendarViewState(controlledDate: Date | undefined, onDateChange: ((
     const calendarEvents = useCalendarEvents(eventsData, selectedGames, resolved);
     useCalendarImageHints(calendarEvents);
     const { handlePrev, handleNext, handleToday } = useCalendarNavigation(currentDate, setCurrentDate, view);
-    return { navigate, resolved, tzAbbr, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
+    return { navigate, resolved, tzAbbr, startAfter, endBefore, currentDate, setCurrentDate, view, setView, isScheduleView, isLoading, isFetching, calendarEvents, handlePrev, handleNext, handleToday };
 }
 
 function useEventWrappers(eventOverlapsGameTime: (s: Date, e: Date) => boolean, handleMonthChipClick: (e: React.MouseEvent, d: Date) => void) {
-    const MonthEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <MonthEventComponent event={event} eventOverlapsGameTime={eventOverlapsGameTime} onChipClick={handleMonthChipClick} />, [eventOverlapsGameTime, handleMonthChipClick]);
-    const WeekEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
-    const DayEventWrapper = useCallback(({ event }: { event: CalendarEvent }) => <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
+    const MonthEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? null : <MonthEventComponent event={event} eventOverlapsGameTime={eventOverlapsGameTime} onChipClick={handleMonthChipClick} />, [eventOverlapsGameTime, handleMonthChipClick]);
+    const WeekEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? <LayerWindowLabel event={event} /> : <WeekEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
+    const DayEventWrapper = useCallback(({ event }: { event: GridEvent }) => isLayerEvent(event) ? <LayerWindowLabel event={event} /> : <DayEventCard event={event} eventOverlapsGameTime={eventOverlapsGameTime} />, [eventOverlapsGameTime]);
     return { MonthEventWrapper, WeekEventWrapper, DayEventWrapper };
 }
 
-function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange, toolbarAction, belowToolbar }: {
-    s: ReturnType<typeof useCalendarViewState>; className: string; isHeaderHidden: boolean;
-    eventPropGetter: (e: CalendarEvent) => { style: React.CSSProperties }; handleSelectEvent: (e: CalendarEvent) => void;
+function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handleSelectEvent, wrappers, calendarView, onCalendarViewChange, toolbarAction, belowToolbar, layer }: {
+    s: ReturnType<typeof useCalendarViewState>; className: string; isHeaderHidden: boolean; layer: CalendarLayerData;
+    eventPropGetter: (e: GridEvent) => { className?: string; style: React.CSSProperties }; handleSelectEvent: (e: GridEvent) => void;
     wrappers: ReturnType<typeof useEventWrappers>; calendarView: CalendarViewMode | undefined; onCalendarViewChange: ((view: CalendarViewMode) => void) | undefined;
     toolbarAction?: ReactNode; belowToolbar?: ReactNode;
 }) {
@@ -177,20 +186,20 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
             <CalendarToolbar view={s.view} currentDate={s.currentDate} tzAbbr={s.tzAbbr} isHeaderHidden={isHeaderHidden} calendarView={calendarView} onPrev={s.handlePrev} onNext={s.handleNext} onToday={s.handleToday} onViewChange={s.setView} action={toolbarAction} />
             {belowToolbar}
             {(s.isLoading || (s.isFetching && s.calendarEvents.length === 0)) && <div className="calendar-loading"><div className="loading-spinner" /><span>Loading events...</span></div>}
-            <div className="calendar-grid-wrapper">
-                <Calendar key={s.view} localizer={localizer} events={s.calendarEvents} date={s.currentDate} view={s.view}
+            <CalendarLayerGrid markers={layer.markers}>
+                <Calendar<GridEvent> key={s.view} localizer={localizer} events={s.calendarEvents} backgroundEvents={layer.backgroundEvents} date={s.currentDate} view={s.view}
                     views={[Views.MONTH, Views.WEEK, Views.DAY]} onNavigate={(date: Date) => s.setCurrentDate(date)} onView={s.setView}
                     onSelectEvent={handleSelectEvent}
                     onDrillDown={(date) => { s.setCurrentDate(date); s.setView(Views.DAY); onCalendarViewChange?.('day'); }}
                     drilldownView={Views.DAY} eventPropGetter={eventPropGetter}
-                    components={{ month: { event: wrappers.MonthEventWrapper }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, toolbar: () => null }}
+                    components={{ month: { event: wrappers.MonthEventWrapper }, week: { event: wrappers.WeekEventWrapper }, day: { event: wrappers.DayEventWrapper }, dayColumnWrapper: LayerDayColumnWrapper, toolbar: () => null }}
                     getNow={() => new TZDate(Date.now(), s.resolved)} allDayAccessor={() => false} popup selectable
                     onSelectSlot={(slotInfo) => {
                         if (slotInfo.action === 'doubleClick' || (window.innerWidth < 768 && slotInfo.action === 'click' && s.view === Views.MONTH)) {
                             s.setCurrentDate(slotInfo.start); s.setView(Views.DAY); onCalendarViewChange?.('day');
                         }
                     }} />
-            </div>
+            </CalendarLayerGrid>
             {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && <CalendarEmptyState view={s.view} />}
         </div>
     );
@@ -208,14 +217,15 @@ function useCalendarInteractions(
         setCurrentDate(eventStart); setView(Views.DAY); onCalendarViewChange?.('day');
     }, [setCurrentDate, setView, onCalendarViewChange]);
 
-    const handleSelectEvent = useCallback((event: CalendarEvent) => {
+    const handleSelectEvent = useCallback((event: GridEvent) => {
+        if (isLayerEvent(event)) return;
         if (window.innerWidth < 768 && view === Views.MONTH && !isScheduleView) {
             setCurrentDate(event.start); setView(Views.DAY); onCalendarViewChange?.('day'); return;
         }
         navigate(`/events/${event.id}`, { state: { fromCalendar: true, calendarDate: format(currentDate, 'yyyy-MM-dd'), calendarView: isScheduleView ? 'schedule' : viewToStr(view) } });
     }, [navigate, view, currentDate, isScheduleView, setCurrentDate, setView, onCalendarViewChange]);
 
-    const eventPropGetter = useCallback((event: CalendarEvent) => ({ style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
+    const eventPropGetter = useCallback((event: GridEvent) => (isLayerEvent(event) ? { className: 'rl-layer-window', style: {} } : { style: getCalendarEventStyle(event.resource?.game?.slug || 'default') }), []);
     const wrappers = useEventWrappers(eventOverlapsGameTime, handleMonthChipClick);
     return { handleSelectEvent, eventPropGetter, wrappers };
 }
@@ -244,6 +254,8 @@ export function CalendarView({
     const isHeaderHidden = scrollDirection === 'down';
     const eventOverlapsGameTime = useGameTimeOverlap(gameTimeSlots);
     const { handleSelectEvent, eventPropGetter, wrappers } = useCalendarInteractions(s, onCalendarViewChange, eventOverlapsGameTime);
+    const layerViewEnabled = !s.isScheduleView && (s.view === Views.WEEK || s.view === Views.DAY);
+    const layer = useCalendarLayerData({ from: s.startAfter, to: s.endBefore, selectedGames, viewEnabled: layerViewEnabled, tz: s.resolved });
 
     if (s.isScheduleView) {
         return (
@@ -257,5 +269,5 @@ export function CalendarView({
 
     return <CalendarGridBody s={s} className={className} isHeaderHidden={isHeaderHidden} eventPropGetter={eventPropGetter}
         handleSelectEvent={handleSelectEvent} wrappers={wrappers} calendarView={calendarView} onCalendarViewChange={onCalendarViewChange}
-        toolbarAction={toolbarAction} belowToolbar={belowToolbar} />;
+        toolbarAction={toolbarAction} belowToolbar={belowToolbar} layer={layer} />;
 }
