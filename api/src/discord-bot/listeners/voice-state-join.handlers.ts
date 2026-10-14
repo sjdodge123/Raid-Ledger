@@ -58,7 +58,8 @@ export async function handleGameBindingJoin(
  * later game confirmation never mints a second, sticky-game event.
  *
  * ROK-1782 (b): a member not playing a fixed-game monitor's game (Just
- * Chatting off) is neither tracked on that game nor rostered into its event.
+ * Chatting off) is not rostered into its event. Voice→activity tracking
+ * (ROK-591/604) is unchanged — it never depended on the spawn gate.
  */
 async function trackAndJoinExisting(
   deps: VoiceHandlerDeps,
@@ -67,18 +68,15 @@ async function trackAndJoinExisting(
   dm: DiscordMemberInfo,
   guildMember?: GuildMember,
 ): Promise<boolean> {
-  const plays = await countsTowardBinding(deps, binding, guildMember);
   const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
   const uid = rlUser?.id ?? null;
-  if (plays) {
-    const name = binding.gameName ?? '';
-    startVoiceGameTracking(deps, dm.discordUserId, binding.gameId, name, uid);
-  }
+  const name = binding.gameName ?? '';
+  startVoiceGameTracking(deps, dm.discordUserId, binding.gameId, name, uid);
   const existing = deps.adHocEventService.getActiveBindingEventGameId(
     binding.bindingId,
   );
   if (!existing) return false;
-  if (plays)
+  if (await countsTowardBinding(deps, binding, guildMember))
     await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
   return true;
 }

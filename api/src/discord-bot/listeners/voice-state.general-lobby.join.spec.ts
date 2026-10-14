@@ -382,8 +382,11 @@ function presenceChangeNoOpTests() {
     await listener.onBotConnected();
     presenceHandler!(null, { userId: 'user-not-in-channel', member: null });
     await jest.advanceTimersByTimeAsync(100);
-    expect(mocks.presenceDetector.detectGameForMember).not.toHaveBeenCalled();
+    // ROK-1782 ruling (c): the monitor IS consulted now (it checks whether the
+    // member started its game), but a member not on the bound game is neither
+    // moved out of nor rostered into anything.
     expect(mocks.adHocEventService.handleVoiceLeave).not.toHaveBeenCalled();
+    expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
     expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
   });
 
@@ -448,6 +451,7 @@ function presenceChangeNonLobbyTest() {
     await jest.advanceTimersByTimeAsync(2100);
     mocks.presenceDetector.detectGameForMember.mockClear();
     mocks.adHocEventService.handleVoiceLeave.mockClear();
+    mocks.adHocEventService.handleVoiceJoin.mockClear();
     presenceHandler!(null, {
       userId: 'u-nogame',
       member: {

@@ -240,7 +240,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — adv
     bindingPurpose: 'game-voice-monitor' as const,
     gameId: 1,
     gameName: 'Rise of Kingdoms',
-    config: { minPlayers: 2 },
+    config: { minPlayers: 2, allowJustChatting: true },
   };
 
   // ─── AC1: Spawn immediately with unanimous game activity ───────────────────
