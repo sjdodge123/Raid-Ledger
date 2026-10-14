@@ -286,8 +286,10 @@ export async function findLeadingFutureSlot(
 }
 
 /**
- * `Lock in <Ddd, Mmm D, h:mm A>` in the community timezone, ≤80 chars. The
- * date (ROK-1784) keeps the label unambiguous when the DM is read days later. A corrupt
+ * `Lock in <Ddd, Mmm D, h:mm A TZ>` in the community timezone, ≤80 chars. The
+ * date (ROK-1784) keeps the label unambiguous when the DM is read days later,
+ * and the zone name stops it reading as the viewer-local time the embed and
+ * push line show (they render in the recipient's zone). A corrupt
  * timezone falls back to UTC rather than aborting the sweep (mirrors
  * `formatEpoch`'s guard).
  *
@@ -302,6 +304,7 @@ export function formatLockLabel(iso: string, timeZone: string): string {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
+    timeZoneName: 'short',
   };
   const d = new Date(iso);
   let when: string;

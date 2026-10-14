@@ -35,18 +35,18 @@
  * Deterministic waits only — `pollForCondition` + `awaitProcessing`, never a
  * fixed timer (`npm run lint:no-sleep`).
  */
-import { pollForCondition } from "../../helpers/polling.js";
-import { awaitProcessing, seedFixtureUser } from "../fixtures.js";
-import type { FixtureUser } from "../fixtures.js";
-import type { SmokeTest, TestContext } from "../types.js";
-import type { ApiClient } from "../api.js";
+import { pollForCondition } from '../../helpers/polling.js';
+import { awaitProcessing, seedFixtureUser } from '../fixtures.js';
+import type { FixtureUser } from '../fixtures.js';
+import type { SmokeTest, TestContext } from '../types.js';
+import type { ApiClient } from '../api.js';
 
 /** Fixture slots 1..7 are taken by the LFG/LFM smokes; 8 + 9 are ours. */
 const MEMBER_A_SLOT = 8;
 const MEMBER_B_SLOT = 9;
 
 /** The payload discriminator (`scheduling-unanimous.helpers.ts`). */
-const UNANIMOUS_SUBTYPE = "scheduling_poll_unanimous_time";
+const UNANIMOUS_SUBTYPE = 'scheduling_poll_unanimous_time';
 
 /** `All {n} members said yes to <t:{unix}:f>. Lock it in.` */
 const MESSAGE_RE = /^All (\d+) members said yes to <t:(\d+):f>\. Lock it in\.$/;
@@ -135,11 +135,9 @@ async function waitForUnanimousDm(
 async function resolveGameId(ctx: TestContext): Promise<number> {
   const fromCtx = ctx.games[0]?.id ?? ctx.mmoGameId;
   if (fromCtx) return fromCtx;
-  const res = await ctx.api.get<{ data: { id: number }[] }>(
-    "/games/configured",
-  );
+  const res = await ctx.api.get<{ data: { id: number }[] }>('/games/configured');
   const id = res?.data?.[0]?.id;
-  if (!id) throw new Error("Need at least one configured game for the poll");
+  if (!id) throw new Error('Need at least one configured game for the poll');
   return id;
 }
 
@@ -186,14 +184,14 @@ function assertCopy(
   const expectedTitle = `Everyone's in for ${gameName}`;
   if (dm.title !== expectedTitle) {
     throw new Error(
-      `Expected DM title "${expectedTitle}", got "${dm.title ?? "<missing>"}"`,
+      `Expected DM title "${expectedTitle}", got "${dm.title ?? '<missing>'}"`,
     );
   }
-  const match = MESSAGE_RE.exec(dm.message ?? "");
+  const match = MESSAGE_RE.exec(dm.message ?? '');
   if (!match) {
     throw new Error(
       `Expected message "All {n} members said yes to <t:UNIX:f>. Lock it in.",` +
-        ` got "${dm.message ?? "<missing>"}"`,
+        ` got "${dm.message ?? '<missing>'}"`,
     );
   }
   const expectedUnix = Math.floor(Date.parse(slot.proposedTime) / 1000);
@@ -225,7 +223,7 @@ function assertLockPayload(
       `Expected payload.slotId=${slotId} (drives ?lock=<slotId>), got ${String(p.slotId)}`,
     );
   }
-  if (typeof p.lockLabel !== "string" || p.lockLabel.trim() === "") {
+  if (typeof p.lockLabel !== 'string' || p.lockLabel.trim() === '') {
     throw new Error(
       `Expected a non-empty payload.lockLabel (the Lock button's label), got ${JSON.stringify(p.lockLabel)}`,
     );
@@ -257,10 +255,10 @@ function pathAndLock(url: string | undefined): {
   lock: string | null;
 } {
   try {
-    const u = new URL(url ?? "");
-    return { path: u.pathname, lock: u.searchParams.get("lock") };
+    const u = new URL(url ?? '');
+    return { path: u.pathname, lock: u.searchParams.get('lock') };
   } catch {
-    return { path: "", lock: null };
+    return { path: '', lock: null };
   }
 }
 
@@ -277,46 +275,47 @@ async function assertRenderedButtons(
   poll: CreatePollResponse,
   slotId: number,
 ): Promise<void> {
-  if (/<t:\d+:R>/.test(dm.message ?? "")) {
+  if (/<t:\d+:R>/.test(dm.message ?? '')) {
     throw new Error(
-      `Expected no relative <t:…:R> token in the DM, got "${dm.message ?? ""}"`,
+      `Expected no relative <t:…:R> token in the DM, got "${dm.message ?? ''}"`,
     );
   }
-  const r = await api.post<RenderedDm>("/admin/test/render-dm-embed", {
-    type: "community_lineup",
+  const r = await api.post<RenderedDm>('/admin/test/render-dm-embed', {
+    type: 'community_lineup',
     title: dm.title,
     message: dm.message,
     ...(dm.payload ? { payload: dm.payload } : {}),
   });
   const row = r.components[r.components.length - 1]?.components ?? [];
-  const labels = row.map((b) => b.label ?? "?");
+  const labels = row.map((b) => b.label ?? '?');
   const pollPath = `/community-lineup/${poll.lineupId}/schedule/${poll.id}`;
   const lock = row[0];
   const open = row[1];
   const lockUrl = pathAndLock(lock?.url);
   const openUrl = pathAndLock(open?.url);
   if (
-    !lock?.label?.startsWith("Lock in") ||
+    !dm.payload?.lockLabel ||
+    lock?.label !== dm.payload.lockLabel ||
     lockUrl.path !== pollPath ||
     lockUrl.lock !== String(slotId)
   ) {
     throw new Error(
-      `Expected button 1 "Lock in …" → ${pollPath}?lock=${slotId}, got [${labels.join(", ")}] url=${String(lock?.url)}`,
+      `Expected button 1 "${String(dm.payload?.lockLabel)}" → ${pollPath}?lock=${slotId}, got [${labels.join(', ')}] url=${String(lock?.url)}`,
     );
   }
   if (
-    open?.label !== "Open Poll" ||
+    open?.label !== 'Open Poll' ||
     open.style !== LINK_STYLE ||
     openUrl.path !== pollPath ||
     openUrl.lock !== null
   ) {
     throw new Error(
-      `Expected button 2 "Open Poll" link → ${pollPath} (no ?lock=), got [${labels.join(", ")}] url=${String(open?.url)}`,
+      `Expected button 2 "Open Poll" link → ${pollPath} (no ?lock=), got [${labels.join(', ')}] url=${String(open?.url)}`,
     );
   }
-  if (labels[labels.length - 1] !== "Adjust Notifications" || row.length > 5) {
+  if (labels[labels.length - 1] !== 'Adjust Notifications' || row.length > 5) {
     throw new Error(
-      `Expected ≤5 buttons ending "Adjust Notifications", got [${labels.join(", ")}]`,
+      `Expected ≤5 buttons ending "Adjust Notifications", got [${labels.join(', ')}]`,
     );
   }
 }
@@ -364,7 +363,7 @@ async function assertOnlyOnce(
 
 const unanimousTimeDmsTheCreator: SmokeTest = {
   name: "ROK-1632 AC3: a time every member said yes to DMs the poll's creator",
-  category: "dm",
+  category: 'dm',
   async run(ctx: TestContext) {
     const gameId = await resolveGameId(ctx);
     const memberA = await seedFixtureUser(ctx.api, 3, MEMBER_A_SLOT);
@@ -372,7 +371,7 @@ const unanimousTimeDmsTheCreator: SmokeTest = {
 
     // The admin creates the poll, so `community_lineups.created_by` — the
     // DM's recipient — is `ctx.testUserId`.
-    const poll = await ctx.api.post<CreatePollResponse>("/scheduling-polls", {
+    const poll = await ctx.api.post<CreatePollResponse>('/scheduling-polls', {
       gameId,
       durationHours: 24,
       memberUserIds: [memberA.userId, memberB.userId],
@@ -414,10 +413,10 @@ const unanimousTimeDmsTheCreator: SmokeTest = {
       // Shared guild — never leave an open poll behind (it keeps a live card
       // in the game channel and pollutes the next run's banner).
       await ctx.api
-        .post(`${base}/cancel`, { reason: "smoke cleanup ROK-1632" })
+        .post(`${base}/cancel`, { reason: 'smoke cleanup ROK-1632' })
         .catch(() => null);
       await ctx.api
-        .patch(`/lineups/${poll.lineupId}/status`, { status: "archived" })
+        .patch(`/lineups/${poll.lineupId}/status`, { status: 'archived' })
         .catch(() => null);
     }
   },

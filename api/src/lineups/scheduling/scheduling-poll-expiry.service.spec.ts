@@ -98,7 +98,7 @@ describe('warning DM (S3-AC1, S3-AC5)', () => {
       },
     });
     expect(arg.payload.lockLabel).toMatch(
-      /^Lock in \w{3}, \w{3} \d{1,2}, \d{1,2}:\d{2} [AP]M$/,
+      /^Lock in \w{3}, \w{3} \d{1,2}, \d{1,2}:\d{2} [AP]M [A-Z][\w+:-]*$/,
     );
   });
 });

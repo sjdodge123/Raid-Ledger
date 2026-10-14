@@ -43,16 +43,18 @@ describe('formatLockLabel', () => {
   // 2026-09-17T02:30Z = Wed 7:30 PM in Los Angeles (PDT), Thu 2:30 AM UTC.
   const iso = '2026-09-17T02:30:00.000Z';
 
-  it('formats "Lock in <Ddd, Mmm D, h:mm A>" in the community timezone', () => {
+  it('formats "Lock in <Ddd, Mmm D, h:mm A TZ>" in the community timezone', () => {
     expect(formatLockLabel(iso, 'America/Los_Angeles')).toBe(
-      'Lock in Wed, Sep 16, 7:30 PM',
+      'Lock in Wed, Sep 16, 7:30 PM PDT',
     );
-    expect(formatLockLabel(iso, 'UTC')).toBe('Lock in Thu, Sep 17, 2:30 AM');
+    expect(formatLockLabel(iso, 'UTC')).toBe(
+      'Lock in Thu, Sep 17, 2:30 AM UTC',
+    );
   });
 
   it('falls back to UTC on a corrupt timezone instead of throwing', () => {
     expect(formatLockLabel(iso, 'Not/AZone')).toBe(
-      'Lock in Thu, Sep 17, 2:30 AM',
+      'Lock in Thu, Sep 17, 2:30 AM UTC',
     );
   });
 
@@ -77,7 +79,7 @@ describe('buildExpiryWarnCopy', () => {
         `The leading time is <t:${leadingUnix}:f>.`,
     );
     expect(copy.message).not.toMatch(/<t:\d+:R>/);
-    expect(copy.lockLabel).toBe('Lock in Thu, Sep 17, 2:30 AM');
+    expect(copy.lockLabel).toBe('Lock in Thu, Sep 17, 2:30 AM UTC');
   });
 });
 

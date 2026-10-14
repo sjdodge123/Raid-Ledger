@@ -276,6 +276,14 @@ function buildOpenPollButton(
     .setURL(`${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`);
 }
 
+/** Plain "View Lineup" link to the lineup page. */
+function viewLineupButton(clientUrl: string, lineupId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setLabel('View Lineup')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/community-lineup/${lineupId}`);
+}
+
 /** Extra buttons to add to the main action row for specific types. */
 export function buildInlineButtons(
   type: NotificationType,
@@ -285,12 +293,7 @@ export function buildInlineButtons(
   if (type === 'lineup_steam_nudge') {
     const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
     if (!lineupId) return [];
-    return [
-      new ButtonBuilder()
-        .setLabel('View Lineup')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
-    ];
+    return [viewLineupButton(clientUrl, lineupId)];
   }
   if (type === 'community_lineup') {
     const sub = payload?.subtype as string | undefined;
@@ -304,12 +307,7 @@ export function buildInlineButtons(
       sub === 'lineup_event_created' ||
       sub === 'lineup_scheduling_open';
     if (!needsInline) return [];
-    return [
-      new ButtonBuilder()
-        .setLabel('View Lineup')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
-    ];
+    return [viewLineupButton(clientUrl, lineupId)];
   }
   return [];
 }
