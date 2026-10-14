@@ -3,9 +3,17 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
   games,
+  pelicanSchedules,
   pelicanServers,
+  type NewPelicanSchedule,
   type NewPelicanServer,
 } from '../../drizzle/schema';
+import {
+  DEMO_TZ_MISMATCH_FIX,
+  DEMO_TZ_MISMATCH_STORED,
+  runningServerSchedules,
+  tzMismatchServerSchedules,
+} from './pelican-demo-seed-schedules.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -22,13 +30,22 @@ export interface PelicanSeedServer {
   kind: PelicanSeedKind;
   id: number;
   name: string;
+  /** Stored schedules seeded for this row (ROK-1096). */
+  scheduleCount: number;
+  /** The admin row is expected to carry `tzMismatch: true` (ROK-1096). */
+  tzMismatch: boolean;
 }
 
 export interface PelicanSeedResult {
   gameId: number;
   gameName: string;
   servers: PelicanSeedServer[];
+  /** The override that clears the mismatched row's warning (ROK-1096). */
+  tzMismatchFixTimezone: string;
 }
+
+/** The row whose schedule disagrees with its timezone override. */
+const TZ_MISMATCH_KIND: PelicanSeedKind = 'offline_unmapped';
 
 interface SeedSpec {
   kind: PelicanSeedKind;
@@ -59,7 +76,11 @@ export function buildDemoServers(gameId: number, now: Date): SeedSpec[] {
     [
       'offline_unmapped',
       'Offline',
-      { currentState: 'offline', statusCheckedAt: now },
+      {
+        currentState: 'offline',
+        statusCheckedAt: now,
+        timezone: DEMO_TZ_MISMATCH_STORED,
+      },
     ],
     ['unknown_hidden', 'Hidden', { gameId, showOnCalendar: false }],
     ['missing', 'Missing', { missingSince: now }],
@@ -83,9 +104,55 @@ async function pickDemoGame(
   return game ?? null;
 }
 
+/** ROK-1096 demo schedules per seeded row; most rows get none. */
+function schedulesFor(
+  kind: PelicanSeedKind,
+  serverId: number,
+  now: Date,
+): NewPelicanSchedule[] {
+  if (kind === 'running_mapped') return runningServerSchedules(serverId);
+  if (kind === TZ_MISMATCH_KIND)
+    return tzMismatchServerSchedules(serverId, now);
+  return [];
+}
+
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** Wipe `pelican_servers` (schedules cascade), insert `specs` + their schedules. */
+async function resetDemoRows(
+  tx: Tx,
+  specs: SeedSpec[],
+  now: Date,
+): Promise<PelicanSeedServer[]> {
+  await tx.delete(pelicanServers);
+  const inserted = await tx
+    .insert(pelicanServers)
+    .values(specs.map((s) => s.values))
+    .returning({
+      id: pelicanServers.id,
+      name: pelicanServers.name,
+      panelUuid: pelicanServers.panelUuid,
+    });
+  const out = specs.flatMap((spec) => {
+    const row = inserted.find((r) => r.panelUuid === spec.values.panelUuid);
+    return row
+      ? [{ spec, row, rows: schedulesFor(spec.kind, row.id, now) }]
+      : [];
+  });
+  const schedules = out.flatMap((o) => o.rows);
+  if (schedules.length > 0) await tx.insert(pelicanSchedules).values(schedules);
+  return out.map(({ spec, row, rows }) => ({
+    kind: spec.kind,
+    id: row.id,
+    name: row.name,
+    scheduleCount: rows.length,
+    tzMismatch: spec.kind === TZ_MISMATCH_KIND,
+  }));
+}
+
 /**
- * Wipe `pelican_servers` and insert the four demo rows (re-run = reset).
- * Returns `null` when there is no game to map.
+ * Reset `pelican_servers` to the four demo rows plus their schedules
+ * (re-run = reset). Returns `null` when there is no game to map.
  */
 export async function seedDemoPelicanServers(
   db: Db,
@@ -94,20 +161,11 @@ export async function seedDemoPelicanServers(
   const game = await pickDemoGame(db);
   if (!game) return null;
   const specs = buildDemoServers(game.id, now);
-  const inserted = await db.transaction(async (tx) => {
-    await tx.delete(pelicanServers);
-    return tx
-      .insert(pelicanServers)
-      .values(specs.map((s) => s.values))
-      .returning({
-        id: pelicanServers.id,
-        name: pelicanServers.name,
-        panelUuid: pelicanServers.panelUuid,
-      });
-  });
-  const servers = specs.flatMap((spec) => {
-    const row = inserted.find((r) => r.panelUuid === spec.values.panelUuid);
-    return row ? [{ kind: spec.kind, id: row.id, name: row.name }] : [];
-  });
-  return { gameId: game.id, gameName: game.name, servers };
+  const servers = await db.transaction((tx) => resetDemoRows(tx, specs, now));
+  return {
+    gameId: game.id,
+    gameName: game.name,
+    servers,
+    tzMismatchFixTimezone: DEMO_TZ_MISMATCH_FIX,
+  };
 }
