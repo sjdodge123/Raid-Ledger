@@ -13,7 +13,10 @@
  * the panel on load and on every tab click.
  *
  * Phone: the row never wraps; it scrolls sideways inside its own `<nav>`
- * (thin scrollbar), so the page never scrolls horizontally. When the active
+ * (thin scrollbar, shown only when the row overflows), so the page never scrolls
+ * horizontally. `overflow-y-hidden` matters: the tabs' `-mb-px` underline overlap
+ * is 1px of vertical overflow, which otherwise draws a vertical scrollbar at the
+ * row's right end on phones (ROK-1785 verify flag). When the active
  * tab is clipped by the row (a deep link to the last tab on a phone), it is
  * scrolled into view on mount and on every change. An unclipped tab is left
  * alone, so a row far down the page never drags the page to it on load.
@@ -41,7 +44,7 @@ const TAB_BASE =
 const TAB_ON = 'border-success text-foreground';
 const TAB_OFF = 'border-transparent text-muted hover:border-edge-strong hover:text-foreground';
 const ROW_SCROLL =
-    'overflow-x-auto overscroll-x-contain [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-edge-strong';
+    'overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-edge-strong';
 
 function isClipped(tab: HTMLElement, row: HTMLElement): boolean {
     const t = tab.getBoundingClientRect();

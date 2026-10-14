@@ -75,6 +75,8 @@ describe('TabRow — markup', () => {
         render(<TabRow tabs={TABS} activeId="overview" label="Sections" />);
         const nav = screen.getByRole('navigation');
         expect(nav.className).toContain('overflow-x-auto');
+        // The tabs' -mb-px underline is 1px of vertical overflow: without this a vertical scrollbar shows on phones.
+        expect(nav.className, 'the row must never scroll (or draw a scrollbar) vertically').toContain('overflow-y-hidden');
         expect(nav.className).toContain('[scrollbar-width:thin]');
     });
 });
