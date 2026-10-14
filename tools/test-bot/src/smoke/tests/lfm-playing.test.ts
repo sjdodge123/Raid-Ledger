@@ -188,6 +188,9 @@ async function awaitPlayingPost(
   // Round-2 TECH-DEBT: a bare poll timeout named no author line, so three
   // rounds of this gate could not tell "never rendered" from "painted over".
   let seen = '<no post for this game>';
+  let seenDescription = '';
+  // The spawn paints PLAYING NOW before the ephemeral voice channel is
+  // claimed (an in-between edit with no link), so wait for both together.
   const msg = await pollForEmbed(
     run.channelId,
     (m) =>
@@ -195,7 +198,8 @@ async function awaitPlayingPost(
       m.embeds.some((e) => {
         if (e.title !== run.game.name) return false;
         seen = e.author ?? '';
-        return PLAYING_AUTHOR.test(seen);
+        seenDescription = e.description ?? '';
+        return PLAYING_AUTHOR.test(seen) && VOICE_LINK.test(seenDescription);
       }),
     run.ctx.config.timeoutMs,
   ).catch((err: unknown) => {
@@ -204,8 +208,9 @@ async function awaitPlayingPost(
     const text = err instanceof Error ? err.message : String(err);
     if (!text.includes('timed out')) throw err;
     throw new Error(
-      `AC7: no PLAYING NOW post — expected an author line matching ` +
-        `${String(PLAYING_AUTHOR)}, last rendered "${seen}"`,
+      `AC7: no PLAYING NOW post with a voice link — expected an author line ` +
+        `matching ${String(PLAYING_AUTHOR)} and a description matching ` +
+        `${String(VOICE_LINK)}, last rendered "${seen}" / "${seenDescription}"`,
     );
   });
   const embed = embedFor(msg, run.game.name);
