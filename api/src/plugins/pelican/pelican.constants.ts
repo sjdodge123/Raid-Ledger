@@ -18,3 +18,7 @@ export const PELICAN_STATUS_FRESH_MS = 20_000;
 export const PELICAN_STATUS_STALE_MS = 6 * 60_000;
 /** Label the host stamps onto every Pelican status/item. */
 export const PELICAN_PROVIDER_LABEL = 'Pelican';
+/** At most this many `/schedules` calls in flight (ROK-1773 D3). */
+export const PELICAN_SCHEDULE_CONCURRENCY = 4;
+/** Stored schedule names are cut to this length (mirrors server names). */
+export const PELICAN_SCHEDULE_NAME_MAX = 200;

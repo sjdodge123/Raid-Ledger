@@ -13,6 +13,8 @@ import { PelicanServersRepository } from './pelican-servers.repository';
 import { PelicanServersAdminRepository } from './pelican-servers-admin.repository';
 import { PelicanServersAdminController } from './pelican-servers-admin.controller';
 import { PelicanSyncService } from './pelican-sync.service';
+import { PelicanSchedulesRepository } from './pelican-schedules.repository';
+import { PelicanScheduleSyncService } from './pelican-schedule-sync.service';
 import { PelicanStatusService } from './pelican-status.service';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
@@ -39,6 +41,8 @@ type UninstalledPayload = { slug: string };
     PelicanClientFactory,
     PelicanServersRepository,
     PelicanServersAdminRepository,
+    PelicanSchedulesRepository,
+    PelicanScheduleSyncService,
     PelicanSyncService,
     PelicanStatusService,
     PelicanCronRegistrar,
@@ -48,6 +52,7 @@ type UninstalledPayload = { slug: string };
   exports: [
     PelicanClientFactory,
     PelicanServersRepository,
+    PelicanSchedulesRepository,
     PelicanSyncService,
     PelicanStatusService,
   ],

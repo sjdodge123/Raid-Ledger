@@ -13,6 +13,7 @@ import {
   fakeServer,
   jsonResponse,
   requestUrl,
+  scheduleListBody,
   serverPageBody,
 } from './pelican-fixtures';
 
@@ -22,6 +23,17 @@ export const PANEL_HOST = 'panel.test';
 
 type FetchArgs = Parameters<typeof fetch>;
 export type FakeListedServer = ReturnType<typeof fakeServer>;
+
+/** What `/servers/{uuid}/schedules` answers for one uuid (ROK-1773). */
+export interface FakeScheduleReply {
+  status: number;
+  body: unknown;
+}
+
+/** A 200 schedule list of `fakeSchedule` items. */
+export function schedulesOk(schedules: unknown[]): FakeScheduleReply {
+  return { status: 200, body: scheduleListBody(schedules) };
+}
 
 export interface FakeLiveState {
   state: string;
@@ -36,6 +48,10 @@ export interface FakePanel {
   failPage: number | null;
   /** Live state per uuid; a uuid absent here answers 500 on `/resources`. */
   live: Map<string, FakeLiveState>;
+  /** Schedules per uuid; a uuid absent here answers 500 on `/schedules`. */
+  schedules: Map<string, FakeScheduleReply>;
+  /** Awaited before any `/schedules` answer (e.g. deactivate mid-tick). */
+  beforeSchedules: (() => Promise<void>) | null;
   /** When set, every request waits for it before answering. */
   gate: Promise<void> | null;
   fetchImpl: jest.Mock<Promise<Response>, FetchArgs>;
@@ -72,15 +88,25 @@ function resources(panel: FakePanel, uuid: string): Response {
   });
 }
 
-function route(panel: FakePanel, input: FetchArgs[0]): Response {
+const RESOURCES_PATH = /^\/api\/client\/servers\/([^/]+)\/resources$/;
+const SCHEDULES_PATH = /^\/api\/client\/servers\/([^/]+)\/schedules$/;
+
+async function schedules(panel: FakePanel, uuid: string): Promise<Response> {
+  if (panel.beforeSchedules) await panel.beforeSchedules();
+  const reply = panel.schedules.get(uuid);
+  if (!reply) return jsonResponse({ errors: [] }, 500);
+  return jsonResponse(reply.body, reply.status);
+}
+
+async function route(panel: FakePanel, input: FetchArgs[0]): Promise<Response> {
   const url = requestUrl(input);
   if (url.pathname === '/api/client') {
     return listingPage(panel, Number(url.searchParams.get('page') ?? '1'));
   }
-  const match = /^\/api\/client\/servers\/([^/]+)\/resources$/.exec(
-    url.pathname,
-  );
+  const match = RESOURCES_PATH.exec(url.pathname);
   if (match?.[1]) return resources(panel, decodeURIComponent(match[1]));
+  const sched = SCHEDULES_PATH.exec(url.pathname);
+  if (sched?.[1]) return schedules(panel, decodeURIComponent(sched[1]));
   return jsonResponse({ errors: [] }, 404);
 }
 
@@ -90,6 +116,8 @@ export function createFakePanel(servers: FakeListedServer[]): FakePanel {
     pageSize: 100,
     failPage: null,
     live: new Map(),
+    schedules: new Map(),
+    beforeSchedules: null,
     gate: null,
     fetchImpl: jest.fn<Promise<Response>, FetchArgs>(),
   };
@@ -112,12 +140,21 @@ export function listingCalls(panel: FakePanel): number {
   return requestedPaths(panel).filter((p) => p === '/api/client').length;
 }
 
-/** Uuids whose `/resources` were requested. */
-export function resourceUuids(panel: FakePanel): string[] {
+function uuidsFor(panel: FakePanel, pattern: RegExp): string[] {
   return requestedPaths(panel)
-    .map((p) => /^\/api\/client\/servers\/([^/]+)\/resources$/.exec(p)?.[1])
+    .map((p) => pattern.exec(p)?.[1])
     .filter((u): u is string => u !== undefined)
     .map((u) => decodeURIComponent(u));
+}
+
+/** Uuids whose `/resources` were requested. */
+export function resourceUuids(panel: FakePanel): string[] {
+  return uuidsFor(panel, RESOURCES_PATH);
+}
+
+/** Uuids whose `/schedules` were requested, in call order (ROK-1773). */
+export function scheduleUuids(panel: FakePanel): string[] {
+  return uuidsFor(panel, SCHEDULES_PATH);
 }
 
 /** Route the app's Pelican client to `panel` (restore with `jest.restoreAllMocks`). */

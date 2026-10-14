@@ -121,22 +121,30 @@ describe('pelican_schedules schema (ROK-1772 §3 / ROK-1773)', () => {
     expect(fks).toEqual([{ cols: ['server_id'], onDelete: 'cascade' }]);
   });
 
-  it('restricts effect to every GameServerEffectSchema value', () => {
-    const chk = config.checks.find(
-      (c) => c.name === 'pelican_schedules_effect_chk',
-    );
+  /** The literal text of a CHECK lives in its SQL template's string chunks. */
+  function checkSqlText(name: string): string {
+    const chk = config.checks.find((c) => c.name === name);
     expect(chk).toBeDefined();
-    // The literal list lives in the SQL template's string chunks.
-    const sqlText = (chk?.value.queryChunks ?? [])
+    return (chk?.value.queryChunks ?? [])
       .flatMap((c) =>
         typeof c === 'object' && c !== null && 'value' in c
           ? [String(c.value)]
           : [],
       )
       .join('');
+  }
+
+  it('restricts effect to every GameServerEffectSchema value', () => {
+    const sqlText = checkSqlText('pelican_schedules_effect_chk');
     for (const effect of GameServerEffectSchema.options) {
       expect(sqlText).toContain(`'${effect}'`);
     }
+  });
+
+  it('bounds effect_offset_s to one day (running sum of task offsets)', () => {
+    expect(checkSqlText('pelican_schedules_effect_offset_chk')).toContain(
+      'BETWEEN 0 AND 86400',
+    );
   });
 });
 

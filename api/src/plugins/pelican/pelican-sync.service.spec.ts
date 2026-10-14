@@ -6,6 +6,7 @@ import type {
   PelicanServersRepository,
 } from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
+import type { PelicanScheduleSyncService } from './pelican-schedule-sync.service';
 import { toListedServer } from './pelican-sync.helpers';
 import type { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import {
@@ -45,12 +46,18 @@ function build(
       Promise.resolve(counts),
     ),
   };
+  const scheduleSync = {
+    syncSchedules: jest.fn(() =>
+      Promise.resolve({ synced: 0, failed: 0, skipped: 0 }),
+    ),
+  };
   const service = new PelicanSyncService(
     registry as unknown as PluginRegistryService,
     factory as unknown as PelicanClientFactory,
     repo as unknown as PelicanServersRepository,
+    scheduleSync as unknown as PelicanScheduleSyncService,
   );
-  return { service, fetchImpl, repo, factory };
+  return { service, fetchImpl, repo, factory, scheduleSync };
 }
 
 const twoPages: Respond = (page) =>
@@ -169,5 +176,44 @@ describe('PelicanSyncService.syncServers — uninstall race', () => {
       markedMissing: 0,
       restored: 0,
     });
+  });
+});
+
+describe('PelicanSyncService.syncServers — schedule phase (ROK-1773 D2)', () => {
+  it('runs the schedule phase once, after the listing is applied', async () => {
+    const { service, repo, scheduleSync } = build(twoPages);
+    const outcome = await service.syncServers();
+    expect(outcome.code).toBe('ok');
+    expect(scheduleSync.syncSchedules).toHaveBeenCalledTimes(1);
+    expect(scheduleSync.syncSchedules).toHaveBeenCalledWith(
+      expect.objectContaining({ host: 'panel.example.test' }),
+    );
+    const applyOrder = repo.applyListing.mock.invocationCallOrder[0];
+    const scheduleOrder =
+      scheduleSync.syncSchedules.mock.invocationCallOrder[0];
+    expect(applyOrder).toBeLessThan(scheduleOrder ?? 0);
+  });
+
+  it('skips the schedule phase when a listing page fails', async () => {
+    const { service, scheduleSync } = build((page) =>
+      page === 1
+        ? twoPages(1)
+        : Promise.resolve(new Response('', { status: 503 })),
+    );
+    expect((await service.syncServers()).code).toBe('http');
+    expect(scheduleSync.syncSchedules).not.toHaveBeenCalled();
+  });
+
+  it('skips the schedule phase when the plugin went inactive mid-sync', async () => {
+    const { service, repo, scheduleSync } = build(twoPages);
+    repo.applyListing.mockResolvedValueOnce(null);
+    expect((await service.syncServers()).code).toBe('not_configured');
+    expect(scheduleSync.syncSchedules).not.toHaveBeenCalled();
+  });
+
+  it('skips the schedule phase while the plugin is inactive', async () => {
+    const { service, scheduleSync } = build(twoPages, { active: false });
+    await service.syncServers();
+    expect(scheduleSync.syncSchedules).not.toHaveBeenCalled();
   });
 });
