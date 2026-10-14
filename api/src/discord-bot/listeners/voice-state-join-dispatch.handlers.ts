@@ -4,7 +4,7 @@
  * bindings for a joined channel and route to the game-binding / general-lobby
  * handlers. handleChannelJoin is re-entrant (presence recheck re-invokes it).
  */
-import type { GuildMember } from 'discord.js';
+import { ActivityType, type GuildMember, type Presence } from 'discord.js';
 import type { Logger } from '@nestjs/common';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
@@ -97,34 +97,52 @@ export async function handleChannelJoin(
  * channel, not just the first row. Lobbies run the game-switch path; a
  * fixed-game monitor (when no lobby outranks it) re-runs its join decision for
  * a member who just started its game and is not yet in its event.
+ * `prev` is the pre-update presence (null when discord.js had none cached).
  */
 export async function handlePresenceUpdate(
   ctx: JoinHandlerCtx,
   chId: string,
   gm: GuildMember,
+  prev: Presence | null = null,
 ): Promise<void> {
   const bindings = await ctx.resolveAllBindings(chId);
   const lobbyWins = bindings.some(isLobbyBinding);
   for (const b of bindings) {
     if (isLobbyBinding(b)) await handlePresenceChange(ctx.deps, gm.id, b, gm);
-    else if (!lobbyWins) await recheckMonitorOnPresence(ctx, chId, b, gm);
+    else if (!lobbyWins) await recheckMonitorOnPresence(ctx, chId, b, gm, prev);
   }
 }
 
-/** Re-run a fixed-game monitor's join for a member now playing its game. */
+/** The Playing activity name of a presence, or null when none. */
+function playingName(p: Presence | null | undefined): string | null {
+  const playing = p?.activities?.find((a) => a.type === ActivityType.Playing);
+  return playing?.name ?? null;
+}
+
+/**
+ * Re-run a fixed-game monitor's join for a member now playing its game. Only
+ * a CHANGED Playing activity can newly qualify them — status flips, custom
+ * statuses and Rich Presence ticks on the same game return before any
+ * game-detection DB lookup. An uncached `prev` cannot be compared, so it falls
+ * through to detection.
+ */
 async function recheckMonitorOnPresence(
   ctx: JoinHandlerCtx,
   chId: string,
   b: ResolvedBinding,
   gm: GuildMember,
+  prev: Presence | null,
 ): Promise<void> {
   if (b.gameId == null || isBotMember(gm)) return;
-  const detected = await ctx.presenceDetector.detectGameForMember(gm);
-  if (detected.gameId !== b.gameId) return;
+  const next = playingName(gm.presence);
+  if (next === null) return;
+  if (prev && playingName(prev) === next) return;
   const svc = ctx.deps.adHocEventService;
   const active = svc.getActiveBindingEventGameId(b.bindingId);
   const state = active && svc.getActiveState(b.bindingId, active.gameId);
   if (state && state.memberSet.has(gm.id)) return;
+  const detected = await ctx.presenceDetector.detectGameForMember(gm);
+  if (detected.gameId !== b.gameId) return;
   await dispatchBindingJoin(ctx, chId, b, buildDiscordMember(gm.id, gm), gm);
 }
 

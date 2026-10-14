@@ -7,6 +7,12 @@
  *  (a) a general lobby on the channel wins — its per-game groups decide;
  *  (c) presence updates are evaluated against EVERY binding on the channel.
  */
+import { ActivityType, type GuildMember, type Presence } from 'discord.js';
+import {
+  handlePresenceUpdate,
+  type JoinHandlerCtx,
+} from './voice-state-join-dispatch.handlers';
+import type { ResolvedBinding } from './voice-state.helpers';
 import {
   gameBinding,
   lobbyBinding,
@@ -83,5 +89,54 @@ describe('ROK-1782 (a) — no duplicate event when both bindings match', () => {
     await h.advanceSpawnDelay();
     expect(h.eventKeys()).toEqual(['bind-gl:1']);
     expect(joinsFor('bind-game')).toEqual([]);
+  });
+});
+
+describe('ROK-1782 (c) — monitor presence recheck only on a game change', () => {
+  const bg3Monitor: ResolvedBinding = {
+    bindingId: 'bind-game',
+    gameId: BG3.gameId,
+    gameName: BG3.gameName,
+    bindingPurpose: 'game-voice-monitor',
+    recurrenceGroupId: null,
+    config: { minPlayers: 2 },
+  };
+  const presence = (game: string): Presence =>
+    ({
+      activities: [{ type: ActivityType.Playing, name: game }],
+    }) as unknown as Presence;
+  const member = (game: string): GuildMember =>
+    ({
+      id: 'u1',
+      user: { bot: false },
+      presence: presence(game),
+    }) as unknown as GuildMember;
+
+  function ctxFor(): { ctx: JoinHandlerCtx; detect: jest.Mock } {
+    const detect = jest.fn().mockResolvedValue({ gameId: 99, gameName: 'x' });
+    const svc = {
+      getActiveBindingEventGameId: jest.fn().mockReturnValue(null),
+      getActiveState: jest.fn(),
+    };
+    const ctx = {
+      deps: { adHocEventService: svc },
+      presenceDetector: { detectGameForMember: detect },
+      resolveAllBindings: jest.fn().mockResolvedValue([bg3Monitor]),
+    } as unknown as JoinHandlerCtx;
+    return { ctx, detect };
+  }
+
+  it('an unchanged Playing game triggers no game detection or join', async () => {
+    const { ctx, detect } = ctxFor();
+    const gm = member(BG3.gameName);
+    await handlePresenceUpdate(ctx, 'ch', gm, presence(BG3.gameName));
+    expect(detect).not.toHaveBeenCalled();
+  });
+
+  it('a changed Playing game is re-detected against the monitor', async () => {
+    const { ctx, detect } = ctxFor();
+    const gm = member(BG3.gameName);
+    await handlePresenceUpdate(ctx, 'ch', gm, presence(VALHEIM.gameName));
+    expect(detect).toHaveBeenCalledTimes(1);
   });
 });

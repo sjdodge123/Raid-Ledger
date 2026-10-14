@@ -194,8 +194,8 @@ export class VoiceStateListener implements OnApplicationShutdown {
       this.handleVoiceStateUpdate(o, n);
     };
     client.on(Events.VoiceStateUpdate, this.boundHandler);
-    this.presenceHandler = (_o: Presence | null, n: Presence) => {
-      this.onPresenceUpdate(n).catch((e) =>
+    this.presenceHandler = (o: Presence | null, n: Presence) => {
+      this.onPresenceUpdate(o, n).catch((e) =>
         this.logger.error(`Presence error: ${e}`),
       );
     };
@@ -296,10 +296,13 @@ export class VoiceStateListener implements OnApplicationShutdown {
     }
   }
 
-  private async onPresenceUpdate(np: Presence): Promise<void> {
+  private async onPresenceUpdate(
+    op: Presence | null,
+    np: Presence,
+  ): Promise<void> {
     const channelId = this.userChannelMap.get(np.userId);
     if (!channelId || !np.member) return;
-    await handlePresenceUpdate(this.joinCtx, channelId, np.member);
+    await handlePresenceUpdate(this.joinCtx, channelId, np.member, op);
   }
 
   private get joinCtx(): JoinHandlerCtx {
