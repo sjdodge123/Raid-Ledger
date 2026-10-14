@@ -9,6 +9,7 @@
  */
 import type { JSX, SyntheticEvent } from 'react';
 import { PowerIcon } from '@heroicons/react/16/solid';
+import { Button } from '../../ui/button';
 import type { TipPlacement } from './layer-tip-placement';
 import { useGlyphTip } from './use-glyph-tip';
 
@@ -50,13 +51,13 @@ export function LayerGlyph({ tips }: LayerGlyphProps): JSX.Element {
     const { visible, placement, handlers } = useGlyphTip();
     return (
         <span className="relative pointer-events-auto inline-flex" onPointerDown={stop} onMouseDown={stop} onTouchStart={stop} onDoubleClick={stop}>
-            <button
-                type="button" data-testid="layer-marker-glyph" aria-label={glyphAriaLabel(tips)} aria-expanded={visible}
+            <Button
+                variant="bare" data-testid="layer-marker-glyph" aria-label={glyphAriaLabel(tips)} aria-expanded={visible}
                 {...handlers}
-                className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-surface text-muted ring-1 ring-edge-strong focus:outline-none focus-visible:ring-2 focus-visible:ring-success"
+                className="h-4 w-4 rounded-full bg-surface text-muted ring-1 ring-edge-strong focus:outline-none"
             >
                 <PowerIcon aria-hidden="true" className="h-3 w-3" />
-            </button>
+            </Button>
             <GlyphTip tips={tips} placement={placement} visible={visible} />
         </span>
     );
