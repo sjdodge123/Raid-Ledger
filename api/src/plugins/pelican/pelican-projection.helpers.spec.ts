@@ -45,6 +45,7 @@ function sched(
     nextRunAt: null,
     effect,
     effectOffsetS: 0,
+    onlyWhenOnline: false,
     gameId: 7,
     serverName: 'Valheim',
     serverTimezone: NY,
@@ -192,6 +193,33 @@ describe('projectSchedules — look-behind opener is stable (review fix)', () =>
       expect(briefs(project([START, SUNDAY_STOP], from, to))).toEqual([WEEK]);
     },
   );
+});
+
+describe('projectSchedules — only_when_online (Lead ruling)', () => {
+  const day = [
+    '2026-10-14T12:00:00-04:00',
+    '2026-10-15T12:00:00-04:00',
+  ] as const;
+
+  it('drops start runs of an only-when-online schedule (no window, no marker)', () => {
+    const start = sched('0 18 * * *', 'start', { onlyWhenOnline: true });
+    expect(briefs(project([start, STOP], ...day))).toEqual([
+      'marker stop 2026-10-15T06:00:00.000Z Night down',
+    ]);
+    expect(briefs(project([start], ...day))).toEqual([]);
+  });
+
+  it('keeps restart and stop runs of only-when-online schedules', () => {
+    const restart = sched('0 22 * * *', 'restart', { onlyWhenOnline: true });
+    const stop = sched('0 2 * * *', 'stop', {
+      name: 'Night down',
+      onlyWhenOnline: true,
+    });
+    expect(briefs(project([START, restart, stop], ...day))).toEqual([
+      'window 2026-10-14T22:00:00.000Z -> 2026-10-15T06:00:00.000Z Evening up',
+      'marker restart 2026-10-15T02:00:00.000Z Restart',
+    ]);
+  });
 });
 
 describe('projectSchedules — DST', () => {

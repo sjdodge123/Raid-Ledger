@@ -45,6 +45,7 @@ export interface ProjectionSchedule extends Pick<
   | 'nextRunAt'
   | 'effect'
   | 'effectOffsetS'
+  | 'onlyWhenOnline'
 > {
   gameId: number;
   /** Raw panel name — redacted here before it reaches an item. */
@@ -221,6 +222,9 @@ function scheduleEvents(
     });
     return [];
   }
+  // Lead ruling: Pelican skips an only-when-online schedule while the server
+  // is offline, and a start only matters then — so it can never fire.
+  if (effect === 'start' && s.onlyWhenOnline) return [];
   try {
     return expandSchedule(s, effect, ctx);
   } catch {
