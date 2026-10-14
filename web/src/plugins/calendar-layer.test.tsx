@@ -31,17 +31,23 @@ function setActive(slugs: string[]) {
     act(() => usePluginStore.getState().setActiveSlugs(slugs));
 }
 
+/** Fresh registry with plugin `a` (one item) and plugin `b` (two items), none active. */
+function setupTwoLayers() {
+    clearRegistry();
+    usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false });
+    const a = fakeLayer('a:layer', [windowItem('a1')]);
+    const b = fakeLayer('b:layer', [windowItem('b1'), windowItem('b2')]);
+    registerPlugin('a', BADGE).registerCalendarLayer(a.layer);
+    registerPlugin('b', BADGE).registerCalendarLayer(b.layer);
+    return { a, b };
+}
+
 describe('useCalendarLayers — merge + gating (ROK-1774)', () => {
     let a: ReturnType<typeof fakeLayer>;
     let b: ReturnType<typeof fakeLayer>;
 
     beforeEach(() => {
-        clearRegistry();
-        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false });
-        a = fakeLayer('a:layer', [windowItem('a1')]);
-        b = fakeLayer('b:layer', [windowItem('b1'), windowItem('b2')]);
-        registerPlugin('a', BADGE).registerCalendarLayer(a.layer);
-        registerPlugin('b', BADGE).registerCalendarLayer(b.layer);
+        ({ a, b } = setupTwoLayers());
     });
 
     it('returns only the active plugin\'s items and calls the inactive layer with enabled=false', () => {
@@ -81,6 +87,13 @@ describe('useCalendarLayers — merge + gating (ROK-1774)', () => {
         const games = new Set(['valheim']);
         renderHook(() => useCalendarLayers(RANGE, games, true));
         expect(a.spy).toHaveBeenLastCalledWith(RANGE, games, true);
+    });
+
+});
+
+describe('useCalendarLayers — result shape (ROK-1774)', () => {
+    beforeEach(() => {
+        setupTwoLayers();
     });
 
     it('drops items a layer returns while disabled', () => {
