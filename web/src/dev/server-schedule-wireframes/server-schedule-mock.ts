@@ -42,8 +42,8 @@ export interface MockEvent {
 }
 
 export const DAY_LABELS = ['Mon 12', 'Tue 13', 'Wed 14', 'Thu 15', 'Fri 16', 'Sat 17', 'Sun 18'] as const;
-/** The day the Day panel shows (Fri 16 — window + event overlap). */
-export const DAY_PANEL_INDEX = 4;
+/** The day the Day panel shows (Sat 17 — Friday's window tail, the restart, a window under an event). */
+export const DAY_PANEL_INDEX = 5;
 /** Month grid: 1 Oct 2026 is a Thursday (index 3 in a Mon-first week). */
 export const MONTH_FIRST_WEEKDAY = 3;
 export const MONTH_DAYS = 31;
