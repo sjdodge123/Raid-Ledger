@@ -43,15 +43,19 @@ describe('formatLockLabel', () => {
   // 2026-09-17T02:30Z = Wed 7:30 PM in Los Angeles (PDT), Thu 2:30 AM UTC.
   const iso = '2026-09-17T02:30:00.000Z';
 
-  it('formats "Lock in <Ddd h:mm A>" in the community timezone', () => {
+  it('formats "Lock in <Ddd, Mmm D, h:mm A TZ>" in the community timezone', () => {
     expect(formatLockLabel(iso, 'America/Los_Angeles')).toBe(
-      'Lock in Wed 7:30 PM',
+      'Lock in Wed, Sep 16, 7:30 PM PDT',
     );
-    expect(formatLockLabel(iso, 'UTC')).toBe('Lock in Thu 2:30 AM');
+    expect(formatLockLabel(iso, 'UTC')).toBe(
+      'Lock in Thu, Sep 17, 2:30 AM UTC',
+    );
   });
 
   it('falls back to UTC on a corrupt timezone instead of throwing', () => {
-    expect(formatLockLabel(iso, 'Not/AZone')).toBe('Lock in Thu 2:30 AM');
+    expect(formatLockLabel(iso, 'Not/AZone')).toBe(
+      'Lock in Thu, Sep 17, 2:30 AM UTC',
+    );
   });
 
   it('never exceeds the 80-char Discord button cap', () => {
@@ -63,16 +67,19 @@ describe('buildExpiryWarnCopy', () => {
   const deadline = new Date('2026-09-16T20:00:00.000Z');
   const leading = '2026-09-17T02:30:00.000Z';
 
-  it('names the game and embeds Discord relative + full timestamps', () => {
+  // ROK-1784: a persisted DM is read long after it is sent, so the close time
+  // is absolute (`:f`) — a relative `:R` read "closes an hour ago" later.
+  it('names the game and embeds absolute Discord timestamps only', () => {
     const copy = buildExpiryWarnCopy('Valheim', deadline, leading, 'UTC');
     const deadlineUnix = Math.floor(deadline.getTime() / 1000);
     const leadingUnix = Math.floor(new Date(leading).getTime() / 1000);
     expect(copy.title).toBe('Your Valheim poll closes soon');
     expect(copy.message).toBe(
-      `Nobody has locked in a time and the poll closes <t:${deadlineUnix}:R>. ` +
+      `Nobody has locked in a time. The poll closes <t:${deadlineUnix}:f>. ` +
         `The leading time is <t:${leadingUnix}:f>.`,
     );
-    expect(copy.lockLabel).toBe('Lock in Thu 2:30 AM');
+    expect(copy.message).not.toMatch(/<t:\d+:R>/);
+    expect(copy.lockLabel).toBe('Lock in Thu, Sep 17, 2:30 AM UTC');
   });
 });
 
@@ -117,9 +124,10 @@ describe('buildNoLeaderWarnCopy (ROK-1617 item D)', () => {
     const deadlineUnix = Math.floor(deadline.getTime() / 1000);
     expect(copy.title).toBe('Your Valheim poll closes soon');
     expect(copy.message).toBe(
-      `No time worked for the group yet and the poll closes ` +
-        `<t:${deadlineUnix}:R>. Suggest a new time or start a new poll.`,
+      `No time worked for the group yet. The poll closes ` +
+        `<t:${deadlineUnix}:f>. Suggest a new time or start a new poll.`,
     );
+    expect(copy.message).not.toMatch(/<t:\d+:R>/);
     expect(copy).not.toHaveProperty('lockLabel');
   });
 });
