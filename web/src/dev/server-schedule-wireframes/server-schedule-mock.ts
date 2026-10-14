@@ -84,7 +84,7 @@ export interface WindowSegment {
   continued: boolean;
 }
 
-/** Split every window into the pieces that fall inside `day`. */
+/** Split every window into the pieces that fall inside `day`, earliest first (DOM order = time order). */
 export function segmentsForDay(day: number, windows: MockWindow[] = WINDOWS): WindowSegment[] {
   const out: WindowSegment[] = [];
   for (const w of windows) {
@@ -95,7 +95,7 @@ export function segmentsForDay(day: number, windows: MockWindow[] = WINDOWS): Wi
       out.push({ serverId: w.serverId, startMin: 0, endMin: w.endMin - 1440, continued: true });
     }
   }
-  return out;
+  return out.sort((a, b) => a.startMin - b.startMin);
 }
 
 export function markersForDay(day: number): MockMarker[] {

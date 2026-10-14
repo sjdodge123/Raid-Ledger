@@ -49,11 +49,15 @@ describe('ServerScheduleWireframesPage', () => {
 });
 
 describe('segmentsForDay', () => {
-  it('splits a window that crosses midnight into an evening piece and a next-day tail', () => {
+  it('splits a window that crosses midnight into an evening piece and a next-day tail, earliest first', () => {
     expect(segmentsForDay(4)).toEqual([{ serverId: 'minecraft', startMin: 1080, endMin: 1440, continued: false }]);
     expect(segmentsForDay(5)).toEqual([
-      { serverId: 'minecraft', startMin: 1080, endMin: 1440, continued: false },
       { serverId: 'minecraft', startMin: 0, endMin: 120, continued: true },
+      { serverId: 'minecraft', startMin: 1080, endMin: 1440, continued: false },
     ]);
+    // Chronological even when the source windows are listed latest-first.
+    const late = { kind: 'window' as const, serverId: 'x', day: 5, startMin: 1080, endMin: 1200 };
+    const early = { kind: 'window' as const, serverId: 'x', day: 4, startMin: 1080, endMin: 1500 };
+    expect(segmentsForDay(5, [late, early]).map((s) => s.startMin)).toEqual([0, 1080]);
   });
 });
