@@ -27,6 +27,7 @@ import {
 import { PELICAN_PLUGIN_ID } from './pelican.constants';
 import { PelicanServersAdminRepository } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
+import { PelicanTzCheckService } from './pelican-tz-check.service';
 
 /**
  * Pelican admin servers table (ROK-1094). Same guards as
@@ -37,15 +38,21 @@ import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
 @UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
 @RequirePlugin(PELICAN_PLUGIN_ID)
 export class PelicanServersAdminController {
-  constructor(private readonly servers: PelicanServersAdminRepository) {}
+  constructor(
+    private readonly servers: PelicanServersAdminRepository,
+    private readonly tzCheck: PelicanTzCheckService,
+  ) {}
 
   /** GET /admin/plugins/pelican/servers — every row, missing included. */
   @Get('servers')
   async listServers(): Promise<PelicanServerListResponse> {
     const rows = await this.servers.listForAdmin();
+    const mismatched = await this.tzCheck.mismatchedServerIds(rows);
     const now = new Date();
     return PelicanServerListResponseSchema.parse({
-      data: rows.map((row) => toAdminServerRowDto(row, now)),
+      data: rows.map((row) =>
+        toAdminServerRowDto(row, now, mismatched.has(row.id)),
+      ),
     });
   }
 
@@ -66,8 +73,9 @@ export class PelicanServersAdminController {
     if (result.kind === 'unknown_game') {
       throw new BadRequestException('Unknown game');
     }
+    const mismatched = await this.tzCheck.mismatchedServerIds([result.row]);
     return PelicanServerRowSchema.parse(
-      toAdminServerRowDto(result.row, new Date()),
+      toAdminServerRowDto(result.row, new Date(), mismatched.has(id)),
     );
   }
 }

@@ -37,6 +37,7 @@ export const pelicanServerFixture: PelicanServerRowDto = {
     lastSyncedAt: '2026-10-13T12:00:00.000Z',
     statusCheckedAt: '2026-10-13T12:00:00.000Z',
     missing: false,
+    tzMismatch: false,
 };
 
 export const pelicanSyncOkResult: PelicanSyncResult = {

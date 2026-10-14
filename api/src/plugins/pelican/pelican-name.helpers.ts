@@ -1,3 +1,5 @@
+import type { GameServerEffect } from '@raid-ledger/contract';
+
 /**
  * Member-facing server-name redaction (ROK-1772, ruling Q3). Panel names are
  * admin-typed and may carry an address; strip IPv4, IPv6, URLs, `host:port`,
@@ -22,15 +24,42 @@ const EMPTY_BRACKETS = /\(\s*\)|\[\s*\]|\{\s*\}/g;
 const EDGE_PUNCTUATION = /^[\s\-:|@,/]+|[\s\-:|@,/]+$/g;
 const MAX_NAME = 200;
 
-/** Safe display name; an empty result falls back to `Server <id>`. */
-export function redactServerName(name: string, id: number): string {
+/** `name` with every address-like token removed, trimmed to 200. */
+function stripAddresses(name: string): string {
   let out = name;
   for (const pattern of PATTERNS) out = out.replace(pattern, ' ');
-  out = out
+  return out
     .replace(EMPTY_BRACKETS, ' ')
     .replace(/\s+/g, ' ')
     .replace(EDGE_PUNCTUATION, '')
     .slice(0, MAX_NAME)
     .trim();
+}
+
+/** Safe display name; an empty result falls back to `Server <id>`. */
+export function redactServerName(name: string, id: number): string {
+  const out = stripAddresses(name);
   return out.length > 0 ? out : `Server ${id}`;
+}
+
+/** Member-facing fallback label per schedule effect (ROK-1096 ruling 1). */
+export const SCHEDULE_EFFECT_LABELS: Readonly<
+  Record<GameServerEffect, string>
+> = {
+  restart: 'Restart',
+  stop: 'Stop',
+  start: 'Server online',
+  kill: 'Kill',
+  backup: 'Backup',
+  command: 'Command',
+  mixed: 'Scheduled task',
+};
+
+/** Schedule name with addresses stripped; empty → the effect's label. */
+export function redactScheduleLabel(
+  name: string,
+  effect: GameServerEffect,
+): string {
+  const out = stripAddresses(name);
+  return out.length > 0 ? out : SCHEDULE_EFFECT_LABELS[effect];
 }

@@ -1,4 +1,5 @@
-import { redactServerName } from './pelican-name.helpers';
+import type { GameServerEffect } from '@raid-ledger/contract';
+import { redactScheduleLabel, redactServerName } from './pelican-name.helpers';
 
 describe('redactServerName (ruling Q3)', () => {
   it.each([
@@ -43,5 +44,23 @@ describe('redactServerName (ruling Q3)', () => {
 
   it('never emits more than 200 characters', () => {
     expect(redactServerName('x'.repeat(500), 1)).toHaveLength(200);
+  });
+});
+
+describe('redactScheduleLabel (ROK-1096 ruling 1)', () => {
+  it.each<[string, GameServerEffect, string]>([
+    ['Nightly restart', 'restart', 'Nightly restart'],
+    ['restart http://x.y', 'restart', 'restart'],
+    ['Backup to 10.0.0.5:2456', 'backup', 'Backup to'],
+    ['10.0.0.5:2456', 'restart', 'Restart'],
+    ['', 'start', 'Server online'],
+    ['   ', 'mixed', 'Scheduled task'],
+    ['', 'kill', 'Kill'],
+  ])('%j (%s) -> %j', (raw, effect, expected) => {
+    expect(redactScheduleLabel(raw, effect)).toBe(expected);
+  });
+
+  it('truncates to 200 characters', () => {
+    expect(redactScheduleLabel('a'.repeat(300), 'stop')).toHaveLength(200);
   });
 });

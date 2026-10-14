@@ -52,6 +52,7 @@
     "class-validator": "^0.15.1",
     "compression": "^1.8.2",
     "cookie-parser": "^1.4.7",
+    "cron-parser": "^5.10.1",
     "discord.js": "^14.27.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.3",

@@ -22,9 +22,21 @@ const row = {
     lastSyncedAt: '2026-10-13T12:00:00.000Z',
     statusCheckedAt: null,
     missing: false,
+    tzMismatch: false,
 };
 
 describe('PelicanServerRowSchema', () => {
+    it('requires the ROK-1096 tzMismatch flag', () => {
+        const { tzMismatch: _omit, ...withoutFlag } = row;
+        expect(PelicanServerRowSchema.safeParse(withoutFlag).success).toBe(
+            false,
+        );
+        expect(
+            PelicanServerRowSchema.safeParse({ ...row, tzMismatch: true })
+                .success,
+        ).toBe(true);
+    });
+
     it('accepts a well-formed row inside the list response', () => {
         expect(
             PelicanServerListResponseSchema.safeParse({ data: [row] }).success,

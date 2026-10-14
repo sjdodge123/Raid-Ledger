@@ -16,6 +16,7 @@ import {
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { toast } from '../../../lib/toast';
 import { PelicanServersSection } from './pelican-servers-section';
+import { TZ_MISMATCH_WARNING } from './pelican-server-row';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -117,6 +118,32 @@ describe('PelicanServersSection — layout', () => {
         for (const name of ['Game', 'Timezone']) {
             expect(card.getByText(name, { selector: 'label' })).not.toHaveClass('sr-only');
         }
+    });
+});
+
+describe('PelicanServersSection — timezone mismatch warning (ROK-1096)', () => {
+    const mismatched: PelicanServerRowDto = { ...pelicanServerFixture, timezone: 'America/New_York', tzMismatch: true };
+
+    it('≥1024px: the row shows the warning in text-warning and the Timezone control is described by it', async () => {
+        await renderSection([mismatched]);
+        const row = within(screen.getByTestId('pelican-server-row-1'));
+        expect(row.getByText(TZ_MISMATCH_WARNING)).toHaveClass('text-warning');
+        expect(row.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription(expect.stringContaining(TZ_MISMATCH_WARNING));
+    });
+
+    it('<1024px: the card shows the warning and the Timezone control is described by it', async () => {
+        setViewport(false);
+        await renderSection([mismatched]);
+        const card = within(screen.getByTestId('pelican-server-card-1'));
+        expect(card.getByText(TZ_MISMATCH_WARNING)).toHaveClass('text-warning');
+        expect(card.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription(expect.stringContaining(TZ_MISMATCH_WARNING));
+    });
+
+    it.each([true, false])('no warning when tzMismatch is false (desktop: %s)', async (desktop) => {
+        setViewport(desktop);
+        await renderSection([{ ...pelicanServerFixture, tzMismatch: false }]);
+        expect(screen.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription('Uses the panel default (America/New_York).');
+        expect(screen.queryByText(TZ_MISMATCH_WARNING)).toBeNull();
     });
 });
 

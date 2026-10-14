@@ -18,8 +18,23 @@ import {
  */
 export interface PelicanServableSchedule extends PelicanScheduleRow {
   gameId: number;
+  /** RAW panel name — the projection redacts it before it reaches members. */
+  serverName: string;
   serverTimezone: string | null;
 }
+
+/** What the admin tz self-check reads (ROK-1096 D11) — no payloads. */
+export type PelicanActiveScheduleCron = Pick<
+  PelicanScheduleRow,
+  | 'serverId'
+  | 'cronMinute'
+  | 'cronHour'
+  | 'cronDayOfMonth'
+  | 'cronMonth'
+  | 'cronDayOfWeek'
+  | 'isActive'
+  | 'nextRunAt'
+>;
 
 /** Drizzle access to `pelican_schedules` (ROK-1773). */
 @Injectable()
@@ -58,6 +73,7 @@ export class PelicanSchedulesRepository {
       .select({
         schedule: pelicanSchedules,
         gameId: pelicanServers.gameId,
+        serverName: pelicanServers.name,
         serverTimezone: pelicanServers.timezone,
       })
       .from(pelicanSchedules)
@@ -75,8 +91,38 @@ export class PelicanSchedulesRepository {
             : inArray(pelicanServers.gameId, gameIds),
         ),
       );
-    return rows.flatMap(({ schedule, gameId, serverTimezone }) =>
-      gameId === null ? [] : [{ ...schedule, gameId, serverTimezone }],
+    return rows.flatMap(({ schedule, gameId, serverName, serverTimezone }) =>
+      gameId === null
+        ? []
+        : [{ ...schedule, gameId, serverName, serverTimezone }],
     );
+  }
+
+  /**
+   * Active schedules of `serverIds` for the admin tz self-check (D11). No
+   * mapping/visibility filter — the admin sees hidden and unmapped servers.
+   */
+  async listActiveForServers(
+    serverIds: number[],
+  ): Promise<PelicanActiveScheduleCron[]> {
+    if (serverIds.length === 0) return [];
+    return this.db
+      .select({
+        serverId: pelicanSchedules.serverId,
+        cronMinute: pelicanSchedules.cronMinute,
+        cronHour: pelicanSchedules.cronHour,
+        cronDayOfMonth: pelicanSchedules.cronDayOfMonth,
+        cronMonth: pelicanSchedules.cronMonth,
+        cronDayOfWeek: pelicanSchedules.cronDayOfWeek,
+        isActive: pelicanSchedules.isActive,
+        nextRunAt: pelicanSchedules.nextRunAt,
+      })
+      .from(pelicanSchedules)
+      .where(
+        and(
+          inArray(pelicanSchedules.serverId, serverIds),
+          eq(pelicanSchedules.isActive, true),
+        ),
+      );
   }
 }

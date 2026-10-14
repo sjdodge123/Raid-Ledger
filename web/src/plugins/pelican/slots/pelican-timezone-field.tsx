@@ -42,18 +42,22 @@ function labelFor(options: ZoneOption[], id: string): ZoneOption {
 export interface PelicanTimezoneFieldProps {
     value: string; onChange: (tz: string) => void; inherited: boolean;
     id?: string; label?: string; hint?: string; testId?: string; hideLabel?: boolean;
+    /** A `text-warning` line under the hint (ROK-1096). It sits inside the hint, so the input's `aria-describedby` reads it. */
+    warning?: string | undefined;
 }
 
 const DEFAULT_HINT = 'Pelican’s API doesn’t say which timezone a schedule uses. Raid Ledger reads schedules in this zone.';
 
 export function PelicanTimezoneField({
     value, onChange, inherited, id = 'pelicanDefaultTimezone', label = 'Default timezone', hint: hintText = DEFAULT_HINT,
-    testId = 'pelican-timezone-input', hideLabel = false,
+    testId = 'pelican-timezone-input', hideLabel = false, warning,
 }: PelicanTimezoneFieldProps) {
     const options = useMemo(() => buildZoneOptions(), []);
     const selected = labelFor(options, value);
     const [text, setText] = useState(selected.label);
-    const hint = hintText + (inherited && hintText === DEFAULT_HINT ? ' Prefilled from the community default.' : '');
+    const hintLine = hintText + (inherited && hintText === DEFAULT_HINT ? ' Prefilled from the community default.' : '');
+    const hint = warning === undefined ? hintLine
+        : <>{hintLine}<span data-testid={`${testId}-warning`} className="mt-1 block text-warning">{warning}</span></>;
     return (
         <Field id={id} label={label} hint={hint} hideLabel={hideLabel}>
             <Combobox<ZoneOption>
