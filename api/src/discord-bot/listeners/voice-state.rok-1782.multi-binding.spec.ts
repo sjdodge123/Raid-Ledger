@@ -59,7 +59,11 @@ describe('ROK-1782 (c) — presence updates fan out to every binding', () => {
       await h.joinMember({ id, gameId: null });
     await h.changePresence('u1', VALHEIM);
     await h.changePresence('u2', VALHEIM);
-    expect(joinsFor('bind-gl')).toEqual([{ memberId: 'u2', gameId: 2 }]);
+    // The switch that completes the group rosters the WHOLE group, u1 included.
+    expect(joinsFor('bind-gl')).toEqual([
+      { memberId: 'u1', gameId: 2 },
+      { memberId: 'u2', gameId: 2 },
+    ]);
   });
 });
 
