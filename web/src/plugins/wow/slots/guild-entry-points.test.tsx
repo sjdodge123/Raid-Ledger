@@ -192,8 +192,18 @@ describe('generic slots', () => {
         }
     });
 
+    it('the drawer slot hands the host\'s onClose to "Your guild", so a tap closes the drawer', async () => {
+        activateWowPlugin();
+        serve(ONE);
+        const onClose = vi.fn();
+        renderWithProviders(<PluginSlot name="nav:drawer-top" context={{ onClose }} />);
+        await userEvent.click(await screen.findByTestId('guild-entry-row'));
+        expect(onClose, 'tapping a guild in the drawer must call the drawer\'s onClose').toHaveBeenCalledTimes(1);
+    });
+
     it.each([
-        ['components/layout/Header.tsx', '<PluginSlot name="nav:primary-links" context={{ pathname }} />'],
+        // Hidden below lg so the md (768) header matches main's (ROK-1785 verify flag).
+        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],
