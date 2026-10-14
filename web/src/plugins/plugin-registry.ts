@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { CharacterIdentityProvider } from './character-identity';
+import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -49,6 +50,8 @@ export interface PluginHandle {
     ): void;
     /** Register this plugin's manual-character identity rules for each of `provider.gameSlugs` (ROK-1733). */
     registerCharacterIdentity<V>(provider: CharacterIdentityProvider<V>): void;
+    /** Register a calendar layer (windows + markers) drawn only while this plugin is active (ROK-1774). */
+    registerCalendarLayer(layer: CalendarLayer): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -65,6 +68,9 @@ const badgeRegistry = new Map<string, PluginBadgeMeta>();
 
 /** Character-identity providers keyed by game slug — one provider per game */
 const identityRegistry = new Map<string, CharacterIdentityRegistration>();
+
+/** Calendar layers keyed by `layer.key` — re-registering a key replaces it (HMR) */
+const layerRegistry = new Map<string, CalendarLayerRegistration>();
 
 /**
  * Register a plugin with badge metadata and receive a handle for slot registration.
@@ -90,6 +96,9 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
                 identityRegistry.set(gameSlug, { pluginSlug: slug, provider: opaque });
             }
         },
+        registerCalendarLayer(layer) {
+            layerRegistry.set(layer.key, { pluginSlug: slug, layer });
+        },
     };
 }
 
@@ -101,6 +110,11 @@ export function getCharacterIdentityRegistration(gameSlug: string): CharacterIde
 /** Every identity registration (one per game slug), regardless of plugin status. */
 export function getCharacterIdentityRegistrations(): readonly CharacterIdentityRegistration[] {
     return [...identityRegistry.values()];
+}
+
+/** Every calendar layer in registration order, regardless of plugin status — callers filter by active plugin. */
+export function getCalendarLayerRegistrations(): readonly CalendarLayerRegistration[] {
+    return [...layerRegistry.values()];
 }
 
 export function getPluginBadge(slug: string): PluginBadgeMeta | undefined {
@@ -133,6 +147,7 @@ export function clearRegistry(): void {
     registry.length = 0;
     badgeRegistry.clear();
     identityRegistry.clear();
+    layerRegistry.clear();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */
