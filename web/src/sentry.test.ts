@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { at } from './test/defined';
 
 vi.mock('@sentry/react', () => ({
     init: vi.fn(),
+    addIntegration: vi.fn(),
     browserTracingIntegration: vi.fn(() => 'browserTracingIntegration'),
     replayIntegration: vi.fn(() => 'replayIntegration'),
     makeFetchTransport: vi.fn(() => ({
@@ -114,5 +115,118 @@ describe('web Sentry magic-link token scrubbing (ROK-1366)', () => {
     it('scrubs a fragment token from the event request url', () => {
         const event = config.beforeSend({ request: { url: 'https://rl.test/e#token=abc' } });
         expect(event?.request?.url).toBe('https://rl.test/e#token=[Filtered]');
+    });
+});
+
+type MockFn = ReturnType<typeof vi.fn>;
+interface ReplayConfig {
+    integrations: unknown[];
+    replaysOnErrorSampleRate: number;
+}
+
+describe('web Sentry Replay is lazy-loaded (Sentry 11 upgrade)', () => {
+    afterEach(() => {
+        vi.unstubAllEnvs();
+    });
+
+    async function loadSentry(prod: boolean) {
+        vi.resetModules();
+        vi.stubEnv('PROD', prod);
+        const Sentry = await import('@sentry/react');
+        for (const fn of [Sentry.init, Sentry.replayIntegration, Sentry.addIntegration]) {
+            (fn as unknown as MockFn).mockClear();
+        }
+        await import('./sentry');
+        const initMock = Sentry.init as unknown as MockFn;
+        return { Sentry, config: at(initMock.mock.calls, 0)[0] as ReplayConfig };
+    }
+
+    it('keeps Replay out of the integrations handed to Sentry.init', async () => {
+        const { Sentry, config } = await loadSentry(true);
+        expect(config.integrations).not.toContain('replayIntegration');
+        expect(Sentry.replayIntegration).not.toHaveBeenCalled();
+        expect(config.replaysOnErrorSampleRate).toBe(1);
+    });
+
+    it('adds Replay after init with the scrubbing beforeAddRecordingEvent', async () => {
+        const { Sentry } = await loadSentry(true);
+        await vi.dynamicImportSettled();
+        const { scrubRecordingEvent } = await import('./lib/sentry-scrub-events');
+        expect(Sentry.replayIntegration).toHaveBeenCalledWith({ beforeAddRecordingEvent: scrubRecordingEvent });
+        expect(Sentry.addIntegration).toHaveBeenCalledWith('replayIntegration');
+    });
+
+    it('never loads Replay when no replay can be sampled (non-production)', async () => {
+        const { Sentry, config } = await loadSentry(false);
+        await vi.dynamicImportSettled();
+        expect(config.replaysOnErrorSampleRate).toBe(0);
+        expect(Sentry.addIntegration).not.toHaveBeenCalled();
+    });
+});
+
+describe('web Sentry Replay chunk-load failure (Sentry 11 upgrade)', () => {
+    let rejections: unknown[];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+
+    beforeEach(() => {
+        rejections = [];
+        process.on('unhandledRejection', onRejection);
+    });
+
+    afterEach(() => {
+        process.off('unhandledRejection', onRejection);
+        vi.doUnmock('./lib/sentry-replay');
+        vi.unstubAllEnvs();
+        vi.restoreAllMocks();
+    });
+
+    it('swallows a rejected Replay import without an unhandled rejection', async () => {
+        vi.resetModules();
+        vi.stubEnv('PROD', true);
+        vi.doMock('./lib/sentry-replay', () => {
+            throw new Error('chunk load failed');
+        });
+        const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+        const Sentry = await import('@sentry/react');
+        (Sentry.init as unknown as MockFn).mockClear();
+        (Sentry.addIntegration as unknown as MockFn).mockClear();
+        await import('./sentry');
+        await vi.dynamicImportSettled();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(rejections, 'Replay import rejection must be handled').toEqual([]);
+        expect(debug).toHaveBeenCalledWith('[sentry] Replay chunk failed to load', expect.any(Error));
+        expect(Sentry.init).toHaveBeenCalledTimes(1);
+        expect(Sentry.addIntegration).not.toHaveBeenCalled();
+    });
+});
+
+describe('web Sentry v11 privacy options pin the v10 baseline', () => {
+    it('passes static lifecycle, the v10 dataCollection and no attached stacktraces', async () => {
+        vi.resetModules();
+        const Sentry = await import('@sentry/react');
+        const initMock = Sentry.init as unknown as MockFn;
+        initMock.mockClear();
+        await import('./sentry');
+        const config = at(initMock.mock.calls, 0)[0] as Record<string, unknown>;
+        const deny = { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] };
+        expect({
+            traceLifecycle: config['traceLifecycle'],
+            dataCollection: config['dataCollection'],
+            attachStacktrace: config['attachStacktrace'],
+        }).toEqual({
+            traceLifecycle: 'static',
+            dataCollection: {
+                userInfo: false,
+                cookies: false,
+                httpHeaders: { request: deny, response: deny },
+                httpBodies: [],
+                urlQueryParams: deny,
+                genAI: { inputs: false, outputs: false },
+                databaseQueryData: false,
+                queues: false,
+                graphQL: { document: false, variables: false },
+            },
+            attachStacktrace: false,
+        });
     });
 });

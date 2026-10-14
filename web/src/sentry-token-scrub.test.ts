@@ -12,6 +12,7 @@ import { at } from './test/defined';
 
 vi.mock('@sentry/react', () => ({
     init: vi.fn(),
+    addIntegration: vi.fn(),
     browserTracingIntegration: vi.fn(() => ({ name: 'BrowserTracing' })),
     replayIntegration: vi.fn((opts?: unknown) => ({ name: 'Replay', opts })),
     makeFetchTransport: vi.fn(() => ({ send: vi.fn(), flush: vi.fn() })),
@@ -35,10 +36,13 @@ let config: InitConfig;
 let recordingHook: Hook;
 
 beforeAll(async () => {
+    // Replay is lazy-loaded only when a replay can be sampled (production).
+    vi.stubEnv('PROD', true);
     const Sentry = await import('@sentry/react');
     await import('./sentry');
+    await vi.dynamicImportSettled();
     config = at(vi.mocked(Sentry.init).mock.calls, 0)[0] as unknown as InitConfig;
-    const replayOpts = vi.mocked(Sentry.replayIntegration).mock.calls[0]?.[0];
+    const replayOpts = at(vi.mocked(Sentry.replayIntegration).mock.calls, 0)[0];
     recordingHook =
         (replayOpts as { beforeAddRecordingEvent?: Hook } | undefined)
             ?.beforeAddRecordingEvent ?? identity;

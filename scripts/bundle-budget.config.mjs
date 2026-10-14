@@ -42,13 +42,15 @@ export const BASELINE_KB = {
   // (the JS-only baseline was 490.71).
   totalInitial: 530.29,
   // Keys are the output chunk names from VENDOR_CHUNKS in web/vite.config.ts.
-  // Rolldown emits @sentry/react as TWO `sentry-*` chunks (53.8 + 34.5 KB);
-  // every chunk sharing a vendor name is summed into one group.
+  // Rolldown emits @sentry/react as TWO `sentry-*` chunks; every chunk
+  // sharing a vendor name is summed into one group. Recaptured 2026-10-14 for
+  // Sentry 11: Session Replay moved to its own lazy `sentry-replay` chunk
+  // (below), so the eager group fell 88.27 -> 55.49 KB (54.24 + 1.25).
   vendor: {
     'react-vendor': 62.54,
     'query-vendor': 10.02,
     'calendar-vendor': 62.49,
-    sentry: 88.27,
+    sentry: 55.49,
     socket: 12.38,
   },
   // Largest lazy chunk WITHOUT a named entry below (game-detail-page). Its
@@ -82,6 +84,7 @@ const LAZY_NAMED = [
     kb: 13.65,
     why: "react-router's own dist chunk name (chunk-BV7QT456 today); it changes on a react-router bump",
   },
+  { name: 'sentry-replay', kb: 38.8, why: 'Sentry 11 Session Replay, dynamically imported after Sentry.init (src/lib/sentry-replay.ts); split out of the eager sentry vendor group' },
   { name: 'calendar-page', kb: 12.47, why: 'route' },
   { name: 'lfg-group-page', kb: 11.81, why: 'route' },
 ];

@@ -33,6 +33,9 @@ function packageSegment(pkg: string): string {
 export function manualChunks(moduleId: string): string | undefined {
   const id = moduleId.replace(/\\/g, '/')
   if (!id.includes('/node_modules/')) return undefined
+  // Session Replay is dynamically imported after Sentry.init (src/lib/sentry-replay.ts);
+  // forcing it into the eager `sentry` vendor chunk would undo that.
+  if (id.includes('/node_modules/@sentry/replay')) return undefined
   for (const [chunk, pkgs] of Object.entries(VENDOR_CHUNKS)) {
     if (pkgs.some((pkg) => id.includes(packageSegment(pkg)))) return chunk
   }
