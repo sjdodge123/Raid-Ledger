@@ -289,7 +289,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `filter-panel.tsx` → `FilterPanel`, `FilterPanelTrigger` | The lower-level pieces `filter-entry.tsx` composes: `FilterPanel` is the inline collapsible panel ("Filters" + "Clear all", scrolls internally past `max-h-[500px]`) that becomes a `BottomSheet` below `DESKTOP_MQ`, and closes on Escape with focus returned to the trigger (§4.1); `FilterPanelTrigger` is the bare 44px funnel button. Reach for these only when `FilterEntry` doesn't fit. | Building a new filter entry point, or reading how one works | `activeFilterCount`, `onClearAll`, `isOpen`, `onToggle`, `onClose`, `children`; trigger: `activeCount`, `isOpen`, `onClick`, `describeCount` |
 | `filter-fab.tsx` → `FilterFab` (+ `fab-position.ts`) | The Filters FAB (§4.1, ROK-1659): 56px round, `right-4` (`md:right-5` from 768px, centred over the feedback button), `lg:hidden`, neutral tone (`bg-surface border-edge-strong`) with the active-filter badge. Portaled to `document.body` so a sticky toolbar's stacking context never traps it. Normally reached through `FilterEntry`, not mounted directly. | Phone/tablet filter entry, below 1024px | `activeCount`, `isOpen`, `onClick`, `stackAboveCreate` (lifts it above a page's create `FAB` — `fab-position.ts`), `describeCount` |
 | `filter-count-badge.tsx` → `FilterCountBadge` | The active-filter count badge shared by `FilterPanelTrigger` and `FilterFab`: solid `bg-success` pill, renders nothing at 0, count re-exposed via `aria-describedby` since both openers are named "Filters". | Never mounted directly — internal to `filter-panel.tsx` / `filter-fab.tsx` | `count`, `id`, `describe` (screen-reader wording override, defaults to `describeActiveFilters` (in `filter-count-badge.helpers.ts`, with the `DescribeFilterCount` type) → "N active filters"; the calendar passes `describeHiddenGames` → "N games hidden"), `offset` (`'fab'` 4px corner inset for the 56px FAB, default; `'trigger'` 6px for the 44px toolbar funnel) |
-| `button.tsx` → `Button` (ROK-1646) | **The** button. Seven variants — `primary` (`bg-emerald-600`; on light `#047857` with a darker `#065f46` hover, §6.10), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), and three soft tints of one shape (`/10` tint, token label, `/30` border, `/20` hover): `destructive-soft` (`danger`), `warning-soft` (`warning` — Restore, Pause, Hide) and `success-soft` (`success` — Resume, Run now, Unhide). Tint a button with a variant, never colour classes in `className` — `Button` has no tailwind-merge — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. | Every action button. Link-styled actions stay `<Link>`. A row action menu is `role="menuitem"` ghost / `destructive-soft` rows (§4.11). | `variant` (default `primary`), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), `brandColor` (ROK-1655 — a runtime/provider fill only; its label is white or `#0f172a`, whichever has the higher contrast on the fill, on every scheme — ROK-1472, §4.11), forwarded ref, all `ButtonHTMLAttributes` |
+| `button.tsx` → `Button` (ROK-1646) | **The** button. Seven variants — `primary` (`bg-emerald-600`; on light `#047857` with a darker `#065f46` hover, §6.10), `secondary` (`bg-panel border-edge`), `ghost`, `destructive` (`bg-red-600`), and three soft tints of one shape (`/10` tint, token label, `/30` border, `/20` hover): `destructive-soft` (`danger`), `warning-soft` (`warning` — Restore, Pause, Hide) and `success-soft` (`success` — Resume, Run now, Unhide). Tint a button with a variant, never colour classes in `className` — `Button` has no tailwind-merge — one disabled treatment (`opacity-50`), a `success` focus ring. `type` defaults to `"button"`. An eighth variant, `bare` (ROK-1774), drops the padding, 44px minimum, radius, fill and border (it ignores `size`, `iconOnly` and `brandColor` paint) and keeps only inline-flex layout, the `success` focus ring and the disabled treatment — the caller's `className` supplies the rest. | Every action button. Link-styled actions stay `<Link>`. A row action menu is `role="menuitem"` ghost / `destructive-soft` rows (§4.11). `bare` ONLY for an inline icon/glyph control inside a dense surface — e.g. the 16px calendar layer marker glyph (`LayerGlyph`) — where a 44px target would steal neighbouring clicks; it must still carry an accessible name (`aria-label`) and keep the visible focus ring (never add `focus-visible:ring-0` / `outline-none` without a ring). Not a way to restyle a normal button. | `variant` (default `primary`; `bare` as above), `size` `md`/`sm`/`lg` (44px below `lg`; `sm` is 36px from `lg`), `loading` (sets `aria-busy` + `aria-disabled` — not native `disabled`, so focus stays — swallows clicks and form submits, keeps the width), `loadingLabel`, `fullWidth`, `iconOnly` (TypeScript then requires `aria-label`), `brandColor` (ROK-1655 — a runtime/provider fill only; its label is white or `#0f172a`, whichever has the higher contrast on the fill, on every scheme — ROK-1472, §4.11), forwarded ref, all `ButtonHTMLAttributes` |
 | `stretched-action.tsx` → `StretchedAction` (TDB:1949) | The whole-card action of a clickable card that holds its own controls (§4.2): a native `<button type="button">` with no content and no fill, `absolute -inset-px cursor-pointer rounded-lg` + `FOCUS_RING` on `ring-offset-2 ring-offset-surface`. `-inset-px` also covers the frame's 1px border, so a click there fires the action; the offset keeps the focus ring off a frame's own `ring-2` (RosterSlot's current-user glow), where a flush ring would vanish. Not `Button`, whose `relative inline-flex`, 44px minimum, padding and label span fight an invisible overlay. | A card with its own link / Remove button whose frame is also clickable (`RosterSlot`). Render it as the `relative` frame's FIRST child | `label` (the accessible name — keep any visible verb in it, WCAG 2.5.3), `onClick`, every other button attribute except `type` / `className` / `children` / `aria-label` / `aria-labelledby` (`label` is the only accessible name), forwarded ref |
 | `field.tsx` → `Field` (+ `field-context.ts` → `useFieldControlProps`) (ROK-1646) | Label + hint + **inline** error + required marker around one control. Generates the id, renders `<label htmlFor>`, and hands `id` / `aria-describedby` / `aria-invalid` / `aria-required` to the control through context — nested controls included. Error is `<p role="alert" className="text-danger">`. | Every labelled form control. Validation errors go here, not in a toast (§4.8). | `label`, `hint`, `error`, `required`, `hideLabel` (`sr-only`), `id`, `className` |
 | `input.tsx` → `Input` (ROK-1646) | The text input on the shared field frame (`form-classes.ts`). | Any single-line text/email/number/password field | `Omit<InputHTMLAttributes,'size'>` + `fieldSize` `md`/`lg`/`sm`, `invalid`, `leading` (icon, adds `pl-10`), `trailing` (interactive, adds `pr-14` so text clears a 44px button) — on `fieldSize="sm"` both are restated at `lg:` (`lg:pl-10` / `lg:pr-14`), because `sm`'s `lg:px-2` otherwise outranks them from `lg` up and the text runs under the icon, `mono`, forwarded ref. `type` `date` / `time` / `datetime-local` / `month` / `week` also get `min-w-0 appearance-none` + a left-aligned value, so iPadOS's native control can't overflow a grid cell (ROK-1690) |
@@ -1031,6 +1031,52 @@ toggle is §4.3.
 
 ---
 
+### 4.22 Server-schedule layer (plugin calendar layers, ROK-1774)
+
+A plugin draws **non-event time** on the Week/Day grid through `PluginHandle.registerCalendarLayer`
+(`web/src/plugins/calendar-layer.ts`): it supplies items (`window` spans and `marker` instants with
+pre-formatted text), the host draws them. First user: Pelican game-server schedules
+(`web/src/plugins/pelican/calendar/`). Month and Schedule views draw nothing from layers yet (ROK-1775).
+
+**Tokens.** Band: a 135° hatch of `color-mix(in oklab, var(--color-edge-strong) 25%, transparent)` 6px
+stripes over transparent, a 1px `--color-edge` left edge, no radius, label `text-[11px] leading-tight
+text-dim`. Tick: `border-t-2 border-solid border-edge-strong`. Glyph: a 16px `rounded-full bg-surface
+text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:ring-success`. Tooltip:
+`bg-surface border border-edge-strong rounded-md shadow-lg text-xs`, line 1 `text-foreground`, line 2
+`text-muted`, `max-w-[16rem] break-words`. No new tokens.
+
+**DO**
+- Keep the band behind events (`backgroundEvents`, `pointer-events: none`) — an event under a band must
+  stay clickable. The glyph is the ONLY layer element that takes the pointer; it stops pointer/mouse/touch
+  down so react-big-calendar's slot selection never starts on it.
+- Let tooltips **wrap** (`break-words`); never truncate a server name or a time in a tooltip. A band
+  label is one line: it ellipsizes when the band is narrow or short, and it hides entirely on a band
+  shorter than one line. The full text stays in its `title` and in the band's screen-reader text. A
+  window crossing local midnight is split per day; later segments read "… (cont.)" (the host adds it).
+- Open the tooltip on hover, keyboard focus or tap (a second tap, a tap elsewhere or Escape closes it).
+  Place it with `placeTip`: open right when it fits, otherwise toward the side with more room, with
+  `max-width` capped to that room, so it never leaves the grid on any column or on a 375px phone.
+  Markers at the same local minute share one glyph whose tooltip lists each one. The glyph's
+  `aria-label` carries the tooltip lines.
+- Zone every item with `useTimezoneStore.resolved`, the same as events.
+
+**DON'T**
+- Use the busy (§4.16), slot, heatmap or game colours for a layer — each already means something on
+  this grid. A layer is neutral `edge`/`edge-strong` only.
+- Make the band or tick interactive, or give a layer its own filter: the page's game filter
+  (§4.3 / `filter-entry.tsx`) applies client-side.
+- Import a plugin from core: `components/**`, `pages/**` and `plugins/calendar-layer*.ts` never import
+  `plugins/pelican/**` (`pelican-core-boundary.guard.test.ts`).
+
+**Where it lives.** Host pieces: `web/src/components/calendar/layers/` — `calendar-layers.css` (band +
+tick z-order), `LayerWindowLabel.tsx`, `LayerMarkerTick.tsx`, `LayerGlyph.tsx` (tooltip + flip),
+`LayerDayColumnWrapper.tsx` (ticks per day column), `CalendarLayerGrid.tsx` + `calendar-layer-context.ts`
+(grid ref for the flip), `calendar-layer-events.ts` (zoning, midnight split), `layer-tip-placement.ts` (`placeTip`),
+`use-calendar-layer-data.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
+(`calendar-layer-section.tsx`). Smoke: `scripts/smoke/calendar-server-layer.smoke.spec.ts`.
+
+---
+
 ## 5. Rendered reference
 
 `/dev/design-system` (DEMO_MODE only) renders the swatches, the most-reached-for primitives in their
@@ -1044,7 +1090,9 @@ true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
 The ROK-1586 sections render the §4.13–4.19 patterns from the shipped maps and helpers, not copies:
 *Semantic colour tokens* (`semantic-tokens-section.tsx` — solid / border / tint / text per token, and the
 D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pattern — week strip*
-(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). Check both families there before
+(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). ROK-1774 adds
+*Pattern — server-schedule layer* (`calendar-layer-section.tsx`, §4.22), which mounts the real band label and tick
+in the grid's own DOM so `calendar-layers.css` applies. Check both families there before
 changing any of them.
 
 ---
