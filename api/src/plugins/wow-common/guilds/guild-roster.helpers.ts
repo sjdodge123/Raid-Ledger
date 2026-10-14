@@ -7,7 +7,7 @@ import {
   type GuildRankGroup,
 } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot } from './guild-membership.helpers';
+import { characterLink, inLatestSnapshot } from './guild-membership.helpers';
 
 /**
  * ROK-1785 — the guild page roster: latest-snapshot `guild_members` rows,
@@ -120,12 +120,7 @@ export async function loadRosterRows(
     .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
     .leftJoin(
       characters,
-      and(
-        isNotNull(guildMembers.guid),
-        eq(characters.addonGuid, guildMembers.guid),
-        eq(characters.gameId, guilds.gameId),
-        ownerIsActive(),
-      ),
+      and(isNotNull(guildMembers.guid), characterLink(), ownerIsActive()),
     )
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()))
     .orderBy(asc(guildMembers.rankIndex), asc(guildMembers.characterName));

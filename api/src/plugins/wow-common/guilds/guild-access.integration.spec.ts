@@ -48,6 +48,8 @@ interface MemberOpts {
   username: string;
   rankIndex: number;
   seenAt?: Date;
+  /** The character's region; omitted = 'us' (the seeded guild's region). */
+  charRegion?: string | null;
 }
 
 /** A user + character + guild_members row linked by GUID. */
@@ -65,6 +67,7 @@ async function seedMember(o: MemberOpts) {
     gameId: testApp.seed.game.id,
     name: o.username,
     addonGuid: guid,
+    region: o.charRegion === undefined ? 'us' : o.charRegion,
   });
   const [row] = nonEmpty(
     await testApp.db
@@ -197,5 +200,45 @@ describe('GuildAccessService (real DB)', () => {
     expect((await access.myGuilds(m.actor.id)).map((g) => g.name)).toEqual([
       'Home Guild',
     ]);
+  });
+});
+
+describe('GuildAccessService membership region (real DB)', () => {
+  it('a same-GUID character in another region is not a member', async () => {
+    const guildId = await seedGuild('Region Guard');
+    const eu = await seedMember({
+      guildId,
+      username: 'euclone',
+      rankIndex: 0,
+      charRegion: 'eu',
+    });
+    expect(await access.isMember(eu.actor.id, guildId)).toBe(false);
+    expect(await access.canView(eu.actor, guildId)).toBe(false);
+    expect(await access.myGuilds(eu.actor.id)).toEqual([]);
+  });
+
+  it('a character with an unknown (NULL) region still links by GUID + game', async () => {
+    const guildId = await seedGuild('Region Unknown');
+    const m = await seedMember({
+      guildId,
+      username: 'noregion',
+      rankIndex: 3,
+      charRegion: null,
+    });
+    expect(await access.isMember(m.actor.id, guildId)).toBe(true);
+    expect((await access.myGuilds(m.actor.id)).map((g) => g.name)).toEqual([
+      'Region Unknown',
+    ]);
+  });
+
+  it('region matching ignores case (guild "us", character "US")', async () => {
+    const guildId = await seedGuild('Region Case');
+    const m = await seedMember({
+      guildId,
+      username: 'upper',
+      rankIndex: 3,
+      charRegion: 'US',
+    });
+    expect(await access.isMember(m.actor.id, guildId)).toBe(true);
   });
 });

@@ -1,4 +1,4 @@
-import { and, eq, gte, isNull, or, type SQL } from 'drizzle-orm';
+import { and, eq, gte, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
@@ -7,7 +7,8 @@ import * as schema from '../../../drizzle/schema';
  * ROK-1785 D3 — THE guild-membership definition. Never re-derive it.
  *
  * A user is a member of a guild when they are active (`deactivated_at` NULL)
- * and own >=1 character of the guild's game whose `addon_guid` equals a
+ * and own >=1 character of the guild's game (and region, when the character's
+ * is known) whose `addon_guid` equals a
  * `guild_members.guid` row of that guild that is NOT soft-removed. The
  * LedgerLink import stamps every member of a snapshot with
  * `last_seen_at = snapshotAt` and the guild with `last_snapshot_at =
@@ -35,11 +36,25 @@ export function inLatestSnapshot(): SQL | undefined {
   );
 }
 
-/** Join: the member's GUID on a character of the guild's game. */
-function characterLink(): SQL | undefined {
+/**
+ * Same region, or the character's region is unknown. GUIDs are only unique
+ * per region (`characters` unique index is game + region + addon_guid), so a
+ * same-GUID character in another region is a different player. `guilds.region`
+ * is NOT NULL; a NULL character region falls back to GUID + game.
+ */
+export function sameRegionOrUnknown(): SQL | undefined {
+  return or(
+    isNull(characters.region),
+    sql`lower(${characters.region}) = lower(${guilds.region})`,
+  );
+}
+
+/** Join: the member's GUID on a character of the guild's game and region. */
+export function characterLink(): SQL | undefined {
   return and(
     eq(characters.addonGuid, guildMembers.guid),
     eq(characters.gameId, guilds.gameId),
+    sameRegionOrUnknown(),
   );
 }
 

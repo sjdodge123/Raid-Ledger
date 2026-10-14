@@ -2,7 +2,11 @@ import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterGuild, GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot, toGuildSummary } from './guild-membership.helpers';
+import {
+  inLatestSnapshot,
+  sameRegionOrUnknown,
+  toGuildSummary,
+} from './guild-membership.helpers';
 
 /** ROK-1785 — read queries behind the guild endpoints (no access logic). */
 
@@ -88,7 +92,8 @@ export async function rankNamesInSnapshot(
 
 /**
  * The guild a character is in now: its `addon_guid` on a latest-snapshot
- * member row of a guild of the same game. Newest snapshot wins.
+ * member row of a guild of the same game (and region, when the character's
+ * is known). Newest snapshot wins.
  */
 export async function findCharacterGuild(
   db: Db,
@@ -103,6 +108,7 @@ export async function findCharacterGuild(
       and(
         eq(guilds.id, guildMembers.guildId),
         eq(guilds.gameId, characters.gameId),
+        sameRegionOrUnknown(),
       ),
     )
     .where(
