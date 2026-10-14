@@ -194,6 +194,44 @@ async function createInFreeSlot(
     throw new Error(`no 30-min slot free of other events inside any of ${windows.length} future windows`);
 }
 
+/** A viewport point where `card` is the topmost hit, or what covers it instead. */
+type CardHit = { x: number; y: number } | { covered: string };
+
+/**
+ * Re-centre `card`, clamp its box to the viewport, and hit-test its visible part
+ * centre-first on a 3-column grid (every 3px). Hit-testing skips the bands
+ * (`pointer-events:none`), so a hit on the card means nothing intercepts a click
+ * there. A raw centre is not enough on a phone: the sticky header / mobile nav
+ * (hide-on-scroll, animated `top`), the fixed tab bar and FAB, or a box that
+ * runs past the clipped viewport edge can own the exact centre while the rest
+ * of the card stays clickable. Re-centring on every poll absorbs late layout
+ * shifts (layer data landing after the scroll).
+ */
+async function topmostPointOn(card: Locator): Promise<CardHit> {
+    return card.evaluate((el): CardHit => {
+        el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' });
+        const r = el.getBoundingClientRect();
+        const top = Math.max(r.top, 0);
+        const bottom = Math.min(r.bottom, window.innerHeight);
+        const left = Math.max(r.left, 0);
+        const right = Math.min(r.right, window.innerWidth);
+        if (bottom - top < 2 || right - left < 2) return { covered: `off-screen at ${Math.round(r.x)},${Math.round(r.y)}` };
+        const cy = (top + bottom) / 2;
+        const xs = [0.5, 0.25, 0.75].map((f) => left + (right - left) * f);
+        const ys = [cy];
+        for (let dy = 3; dy < (bottom - top) / 2; dy += 3) ys.push(cy - dy, cy + dy);
+        let first = '';
+        for (const y of ys) {
+            for (const x of xs) {
+                const hit = document.elementFromPoint(x, y);
+                if (hit && el.contains(hit)) return { x, y };
+                if (!first) first = hit ? `${hit.tagName.toLowerCase()}[class="${String(hit.getAttribute('class') ?? '').slice(0, 80)}"]` : 'nothing';
+            }
+        }
+        return { covered: first };
+    });
+}
+
 test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
     // The seed activates Pelican (idempotent) and is NEVER undone: deactivating a
     // shared plugin mid-run is what raced the sibling projects. A Pelican layer
@@ -247,14 +285,19 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
             await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
             const card = page.locator('.rbc-event').filter({ hasText: title }).first();
             await expect(card).toBeVisible({ timeout: 15_000 });
-            // Centre it in every scroll container, clear of the phone's fixed tab bar.
-            await card.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }));
-            await expect.poll(() => card.evaluate((el) => {
-                const r = el.getBoundingClientRect();
-                const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-                return !!hit && el.contains(hit);
-            }), 'our card is topmost at its centre (no band, nav or other event over it)').toBe(true);
-            await card.click({ timeout: 15_000 });
+            // A real click on a point of the card that nothing (band, nav, tab bar,
+            // other event) covers — the poll names the occluder if there is none.
+            const points: Array<{ x: number; y: number }> = [];
+            await expect.poll(async () => {
+                const hit = await topmostPointOn(card);
+                if ('covered' in hit) return `covered by ${hit.covered}`;
+                points.push(hit);
+                return 'topmost';
+            }, { message: 'a visible point of our card is topmost (no band, nav or other event over it)', timeout: 15_000 })
+                .toBe('topmost');
+            const point = points.at(-1);
+            if (!point) throw new Error('topmost poll passed without a point');
+            await page.mouse.click(point.x, point.y);
             await expect(page).toHaveURL(new RegExp(`/events/${id}(\\?|$)`));
         } finally {
             await apiDelete(token, `/events/${id}`);
