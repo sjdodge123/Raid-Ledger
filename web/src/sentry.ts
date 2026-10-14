@@ -118,7 +118,13 @@ if (!telemetryDisabled) {
     // Replay loads in its own chunk after init, and not at all when no replay
     // would ever be sampled.
     if (replaysSessionSampleRate > 0 || replaysOnErrorSampleRate > 0) {
-        void import('./lib/sentry-replay').then((m) => m.addReplayIntegration());
+        // A failed chunk load must not surface as an unhandled rejection that
+        // Sentry itself would report; Replay is best-effort.
+        void import('./lib/sentry-replay')
+            .then((m) => m.addReplayIntegration())
+            .catch((err: unknown) => {
+                console.debug('[sentry] Replay chunk failed to load', err);
+            });
     }
 }
 
