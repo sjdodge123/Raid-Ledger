@@ -281,19 +281,31 @@ describe('editors endpoints — manage matrix', () => {
 });
 
 describe('GET /by-character/:characterId', () => {
-  it('returns the guild + rank name without auth', async () => {
-    const res = await get(`/by-character/${charIds.gm}`);
-    expect(res.status).toBe(200);
-    expect(res.body.data).toMatchObject({
-      rankName: 'Rank 0',
-      guild: { id: guildId },
-    });
+  it('401 without a token', async () => {
+    expect((await get(`/by-character/${charIds.gm}`)).status).toBe(401);
   });
 
+  it.each([
+    ['plain', true],
+    ['admin', true],
+    ['outsider', false],
+  ] as const)(
+    '%s sees the guild + rank name; viewerCanOpen=%s',
+    async (who, viewerCanOpen) => {
+      const res = await get(`/by-character/${charIds.gm}`, who);
+      expect(res.status).toBe(200);
+      expect(res.body.data).toMatchObject({
+        rankName: 'Rank 0',
+        guild: { id: guildId },
+        viewerCanOpen,
+      });
+    },
+  );
+
   it.each(['removed', 'outsider'] as const)(
-    '%s → { data: null }',
+    "%s's character → { data: null }",
     async (who) => {
-      const res = await get(`/by-character/${charIds[who]}`);
+      const res = await get(`/by-character/${charIds[who]}`, 'plain');
       expect(res.body).toEqual({ data: null });
     },
   );

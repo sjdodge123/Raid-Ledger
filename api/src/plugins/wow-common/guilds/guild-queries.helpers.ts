@@ -93,7 +93,7 @@ export async function rankNamesInSnapshot(
 export async function findCharacterGuild(
   db: Db,
   characterId: string,
-): Promise<CharacterGuild['data']> {
+): Promise<Omit<NonNullable<CharacterGuild['data']>, 'viewerCanOpen'> | null> {
   const [row] = await db
     .select({ guild: guilds, rankName: guildMembers.rankName })
     .from(characters)

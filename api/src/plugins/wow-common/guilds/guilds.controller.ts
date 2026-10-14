@@ -37,8 +37,8 @@ const jwt = AuthGuard('jwt');
 /**
  * ROK-1785 — `/plugins/wow/guilds`. Thin: access lives in
  * `GuildAccessService` (via the two services), queries in `*.helpers.ts`.
- * `by-character` is public like the character page it decorates; every
- * other route needs a JWT. Literal routes are declared before `:id`.
+ * Every route needs a JWT (`by-character` included: rank names are armory-
+ * public, but anonymous callers must not enumerate guilds). Literal routes are declared before `:id`.
  */
 @Controller('plugins/wow/guilds')
 @UseGuards(PluginActiveGuard)
@@ -69,10 +69,12 @@ export class GuildsController {
   }
 
   @Get('by-character/:characterId')
+  @UseGuards(jwt)
   byCharacter(
+    @Request() req: AuthenticatedRequest,
     @Param('characterId', ParseUUIDPipe) characterId: string,
   ): Promise<CharacterGuild> {
-    return this.pages.byCharacter(characterId);
+    return this.pages.byCharacter(req.user, characterId);
   }
 
   @Get(':id')

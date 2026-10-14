@@ -156,12 +156,23 @@ describe('GameDetailGuilds (game-detail:sections)', () => {
 describe('CharacterGuildBadge (character-detail:header-badges)', () => {
     it('in a guild → crest + name + rank, linking to the guild', async () => {
         server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
-            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined }, rankName: 'Officer' } })));
+            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined }, rankName: 'Officer', viewerCanOpen: true } })));
         renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
         const badge = await screen.findByTestId('character-guild-badge');
         expect(badge).toHaveAttribute('href', '/guilds/11');
         expect(badge).toHaveTextContent('Iron Vanguard');
         expect(badge).toHaveTextContent('Officer');
+    });
+
+    it('a viewer who cannot open the guild → plain text, no link', async () => {
+        server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
+            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined }, rankName: 'Officer', viewerCanOpen: false } })));
+        renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
+        const badge = await screen.findByTestId('character-guild-badge');
+        expect(badge.tagName, 'a non-member must not get a link to the guild page').toBe('SPAN');
+        expect(badge).not.toHaveAttribute('href');
+        expect(badge.querySelector('a')).toBeNull();
+        expect(badge).toHaveTextContent('Iron Vanguard');
     });
 
     it('no guild → nothing', async () => {

@@ -98,7 +98,12 @@ export type GuildListQuery = z.infer<typeof GuildListQuerySchema>;
 export const CharacterGuildSchema = z
   .object({
     data: z
-      .object({ guild: GuildSummarySchema, rankName: z.string().nullable() })
+      .object({
+        guild: GuildSummarySchema,
+        rankName: z.string().nullable(),
+        /** The signed-in viewer may open the guild page (member or staff). */
+        viewerCanOpen: z.boolean(),
+      })
       .strict()
       .nullable(),
   })

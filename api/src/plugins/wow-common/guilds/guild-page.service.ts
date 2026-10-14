@@ -86,9 +86,15 @@ export class GuildPageService {
     };
   }
 
-  /** The character's current guild (public, like the character page). */
-  async byCharacter(characterId: string): Promise<CharacterGuild> {
-    return { data: await findCharacterGuild(this.db, characterId) };
+  /** The character's current guild + whether the viewer may open its page. */
+  async byCharacter(
+    actor: GuildActor,
+    characterId: string,
+  ): Promise<CharacterGuild> {
+    const found = await findCharacterGuild(this.db, characterId);
+    if (!found) return { data: null };
+    const viewerCanOpen = await this.access.canView(actor, found.guild.id);
+    return { data: { ...found, viewerCanOpen } };
   }
 
   /** Guilds of a game the viewer can open: staff all, members theirs. */
