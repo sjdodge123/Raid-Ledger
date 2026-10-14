@@ -1,5 +1,6 @@
 import type { GuildMember } from 'discord.js';
 import {
+  isLobbyBinding,
   resolveVoiceChannel,
   spawnTimerKey,
   type ResolvedBinding,
@@ -39,7 +40,7 @@ export async function handleChannelLeave(
   userId: string,
   timers: TimerMaps,
   adHocEventService: AdHocEventService,
-  resolveBindingFn: (ch: string) => Promise<ResolvedBinding | null>,
+  resolveBindingsFn: (ch: string) => Promise<ResolvedBinding[]>,
 ): Promise<void> {
   cancelPendingRecheck(timers, userId);
   stopVoiceGameTracking(deps, userId);
@@ -48,8 +49,10 @@ export async function handleChannelLeave(
   } catch (err) {
     deps.logger.error(`Leave tracking failed for ${userId}: ${err}`);
   }
-  const binding = await resolveBindingFn(channelId);
-  if (!binding) {
+  // ROK-1782: every binding on the channel sees the leave — with a lobby and a
+  // monitor on one channel, the first row alone missed the lobby's roster.
+  const bindings = await resolveBindingsFn(channelId);
+  if (bindings.length === 0) {
     // ROK-1494 A3 mirror: an LFG-born event's ephemeral channel has no binding,
     // so without this the roster could grow on join and never shrink on leave.
     await recordLfgNowVoiceLeave(lfgNowDeps(deps), channelId, userId).catch(
@@ -57,11 +60,18 @@ export async function handleChannelLeave(
     );
     return;
   }
-  await removeChannelMember(deps, channelId, binding, userId, timers);
-  // ROK-1446 D6: leave is shared by both binding kinds, so the lobby gate in
-  // `markLobbyDirty` is what keeps monitor channels out (D1).
-  markLobbyDirty(deps, binding, channelId);
-  await adHocEventService.handleVoiceLeave(binding.bindingId, userId);
+  const lobbyWins = bindings.some(isLobbyBinding);
+  for (const binding of bindings) {
+    // ROK-1782 (a): a monitor yielded to a lobby armed no timer of its own, and
+    // its `(channel, game)` key is shared with the lobby's group for that game
+    // — its occupancy cancel would kill a still-qualifying lobby spawn.
+    if (!lobbyWins || isLobbyBinding(binding))
+      await removeChannelMember(deps, channelId, binding, userId, timers);
+    // ROK-1446 D6: leave is shared by both binding kinds, so the lobby gate in
+    // `markLobbyDirty` is what keeps monitor channels out (D1).
+    markLobbyDirty(deps, binding, channelId);
+    await adHocEventService.handleVoiceLeave(binding.bindingId, userId);
+  }
 }
 
 /** Cancel a pending presence recheck timer. */

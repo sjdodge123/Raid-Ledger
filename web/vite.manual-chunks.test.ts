@@ -31,10 +31,16 @@ describe('ROK-1366: manualChunks keeps app code out of vendor chunks', () => {
         '@sentry/react/build/esm/index.js',
         '@sentry/browser/build/npm/esm/index.js',
         '@sentry/core/build/esm/tracing/errors.js',
-        '@sentry/replay/build/npm/esm/index.js',
         '@sentry/browser-utils/build/esm/metrics/instrument.js',
     ])('puts every @sentry package (%s) in the sentry chunk', (pkgPath) => {
         expect(manualChunks(nm(pkgPath))).toBe('sentry')
+    })
+
+    it.each([
+        '@sentry/replay/build/npm/esm/index.js',
+        '@sentry/replay-canvas/build/npm/esm/index.js',
+    ])('leaves Session Replay (%s) out of the eager sentry chunk — it is lazy-loaded', (pkgPath) => {
+        expect(manualChunks(nm(pkgPath))).toBeUndefined()
     })
 
     it('matches whole package segments only', () => {

@@ -102,9 +102,16 @@ function describeSentryInstrumentTs() {
       expect(config['tracesSampleRate']).toBe(0.1);
     });
 
-    it('sets environment tag to production', () => {
+    // Sentry v11: streaming no-ops beforeSendTransaction (ROK-1592 scrub) and
+    // an unset dataCollection widens PII collection — pin the v10 behaviour.
+    it('keeps the static lifecycle and the v10 PII baseline', () => {
       const config = initConfig(sentryInitMock);
-      expect(config['environment']).toBe('production');
+      expect(config['traceLifecycle']).toBe('static');
+      expect(config['attachStacktrace']).toBe(false);
+      // Exact v10 baseline — a whole-object pin, kept compact (file at max-lines).
+      const deny = '{"deny":["forwarded","-ip","remote-","via","-user"]}';
+      const v10 = `{"userInfo":false,"cookies":false,"httpHeaders":{"request":${deny},"response":${deny}},"httpBodies":[],"urlQueryParams":${deny},"genAI":{"inputs":false,"outputs":false},"databaseQueryData":false,"queues":false,"graphQL":{"document":false,"variables":false}}`;
+      expect(config['dataCollection']).toEqual(JSON.parse(v10));
     });
 
     // ── ROK-1329: honor SENTRY_ENVIRONMENT so fleet runners don't pollute

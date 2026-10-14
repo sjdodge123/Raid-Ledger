@@ -35,7 +35,7 @@ function boundGame(gameId: number | null): ResolvedBinding {
     gameName: 'Rise of Kingdoms',
     bindingPurpose: 'game-voice-monitor',
     recurrenceGroupId: null,
-    config: { minPlayers: 2 },
+    config: { minPlayers: 2, allowJustChatting: true },
   };
 }
 
@@ -164,7 +164,9 @@ describe('VoiceStateListener — ROK-1445 AC12 game-binding spawn preservation',
   });
 
   it('degrades to a null-game event when the threshold is met with zero confirmations [must-keep-passing]', async () => {
-    h = await setupRok1445Harness(gameBinding({ config: { minPlayers: 2 } }));
+    h = await setupRok1445Harness(
+      gameBinding({ config: { minPlayers: 2, allowJustChatting: true } }),
+    );
     await h.joinMember({ id: 'u1', gameId: null });
     await h.joinMember({ id: 'u2', gameId: null });
     await h.advanceSpawnDelay();
@@ -174,7 +176,9 @@ describe('VoiceStateListener — ROK-1445 AC12 game-binding spawn preservation',
   });
 
   it('mints the bound game and rosters the presence-null member too [must-keep-passing]', async () => {
-    h = await setupRok1445Harness(gameBinding({ config: { minPlayers: 2 } }));
+    h = await setupRok1445Harness(
+      gameBinding({ config: { minPlayers: 2, allowJustChatting: true } }),
+    );
     await h.joinMember({ id: 'u1', gameId: 1, gameName: 'Rise of Kingdoms' });
     await h.joinMember({ id: 'u2', gameId: null });
     await h.advanceSpawnDelay();
