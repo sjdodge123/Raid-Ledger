@@ -110,10 +110,60 @@ describe('useCalendarLayers — result shape (ROK-1774)', () => {
         expect(result.current).toBe(first);
     });
 
+    it('keeps the merged array identity across rerenders while layer results are unchanged', () => {
+        setActive(['a', 'b']);
+        const { result, rerender } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        const first = result.current;
+        expect(first.map((i) => i.id)).toEqual(['a1', 'b1', 'b2']);
+        rerender();
+        expect(result.current).toBe(first);
+    });
+
+    it('returns a new merged array when a layer result changes', () => {
+        setActive(['a']);
+        const { result } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        const first = result.current;
+        setActive(['a', 'b']);
+        expect(result.current).not.toBe(first);
+        expect(result.current.map((i) => i.id)).toEqual(['a1', 'b1', 'b2']);
+    });
+
     it('returns [] with no layers registered', () => {
         clearRegistry();
         setActive(['a']);
         const { result } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
         expect(result.current).toEqual([]);
+    });
+});
+
+describe('useCalendarLayers — registration freeze (ROK-1774)', () => {
+    beforeEach(() => {
+        setupTwoLayers();
+    });
+
+    it('throws in dev when a NEW layer key registers after the first render', () => {
+        renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        const late = fakeLayer('late:layer', [windowItem('late1')]);
+        expect(() => registerPlugin('late', BADGE).registerCalendarLayer(late.layer))
+            .toThrow('Calendar layer "late:layer" was registered after the calendar first rendered');
+    });
+
+    it('still lets an already-registered key be replaced after the first render (HMR)', () => {
+        renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        const again = fakeLayer('a:layer', [windowItem('a2')]);
+        expect(() => registerPlugin('a', BADGE).registerCalendarLayer(again.layer)).not.toThrow();
+    });
+
+    it('ignores a late NEW layer key in prod', () => {
+        vi.stubEnv('DEV', false);
+        try {
+            setActive(['a', 'late']);
+            const { result, rerender } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+            registerPlugin('late', BADGE).registerCalendarLayer(fakeLayer('late:layer', [windowItem('late1')]).layer);
+            rerender();
+            expect(result.current.map((i) => i.id)).toEqual(['a1']);
+        } finally {
+            vi.unstubAllEnvs();
+        }
     });
 });

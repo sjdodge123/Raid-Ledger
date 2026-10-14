@@ -72,6 +72,28 @@ const identityRegistry = new Map<string, CharacterIdentityRegistration>();
 /** Calendar layers keyed by `layer.key` — re-registering a key replaces it (HMR) */
 const layerRegistry = new Map<string, CalendarLayerRegistration>();
 
+/** Set by the first `useCalendarLayers` render: its hook order depends on this list staying fixed. */
+let layersFrozen = false;
+
+/** @internal Called by `useCalendarLayers` — after this, a NEW layer key throws in dev and is ignored in prod. */
+export function freezeCalendarLayers(): void {
+    layersFrozen = true;
+}
+
+function addCalendarLayer(registration: CalendarLayerRegistration): void {
+    const { key } = registration.layer;
+    if (layersFrozen && !layerRegistry.has(key)) {
+        if (import.meta.env.DEV) {
+            throw new Error(
+                `Calendar layer "${key}" was registered after the calendar first rendered. ` +
+                'Register layers at plugin import time — a late layer would change hook order.',
+            );
+        }
+        return;
+    }
+    layerRegistry.set(key, registration);
+}
+
 /**
  * Register a plugin with badge metadata and receive a handle for slot registration.
  * Plugins MUST call this before registering any slots — the handle enforces this contract.
@@ -97,7 +119,7 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
             }
         },
         registerCalendarLayer(layer) {
-            layerRegistry.set(layer.key, { pluginSlug: slug, layer });
+            addCalendarLayer({ pluginSlug: slug, layer });
         },
     };
 }
@@ -148,6 +170,7 @@ export function clearRegistry(): void {
     badgeRegistry.clear();
     identityRegistry.clear();
     layerRegistry.clear();
+    layersFrozen = false;
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

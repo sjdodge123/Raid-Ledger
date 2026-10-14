@@ -6,8 +6,9 @@
  * returns items from ACTIVE plugins. Core never imports a plugin's code —
  * `web/src/test/pelican-core-boundary.guard.test.ts` enforces that.
  */
+import { useMemo } from 'react';
 import { usePluginStore } from '../stores/plugin-store';
-import { getCalendarLayerRegistrations } from './plugin-registry';
+import { freezeCalendarLayers, getCalendarLayerRegistrations } from './plugin-registry';
 
 /** ISO 8601 with offset — exactly what computeDateRange yields. */
 export interface CalendarLayerRange {
@@ -74,8 +75,10 @@ const NO_ITEMS: readonly CalendarLayerItem[] = Object.freeze([]);
  *
  * Every registered layer's `useItems` runs on every render (rules of hooks);
  * an inactive plugin's layer — or every layer when `viewEnabled` is false —
- * is called with `enabled=false` and its items are discarded. Returns a new
- * array whenever any layer has items; the empty result is a stable constant.
+ * is called with `enabled=false` and its items are discarded. The merged array
+ * keeps its identity while every layer's result does (the empty result is a
+ * stable constant), so downstream memos and day columns skip re-rendering.
+ * The first call freezes the registration list (stable hook order).
  */
 export function useCalendarLayers(
     range: CalendarLayerRange,
@@ -83,11 +86,39 @@ export function useCalendarLayers(
     viewEnabled: boolean,
 ): readonly CalendarLayerItem[] {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
-    const merged: CalendarLayerItem[] = [];
-    for (const { pluginSlug, layer } of getCalendarLayerRegistrations()) {
+    freezeCalendarLayers();
+    const parts = getCalendarLayerRegistrations().map(({ pluginSlug, layer }) => {
         const enabled = viewEnabled && activeSlugs.has(pluginSlug);
         const items = layer.useItems(range, selectedGames, enabled);
-        if (enabled) merged.push(...items);
+        return enabled && items.length > 0 ? items : NO_ITEMS;
+    });
+    return useStableMerge(parts);
+}
+
+type Parts = readonly (readonly CalendarLayerItem[])[];
+
+/** Identity tag per layer result array, so a deps key can say "same arrays as last render". */
+const partIds = new WeakMap<object, number>();
+let nextPartId = 0;
+
+function partId(part: readonly CalendarLayerItem[]): number {
+    let id = partIds.get(part);
+    if (id === undefined) {
+        id = ++nextPartId;
+        partIds.set(part, id);
     }
+    return id;
+}
+
+/** Re-merge only when some layer's result identity changed. */
+function useStableMerge(parts: Parts): readonly CalendarLayerItem[] {
+    const key = parts.map(partId).join(',');
+    // `key` encodes the identity of every part, so `parts` itself is covered by it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return useMemo(() => mergeParts(parts), [key]);
+}
+
+function mergeParts(parts: Parts): readonly CalendarLayerItem[] {
+    const merged = parts.flat();
     return merged.length > 0 ? merged : NO_ITEMS;
 }
