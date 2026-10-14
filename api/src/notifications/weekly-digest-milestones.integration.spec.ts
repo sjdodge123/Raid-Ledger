@@ -66,11 +66,15 @@ async function seedUser(
   return u.id;
 }
 
-async function seedGame(testApp: TestApp, name: string): Promise<number> {
+async function seedGame(
+  testApp: TestApp,
+  name: string,
+  flags: { hidden?: boolean; banned?: boolean } = {},
+): Promise<number> {
   const [g] = nonEmpty(
     await testApp.db
       .insert(schema.games)
-      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-') })
+      .values({ name, slug: name.toLowerCase().replace(/\s+/g, '-'), ...flags })
       .returning(),
     'game',
   );
@@ -315,5 +319,89 @@ describe('Weekly digest milestones — first games privacy (AC10, integration)',
     const m = await fetchDigestMilestones(testApp.db);
     expect(m.firstGames).toEqual([{ gameId: valheim, name: 'Valheim' }]);
     expect(m.hourMilestones).toEqual([]);
+  });
+});
+
+describe('Weekly digest milestones — game visibility (ROK-1783, integration)', () => {
+  const ctx = useMilestonesApp();
+  let testApp: TestApp;
+  beforeEach(() => {
+    ({ testApp } = ctx);
+  });
+
+  it('B2 and B4: a hidden or a banned game never appears in either list', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    const valheim = await seedGame(testApp, 'Valheim');
+    const drg = await seedGame(testApp, 'Deep Rock Galactic');
+    await seedRollup(testApp, ann, valheim, 3, 2);
+    await seedRollup(testApp, ann, drg, 90, 20);
+    await seedRollup(testApp, ann, drg, 20, 2);
+    for (const { label, flags } of [
+      { label: 'hidden', flags: { hidden: true } },
+      { label: 'banned', flags: { banned: true } },
+    ]) {
+      const first = await seedGame(testApp, `First ${label}`, flags);
+      await seedAttended(testApp, ann, 2, first);
+      await seedRollup(testApp, ann, first, 3, 2);
+      const hours = await seedGame(testApp, `Hours ${label}`, flags);
+      await seedRollup(testApp, ann, hours, 90, 20);
+      await seedRollup(testApp, ann, hours, 20, 2);
+    }
+
+    const m = await fetchDigestMilestones(testApp.db);
+    expect(m.firstGames.map((g) => g.name)).toEqual(['Valheim']);
+    expect(m.hourMilestones.map((h) => h.name)).toEqual(['Deep Rock Galactic']);
+  });
+});
+
+describe('Weekly digest milestones — rollup window edges (ROK-1783, integration)', () => {
+  const ctx = useMilestonesApp();
+  let testApp: TestApp;
+  beforeEach(() => {
+    ({ testApp } = ctx);
+  });
+
+  /**
+   * One game's history, seen by two consecutive Monday digests. "Week N" is
+   * posted today with 10 h played earlier today (the boundary day); "week N+1"
+   * is the same history shifted back 7 days, i.e. what next Monday's digest
+   * sees. The crossing must be announced by exactly one of them.
+   */
+  it('B4: a threshold crossed on the window-start day is announced in exactly one of two consecutive weeks', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    const weeks = [
+      { name: 'Week N', offset: 0 },
+      { name: 'Week N+1', offset: 7 },
+    ];
+    for (const w of weeks) {
+      const game = await seedGame(testApp, w.name);
+      await seedRollup(testApp, ann, game, 90, 20 + w.offset);
+      await seedRollup(testApp, ann, game, 10, w.offset);
+    }
+
+    const { hourMilestones } = await fetchDigestMilestones(testApp.db);
+    const announcedIn = hourMilestones
+      .filter((h) => h.threshold === 100)
+      .map((h) => h.name);
+    expect(announcedIn).toHaveLength(1);
+  });
+
+  it('B2: a game first played on the window-start day is a first in exactly one of two consecutive weeks', async () => {
+    const ann = await seedUser(testApp, 'Ann');
+    for (const w of [
+      { name: 'Week N', offset: 0 },
+      { name: 'Week N+1', offset: 7 },
+    ]) {
+      await seedRollup(
+        testApp,
+        ann,
+        await seedGame(testApp, w.name),
+        3,
+        w.offset,
+      );
+    }
+
+    const { firstGames } = await fetchDigestMilestones(testApp.db);
+    expect(firstGames.map((g) => g.name)).toHaveLength(1);
   });
 });
