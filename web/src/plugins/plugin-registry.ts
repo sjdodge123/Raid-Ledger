@@ -25,6 +25,8 @@ export type PluginSlotName =
     | 'nav:primary-links'
     /** First block of the phone More drawer (ROK-1785); context `{ onClose }`. Signed-in only. */
     | 'nav:drawer-top'
+    /** Items at the top of the header user (avatar) menu, shown from md (ROK-1785); context `{ onClose }`. Signed-in only. */
+    | 'user-menu:items'
     /** Cards above New Members on /players (ROK-1785); no context. */
     | 'players:header-cards'
     /** Plugin sections on the game detail page (ROK-1785); context `{ gameId, gameSlug }`. */

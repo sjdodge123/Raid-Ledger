@@ -5,7 +5,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
@@ -64,28 +64,10 @@ describe('NavGuildLink (nav:primary-links)', () => {
         expect(link.className).toContain('text-emerald-400');
     });
 
-    it('one guild → icon-only below lg, "Guild" text from lg; named "Guild" at both, guild name as tooltip', async () => {
-        serve(ONE);
-        renderWithProviders(<NavGuildLink pathname="/players" />);
-        const link = await screen.findByRole('link', { name: 'Guild' });
-        expect(link).toHaveAttribute('data-testid', 'nav-guild-link');
-        expect(link).toHaveAttribute('aria-label', 'Guild');
-        expect(link).toHaveAttribute('title', 'Iron Vanguard');
-        const icon = within(link).getByTestId('nav-guild-icon');
-        expect(icon.getAttribute('class'), 'the shield renders 768–1023px only').toContain('lg:hidden');
-        expect(icon).toHaveAttribute('aria-hidden', 'true');
-        const text = within(link).getByText('Guild');
-        expect(text.className, 'the text renders from 1024px only').toBe('hidden lg:inline');
-    });
-
     it('two guilds → a menu listing both', async () => {
         serve(TWO);
         renderWithProviders(<NavGuildLink pathname="/players" />);
-        const trigger = await screen.findByRole('button', { name: 'Guild' });
-        expect(trigger).toHaveAttribute('data-testid', 'nav-guild-menu-trigger');
-        expect(within(trigger).getByTestId('nav-guild-icon').getAttribute('class')).toContain('lg:hidden');
-        expect(within(trigger).getByText('Guild').className).toBe('hidden lg:inline');
-        await userEvent.click(trigger);
+        await userEvent.click(await screen.findByTestId('nav-guild-menu-trigger'));
         const menu = screen.getByTestId('nav-guild-menu');
         expect(menu).toHaveTextContent('Iron Vanguard');
         expect(menu).toHaveTextContent('Dusk Wardens');
@@ -220,8 +202,8 @@ describe('generic slots', () => {
     });
 
     it.each([
-        // Shown from md; below md the drawer's "Your guild" block is the entry (ROK-1785).
-        ['components/layout/Header.tsx', '<span className="hidden md:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
+        // Hidden below lg so the md (768) header matches main's (ROK-1785 verify flag).
+        ['components/layout/Header.tsx', '<span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>'],
         ['components/layout/more-drawer.tsx', '<PluginSlot name="nav:drawer-top" context={{ onClose }} />'],
         ['pages/players-page.tsx', '<PluginSlot name="players:header-cards" />'],
         ['pages/game-detail-page.tsx', '<PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />'],

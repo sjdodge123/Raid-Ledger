@@ -11,8 +11,9 @@
  * users are deleted in `finally`; the guild row stays (disposable env).
  *
  * Entry points, chosen by the live viewport: the header "Guild" text link from
- * 1024px (`lg:`), the header's icon-only shield link (named "Guild") at
- * 768–1023px (`md:`), and the More drawer's "Your guild" block below 768px.
+ * 1024px (`lg:`), the guild item in the user (avatar) menu at 768–1023px (the
+ * header bar there is unchanged from core), and the More drawer's "Your guild"
+ * block below 768px.
  */
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
@@ -33,8 +34,8 @@ interface SeededGuild {
 
 /** Header `lg:` — the "Guild" link shows its text. */
 const HEADER_NAV_MIN_WIDTH = 1024;
-/** Header `md:` — the slot shows; below lg the link is the icon-only shield. */
-const HEADER_ICON_MIN_WIDTH = 768;
+/** Header `md:` — the user menu shows; below lg it carries the guild item. */
+const USER_MENU_MIN_WIDTH = 768;
 
 /** A guild name unique to this project, worker and run (fixture: 3-48 chars). */
 function guildName(testInfo: TestInfo): string {
@@ -138,7 +139,7 @@ test('non-member: the "not a member" state, no hero', async ({ page }, testInfo)
     });
 });
 
-test('entry points: header text or icon link / drawer "Your guild" reach the page; Players card', async ({ page }, testInfo) => {
+test('entry points: header text link / user menu item / drawer "Your guild" reach the page; Players card', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInOnboardedMember(page, guild.users.member.userId);
         await page.goto('/players');
@@ -150,12 +151,14 @@ test('entry points: header text or icon link / drawer "Your guild" reach the pag
             .getByRole('link', { name: 'Guild', exact: true });
         if (width >= HEADER_NAV_MIN_WIDTH) {
             await expect(headerLink, 'the header text link').toHaveAttribute('data-testid', 'nav-guild-link');
-            await expect(headerLink.getByText('Guild', { exact: true }), '"Guild" text from 1024px').toBeVisible();
+            await expect(headerLink, '"Guild" text from 1024px').toBeVisible();
             await headerLink.click();
-        } else if (width >= HEADER_ICON_MIN_WIDTH) {
-            await expect(headerLink.getByTestId('nav-guild-icon'), 'icon-only shield at 768–1023px').toBeVisible();
-            await expect(headerLink.getByText('Guild', { exact: true }), 'no text at 768–1023px').toBeHidden();
-            await headerLink.click();
+        } else if (width >= USER_MENU_MIN_WIDTH) {
+            await expect(headerLink, 'no guild control in the header bar at 768–1023px').toBeHidden();
+            await page.getByTestId('user-menu-trigger').click();
+            const item = page.getByTestId('user-menu-guild-item');
+            await expect(item, 'the user menu lists the guild at 768–1023px').toBeVisible();
+            await item.click();
         } else {
             await page.getByRole('button', { name: 'Open menu' }).click();
             const block = page.getByTestId('more-drawer-panel').getByTestId('drawer-your-guild');

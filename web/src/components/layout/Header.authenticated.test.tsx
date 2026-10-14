@@ -8,6 +8,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { Header } from './Header';
 import { at } from '../../test/defined';
+import { registerPlugin } from '../../plugins/plugin-registry';
+import { usePluginStore } from '../../stores/plugin-store';
 
 vi.mock('../../hooks/use-auth', () => ({
     useAuth: () => ({
@@ -40,6 +42,10 @@ vi.mock('./UserMenu', () => ({
     UserMenu: () => null,
 }));
 
+const NAV_SLUG = 'test-header-nav-links';
+registerPlugin(NAV_SLUG, { icon: 'x', color: 'blue', label: 'Test' })
+    .registerSlot('nav:primary-links', () => <a href="/x" data-testid="plugin-nav-link">Plugin</a>);
+
 function renderHeader() {
     return render(
         <MemoryRouter>
@@ -61,5 +67,16 @@ describe('Header — authenticated member', () => {
     it('has no "Event Metrics" link', () => {
         renderHeader();
         expect(screen.queryByRole('link', { name: /event metrics/i })).not.toBeInTheDocument();
+    });
+});
+
+describe('Header — plugin nav links (ROK-1785)', () => {
+    it('the bar shows plugin links only from lg, so 768–1023px matches the core-only bar', () => {
+        usePluginStore.setState({ activeSlugs: new Set([NAV_SLUG]) });
+        renderHeader();
+        const link = screen.getByTestId('plugin-nav-link');
+        const wrapper = link.parentElement;
+        expect(wrapper?.className, 'below lg the plugin slot must render nothing in the bar (Codex P2: md overflow)').toBe('hidden lg:contents');
+        usePluginStore.setState({ activeSlugs: new Set() });
     });
 });
