@@ -152,8 +152,13 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
     // shared plugin mid-run is what raced the sibling projects. A Pelican layer
     // left active with seeded servers is harmless to other specs, because its
     // bands are `pointer-events:none`. Fleet/CI envs are disposable.
+    // The admin-context tests need "all games" saved. `[]` is the default and the
+    // same value calendar.smoke.spec.ts writes, so this write cannot race a
+    // sibling project into hiding anything.
     test.beforeAll(async () => {
-        seed = await ensureSeeded(await getAdminToken());
+        const token = await getAdminToken();
+        await apiPatch(token, '/users/me/preferences', { preferences: { calendarGameFilter: [] } });
+        seed = await ensureSeeded(token);
     });
 
     test('band with its label renders on the grid; hidden/unmapped servers never do', async ({ page }, testInfo) => {
