@@ -1031,6 +1031,48 @@ toggle is §4.3.
 
 ---
 
+### 4.22 Server-schedule layer (plugin calendar layers, ROK-1774)
+
+A plugin draws **non-event time** on the Week/Day grid through `PluginHandle.registerCalendarLayer`
+(`web/src/plugins/calendar-layer.ts`): it supplies items (`window` spans and `marker` instants with
+pre-formatted text), the host draws them. First user: Pelican game-server schedules
+(`web/src/plugins/pelican/calendar/`). Month and Schedule views draw nothing from layers yet (ROK-1775).
+
+**Tokens.** Band: a 135° hatch of `color-mix(in oklab, var(--color-edge-strong) 25%, transparent)` 6px
+stripes over transparent, a 1px `--color-edge` left edge, no radius, label `text-[11px] leading-tight
+text-dim`. Tick: `border-t-2 border-solid border-edge-strong`. Glyph: a 16px `rounded-full bg-surface
+text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:ring-success`. Tooltip:
+`bg-surface border border-edge-strong rounded-md shadow-lg text-xs`, line 1 `text-foreground`, line 2
+`text-muted`, `max-w-[16rem] break-words`. No new tokens.
+
+**DO**
+- Keep the band behind events (`backgroundEvents`, `pointer-events: none`) — an event under a band must
+  stay clickable. The glyph is the ONLY layer element that takes the pointer; it stops pointer/mouse/touch
+  down so react-big-calendar's slot selection never starts on it.
+- Let labels and tooltips **wrap** (`break-words`); never truncate a server name or a time. A window
+  crossing local midnight is split per day; later segments read "… (cont.)" (the host adds it).
+- Open the tooltip on hover, keyboard focus or tap, and **flip it left** when the glyph sits within one
+  tooltip width + gap (256 + 8px) of the grid's right edge (`chooseTipSide`), so Fri/Sat columns and
+  Day view never clip it. The glyph's `aria-label` carries both tooltip lines.
+- Zone every item with `useTimezoneStore.resolved`, the same as events.
+
+**DON'T**
+- Use the busy (§4.16), slot, heatmap or game colours for a layer — each already means something on
+  this grid. A layer is neutral `edge`/`edge-strong` only.
+- Make the band or tick interactive, or give a layer its own filter: the page's game filter
+  (§4.3 / `filter-entry.tsx`) applies client-side.
+- Import a plugin from core: `components/**`, `pages/**` and `plugins/calendar-layer*.ts` never import
+  `plugins/pelican/**` (`pelican-core-boundary.guard.test.ts`).
+
+**Where it lives.** Host pieces: `web/src/components/calendar/layers/` — `calendar-layers.css` (band +
+tick z-order), `LayerWindowLabel.tsx`, `LayerMarkerTick.tsx`, `LayerGlyph.tsx` (tooltip + flip),
+`LayerDayColumnWrapper.tsx` (ticks per day column), `CalendarLayerGrid.tsx` + `calendar-layer-context.ts`
+(grid ref for the flip), `calendar-layer-events.ts` (zoning, midnight split, `chooseTipSide`),
+`use-calendar-layer-data.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
+(`calendar-layer-section.tsx`). Smoke: `scripts/smoke/calendar-server-layer.smoke.spec.ts`.
+
+---
+
 ## 5. Rendered reference
 
 `/dev/design-system` (DEMO_MODE only) renders the swatches, the most-reached-for primitives in their
@@ -1044,7 +1086,9 @@ true`), registered in `lazy-routes.ts` + `app-routes.tsx`.
 The ROK-1586 sections render the §4.13–4.19 patterns from the shipped maps and helpers, not copies:
 *Semantic colour tokens* (`semantic-tokens-section.tsx` — solid / border / tint / text per token, and the
 D-6 solid-button DO/DON'T), *Pattern — journey hero* (`hero-section.tsx`), *Pattern — week strip*
-(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). Check both families there before
+(`week-strip-section.tsx`) and *Pattern — group marks and legend* (`group-marks-section.tsx`). ROK-1774 adds
+*Pattern — server-schedule layer* (`calendar-layer-section.tsx`, §4.22), which mounts the real band label and tick
+in the grid's own DOM so `calendar-layers.css` applies. Check both families there before
 changing any of them.
 
 ---
