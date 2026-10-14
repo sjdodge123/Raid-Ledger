@@ -31,6 +31,8 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
 import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { SettingsService } from '../../settings/settings.service';
 import { VoiceStateListener } from './voice-state.listener';
 import {
   handleChannelJoin,
@@ -70,6 +72,14 @@ beforeEach(async () => {
   stubDiscord();
   orderBindingsMonitorFirst();
   logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+  // Quick Play's kill-switch defaults off in a fresh DB; handleVoiceJoin
+  // bails with `feature-disabled` until it is set.
+  await testApp.app
+    .get(SettingsService)
+    .set(schema.SETTING_KEYS.AD_HOC_EVENTS_ENABLED, 'true');
+  // The detector caches name → game id for 10 min; truncation re-seeds the
+  // games under new ids, so a stale entry would point at a deleted row.
+  testApp.app.get(PresenceGameDetectorService)['gameCache'].clear();
   games = { valheim: await seedGame(VALHEIM), bg3: await seedGame(BG3) };
 });
 
