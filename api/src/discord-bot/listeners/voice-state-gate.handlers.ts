@@ -105,6 +105,10 @@ export async function suppressOrCheckThreshold(
  * monitor never tracks, counts or spawns — the lobby's per-game groups decide.
  * The ROK-959 suppression step still runs so a live scheduled event on a
  * sibling binding keeps getting its `extended_until` window bumped.
+ *
+ * Known gap (TECH-DEBT-BACKLOG 2026-10-14): a monitor event already running
+ * when the lobby binding is added gets no new joiners from here on, and the
+ * lobby may mint a second event for the same game alongside it.
  */
 export async function yieldMonitorToLobby(
   deps: VoiceHandlerDeps,
