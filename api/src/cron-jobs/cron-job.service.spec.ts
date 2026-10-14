@@ -4,6 +4,7 @@ import { createDrizzleMock } from '../common/testing/drizzle-mock';
 import type { CronRunBookkeeping } from './cron-job.bookkeeping';
 import { computeNextRun } from './cron-job.helpers';
 import { CronJobService } from './cron-job.service';
+import { PLUGIN_EVENTS } from '../plugins/plugin-host/plugin-manifest.interface';
 
 const OLD = '*/5 * * * *';
 const NEW = '*/10 * * * *';
@@ -73,5 +74,38 @@ describe('CronJobService.updateSchedule with a queued last_run_at (ROK-1380)', (
       finishedAt.toISOString(),
       newNext,
     ]);
+  });
+});
+
+/** Prototype methods whose @OnEvent metadata names `event`. */
+function listenersFor(event: string): string[] {
+  const proto = CronJobService.prototype as unknown as Record<string, unknown>;
+  return Object.getOwnPropertyNames(proto).filter((name) => {
+    const fn = proto[name];
+    if (typeof fn !== 'function') return false;
+    const meta: unknown = Reflect.getMetadata('EVENT_LISTENER_METADATA', fn);
+    return (
+      Array.isArray(meta) &&
+      meta.some((m: { event?: unknown }) => m.event === event)
+    );
+  });
+}
+
+describe('CronJobService — runtime plugin install (ROK-1783)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
+
+  it('re-syncs the admin job table on INSTALLED, not only on ACTIVATED', () => {
+    const names = listenersFor(PLUGIN_EVENTS.INSTALLED);
+    expect(names).toHaveLength(1);
+    const { service } = setup();
+    const sync = jest.spyOn(service, 'syncJobs').mockResolvedValue();
+    const handler = (service as unknown as Record<string, () => void>)[
+      names[0] ?? ''
+    ];
+    if (typeof handler !== 'function') throw new Error('no INSTALLED handler');
+    handler.call(service);
+    jest.advanceTimersByTime(1_000);
+    expect(sync).toHaveBeenCalledTimes(1);
   });
 });
