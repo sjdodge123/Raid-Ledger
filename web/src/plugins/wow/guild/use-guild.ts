@@ -4,6 +4,7 @@
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
 import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage } from '@raid-ledger/contract';
 import { httpStatusOf } from '../../../lib/api/api-error';
+import { useViewerCacheScope } from '../../../hooks/use-auth';
 import { createGuildEditor, deleteGuildEditor, fetchGuildEditors, fetchGuildPage } from './guild-api';
 
 const MAX_RETRIES = 2;
@@ -23,9 +24,15 @@ function retryUnlessClientError(failures: number, error: Error): boolean {
     return failures < MAX_RETRIES;
 }
 
+/**
+ * The page and editor payloads are membership-gated, so the cached entry is
+ * keyed by viewer too (ROK-1314 `useViewerCacheScope`); the viewer goes LAST
+ * so `guildEditorsKey(guildId)` stays a prefix for invalidation.
+ */
 export function useGuildPage(guildId: number): UseQueryResult<GuildPage, Error> {
+    const viewer = useViewerCacheScope();
     return useQuery({
-        queryKey: guildPageKey(guildId),
+        queryKey: [...guildPageKey(guildId), viewer],
         queryFn: () => fetchGuildPage(guildId),
         enabled: guildId > 0,
         retry: retryUnlessClientError,
@@ -33,8 +40,9 @@ export function useGuildPage(guildId: number): UseQueryResult<GuildPage, Error> 
 }
 
 export function useGuildEditors(guildId: number, enabled: boolean): UseQueryResult<GuildEditorList, Error> {
+    const viewer = useViewerCacheScope();
     return useQuery({
-        queryKey: guildEditorsKey(guildId),
+        queryKey: [...guildEditorsKey(guildId), viewer],
         queryFn: () => fetchGuildEditors(guildId),
         enabled: enabled && guildId > 0,
         retry: retryUnlessClientError,
