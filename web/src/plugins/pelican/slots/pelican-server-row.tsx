@@ -95,6 +95,9 @@ function CalendarSwitch({ row, onUpdate }: Pick<ServerRowProps, 'row' | 'onUpdat
     );
 }
 
+/** Operator ruling 5 (ROK-1096): shown when the row's schedules don't fit its effective timezone. */
+export const TZ_MISMATCH_WARNING = "Schedule times don't match this timezone — check the override";
+
 function TimezoneControl({ row, defaultTimezone, onUpdate, inline = false }: ControlProps<'row' | 'defaultTimezone' | 'onUpdate'>) {
     const inherited = row.timezone === null;
     return (
@@ -102,6 +105,7 @@ function TimezoneControl({ row, defaultTimezone, onUpdate, inline = false }: Con
             <PelicanTimezoneField key={row.timezone ?? 'inherit'} id={`pelican-server-${row.id}-tz`} label="Timezone" hideLabel={inline}
                 testId={`pelican-server-${row.id}-tz-input`} value={row.timezone ?? defaultTimezone} inherited={inherited}
                 hint={inherited ? `Uses the panel default (${defaultTimezone}).` : 'Overrides the panel default.'}
+                warning={row.tzMismatch ? TZ_MISMATCH_WARNING : undefined}
                 onChange={(tz) => { if (tz !== row.timezone) onUpdate(row.id, { timezone: tz }); }} />
             {!inherited && (
                 <Button variant="ghost" size="sm" onClick={() => onUpdate(row.id, { timezone: '' })}>Use default</Button>
