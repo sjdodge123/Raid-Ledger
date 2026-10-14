@@ -187,6 +187,51 @@ describe('buildSyncedFields (the success UPDATE)', () => {
   });
 });
 
+// ROK-1783: `[]` reads as "primary" — pruning the last chosen calendar
+// must stop reading, never fall back to a calendar the user never picked.
+describe('buildSyncedFields (prune never falls back to primary)', () => {
+  const stamp = { now: NOW, random: () => 0.5 };
+
+  it('pruning the only selected calendar turns read off instead of storing []', () => {
+    const fields = buildSyncedFields(
+      { readCalendarIds: ['work'] },
+      { missingCalendarIds: ['work'] },
+      stamp,
+    );
+    expect(fields).toMatchObject({
+      readEnabled: false,
+      lastErrorCode: 'provider_error',
+    });
+    expect(fields).not.toHaveProperty('readCalendarIds', []);
+    const next = { readCalendarIds: fields.readCalendarIds ?? ['work'] };
+    const ids = selectReadCalendarIds(
+      { ...next, dedicatedCalendarId: null },
+      [],
+    );
+    expect(ids).not.toContain('primary');
+  });
+
+  it('a partial prune keeps reading the remaining selection', () => {
+    const fields = buildSyncedFields(
+      { readCalendarIds: ['work', 'home'] },
+      { missingCalendarIds: ['work'] },
+      stamp,
+    );
+    expect(fields.readCalendarIds).toEqual(['home']);
+    expect(fields).not.toHaveProperty('readEnabled');
+  });
+
+  it('a never-configured connection (primary) is not turned off by a prune', () => {
+    const fields = buildSyncedFields(
+      { readCalendarIds: [] },
+      { missingCalendarIds: ['primary'] },
+      stamp,
+    );
+    expect(fields).not.toHaveProperty('readEnabled');
+    expect(fields.readCalendarIds).toEqual([]);
+  });
+});
+
 /** A tx stub that records each lock statement in the order it is issued. */
 function lockRecordingTx(row: unknown) {
   const calls: string[] = [];
