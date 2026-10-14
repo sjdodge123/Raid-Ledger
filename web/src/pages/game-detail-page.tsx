@@ -95,7 +95,6 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </div>
             )}
-            {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
             <CoopSupportAndActivity game={game} gameId={gameId} />
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />
@@ -107,12 +106,14 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
 /**
  * Co-Optimus co-op facts (ROK-1398) followed by community activity. The co-op
  * section renders nothing for games Co-Optimus has never been asked about.
+ * Plugin sections (`game-detail:sections`, ROK-1785) render first.
  */
 function CoopSupportAndActivity({ game, gameId }: {
     game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined;
 }): JSX.Element {
     return (
         <>
+            {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
             <CoopFeaturesSection game={game} />
             {gameId && <CommunityActivitySection gameId={gameId} />}
         </>
