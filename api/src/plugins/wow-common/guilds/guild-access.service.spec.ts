@@ -1,0 +1,157 @@
+/**
+ * ROK-1785 — GuildAccessService access matrix (spec §3) against the drizzle
+ * mock. The membership query (`findLinkedMemberRows`) and the delegation
+ * lookup both end at `.where()`; the SQL semantics of soft removal and
+ * deactivation are proven in `guild-access.integration.spec.ts`.
+ */
+import { Test } from '@nestjs/testing';
+import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../../common/testing/drizzle-mock';
+import { GuildAccessService, type GuildActor } from './guild-access.service';
+import type { LinkedMemberRow } from './guild-membership.helpers';
+
+const GUILD = 7;
+const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
+  guildId: GUILD,
+  memberId: id,
+  rankIndex,
+});
+const actor = (role: GuildActor['role']): GuildActor => ({ id: 42, role });
+
+let db: MockDb;
+let service: GuildAccessService;
+
+beforeEach(async () => {
+  db = createDrizzleMock();
+  const mod = await Test.createTestingModule({
+    providers: [
+      GuildAccessService,
+      { provide: DrizzleAsyncProvider, useValue: db },
+    ],
+  }).compile();
+  service = mod.get(GuildAccessService);
+});
+
+/** Queue the membership rows, then the delegation grants (if queried). */
+function queue(rows: LinkedMemberRow[], grants: { id: number }[] = []) {
+  db.where.mockResolvedValueOnce(rows).mockResolvedValueOnce(grants);
+}
+
+async function matrix(a: GuildActor) {
+  return {
+    view: await service.canView(a, GUILD),
+    edit: await service.canEdit(a, GUILD),
+    manage: await service.canManageEditors(a, GUILD),
+  };
+}
+
+describe('GuildAccessService access matrix', () => {
+  it.each(['admin', 'operator'] as const)(
+    '%s may view, edit and manage without any member row',
+    async (role) => {
+      expect(await matrix(actor(role))).toEqual({
+        view: true,
+        edit: true,
+        manage: true,
+      });
+      expect(db.select).not.toHaveBeenCalled();
+    },
+  );
+
+  it('the GM (rank 0) may view, edit and manage editors', async () => {
+    db.where.mockResolvedValue([member(1, 0)]);
+    expect(await matrix(actor('member'))).toEqual({
+      view: true,
+      edit: true,
+      manage: true,
+    });
+  });
+
+  it('a delegated rank may edit but not manage editors', async () => {
+    db.where
+      .mockResolvedValueOnce([member(2, 1)]) // canView
+      .mockResolvedValueOnce([member(2, 1)]) // canEdit membership
+      .mockResolvedValueOnce([{ id: 9 }]) // canEdit delegation
+      .mockResolvedValueOnce([member(2, 1)]); // canManageEditors
+    expect(await matrix(actor('member'))).toEqual({
+      view: true,
+      edit: true,
+      manage: false,
+    });
+  });
+
+  it('a delegated member row may edit (grant keyed by member id)', async () => {
+    queue([member(3, 4)], [{ id: 10 }]);
+    expect(await service.canEdit(actor('member'), GUILD)).toBe(true);
+  });
+
+  it('a plain member may view only', async () => {
+    db.where
+      .mockResolvedValueOnce([member(4, 3)]) // canView
+      .mockResolvedValueOnce([member(4, 3)]) // canEdit membership
+      .mockResolvedValueOnce([]) // canEdit delegation: no grant
+      .mockResolvedValueOnce([member(4, 3)]); // canManageEditors
+    expect(await matrix(actor('member'))).toEqual({
+      view: true,
+      edit: false,
+      manage: false,
+    });
+  });
+
+  it('a non-member or soft-removed member (no live row) gets nothing', async () => {
+    db.where.mockResolvedValue([]);
+    expect(await matrix(actor('member'))).toEqual({
+      view: false,
+      edit: false,
+      manage: false,
+    });
+    expect(await service.isMember(42, GUILD)).toBe(false);
+  });
+
+  it('a rank-less member row is still checked for a member grant', async () => {
+    queue([member(5, null)], [{ id: 11 }]);
+    expect(await service.canEdit(actor('member'), GUILD)).toBe(true);
+  });
+});
+
+describe('GuildAccessService.myGuilds', () => {
+  it('returns [] and skips the guild query for a non-member', async () => {
+    db.where.mockResolvedValueOnce([]);
+    expect(await service.myGuilds(42)).toEqual([]);
+    expect(db.orderBy).not.toHaveBeenCalled();
+  });
+
+  it('maps each distinct guild to a summary with ISO timestamps', async () => {
+    const snap = new Date('2026-10-01T12:00:00.000Z');
+    db.where
+      .mockResolvedValueOnce([member(1, 0), member(2, 5)])
+      .mockReturnValueOnce(db);
+    db.orderBy.mockResolvedValueOnce([
+      {
+        id: GUILD,
+        gameId: 3,
+        name: 'Stormwind Guard',
+        region: 'us',
+        realmSlug: null,
+        faction: 'Alliance',
+        memberCount: 12,
+        lastSnapshotAt: snap,
+      },
+    ]);
+    expect(await service.myGuilds(42)).toEqual([
+      {
+        id: GUILD,
+        gameId: 3,
+        name: 'Stormwind Guard',
+        region: 'us',
+        realmSlug: null,
+        faction: 'Alliance',
+        memberCount: 12,
+        lastSnapshotAt: '2026-10-01T12:00:00.000Z',
+      },
+    ]);
+  });
+});
