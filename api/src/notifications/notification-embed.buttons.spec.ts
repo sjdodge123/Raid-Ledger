@@ -7,7 +7,10 @@
  * must keep the generic "Vote on a Time" link unchanged.
  */
 import type { APIButtonComponentWithURL } from 'discord.js';
-import { buildPrimaryButton } from './notification-embed.buttons';
+import {
+  buildInlineButtons,
+  buildPrimaryButton,
+} from './notification-embed.buttons';
 
 const CLIENT = 'https://raid.example';
 
@@ -105,5 +108,50 @@ describe('buildPrimaryButton — other lineup subtypes are unchanged', () => {
 
   it('keeps "View Lineup" when only a lineupId is present', () => {
     expect(primary({ lineupId: 7 })?.label).toBe('View Lineup');
+  });
+});
+
+/** Serialize the inline buttons for a community_lineup payload. */
+function inline(payload: Record<string, unknown>): APIButtonComponentWithURL[] {
+  return buildInlineButtons('community_lineup', payload, CLIENT).map(
+    (b) => b.toJSON() as APIButtonComponentWithURL,
+  );
+}
+
+// ROK-1784: the Lock button opens a lock-in confirm, so a lock DM also needs a
+// plain "Open Poll" link beside it (Lock in · Open Poll · Adjust Notifications).
+describe('buildInlineButtons — "Open Poll" beside the Lock link (ROK-1784)', () => {
+  const POLL = `${CLIENT}/community-lineup/7/schedule/42`;
+
+  it.each(['scheduling_poll_expiry_warning', 'scheduling_poll_unanimous_time'])(
+    '%s gets Lock (primary) + a plain "Open Poll" link',
+    (subtype) => {
+      const payload = { subtype, lineupId: 7, matchId: 42, slotId: 9 };
+      expect(primary(payload)?.url).toBe(`${POLL}?lock=9`);
+      expect(inline(payload).map((b) => [b.label, b.url])).toEqual([
+        ['Open Poll', POLL],
+      ]);
+    },
+  );
+
+  it('adds no "Open Poll" when there is no slotId (primary is the poll link)', () => {
+    const payload = {
+      subtype: 'scheduling_poll_expiry_warning',
+      lineupId: 7,
+      matchId: 42,
+    };
+    expect(inline(payload)).toEqual([]);
+  });
+
+  it('leaves non-lock subtypes unchanged', () => {
+    const nudge = {
+      subtype: 'scheduling_poll_nudge',
+      lineupId: 7,
+      matchId: 42,
+      slotId: 9,
+    };
+    expect(inline(nudge)).toEqual([]);
+    const member = { subtype: 'lineup_match_member', lineupId: 7, matchId: 42 };
+    expect(inline(member).map((b) => b.label)).toEqual(['View Lineup']);
   });
 });

@@ -58,6 +58,7 @@ describe('DesignSystemPage', () => {
         'Pattern — week strip',
         'Pattern — group marks and legend',
         'Pattern — own-calendar busy band and radio cards',
+        'Pattern — server-schedule layer (plugin calendar layers)',
         'Forms — the form primitives',
     ])('renders the "%s" section heading', (heading) => {
         demoMode(true);

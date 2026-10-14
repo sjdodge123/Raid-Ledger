@@ -76,7 +76,7 @@ const LAZY_NAMED = [
   { name: 'games-page', kb: 19.7, why: 'route' },
   { name: 'scheduling-poll-page', kb: 16.29, why: 'route' },
   { name: 'SchedulingWireframesPage', kb: 16.18, why: 'DEMO_MODE dev route' },
-  { name: 'DesignSystemPage', kb: 16.5, why: 'DEMO_MODE dev route; +0.9 KB ROK-1785 TabRow demo (TabRow + useHashTab have no other importer yet, so they land in this chunk until the guild page ships); +0.26 KB ROK-1595 busy band, radio cards, away rows (their components are already shared chunks, so a lazy split measured +0.2 KB, not less)' },
+  { name: 'DesignSystemPage', kb: 16.9, why: 'DEMO_MODE dev route; +0.26 KB ROK-1595 busy band, radio cards, away rows (their components are already shared chunks, so a lazy split measured +0.2 KB, not less); +0.3 KB ROK-1774 §4.22 server-schedule layer frame; +0.9 KB ROK-1785 TabRow demo (TabRow + useHashTab have no other importer yet, so they land in this chunk until the guild page ships)' },
   { name: 'SimplifyWireframesPage', kb: 14.61, why: 'DEMO_MODE dev route' },
   {
     pattern: /^chunk-[A-Z0-9]{8}$/,

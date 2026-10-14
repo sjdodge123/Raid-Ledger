@@ -2678,3 +2678,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-14 — feat/rok-1785-guild-shell (surfaced during fleet test plan 2026-10-14-2218-f15f)
 
 - **low (pre-existing):** `web/src/components/layout/Header.tsx`: at 768px a long community name wraps to 3 lines and a long username overflows the right edge (seen with seeded test users; the branch's Guild link is hidden <1024px and the crowding persists without it). `Suggested:` truncate the community name to one line with an ellipsis and cap the username width at tablet.
+### 2026-10-14 — feat/rok-1774-calendar-layer (surfaced during fleet gate cb8efa0ea336)
+
+- **med (flake, pre-existing, NOT this branch)** `scripts/smoke/lineup-creation.smoke.spec.ts:312` — "Phase countdown display › detail page shows full countdown timer" `[tablet]` FAILED after retries: `expect(locator).toBeVisible() failed … Locator: getByText(/remaining|countdown|time left/i) … element(s) not found`. Same shared-global-lineup race family as the entry at ~:2205 (mobile flake, recovered on retry). This branch touches no lineup code. `Suggested:` scope the countdown test to its own lineup created per run (`createLineupOrRetry` with a deadline) instead of resolving the global active lineup.
+- **low (flaky, recovered on retry in the same run)** desktop `public-pages:62`, `scheduling-anti-vote:210`, `scheduling-leader-floor:225`; mobile `lineup-tiebreaker:460`, `navigation:229`, `scheduling-poll-live-updates:225`; tablet `lineup-voting-composite:286`.

@@ -1,0 +1,55 @@
+/*
+ * ROK-1774 — plugin calendar layer (server-schedule band + tick). Tokens only.
+ * The band is the wireframe HATCH_STYLE as CSS and overrides react-big-calendar's
+ * hex border + opacity .75 on `.rbc-background-event`. Never busy/slot/heat/game colours.
+ */
+.calendar-container .rbc-day-slot .rbc-background-event.rl-layer-window {
+    background: repeating-linear-gradient(
+        135deg,
+        color-mix(in oklab, var(--color-edge-strong) 25%, transparent) 0 6px,
+        transparent 6px 12px
+    );
+    border: 0;
+    border-left: 1px solid var(--color-edge);
+    border-radius: 0;
+    opacity: 1;
+    pointer-events: none;
+    min-height: 0;
+    padding: 0;
+    box-shadow: none;
+    /* Lets the label below react to the band's own height (Codex P2: short bands). */
+    container-type: size;
+}
+
+/*
+ * A band shorter than ~3 label lines keeps its label on ONE line with an
+ * ellipsis (full text in `title` + the sr-only span); a band shorter than one
+ * line hides the visible label entirely rather than clipping it mid-glyph.
+ */
+@container (max-height: 2.75rem) {
+    .rl-layer-window-text {
+        display: block;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+}
+
+@container (max-height: 1rem) {
+    .rl-layer-window-text {
+        display: none;
+    }
+}
+
+/* The band shows its own label; RBC's "6:00 PM – 2:00 AM" row is noise here. */
+.calendar-container .rbc-background-event.rl-layer-window .rbc-event-label {
+    display: none;
+}
+
+/*
+ * Ticks sit above events (week/day cards use z-index ≤ 2) and above the
+ * current-time indicator (z-index 3) so a glyph tooltip is never covered.
+ */
+.rl-layer-tick {
+    z-index: 5;
+}

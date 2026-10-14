@@ -151,6 +151,9 @@ export const DesignSystemPage = lazyWithRetry(() =>
 export const SchedulingWireframesPage = lazyWithRetry(() =>
     import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
 );
+export const ServerScheduleWireframesPage = lazyWithRetry(() =>
+    import('./dev/server-schedule-wireframes/ServerScheduleWireframesPage').then((m) => ({ default: m.ServerScheduleWireframesPage })),
+);
 /** ROK-1661 bare viewport probe; `Layout.tsx` renders it with no shell. */
 export const ViewportProbePage = lazyWithRetry(() =>
     import('./dev/ViewportProbePage').then((m) => ({ default: m.ViewportProbePage })),
