@@ -1,7 +1,7 @@
 /**
  * ROK-1785 — pure helpers for the guild page roster, tabs and hero.
  */
-import type { CharacterRole, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
+import type { CharacterRole, GuildEditor, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
 
 /** Role label + the existing role colour class (`web/src/index.css` `.role-*`). */
 export const ROLE_META: Record<CharacterRole, { label: string; cls: string }> = {
@@ -58,4 +58,10 @@ export function delegableRanks(page: GuildPage): { rankIndex: number; name: stri
 /** Members staff may delegate to: everyone, the Guild Master included (rank 0 is not implicit). */
 export function delegableMembers(page: GuildPage): GuildMemberRow[] {
     return page.ranks.flatMap((r) => r.members);
+}
+
+/** True once a rank-0 (Guild Master) member holds a grant — directly, or via a rank grant covering rank 0. */
+export function gmIsEditor(page: GuildPage, editors: readonly GuildEditor[]): boolean {
+    const gmIds = new Set(page.ranks.filter((r) => r.rankIndex === 0).flatMap((r) => r.members.map((m) => m.memberId)));
+    return editors.some((e) => (e.kind === 'rank' ? e.rankIndex === 0 : e.guildMemberId !== null && gmIds.has(e.guildMemberId)));
 }

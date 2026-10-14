@@ -42,10 +42,10 @@ const RANK_EDITOR: GuildEditor = {
 let editorCalls = 0;
 let posts: unknown[] = [];
 
-function serve(page: GuildPageDto | null, status = 200): void {
+function serve(page: GuildPageDto | null, status = 200, editors: GuildEditor[] = [RANK_EDITOR]): void {
     server.use(
         http.get(BASE, () => (page ? HttpResponse.json(page) : HttpResponse.json({ message: 'Forbidden' }, { status }))),
-        http.get(`${BASE}/editors`, () => { editorCalls += 1; return HttpResponse.json({ editors: [RANK_EDITOR] }); }),
+        http.get(`${BASE}/editors`, () => { editorCalls += 1; return HttpResponse.json({ editors }); }),
         http.post(`${BASE}/editors`, async ({ request }) => {
             posts.push(await request.json());
             return HttpResponse.json({ ...RANK_EDITOR, id: 12, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 3, memberName: 'Nolinkadin' });
@@ -122,5 +122,15 @@ describe('GuildPage (ROK-1785)', () => {
         await userEvent.selectOptions(within(panel).getByTestId('guild-editor-member-select'), '3');
         await userEvent.click(at(within(panel).getAllByRole('button', { name: 'Add editor' }), 1));
         await waitFor(() => expect(posts).toEqual([{ kind: 'member', guildMemberId: 3 }]));
+    });
+
+    it('drops the "add your Guild Master" hint once the GM (rank 0) holds a member grant', async () => {
+        const gmGrant: GuildEditor = { ...RANK_EDITOR, id: 13, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 1, memberName: 'Grimtusk' };
+        serve(makePage(true), 200, [RANK_EDITOR, gmGrant]);
+        renderPage();
+        const panel = await screen.findByTestId('guild-editors-panel');
+        await userEvent.click(within(panel).getByText('Page editors'));
+        await waitFor(() => expect(within(panel).getAllByTestId('guild-editor-chip')).toHaveLength(2));
+        expect(within(panel).queryByTestId('guild-editors-gm-hint'), 'the GM is already an editor, so the hint must hide').toBeNull();
     });
 });

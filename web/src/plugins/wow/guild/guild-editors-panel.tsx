@@ -14,6 +14,7 @@ import { RoleBadge } from '../../../components/ui/role-badge';
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 import { Card } from './guild-bits';
 import { AddMemberEditor, AddRankEditor } from './guild-editor-forms';
+import { gmIsEditor } from './guild-roster.helpers';
 import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from './use-guild';
 
 /** Rank 0 is not an implicit editor: staff grant the GM explicitly. */
@@ -60,7 +61,7 @@ function DelegatedEditors({ page }: { page: GuildPage }): JSX.Element {
     return (
         <div className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-foreground">Delegated</h3>
-            <p className="text-sm text-secondary" data-testid="guild-editors-gm-hint">{GM_HINT}</p>
+            {!gmIsEditor(page, list) && <p className="text-sm text-secondary" data-testid="guild-editors-gm-hint">{GM_HINT}</p>}
             <ul aria-label="Page editors" className="flex flex-wrap gap-2">
                 {list.map((e) => <EditorChip key={e.id} editor={e} disabled={pending} onRemove={() => remove.mutate(e.id)} />)}
             </ul>
