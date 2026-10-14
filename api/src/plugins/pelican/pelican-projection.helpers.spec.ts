@@ -167,18 +167,18 @@ describe('projectSchedules — windows (D6/D7, ruling 2)', () => {
   });
 });
 
-describe('projectSchedules — timing', () => {
-  const localHour = (iso: string): number =>
-    Number(
-      new Intl.DateTimeFormat('en-US', {
-        timeZone: NY,
-        hour: 'numeric',
-        hourCycle: 'h23',
-      }).format(new Date(iso)),
-    );
-  const markerTimes = (r: ReturnType<typeof project>): string[] =>
-    r.items.flatMap((i) => (i.kind === 'marker' ? [i.at] : []));
+const localHour = (iso: string): number =>
+  Number(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: NY,
+      hour: 'numeric',
+      hourCycle: 'h23',
+    }).format(new Date(iso)),
+  );
+const markerTimes = (r: ReturnType<typeof project>): string[] =>
+  r.items.flatMap((i) => (i.kind === 'marker' ? [i.at] : []));
 
+describe('projectSchedules — DST', () => {
   it.each([
     [
       'DST end',
@@ -210,7 +210,9 @@ describe('projectSchedules — timing', () => {
       expect(at.map(localHour)).toEqual([4, 4, 4]);
     },
   );
+});
 
+describe('projectSchedules — offset and default tz', () => {
   it('applies the (cumulative) effect offset exactly once', () => {
     const r = project(
       [sched('0 4 * * *', 'restart', { effectOffsetS: 300 })],
@@ -241,7 +243,7 @@ describe('projectSchedules — timing', () => {
   });
 });
 
-describe('projectSchedules — filtering, cap, skips', () => {
+describe('projectSchedules — filtering', () => {
   const day = ['2026-10-14T00:00:00Z', '2026-10-16T00:00:00Z'] as const;
 
   it('inactive schedules produce nothing', () => {
