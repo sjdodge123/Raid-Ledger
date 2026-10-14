@@ -22,3 +22,7 @@ export const PELICAN_PROVIDER_LABEL = 'Pelican';
 export const PELICAN_SCHEDULE_CONCURRENCY = 4;
 /** Stored schedule names are cut to this length (mirrors server names). */
 export const PELICAN_SCHEDULE_NAME_MAX = 200;
+/** At most this many in-range schedule occurrences per server per calendar request (ROK-1096 D5). */
+export const PELICAN_PROJECTION_CAP = 500;
+/** A stored `next_run_at` within this of a cron occurrence counts as one (ROK-1096 D10). */
+export const PELICAN_TZ_TOLERANCE_MS = 60_000;
