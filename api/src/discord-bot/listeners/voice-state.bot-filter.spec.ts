@@ -88,7 +88,9 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
     // immediate spawn, where the roster skips it. That return used to be
     // silent, which hid why the series quick-play smoke never saw an event.
     it('bot-only channel at threshold with confirmed bound game traces no-human-members and mints nothing', async () => {
-      h = await setupRok1445Harness(gameBinding({ config: { minPlayers: 1, allowJustChatting: true } }));
+      h = await setupRok1445Harness(
+        gameBinding({ config: { minPlayers: 1, allowJustChatting: true } }),
+      );
 
       await h.joinMember({ id: 'bot9', ...BOUND_GAME, bot: true });
 
@@ -113,7 +115,9 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
      * still reach suppression — so only the bot path can reach the mint.
      */
     async function degradedEventThenAllConfirmed(): Promise<void> {
-      h = await setupRok1445Harness(gameBinding({ config: { minPlayers: 2, allowJustChatting: true } }));
+      h = await setupRok1445Harness(
+        gameBinding({ config: { minPlayers: 2, allowJustChatting: true } }),
+      );
       await h.joinMember({ id: 'u1', gameId: null });
       await h.joinMember({ id: 'u2', gameId: null });
       await h.advanceSpawnDelay();
