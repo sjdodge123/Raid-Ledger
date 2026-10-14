@@ -1,9 +1,13 @@
+import { CharacterGuildBadge } from './character-guild-badge';
+
 const FACTION_STYLES: Record<string, string> = {
     alliance: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
     horde: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
 interface CharacterDetailHeaderBadgesProps {
+    /** ROK-1785: drives the guild badge; absent in older callers. */
+    characterId?: string;
     faction: string | null;
     itemLevel: number | null;
     equippedItemLevel: number | null;
@@ -32,11 +36,12 @@ function ArmoryLinkBadge({ profileUrl }: { profileUrl: string }) {
 }
 
 export function CharacterDetailHeaderBadges({
-    faction, itemLevel, equippedItemLevel, lastSyncedAt, profileUrl,
+    characterId, faction, itemLevel, equippedItemLevel, lastSyncedAt, profileUrl,
 }: CharacterDetailHeaderBadgesProps) {
     return (
         <>
             {faction && <FactionBadge faction={faction} />}
+            {characterId && <CharacterGuildBadge characterId={characterId} />}
             {itemLevel && (
                 <div className="text-sm">
                     <span className="text-muted">Item Level </span>

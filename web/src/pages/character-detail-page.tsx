@@ -169,7 +169,7 @@ function CharacterHeader({ character, isOwner, isArmoryImported, isAdminViewer }
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-3 flex-wrap">
                         <h1 className="text-2xl font-bold text-foreground">{character.name}</h1>
-                        <PluginSlot name="character-detail:header-badges" context={{ faction: character.faction, itemLevel: character.itemLevel, equippedItemLevel: character.equipment?.equippedItemLevel ?? null, lastSyncedAt: character.lastSyncedAt, profileUrl: character.profileUrl }} />
+                        <PluginSlot name="character-detail:header-badges" context={{ characterId: character.id, faction: character.faction, itemLevel: character.itemLevel, equippedItemLevel: character.equipment?.equippedItemLevel ?? null, lastSyncedAt: character.lastSyncedAt, profileUrl: character.profileUrl }} />
                         <CharacterRoleBadge character={character} isOwner={isOwner} />
                     </div>
                     <CharacterMeta character={character} />

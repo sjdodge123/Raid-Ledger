@@ -20,7 +20,17 @@ export type PluginSlotName =
     | 'admin-settings:integration-cards'
     | 'admin-settings:plugin-content'
     | 'profile:character-actions'
-    | 'character-card:badges';
+    | 'character-card:badges'
+    /** Desktop header links after the core NAV_LINKS (ROK-1785); context `{ pathname }`. Signed-in only. */
+    | 'nav:primary-links'
+    /** First block of the phone More drawer (ROK-1785); context `{ onClose }`. Signed-in only. */
+    | 'nav:drawer-top'
+    /** Items at the top of the header user (avatar) menu, shown from md (ROK-1785); context `{ onClose }`. Signed-in only. */
+    | 'user-menu:items'
+    /** Cards above New Members on /players (ROK-1785); no context. */
+    | 'players:header-cards'
+    /** Plugin sections on the game detail page (ROK-1785); context `{ gameId, gameSlug }`. */
+    | 'game-detail:sections';
 
 export interface PluginBadgeMeta {
     /** Emoji string, or image URL (starting with "/" or "http") */

@@ -12,6 +12,7 @@ import { RoleBadge } from '../ui/role-badge';
 import { useFocusTrap } from '../../hooks/use-focus-trap';
 import { SearchInput } from '../ui/search-input';
 import { nativeFetch } from '../../lib/api/native-fetch';
+import { PluginSlot } from '../../plugins';
 
 interface ImpersonateUser {
     id: number;
@@ -206,6 +207,7 @@ function DropdownContent({ user, isImpersonating, onClose, onLogout, onExitImper
         <div ref={trapRef} role="menu" className="absolute right-0 mt-2 w-56 bg-surface border border-edge rounded-lg shadow-xl z-50">
             <ProfileLink username={user.username} role={user.role} isImpersonating={isImpersonating} onClose={onClose} userId={user.id} />
             <div className="py-1">
+                <PluginSlot name="user-menu:items" context={{ onClose }} />
                 <MySettingsLink onClose={onClose} />
                 {isImpersonating && <ExitImpersonationItem onExit={onExitImpersonation} />}
                 {isAdmin(user) && !isImpersonating && <AdminSettingsLink onClose={onClose} />}

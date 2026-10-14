@@ -2,6 +2,11 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
+import { GuildAccessService } from './guilds/guild-access.service';
+import { GuildEditorGuard } from './guilds/guild-editor.guard';
+import { GuildsController } from './guilds/guilds.controller';
+import { GuildPageService } from './guilds/guild-page.service';
+import { GuildEditorsService } from './guilds/guild-editors.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
@@ -53,6 +58,7 @@ import { CharacterQuestsService } from './character-quests.service';
     AddonImportController,
     AddonImportAdminController,
     CharacterQuestsController,
+    GuildsController,
   ],
   providers: [
     BlizzardService,
@@ -80,6 +86,10 @@ import { CharacterQuestsService } from './character-quests.service';
     ForeverDisplayEquipmentService,
     ForeverDisplayTalentsService,
     CharacterQuestsService,
+    GuildAccessService,
+    GuildEditorGuard,
+    GuildPageService,
+    GuildEditorsService,
   ],
   exports: [
     BlizzardService,
@@ -88,6 +98,7 @@ import { CharacterQuestsService } from './character-quests.service';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
+    GuildAccessService,
   ],
 })
 export class WowCommonModule implements OnModuleInit, OnModuleDestroy {

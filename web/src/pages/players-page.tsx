@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useInfinitePlayers } from '../hooks/use-players';
 import { usePlayerFilters } from '../hooks/use-player-filters';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
+import { PluginSlot } from '../plugins';
 import { NewMembersSection } from '../components/players/NewMembersSection';
 import { MobilePlayerCard } from '../components/players/mobile-player-card';
 import { PlayersMobileToolbar } from '../components/players/players-mobile-toolbar';
@@ -88,6 +89,7 @@ export function PlayersPage() {
                     <FilterPanel activeFilterCount={activeFilterCount} onClearAll={clearAll} isOpen={isOpen} onToggle={toggleOpen}>
                         <PlayerFilters filters={filters} setFilter={setFilter} />
                     </FilterPanel>
+                    <PluginSlot name="players:header-cards" />
                     {activeFilterCount === 0 && !debouncedSearch && <NewMembersSection />}
                     <DesktopSearchInput search={search} setSearch={setSearch} />
                     {isLoading ? <PlayersLoadingSkeleton /> : <PlayerGrid players={players} debouncedSearch={debouncedSearch} />}
