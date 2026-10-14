@@ -44,6 +44,16 @@ export class CronManagerService implements OnApplicationBootstrap {
   }
 
   /**
+   * `PluginRegistryService.install()` inserts the row already active and emits
+   * only INSTALLED (never ACTIVATED), so a runtime install must register the
+   * plugin's jobs here too — otherwise they wait for the next API restart.
+   */
+  @OnEvent(PLUGIN_EVENTS.INSTALLED)
+  handlePluginInstalled(payload: { slug: string }): void {
+    this.handlePluginActivated(payload);
+  }
+
+  /**
    * Register cron jobs from a CronRegistrar adapter into the SchedulerRegistry.
    * Skips jobs that are already registered (idempotent).
    */

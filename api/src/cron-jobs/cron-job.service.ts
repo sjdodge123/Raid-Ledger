@@ -104,6 +104,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   @OnEvent(PLUGIN_EVENTS.ACTIVATED)
   handlePluginActivated(): void {
+    if (this.pluginActivatedTimer) clearTimeout(this.pluginActivatedTimer);
     this.pluginActivatedTimer = setTimeout(() => {
       this.pluginActivatedTimer = null;
       this.syncJobs().catch((err) =>
@@ -112,6 +113,16 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
         ),
       );
     }, 1_000);
+  }
+
+  /**
+   * `PluginRegistryService.install()` inserts the row already active and emits
+   * only INSTALLED, so a runtime install must sync its jobs into the admin
+   * table here too — otherwise they stay invisible until the next restart.
+   */
+  @OnEvent(PLUGIN_EVENTS.INSTALLED)
+  handlePluginInstalled(): void {
+    this.handlePluginActivated();
   }
 
   /** Sync all registered cron jobs into the DB. */
