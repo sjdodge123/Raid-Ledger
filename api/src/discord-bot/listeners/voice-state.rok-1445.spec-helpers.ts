@@ -144,7 +144,7 @@ export function gameBinding(
     gameId: 1,
     gameName: 'Rise of Kingdoms',
     recurrenceGroupId: null,
-    config: { minPlayers: 2 },
+    config: { minPlayers: 2, allowJustChatting: true },
     ...overrides,
   };
 }
