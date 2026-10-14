@@ -8,6 +8,7 @@ import {
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
 import {
+  countsTowardBinding,
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
@@ -37,8 +38,12 @@ export async function handleGameBindingJoin(
   dm: DiscordMemberInfo,
   spawnFns?: GameSpawnFns,
   isBot = false,
+  guildMember?: GuildMember,
 ): Promise<void> {
-  if (!isBot && (await trackAndJoinExisting(deps, channelId, binding, dm)))
+  if (
+    !isBot &&
+    (await trackAndJoinExisting(deps, channelId, binding, dm, guildMember))
+  )
     return;
   await suppressOrCheckThreshold(deps, channelId, binding, spawnFns);
 }
@@ -51,27 +56,30 @@ export async function handleGameBindingJoin(
  * have keyed it under `bindingId:null`. Look it up regardless of game key and
  * reconcile the join into that event (keep it as-is — no game upgrade) so a
  * later game confirmation never mints a second, sticky-game event.
+ *
+ * ROK-1782 (b): a member not playing a fixed-game monitor's game (Just
+ * Chatting off) is neither tracked on that game nor rostered into its event.
  */
 async function trackAndJoinExisting(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
   dm: DiscordMemberInfo,
+  guildMember?: GuildMember,
 ): Promise<boolean> {
+  const plays = await countsTowardBinding(deps, binding, guildMember);
   const rlUser = await deps.usersService.findByDiscordId(dm.discordUserId);
   const uid = rlUser?.id ?? null;
-  startVoiceGameTracking(
-    deps,
-    dm.discordUserId,
-    binding.gameId,
-    binding.gameName ?? '',
-    uid,
-  );
+  if (plays) {
+    const name = binding.gameName ?? '';
+    startVoiceGameTracking(deps, dm.discordUserId, binding.gameId, name, uid);
+  }
   const existing = deps.adHocEventService.getActiveBindingEventGameId(
     binding.bindingId,
   );
   if (!existing) return false;
-  await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
+  if (plays)
+    await joinExistingEvent(deps, channelId, binding, dm, uid, existing.gameId);
   return true;
 }
 

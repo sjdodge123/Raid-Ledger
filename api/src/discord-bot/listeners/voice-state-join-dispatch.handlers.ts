@@ -8,15 +8,19 @@ import type { GuildMember } from 'discord.js';
 import type { Logger } from '@nestjs/common';
 import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import {
+  buildDiscordMember,
+  isLobbyBinding,
   trackChannelMember,
   type DiscordMemberInfo,
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
+  handlePresenceChange,
   markLobbyDirty,
   trackScheduledEventJoin,
   type VoiceHandlerDeps,
 } from './voice-state.handlers';
+import { yieldMonitorToLobby } from './voice-state-gate.handlers';
 import {
   handleGameBindingJoin,
   handleGeneralLobbyJoin,
@@ -81,9 +85,47 @@ export async function handleChannelJoin(
   // counting/roster paths themselves.
   if (!isBotMember(gm))
     trackChannelMember(ctx.channelMembers, chId, dm.discordUserId);
+  // ROK-1782 ruling (a): a general lobby on the channel wins over its monitors.
+  const lobbyWins = bindings.some(isLobbyBinding);
   for (const b of bindings) {
-    await dispatchBindingJoin(ctx, chId, b, dm, gm);
+    await dispatchBindingJoin(ctx, chId, b, dm, gm, lobbyWins);
   }
+}
+
+/**
+ * ROK-1782 ruling (c): evaluate a presence update against EVERY binding on the
+ * channel, not just the first row. Lobbies run the game-switch path; a
+ * fixed-game monitor (when no lobby outranks it) re-runs its join decision for
+ * a member who just started its game and is not yet in its event.
+ */
+export async function handlePresenceUpdate(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  gm: GuildMember,
+): Promise<void> {
+  const bindings = await ctx.resolveAllBindings(chId);
+  const lobbyWins = bindings.some(isLobbyBinding);
+  for (const b of bindings) {
+    if (isLobbyBinding(b)) await handlePresenceChange(ctx.deps, gm.id, b, gm);
+    else if (!lobbyWins) await recheckMonitorOnPresence(ctx, chId, b, gm);
+  }
+}
+
+/** Re-run a fixed-game monitor's join for a member now playing its game. */
+async function recheckMonitorOnPresence(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gm: GuildMember,
+): Promise<void> {
+  if (b.gameId == null || isBotMember(gm)) return;
+  const detected = await ctx.presenceDetector.detectGameForMember(gm);
+  if (detected.gameId !== b.gameId) return;
+  const svc = ctx.deps.adHocEventService;
+  const active = svc.getActiveBindingEventGameId(b.bindingId);
+  const state = active && svc.getActiveState(b.bindingId, active.gameId);
+  if (state && state.memberSet.has(gm.id)) return;
+  await dispatchBindingJoin(ctx, chId, b, buildDiscordMember(gm.id, gm), gm);
 }
 
 /**
@@ -107,30 +149,39 @@ async function dispatchBindingJoin(
   b: ResolvedBinding,
   dm: DiscordMemberInfo,
   gm?: GuildMember,
+  lobbyWins = false,
 ): Promise<void> {
-  if (b.bindingPurpose === 'general-lobby') {
-    await dispatchLobbyJoin(ctx, chId, b, dm, gm);
-  } else {
-    await handleGameBindingJoin(
-      ctx.deps,
-      chId,
-      b,
-      dm,
-      {
-        scheduleSpawn: () =>
-          scheduleDelayedSpawn(
-            ctx.deps,
-            chId,
-            b.gameId,
-            b,
-            ctx.timers,
-            SPAWN_DELAY_MS,
-          ),
-        cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
-      },
-      isBotMember(gm),
-    );
-  }
+  if (isLobbyBinding(b)) return dispatchLobbyJoin(ctx, chId, b, dm, gm);
+  if (lobbyWins) return yieldMonitorToLobby(ctx.deps, chId, b);
+  await handleGameBindingJoin(
+    ctx.deps,
+    chId,
+    b,
+    dm,
+    monitorSpawnFns(ctx, chId, b),
+    isBotMember(gm),
+    gm,
+  );
+}
+
+/** Channel-keyed spawn callbacks for a game-voice-monitor binding. */
+function monitorSpawnFns(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+): { scheduleSpawn: () => void; cancelSpawn: () => void } {
+  return {
+    scheduleSpawn: () =>
+      scheduleDelayedSpawn(
+        ctx.deps,
+        chId,
+        b.gameId,
+        b,
+        ctx.timers,
+        SPAWN_DELAY_MS,
+      ),
+    cancelSpawn: () => cancelPendingSpawn(ctx.timers, chId, b.gameId),
+  };
 }
 
 /** Per-(channel, game) spawn callbacks shared by both binding kinds (AC13). */

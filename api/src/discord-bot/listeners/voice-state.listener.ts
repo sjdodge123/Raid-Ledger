@@ -37,12 +37,10 @@ import {
   resolveAllBindings,
   type ResolvedBinding,
 } from './voice-state.helpers';
-import {
-  handlePresenceChange,
-  type VoiceHandlerDeps,
-} from './voice-state.handlers';
+import { type VoiceHandlerDeps } from './voice-state.handlers';
 import {
   handleChannelJoin,
+  handlePresenceUpdate,
   type JoinHandlerCtx,
 } from './voice-state-join-dispatch.handlers';
 import {
@@ -270,7 +268,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
         userId,
         this.timers,
         this.adHocEventService,
-        (ch) => this.resolveBinding(ch),
+        (ch) => this.resolveAllBindings(ch),
       );
       // ROK-1352: ephemeral channel may now be empty post-event → idle-delete.
       await this.ephemeralIdle
@@ -300,11 +298,8 @@ export class VoiceStateListener implements OnApplicationShutdown {
 
   private async onPresenceUpdate(np: Presence): Promise<void> {
     const channelId = this.userChannelMap.get(np.userId);
-    if (!channelId) return;
-    const binding = await this.resolveBinding(channelId);
-    if (!binding || binding.bindingPurpose !== 'general-lobby' || !np.member)
-      return;
-    await handlePresenceChange(this.deps, np.userId, binding, np.member);
+    if (!channelId || !np.member) return;
+    await handlePresenceUpdate(this.joinCtx, channelId, np.member);
   }
 
   private get joinCtx(): JoinHandlerCtx {

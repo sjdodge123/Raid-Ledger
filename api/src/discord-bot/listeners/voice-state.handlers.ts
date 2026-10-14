@@ -14,6 +14,7 @@ import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import {
   buildMemberInfo,
+  requiresConfirmedPlay,
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
@@ -322,7 +323,9 @@ async function switchClearsThreshold(
  * Get game-filtered count for threshold checking (ROK-697).
  *
  * `counted` includes presence-null members (invisible/console raiders count
- * toward minPlayers). `confirmedCount` (ROK-1390) counts ONLY members whose
+ * toward minPlayers) ONLY when the binding allows Just Chatting — ROK-1782
+ * ruling (b): otherwise a fixed-game monitor counts confirmed players only, so
+ * `counted === confirmedCount` and the ROK-1394 degrade is unreachable. `confirmedCount` (ROK-1390) counts ONLY members whose
  * detected game positively matches the bound game — the series spawn guard
  * uses it to refuse minting a stored game off pure presence-null counting.
  *
@@ -354,6 +357,8 @@ export async function getGameFilteredCount(
     const detected = await deps.presenceDetector.detectGameForMember(member);
     if (detected.gameId !== null && detected.gameId !== binding.gameId)
       continue;
+    // ROK-1782 (b): presence-null members count only when Just Chatting is on.
+    if (detected.gameId === null && requiresConfirmedPlay(binding)) continue;
     counted++;
     if (detected.gameId === null) allConfirmed = false;
     else confirmedCount++;

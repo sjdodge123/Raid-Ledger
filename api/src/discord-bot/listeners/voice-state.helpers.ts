@@ -66,6 +66,22 @@ export function buildDiscordMember(
   };
 }
 
+/** True for a general-lobby binding (per-game presence detection). */
+export function isLobbyBinding(binding: ResolvedBinding): boolean {
+  return binding.bindingPurpose === 'general-lobby';
+}
+
+/**
+ * ROK-1782 ruling (b): a fixed-game Activity Monitor counts and rosters ONLY
+ * members positively playing its game, unless the binding allows Just Chatting
+ * (which keeps the ROK-697 presence-null counting + ROK-1394 degrade). A
+ * null-game monitor (ROK-1415) has no game to confirm, so it is exempt.
+ */
+export function requiresConfirmedPlay(binding: ResolvedBinding): boolean {
+  if (binding.gameId == null) return false;
+  return !(binding.config?.allowJustChatting ?? false);
+}
+
 /** Resolve a voice channel from the guild. */
 export function resolveVoiceChannel(
   clientService: DiscordBotClientService,

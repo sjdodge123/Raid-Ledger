@@ -100,6 +100,26 @@ export async function suppressOrCheckThreshold(
   );
 }
 
+/**
+ * ROK-1782 ruling (a): on a channel that also has a general-lobby binding the
+ * monitor never tracks, counts or spawns — the lobby's per-game groups decide.
+ * The ROK-959 suppression step still runs so a live scheduled event on a
+ * sibling binding keeps getting its `extended_until` window bumped.
+ */
+export async function yieldMonitorToLobby(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+): Promise<void> {
+  const clearance = await deps.adHocEventService.ensureNotSuppressed(
+    binding.bindingId,
+    binding.gameId,
+    channelId,
+  );
+  const outcome = clearance ? 'yielded-to-lobby' : 'suppressed-scheduled';
+  traceGate(deps.logger, outcome, gateCtx(binding, channelId));
+}
+
 /** Check threshold and spawn for a game-specific binding. */
 async function checkGameBindingThreshold(
   deps: VoiceHandlerDeps,
