@@ -74,9 +74,17 @@ export const GuildPageSchema = z
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;
 
+/** One of the viewer's guilds: summary + their best (lowest) rank + edit right. */
+export const MyGuildSchema = GuildSummarySchema.extend({
+  rankIndex: z.number().int().nullable(),
+  rankName: z.string().nullable(),
+  canEdit: z.boolean(),
+}).strict();
+export type MyGuild = z.infer<typeof MyGuildSchema>;
+
 /** `GET /plugins/wow/guilds/mine` — guilds the viewer is a member of. */
 export const MyGuildsSchema = z
-  .object({ guilds: z.array(GuildSummarySchema) })
+  .object({ guilds: z.array(MyGuildSchema) })
   .strict();
 export type MyGuilds = z.infer<typeof MyGuildsSchema>;
 
