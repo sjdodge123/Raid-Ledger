@@ -68,7 +68,9 @@ const TaskAttributesSchema = z.object({
   sequence_id: z.number().int(),
   action: z.string(),
   payload: z.string().nullable(),
-  time_offset: z.number().int(),
+  // Per-task delay; the panel caps it at 900 s. Out of range = bad_response
+  // (rows kept) rather than a CHECK violation mid-replace (ROK-1773 D6).
+  time_offset: z.number().int().min(0).max(900),
   is_queued: z.boolean(),
   continue_on_failure: z.boolean(),
 });

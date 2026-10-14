@@ -52,9 +52,11 @@ export const pelicanSchedules = pgTable(
       'pelican_schedules_effect_chk',
       sql`${t.effect} IN ('restart','stop','start','kill','backup','command','mixed')`,
     ),
+    // ROK-1773: Pelican task offsets are cumulative (each task waits its own
+    // time_offset after the previous one) — up to 10 tasks x 900 s, so cap at a day.
     check(
       'pelican_schedules_effect_offset_chk',
-      sql`${t.effectOffsetS} BETWEEN 0 AND 900`,
+      sql`${t.effectOffsetS} BETWEEN 0 AND 86400`,
     ),
   ],
 );
