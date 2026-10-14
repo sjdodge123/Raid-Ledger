@@ -115,4 +115,21 @@ describe('PelicanGameServerProvider.getCalendarItems filtering (ROK-1096)', () =
     const lines = warn.mock.calls.map((c) => String(c[0]));
     expect(lines).toEqual(['Pelican projection skipped server 42: bad_tz']);
   });
+
+  it('logs a tz mismatch at debug, never warn (every member load hits it)', async () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation();
+    const { provider } = build([
+      servableSchedule('0 4 * * *', 'restart', {
+        serverId: 9,
+        serverTimezone: 'UTC',
+        nextRunAt: new Date('2026-10-14T08:00:00Z'),
+      }),
+    ]);
+    await provider.getCalendarItems(RANGE);
+    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([]);
+    expect(debug.mock.calls.map((c) => String(c[0]))).toEqual([
+      'Pelican tz mismatch servers: 9',
+    ]);
+  });
 });

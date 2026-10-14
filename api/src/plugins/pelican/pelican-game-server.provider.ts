@@ -74,8 +74,10 @@ export class PelicanGameServerProvider implements GameServerProvider {
         `Pelican projection truncated servers: ${truncatedServerIds.join(', ')}`,
       );
     }
+    // debug, not warn: this runs on every member calendar load; the admin
+    // panel already surfaces the mismatch (ROK-1096 review).
     if (tzMismatchServerIds.length > 0) {
-      this.logger.warn(
+      this.logger.debug(
         `Pelican tz mismatch servers: ${tzMismatchServerIds.join(', ')}`,
       );
     }
