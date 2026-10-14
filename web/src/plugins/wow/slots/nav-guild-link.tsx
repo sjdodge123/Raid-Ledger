@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import type { MyGuild } from '@raid-ledger/contract';
 import { navClass } from '../../../components/layout/nav-class';
+import { Button } from '../../../components/ui/button';
 import { GuildRows } from './guild-entry-bits';
 import { guildHref, useMyGuilds } from './guild-queries';
 
@@ -29,10 +30,12 @@ function GuildMenu({ guilds, active }: { guilds: MyGuild[]; active: boolean }): 
     useDismiss(ref, isOpen, close);
     return (
         <div ref={ref} className="relative">
-            <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={isOpen} aria-haspopup="true"
-                className={`flex items-center gap-1 ${navClass(active ? 'on' : '', 'on')}`} data-testid="nav-guild-menu-trigger">
-                Guild <ChevronDownIcon className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-            </button>
+            <Button variant="ghost" size="sm" onClick={() => setOpen((o) => !o)} aria-expanded={isOpen} aria-haspopup="true"
+                aria-current={active ? 'page' : undefined} data-testid="nav-guild-menu-trigger">
+                <span className={`flex items-center gap-1 text-base ${navClass(active ? 'on' : '', 'on')}`}>
+                    Guild <ChevronDownIcon className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                </span>
+            </Button>
             {isOpen && (
                 <div role="menu" aria-label="Your guilds" data-testid="nav-guild-menu"
                     className="absolute left-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-lg border border-edge bg-surface shadow-xl">
