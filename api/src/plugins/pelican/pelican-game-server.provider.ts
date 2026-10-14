@@ -80,7 +80,8 @@ export class PelicanGameServerProvider implements GameServerProvider {
       );
     }
     for (const s of skipped) {
-      const schedule = s.scheduleId !== undefined ? ` schedule ${s.scheduleId}` : '';
+      const schedule =
+        s.scheduleId !== undefined ? ` schedule ${s.scheduleId}` : '';
       this.logger.warn(
         `Pelican projection skipped server ${s.serverId}${schedule}: ${s.reason}`,
       );

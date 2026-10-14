@@ -11,6 +11,10 @@ import {
   type PelicanServersAdminRepository,
 } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
+import type {
+  PelicanTzCheckService,
+  TzCheckServer,
+} from './pelican-tz-check.service';
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
 const FRESH = new Date('2026-10-13T11:59:00.000Z');
@@ -33,22 +37,30 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
   return row;
 }
 
-function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
+function build(
+  result: PelicanMappingUpdateResult = { kind: 'not_found' },
+  mismatched: number[] = [],
+) {
   const listForAdmin = jest.fn(() => Promise.resolve([makeRow()]));
   const updateMapping = jest.fn<
     Promise<PelicanMappingUpdateResult>,
     [number, PelicanServerUpdate]
   >(() => Promise.resolve(result));
   const repo = { listForAdmin, updateMapping };
+  const mismatchedServerIds = jest.fn<
+    Promise<Set<number>>,
+    [readonly TzCheckServer[]]
+  >(() => Promise.resolve(new Set(mismatched)));
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
+    { mismatchedServerIds } as unknown as PelicanTzCheckService,
   );
-  return { controller, listForAdmin, updateMapping };
+  return { controller, listForAdmin, updateMapping, mismatchedServerIds };
 }
 
 describe('toAdminServerRowDto (ROK-1094)', () => {
   it('maps a fresh running row to the contract shape', () => {
-    const dto = toAdminServerRowDto(makeRow(), NOW);
+    const dto = toAdminServerRowDto(makeRow(), NOW, false);
     expect(dto).toEqual({
       id: 4,
       name: 'Valheim',
@@ -61,6 +73,7 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
       lastSyncedAt: FRESH.toISOString(),
       statusCheckedAt: FRESH.toISOString(),
       missing: false,
+      tzMismatch: false,
     });
     expect(PelicanServerRowSchema.parse(dto)).toEqual(dto);
   });
@@ -81,14 +94,22 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
     ],
   ];
   it.each(cases)('%s', (_label, over, state, suspended) => {
-    const dto = toAdminServerRowDto(makeRow(over), NOW);
+    const dto = toAdminServerRowDto(makeRow(over), NOW, false);
     expect(dto.state).toBe(state);
     expect(dto.isSuspended).toBe(suspended);
   });
 
   it('flags a row with missing_since as missing', () => {
-    const dto = toAdminServerRowDto(makeRow({ missingSince: FRESH }), NOW);
+    const dto = toAdminServerRowDto(
+      makeRow({ missingSince: FRESH }),
+      NOW,
+      false,
+    );
     expect(dto.missing).toBe(true);
+  });
+
+  it('carries the tzMismatch flag it is given (ROK-1096)', () => {
+    expect(toAdminServerRowDto(makeRow(), NOW, true).tzMismatch).toBe(true);
   });
 });
 
@@ -108,6 +129,14 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     const res = await controller.listServers();
     expect(res.data).toHaveLength(1);
     expect(res.data[0]?.id).toBe(4);
+    expect(res.data[0]?.tzMismatch).toBe(false);
+  });
+
+  it('flags listed rows the tz check reports (ROK-1096)', async () => {
+    const { controller, mismatchedServerIds } = build(undefined, [4]);
+    const res = await controller.listServers();
+    expect(mismatchedServerIds).toHaveBeenCalledWith([makeRow()]);
+    expect(res.data[0]?.tzMismatch).toBe(true);
   });
 
   it('rejects an invalid body with 400 before touching the repository', async () => {
@@ -145,5 +174,15 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
       timezone: 'Europe/Berlin',
     });
     expect(res.timezone).toBe('Europe/Berlin');
+  });
+
+  it('re-evaluates tzMismatch for the updated row (ROK-1096 D11)', async () => {
+    const row = makeRow({ timezone: 'America/New_York' });
+    const { controller, mismatchedServerIds } = build({ kind: 'ok', row }, [4]);
+    const res = await controller.updateServer(4, {
+      timezone: 'America/New_York',
+    });
+    expect(mismatchedServerIds).toHaveBeenCalledWith([row]);
+    expect(res.tzMismatch).toBe(true);
   });
 });
