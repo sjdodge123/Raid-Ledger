@@ -210,3 +210,6 @@ export * from './game-identity/index.js';
 export * from './wow-addon-export.schema.js';
 export * from './wow-addon-import.schema.js';
 export * from './ledgerlink-json-schema.js';
+
+// Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
+export * from './guilds.schema.js';
