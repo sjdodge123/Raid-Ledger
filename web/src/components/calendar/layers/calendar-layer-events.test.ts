@@ -55,6 +55,22 @@ describe('splitAtMidnight', () => {
         expect(splitAtMidnight(t, t)).toEqual([]);
         expect(splitAtMidnight(t, new Date('2026-02-10T09:00:00Z'))).toEqual([]);
     });
+
+    it('drops a zero-length segment at midnight so no invisible band is drawn', () => {
+        // Local dates: a window ending a few ms past midnight leaves a sliver segment.
+        const start = new Date(2026, 1, 10, 18, 0, 0);
+        const end = new Date(2026, 1, 11, 0, 0, 0, 500);
+        const segments = splitAtMidnight(start, end);
+        expect(segments.map((s) => [s.start.getTime(), s.end.getTime()])).toEqual([
+            [start.getTime(), new Date(2026, 1, 11).getTime()],
+        ]);
+        expect(segments.every((s) => s.end.getTime() - s.start.getTime() >= 60_000)).toBe(true);
+    });
+
+    it('keeps both segments of a window crossing midnight', () => {
+        const segments = splitAtMidnight(new Date(2026, 1, 10, 18), new Date(2026, 1, 11, 2));
+        expect(segments.map((s) => [s.start.getHours(), s.end.getHours()])).toEqual([[18, 0], [0, 2]]);
+    });
 });
 
 describe('zonedMarkers + markersForColumn', () => {

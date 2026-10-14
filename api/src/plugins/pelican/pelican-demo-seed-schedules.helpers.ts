@@ -1,6 +1,8 @@
 /**
  * Demo schedules for the DEMO_MODE Pelican seed (ROK-1096 D15): a start/stop
- * window + a nightly restart on the running+mapped server, and one restart
+ * window + a nightly restart on the running+mapped server — plus (ROK-1774)
+ * a backup in the restart's minute (coincident markers) and a short midday
+ * window (short-window label) — and one restart
  * whose stored `next_run_at` deliberately disagrees with its server's
  * timezone override so the fleet UI plan can show (and fix) the warning.
  */
@@ -15,6 +17,11 @@ export const DEMO_TZ_MISMATCH_FIX = 'America/New_York';
 const NIGHTLY_RESTART = '0 4 * * *';
 /** Cumulative seconds from the schedule firing to the restart task. */
 export const DEMO_RESTART_OFFSET_S = 300;
+/**
+ * The backup lands 30 s after the restart: the same local minute, so the grid
+ * folds both into one glyph, but later, so the restart stays the group head.
+ */
+export const DEMO_BACKUP_OFFSET_S = 330;
 
 interface DemoScheduleSpec {
   name: string;
@@ -36,6 +43,25 @@ const RUNNING_SCHEDULES: readonly DemoScheduleSpec[] = [
     expr: NIGHTLY_RESTART,
     effect: 'restart',
     effectOffsetS: DEMO_RESTART_OFFSET_S,
+  },
+  // ROK-1774: appended after the originals so their panel ids are unchanged.
+  {
+    name: 'Nightly backup',
+    expr: NIGHTLY_RESTART,
+    effect: 'backup',
+    effectOffsetS: DEMO_BACKUP_OFFSET_S,
+  },
+  {
+    name: 'Midday open',
+    expr: '0 13 * * *',
+    effect: 'start',
+    effectOffsetS: 0,
+  },
+  {
+    name: 'Midday close',
+    expr: '40 13 * * *',
+    effect: 'stop',
+    effectOffsetS: 0,
   },
 ];
 
@@ -68,7 +94,10 @@ function toRow(
   };
 }
 
-/** Start 18:00 + stop 02:00 + restart 04:00 (+5 min), in the server's own zone. */
+/**
+ * Start 18:00 + stop 02:00 + restart 04:00 (+5 min) + backup 04:00 (+5.5 min)
+ * + a 13:00–13:40 window, in the server's own zone.
+ */
 export function runningServerSchedules(serverId: number): NewPelicanSchedule[] {
   return RUNNING_SCHEDULES.map((spec, i) => toRow(serverId, i + 1, spec, null));
 }

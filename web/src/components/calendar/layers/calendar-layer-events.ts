@@ -37,14 +37,21 @@ export function isLayerEvent<T extends object>(event: T | LayerWindowEvent): eve
     return 'layer' in event;
 }
 
-/** Split [start, end) at each local midnight of the dates' own timezone. */
+/** RBC lays the grid out in whole minutes, so a shorter segment draws zero-height. */
+const MIN_SEGMENT_MS = 60_000;
+
+/**
+ * Split [start, end) at each local midnight of the dates' own timezone.
+ * Segments shorter than a minute are dropped: RBC renders them as an
+ * invisible zero-height band at midnight.
+ */
 export function splitAtMidnight(start: Date, end: Date): Array<{ start: Date; end: Date }> {
     const out: Array<{ start: Date; end: Date }> = [];
     let cursor = start;
-    while (cursor < end && out.length < MAX_SEGMENTS) {
+    for (let guard = 0; cursor < end && guard < MAX_SEGMENTS; guard += 1) {
         const midnight = addDays(startOfDay(cursor), 1);
         const segEnd = midnight < end ? midnight : end;
-        out.push({ start: cursor, end: segEnd });
+        if (segEnd.getTime() - cursor.getTime() >= MIN_SEGMENT_MS) out.push({ start: cursor, end: segEnd });
         cursor = segEnd;
     }
     return out;
