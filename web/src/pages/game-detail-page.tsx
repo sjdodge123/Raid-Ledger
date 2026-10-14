@@ -16,6 +16,7 @@ import { CommunityActivitySection } from './game-detail/CommunityActivitySection
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GameBanner } from './game-detail/GameBanner';
+import { PluginSlot } from '../plugins';
 import { LfgToggleButton } from './game-detail/lfg-toggle-button';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
 import { useGamePricing } from '../hooks/use-games-discover';
@@ -94,6 +95,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </div>
             )}
+            {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
             <CoopSupportAndActivity game={game} gameId={gameId} />
             {gameEvents && gameEvents.length > 0 && <UpcomingEventsSection events={gameEvents} igdbId={igdbId} navigate={navigate} />}
             <GameMediaSections game={game} streamsData={streamsData} />

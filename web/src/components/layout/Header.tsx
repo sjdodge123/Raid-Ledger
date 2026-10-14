@@ -7,6 +7,8 @@ import { useSystemStatus } from '../../hooks/use-system-status';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { API_BASE_URL } from '../../lib/config';
 import { Z_INDEX } from '../../lib/z-index';
+import { PluginSlot } from '../../plugins';
+import { navClass } from './nav-class';
 
 interface HeaderProps {
     /** Called when the mobile hamburger button is tapped. */
@@ -28,15 +30,12 @@ const NAV_LINKS = [
     { to: '/players', label: 'Players' },
 ];
 
-function navClass(current: string, target: string) {
-    return `font-medium transition-colors ${current === target ? 'text-emerald-400' : 'text-secondary hover:text-foreground'}`;
-}
-
 function DesktopNav({ pathname, user }: { pathname: string; user: User | null }) {
     return (
         <>
             <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
                 {NAV_LINKS.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
+                {user && <PluginSlot name="nav:primary-links" context={{ pathname }} />}
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />

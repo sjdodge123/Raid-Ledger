@@ -15,6 +15,7 @@ import { GameTimeCheckSheet } from '../../pages/scheduling/GameTimeCheckSheet';
 import { PhoneWeekCheckStep } from '../features/game-time/phone/PhoneWeekCheckStep';
 import { PROFILE_HOURS } from '../features/game-time/phone/phone-week-check.helpers';
 import { nativeFetch } from '../../lib/api/native-fetch';
+import { PluginSlot } from '../../plugins';
 
 interface MoreDrawerProps {
     isOpen: boolean;
@@ -243,6 +244,7 @@ function MoreDrawerBody({ s, onClose, onFeedbackClick, onOpenGameTime }: {
 }) {
     return (
         <div className="flex-1 overflow-y-auto">
+            {s.isAuthenticated && <PluginSlot name="nav:drawer-top" context={{ onClose }} />}
             {s.isAuthenticated && s.user && (
                 <UserProfileAccordion user={s.user} avatarUrl={s.avatarUrl} avatarError={s.accordion.avatarError}
                     onAvatarError={() => s.accordion.setAvatarError(true)} expanded={s.accordion.profileExpanded}
