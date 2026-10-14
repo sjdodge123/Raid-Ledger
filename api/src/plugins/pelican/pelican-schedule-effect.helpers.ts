@@ -23,10 +23,12 @@ function isPowerKeyword(payload: string | null): payload is PowerKeyword {
 }
 
 /** Actions that derive their own effect when they are the only kind present. */
-const SINGLE_ACTION_EFFECTS: Readonly<Record<string, GameServerEffect>> = {
-  backup: 'backup',
-  command: 'command',
-};
+/** A `Map`, not an object literal: an upstream action named `constructor` or
+ * `__proto__` must miss here and fall through to `mixed`. */
+const SINGLE_ACTION_EFFECTS: ReadonlyMap<string, GameServerEffect> = new Map([
+  ['backup', 'backup'],
+  ['command', 'command'],
+]);
 
 function bySequence(a: ScheduleTaskInput, b: ScheduleTaskInput): number {
   return a.sequence_id - b.sequence_id || a.id - b.id;
@@ -70,6 +72,6 @@ export function deriveScheduleEffect(
   const kinds = new Set(ordered.map(actionKey));
   const [only] = kinds;
   const single =
-    kinds.size === 1 && only ? SINGLE_ACTION_EFFECTS[only] : undefined;
+    kinds.size === 1 && only ? SINGLE_ACTION_EFFECTS.get(only) : undefined;
   return { effect: single ?? 'mixed', effectOffsetS: firstOffset };
 }

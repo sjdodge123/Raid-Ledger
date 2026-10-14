@@ -78,6 +78,16 @@ const cases: [string, ScheduleTaskInput[], DerivedEffect | null][] = [
     { effect: 'mixed', effectOffsetS: 7 },
   ],
   [
+    'action named constructor is not a prototype hit',
+    [task('constructor', null, 4)],
+    { effect: 'mixed', effectOffsetS: 4 },
+  ],
+  [
+    'action named __proto__ is not a prototype hit',
+    [task('__proto__', null, 6)],
+    { effect: 'mixed', effectOffsetS: 6 },
+  ],
+  [
     'unknown power keyword only',
     [power('hibernate', 3)],
     { effect: 'mixed', effectOffsetS: 3 },
