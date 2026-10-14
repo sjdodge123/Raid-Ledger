@@ -8,6 +8,7 @@ import { IntegrationCard } from '../../../components/admin/IntegrationCard';
 import { usePelicanConfig } from '../hooks/use-pelican-config';
 import { PelicanConnectionForm } from './pelican-connection-form';
 import { PelicanSetupSteps } from './pelican-setup-steps';
+import { PelicanServersSection } from './pelican-servers-section';
 import { isPelicanConfigured } from './pelican-form.helpers';
 import { isPelicanSlot } from './pelican-slot.helpers';
 
@@ -28,6 +29,7 @@ export function PelicanPanel() {
                     </>
                 )}
             </section>
+            {config && isPelicanConfigured(config) && <PelicanServersSection defaultTimezone={config.defaultTimezone} />}
         </IntegrationCard>
     );
 }

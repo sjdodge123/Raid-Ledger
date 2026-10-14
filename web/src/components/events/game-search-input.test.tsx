@@ -159,6 +159,21 @@ describe('GameSearchInput — searches only after user input (ROK-1647 MAJOR-1)'
     });
 });
 
+describe('GameSearchInput — inline table-row mode (ROK-1094)', () => {
+    it('default: a visible "Game" label and the picked name repeated under the box', () => {
+        render(<GameSearchInput value={HADES} onChange={vi.fn()} />);
+        expect(screen.getByText('Game', { selector: 'label' })).not.toHaveClass('sr-only');
+        expect(screen.getByText('Hades')).toBeInTheDocument();
+    });
+
+    it('inline: the label is sr-only but still names the box, and the name shows once (in the box)', () => {
+        render(<GameSearchInput value={HADES} onChange={vi.fn()} inline />);
+        expect(screen.getByText('Game', { selector: 'label' })).toHaveClass('sr-only');
+        expect(box()).toHaveValue('Hades');
+        expect(screen.queryAllByText('Hades')).toHaveLength(0);
+    });
+});
+
 describe('PollGameSearch — keeps the smoke test ids', () => {
     it('exposes game-search-input / -results / game-option and picks by keyboard', async () => {
         const spy = vi.fn();
