@@ -83,7 +83,7 @@ describe('A3 — LFG-born ephemeral voice joins reach the ad-hoc roster', () => 
       'discord-1',
       { pendingRechecks: new Map(), pendingSpawnTimers: new Map() },
       any_({ handleVoiceLeave: jest.fn() }),
-      jest.fn().mockResolvedValue(null),
+      jest.fn().mockResolvedValue([]),
     );
 
     expect(participantService.markLeave).toHaveBeenCalledWith(900, 'discord-1');

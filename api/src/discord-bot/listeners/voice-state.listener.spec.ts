@@ -244,7 +244,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
           gameName: 'TestGame',
-          config: { minPlayers: 2 },
+          config: { minPlayers: 2, allowJustChatting: true },
         },
       ]);
 
@@ -332,7 +332,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
           gameName: 'TestGame',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -374,7 +374,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
           gameName: 'TestGame',
-          config: {},
+          config: { allowJustChatting: true },
         },
       ]);
 
@@ -398,7 +398,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
           gameName: 'GameA',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
         {
           id: 'bind-b',
@@ -406,7 +406,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 2,
           gameName: 'GameB',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -464,7 +464,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 1,
           gameName: 'TestGame',
-          config: { minPlayers: 3 },
+          config: { minPlayers: 3, allowJustChatting: true },
         },
       ]);
 
@@ -557,7 +557,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 42,
           gameName: 'Rise of Kingdoms',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -605,7 +605,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 42,
           gameName: 'Rise of Kingdoms',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -647,7 +647,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: null,
           gameName: null,
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -689,7 +689,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 42,
           gameName: 'Rise of Kingdoms',
-          config: { minPlayers: 1 },
+          config: { minPlayers: 1, allowJustChatting: true },
         },
       ]);
 
@@ -752,7 +752,7 @@ describe('VoiceStateListener', () => {
           bindingPurpose: 'game-voice-monitor',
           gameId: 42,
           gameName: 'Rise of Kingdoms',
-          config: { minPlayers: 3 },
+          config: { minPlayers: 3, allowJustChatting: true },
         },
       ]);
 

@@ -113,6 +113,27 @@ describe('VoiceStateListener — ROK-1445 presence-switch spawn gate', () => {
     });
   });
 
+  // ─── ROK-1782 — the group clears minPlayers through successive switches ────
+
+  describe('ROK-1782 — members reach the game one presence switch at a time', () => {
+    it('rosters EVERY member of the qualifying group, not just the last switcher', async () => {
+      h = await setupRok1445Harness(
+        lobbyBinding({ config: { minPlayers: 2 } }),
+      );
+      for (const id of ['u1', 'u2', 'u3'])
+        await h.joinMember({ id, gameId: null });
+      expect(h.eventKeys()).toEqual([]);
+
+      await h.changePresence('u1', COD4);
+      await h.changePresence('u2', COD4);
+      // No spawn-delay advance: the switch that completes the group spawns the
+      // event, and its roster must already hold the whole group at that moment.
+
+      expect(h.eventKeys()).toEqual([`${BINDING_ID}:${COD4.gameId}`]);
+      expect(h.rosterOf(`${BINDING_ID}:${COD4.gameId}`)).toEqual(['u1', 'u2']);
+    });
+  });
+
   // ─── Preservation — presence going null with Just Chatting off ────────────
 
   describe('presence resolves to no game, allowJustChatting off', () => {
