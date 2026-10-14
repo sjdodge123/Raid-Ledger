@@ -23,6 +23,7 @@ import {
   lobbyGroupSize,
 } from './voice-lobby-groups.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
+import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 
 /** Dependencies bundle for voice state handler functions. */
 export interface VoiceHandlerDeps {
@@ -278,11 +279,8 @@ async function moveToNewGame(
   const uid = rlUser?.id ?? null;
   startVoiceGameTracking(deps, userId, detected.gameId, detected.gameName, uid);
   const channelId = memberChannelId(deps, userId, guildMember);
-  if (
-    !hasActiveEvent &&
-    !(await switchClearsThreshold(deps, channelId, binding, detected.gameId))
-  )
-    return;
+  if (!hasActiveEvent)
+    return spawnSwitchedGroup(deps, channelId, binding, detected.gameId);
   const mi = buildMemberInfo(userId, guildMember, uid);
   await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
@@ -292,6 +290,24 @@ async function moveToNewGame(
     detected.gameName,
     channelId ?? undefined,
   );
+}
+
+/**
+ * A switch with no live event for the game: mint it only if the group clears
+ * `minPlayers` (AC3), and then roster the WHOLE group — the same set the join
+ * path spawns. ROK-1782: rostering only the switcher dropped every earlier
+ * switcher, who had been left waiting below the threshold with nothing else
+ * ever adding them (u1 then u2 start Valheim → event rostered `[u2]`).
+ */
+async function spawnSwitchedGroup(
+  deps: VoiceHandlerDeps,
+  channelId: string | null | undefined,
+  binding: ResolvedBinding,
+  gameId: number | null,
+): Promise<void> {
+  if (!(await switchClearsThreshold(deps, channelId, binding, gameId))) return;
+  if (!channelId) return;
+  await handleGeneralLobbyGroupDetection(deps, channelId, binding, gameId);
 }
 
 /** Whether the switched-to game group clears `minPlayers` (AC3), else trace. */
