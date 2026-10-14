@@ -43,7 +43,11 @@ const MIN_SEGMENT_MS = 60_000;
 /**
  * Split [start, end) at each local midnight of the dates' own timezone.
  * Segments shorter than a minute are dropped: RBC renders them as an
- * invisible zero-height band at midnight.
+ * invisible zero-height band at midnight. A segment that runs to midnight
+ * ends at the last instant of its own day (23:59:59.999, RBC's default
+ * column `max`): RBC's time grid keeps an event in every column whose day is
+ * <= the end's day, so an end of 00:00 next day leaks a 0px band into the
+ * next column. Labels/tooltips use the window's real end, not this one.
  */
 export function splitAtMidnight(start: Date, end: Date): Array<{ start: Date; end: Date }> {
     const out: Array<{ start: Date; end: Date }> = [];
@@ -51,7 +55,9 @@ export function splitAtMidnight(start: Date, end: Date): Array<{ start: Date; en
     for (let guard = 0; cursor < end && guard < MAX_SEGMENTS; guard += 1) {
         const midnight = addDays(startOfDay(cursor), 1);
         const segEnd = midnight < end ? midnight : end;
-        if (segEnd.getTime() - cursor.getTime() >= MIN_SEGMENT_MS) out.push({ start: cursor, end: segEnd });
+        if (segEnd.getTime() - cursor.getTime() >= MIN_SEGMENT_MS) {
+            out.push({ start: cursor, end: segEnd.getTime() === midnight.getTime() ? new Date(midnight.getTime() - 1) : segEnd });
+        }
         cursor = segEnd;
     }
     return out;

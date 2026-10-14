@@ -26,6 +26,7 @@ describe('LayerWindowLabel — short bands (Codex P2)', () => {
         const text = screen.getByText('Server up · Valheim Dedicated');
         expect(text).toHaveClass('rl-layer-window-text');
         expect(text).toHaveAttribute('title', 'Server up · Valheim Dedicated');
+        expect(screen.getByTestId('layer-window-label')).toHaveAttribute('title', 'Server up · Valheim Dedicated');
         expect(screen.getByText('Valheim Dedicated up 8:00 PM to 8:20 PM')).toHaveClass('sr-only');
     });
 

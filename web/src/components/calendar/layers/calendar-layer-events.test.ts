@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { format } from 'date-fns';
 import type { CalendarLayerItem, CalendarLayerMarker, CalendarLayerWindow } from '../../../plugins/calendar-layer';
 import {
     groupCoincidentMarkers, isLayerEvent, markersForColumn, splitAtMidnight, toLayerBackgroundEvents, zonedMarkers,
@@ -35,7 +36,7 @@ describe('toLayerBackgroundEvents', () => {
     it('splits a window crossing local midnight and marks the carried segment "(cont.)"', () => {
         const events = toLayerBackgroundEvents([win('a', '2026-02-10T23:00:00Z', '2026-02-11T03:00:00Z')], 'UTC');
         expect(events.map((e) => [e.id, e.title, e.continued, new Date(e.start.getTime()).toISOString(), new Date(e.end.getTime()).toISOString()])).toEqual([
-            ['a', 'Server up · a', false, '2026-02-10T23:00:00.000Z', '2026-02-11T00:00:00.000Z'],
+            ['a', 'Server up · a', false, '2026-02-10T23:00:00.000Z', '2026-02-10T23:59:59.999Z'],
             ['a#1', 'Server up · a (cont.)', true, '2026-02-11T00:00:00.000Z', '2026-02-11T03:00:00.000Z'],
         ]);
     });
@@ -62,14 +63,23 @@ describe('splitAtMidnight', () => {
         const end = new Date(2026, 1, 11, 0, 0, 0, 500);
         const segments = splitAtMidnight(start, end);
         expect(segments.map((s) => [s.start.getTime(), s.end.getTime()])).toEqual([
-            [start.getTime(), new Date(2026, 1, 11).getTime()],
+            [start.getTime(), new Date(2026, 1, 11).getTime() - 1],
         ]);
         expect(segments.every((s) => s.end.getTime() - s.start.getTime() >= 60_000)).toBe(true);
     });
 
     it('keeps both segments of a window crossing midnight', () => {
         const segments = splitAtMidnight(new Date(2026, 1, 10, 18), new Date(2026, 1, 11, 2));
-        expect(segments.map((s) => [s.start.getHours(), s.end.getHours()])).toEqual([[18, 0], [0, 2]]);
+        expect(segments.map((s) => [s.start.getHours(), s.end.getHours()])).toEqual([[18, 23], [0, 2]]);
+    });
+
+    it('a segment ending at local midnight falls in ONE RBC day column only (no 0px leak next day)', () => {
+        const [seg] = toLayerBackgroundEvents([win('m', '2026-02-10T23:00:00Z', '2026-02-11T00:00:00Z')], 'UTC');
+        if (!seg) throw new Error('fixture window produced no event');
+        // RBC's TimeGrid keeps an event in every column whose day lies between
+        // start's day and end's day (renderDayColumn → inRange 'day'), so both ends
+        // must sit on the same local day or the next column draws a 0px band.
+        expect([format(seg.start, 'yyyy-MM-dd'), format(seg.end, 'yyyy-MM-dd')]).toEqual(['2026-02-10', '2026-02-10']);
     });
 });
 
