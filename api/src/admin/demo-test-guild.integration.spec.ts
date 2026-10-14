@@ -117,14 +117,15 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
     expect(ranks).toEqual([0, 1, 2, 3, 4]);
     const editors = await testApp.request
       .get(`/plugins/wow/guilds/${out.guildId}/editors`)
-      .set('Authorization', `Bearer ${tokenFor(out.users.gm)}`);
+      .set('Authorization', `Bearer ${adminToken}`);
     expect(editors.body.editors).toEqual([
       expect.objectContaining({ id: out.editorId, kind: 'rank', rankIndex: 1 }),
     ]);
   });
 
   it.each([
-    ['gm', 200, { canEdit: true, canManageEditors: true }],
+    // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights.
+    ['gm', 200, { canEdit: false, canManageEditors: false }],
     ['officer', 200, { canEdit: true, canManageEditors: false }],
     ['member', 200, { canEdit: false, canManageEditors: false }],
     ['outsider', 403, undefined],

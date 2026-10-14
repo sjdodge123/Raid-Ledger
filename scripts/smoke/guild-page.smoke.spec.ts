@@ -16,7 +16,7 @@
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiPost, getAdminToken } from './api-helpers';
-import { signInOnboardedMember } from './browser-session';
+import { signInAsAdmin, signInOnboardedMember } from './browser-session';
 
 type Role = 'gm' | 'officer' | 'member' | 'outsider';
 
@@ -69,11 +69,12 @@ async function openGuildAs(page: Page, guild: SeededGuild, role: Role, hash = ''
     await page.goto(`/guilds/${guild.guildId}${hash}`);
 }
 
-test('GM: hero, rank-grouped roster, character link, Page editors card', async ({ page }, testInfo) => {
+test('GM: hero, rank-grouped roster, character link, no Page editors card', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'gm');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('guild-editors-panel'), 'the GM manages page editors').toBeVisible();
+        await expect(page.getByTestId('guild-overview')).toBeVisible();
+        await expect(page.getByTestId('guild-editors-panel'), 'rank 0 confers no editor management (GM_RANK_IMPLIES_EDIT off)').toHaveCount(0);
         await page.goto(`/guilds/${guild.guildId}#roster`);
         await expect(page.getByTestId('guild-roster')).toBeVisible({ timeout: 15_000 });
         for (const rank of [0, 1, 2, 3, 4]) {
@@ -83,6 +84,27 @@ test('GM: hero, rank-grouped roster, character link, Page editors card', async (
         await expect(link).toHaveAttribute('href', `/characters/${guild.users.gm.characterId ?? 'missing'}`);
         await link.click();
         await expect(page).toHaveURL(new RegExp(`/characters/${guild.users.gm.characterId ?? 'missing'}$`));
+    });
+});
+
+test('admin: Page editors card with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await signInAsAdmin(page.context());
+        await page.goto(`/guilds/${guild.guildId}`);
+        const panel = page.getByTestId('guild-editors-panel');
+        await expect(panel, 'admins manage page editors').toBeVisible({ timeout: 15_000 });
+        await panel.getByText('Page editors').click();
+        await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText('Add your Guild Master as an editor.');
+        await expect(panel.getByTestId('guild-editor-chip')).toHaveCount(1);
+    });
+});
+
+test('officer (rank-1 grant): can edit, but no Page editors card', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'officer');
+        await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('guild-overview')).toBeVisible();
+        await expect(page.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
     });
 });
 
