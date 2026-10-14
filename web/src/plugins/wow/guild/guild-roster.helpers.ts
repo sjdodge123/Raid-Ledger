@@ -45,6 +45,11 @@ export function crestInitials(name: string): string {
 }
 
 /** `area-52` → `Area 52`. */
+/** The realm to show: the addon-reported name, else the prettified slug. */
+export function guildRealm(guild: { realmName: string | null; realmSlug: string | null }): string | null {
+    return guild.realmName ?? realmLabel(guild.realmSlug);
+}
+
 export function realmLabel(realmSlug: string | null): string | null {
     if (!realmSlug) return null;
     return realmSlug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');

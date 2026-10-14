@@ -96,6 +96,7 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
     name: row.name,
     region: row.region,
     realmSlug: row.realmSlug,
+    realmName: row.rawRealm,
     faction: row.faction,
     memberCount: row.memberCount,
     lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,

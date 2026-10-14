@@ -27,6 +27,8 @@ export const GuildSummarySchema = z
     name: z.string(),
     region: z.string(),
     realmSlug: z.string().nullable(),
+    /** The realm the addon reported (`guilds.raw_realm`) — display only; WoW: Forever rows have no `realmSlug`. */
+    realmName: z.string().nullable(),
     faction: z.string().nullable(),
     memberCount: z.number().int().nonnegative(),
     lastSnapshotAt: isoDate.nullable(),

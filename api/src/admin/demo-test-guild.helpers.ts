@@ -19,6 +19,8 @@ import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identit
 type Db = PostgresJsDatabase<typeof schema>;
 
 export const SEED_GUILD_REGION = 'us';
+/** Display realm (`raw_realm`) so the guild hero shows one — identity stays realm-less. */
+export const SEED_GUILD_REALM = 'Doomhowl';
 
 /** One seeded user role. `unlinked` has a member row but no RL user. */
 export type SeedGuildRole = 'gm' | 'officer' | 'member' | 'outsider';
@@ -96,6 +98,7 @@ export async function upsertGuild(
 ): Promise<number> {
   const set = {
     memberCount: SEED_GUILD_ROSTER.length,
+    rawRealm: SEED_GUILD_REALM,
     lastSnapshotAt: now,
     updatedAt: now,
   };

@@ -26,7 +26,7 @@ const API = 'http://localhost:3000/plugins/wow/guilds';
 
 function guild(id: number, name: string): MyGuild {
     return {
-        id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', faction: 'horde',
+        id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
         memberCount: 3, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false,
     };
 }

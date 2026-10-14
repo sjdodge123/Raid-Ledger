@@ -23,7 +23,7 @@ function row(overrides: Partial<GuildMemberRow> & Pick<GuildMemberRow, 'memberId
 
 function makePage(canManageEditors = false): GuildPageDto {
     return {
-        guild: { id: 7, gameId: 1, name: 'Iron Vanguard', region: 'us', realmSlug: 'doomhowl', faction: 'Horde', memberCount: 3, lastSnapshotAt: null },
+        guild: { id: 7, gameId: 1, name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 3, lastSnapshotAt: null },
         importedBy: null,
         viewer: { canEdit: canManageEditors, canManageEditors },
         ranks: [
@@ -67,6 +67,13 @@ describe('GuildPage (ROK-1785)', () => {
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
         expect(labels).toEqual(['Overview', 'Roster']);
+    });
+
+    it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {
+        serve(makePage());
+        renderPage();
+        const hero = await screen.findByTestId('guild-hero');
+        expect(hero, 'a realm-less guild with raw_realm must still show its realm').toHaveTextContent('Doomhowl · US');
     });
 
     it('renders the roster grouped by rank, linking only RL characters', async () => {

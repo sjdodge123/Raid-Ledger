@@ -6,7 +6,7 @@
 import type { JSX } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
 import { Pill } from './guild-bits';
-import { crestInitials, realmLabel } from './guild-roster.helpers';
+import { crestInitials, guildRealm } from './guild-roster.helpers';
 
 function Crest({ name }: { name: string }): JSX.Element {
     return (
@@ -19,7 +19,7 @@ function Crest({ name }: { name: string }): JSX.Element {
 
 function HeroFacts({ page }: { page: GuildPage }): JSX.Element {
     const { guild } = page;
-    const where = [realmLabel(guild.realmSlug), guild.region.toUpperCase()].filter(Boolean).join(' · ');
+    const where = [guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             <span>{where}</span>

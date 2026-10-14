@@ -6,6 +6,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ChevronRightIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import type { MyGuild } from '@raid-ledger/contract';
+import { guildRealm } from '../guild/guild-roster.helpers';
 import { guildHref } from './guild-queries';
 
 export function GuildCrest({ small = false }: { small?: boolean }): JSX.Element {
@@ -18,7 +19,7 @@ export function GuildCrest({ small = false }: { small?: boolean }): JSX.Element 
 }
 
 function rowMeta(guild: MyGuild): string {
-    return [guild.rankName, guild.realmSlug, guild.region.toUpperCase()].filter(Boolean).join(' · ');
+    return [guild.rankName, guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
 }
 
 function GuildLinkRow({ guild, onNavigate }: { guild: MyGuild; onNavigate?: (() => void) | undefined }): JSX.Element {

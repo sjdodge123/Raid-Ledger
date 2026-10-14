@@ -29,7 +29,7 @@ const CHAR_ID = '5b3c6f3e-1d2a-4c9b-9a51-2f8e7d6c5b4a';
 
 function guild(id: number, name: string, memberCount = 12): MyGuild {
     return {
-        id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', faction: 'horde',
+        id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
         memberCount, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false,
     };
 }
