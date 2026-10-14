@@ -107,6 +107,15 @@ function describeSentryInstrumentTs() {
       expect(config['environment']).toBe('production');
     });
 
+    // Sentry v11: streaming no-ops beforeSendTransaction (ROK-1592 scrub) and
+    // an unset dataCollection widens PII collection — pin the v10 behaviour.
+    it('keeps the static lifecycle and the v10 PII baseline', () => {
+      const config = initConfig(sentryInitMock);
+      expect(config['traceLifecycle']).toBe('static');
+      expect(config['dataCollection']).toHaveProperty('userInfo', false);
+      expect(config['dataCollection']).toHaveProperty('httpBodies', []);
+    });
+
     // ── ROK-1329: honor SENTRY_ENVIRONMENT so fleet runners don't pollute
     // the prod Sentry inbox. The allinone image bakes NODE_ENV=production, so
     // Sentry.init still fires for fleet envs; the environment tag is what keeps
