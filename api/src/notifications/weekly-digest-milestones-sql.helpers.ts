@@ -4,9 +4,15 @@
  * `weekly-digest-milestones.helpers.ts`; this file only builds queries.
  *
  * Window: `[NOW() - 7 days, NOW()]`, the same as the recap. Rollup rows are
- * per-day `date`s, so their side of the window compares against
- * `(NOW() - 7 days)::date`; event rows compare `upper(duration)` against the
- * timestamp itself, exactly like the recap's `attended` CTE.
+ * per-day `date`s, so their side of the window is the half-open date range
+ * `[(NOW() - 7 days)::date, NOW()::date)`: the posting day's (partial) bucket
+ * belongs to NEXT week's digest, so each rollup day sits in exactly one
+ * window and a crossing on the boundary day is never announced twice
+ * (ROK-1783). Event rows compare `upper(duration)` against the timestamp
+ * itself, exactly like the recap's `attended` CTE.
+ *
+ * Hidden or banned games never appear (ROK-1783): `VISIBLE_GAME`, the same
+ * filter the spotlight reads use.
  *
  * Privacy (AC10): every row that NAMES a member, or that is the only evidence
  * of this week's activity, passes `SHOWS_ACTIVITY_SQL` (imported, never
@@ -27,6 +33,13 @@ const WINDOW_START = sql.raw(`(NOW() - INTERVAL '${RECAP_WINDOW_DAYS} days')`);
 const WINDOW_START_DATE = sql.raw(
   `(NOW() - INTERVAL '${RECAP_WINDOW_DAYS} days')::date`,
 );
+/** Exclusive window end for rollup dates: the posting day goes to next week. */
+const WINDOW_END_DATE = sql.raw('NOW()::date');
+/** A rollup row inside this week's half-open date window. Alias `r`. */
+const ROLLUP_IN_WINDOW = sql`r.period_start >= ${WINDOW_START_DATE}
+        AND r.period_start < ${WINDOW_END_DATE}`;
+/** Raw-SQL twin of `VISIBILITY_FILTER` (hidden/banned games), alias `g`. */
+export const VISIBLE_GAME = sql.raw('g.hidden = false AND g.banned = false');
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
 
 /**
@@ -92,7 +105,7 @@ export function buildEventMilestonesQuery(minThreshold: number): SQL {
 const RECENT_GAMES_CTE = sql`recent AS (
       SELECT r.game_id FROM game_activity_rollups r
       INNER JOIN users u ON u.id = r.user_id
-      WHERE r.period = 'day' AND r.period_start >= ${WINDOW_START_DATE}
+      WHERE r.period = 'day' AND ${ROLLUP_IN_WINDOW}
         AND r.total_seconds > 0${GUILD_MEMBER_SEEN}${ACTIVE_MEMBER}
         AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
       UNION
@@ -119,7 +132,8 @@ export function buildFirstGamesQuery(): SQL {
     SELECT g.id AS game_id, g.name AS name
     FROM recent rc
     INNER JOIN games g ON g.id = rc.game_id
-    WHERE NOT EXISTS (
+    WHERE ${VISIBLE_GAME}
+      AND NOT EXISTS (
         SELECT 1 FROM game_activity_rollups r2
         WHERE r2.game_id = rc.game_id AND r2.period = 'day'
           AND r2.period_start < ${WINDOW_START_DATE} AND r2.total_seconds > 0
@@ -141,6 +155,8 @@ export function buildFirstGamesQuery(): SQL {
  * total is community history and must not shrink (a shrinking total could
  * re-cross a threshold and repeat a line). `guild_member_seen_at` is a stamp
  * that leaving the guild does not clear, so the guest check keeps them in.
+ * Every sum stops before the posting day (`WINDOW_END_DATE`), so "before" and
+ * "through" of consecutive digests chain without overlap.
  */
 export function buildHourMilestonesQuery(minSeconds: number): SQL {
   return sql`
@@ -152,11 +168,12 @@ export function buildHourMilestonesQuery(minSeconds: number): SQL {
     FROM game_activity_rollups r
     INNER JOIN games g ON g.id = r.game_id
     INNER JOIN users u ON u.id = r.user_id
-    WHERE r.period = 'day'${GUILD_MEMBER_SEEN}
+    WHERE r.period = 'day' AND ${VISIBLE_GAME}${GUILD_MEMBER_SEEN}
+      AND r.period_start < ${WINDOW_END_DATE}
       AND ${SHOWS_ACTIVITY_SQL('r.user_id')}
       AND r.game_id IN (
-        SELECT DISTINCT game_id FROM game_activity_rollups
-        WHERE period = 'day' AND period_start >= ${WINDOW_START_DATE}
+        SELECT DISTINCT r.game_id FROM game_activity_rollups r
+        WHERE r.period = 'day' AND ${ROLLUP_IN_WINDOW}
       )
     GROUP BY r.game_id, g.name
     HAVING SUM(r.total_seconds) >= ${minSeconds}

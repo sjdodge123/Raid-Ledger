@@ -21,6 +21,8 @@
  *   order as `runCalendarDerive` — see `calendar-away-guard.helpers.ts`.
  * - `missingCalendarIds` (404/410 calendars) are pruned from the LOCKED
  *   row's `read_calendar_ids`, so a settings PUT racing the fetch survives.
+ *   A prune that would empty an explicit selection turns reading off
+ *   instead (ROK-1783) — `[]` means "primary", which the user never chose.
  * - A calendar refused by a policy 403 (`unreadableCalendarIds`) is
  *   skipped, never pruned: the rest commit and `last_error_code` is set to
  *   `provider_error` so the user can tell a calendar is failing.
@@ -193,6 +195,25 @@ async function replaceBlocks(
 }
 
 /**
+ * D5 prune of the LOCKED row's ids. ROK-1783: an explicit selection whose
+ * every calendar is gone (404/410) must NOT be stored as `[]` — `[]` reads
+ * as "primary" (`selectReadCalendarIds`), so the next sync would import a
+ * calendar the user never chose. Instead reading stops (`readEnabled:
+ * false`) and `lastErrorCode` is set to `provider_error`. The stale ids stay,
+ * so a later re-enable hits the same 404 and stops again instead of reading
+ * primary. KNOWN GAP (TECH-DEBT-BACKLOG 2026-10-14): the web does not surface
+ * `provider_error` on the read card yet, so the stop is silent to the user.
+ */
+function pruneFields(locked: readonly string[], missing: readonly string[]) {
+  if (missing.length === 0) return {};
+  const readCalendarIds = pruneReadCalendarIds(locked, missing);
+  if (readCalendarIds.length > 0 || locked.length === 0) {
+    return { readCalendarIds };
+  }
+  return { readEnabled: false, lastErrorCode: 'provider_error' as const };
+}
+
+/**
  * The success UPDATE's SET. Never `status` (shared with the write side —
  * a success must not flip a `needs_reconnect` back). Pruned ids come from
  * the LOCKED row; a calendar the provider refused this run (policy 403)
@@ -205,21 +226,12 @@ export function buildSyncedFields(
 ) {
   const missing = result.missingCalendarIds ?? [];
   const refused = result.unreadableCalendarIds ?? [];
-  const pruned =
-    missing.length > 0
-      ? {
-          readCalendarIds: pruneReadCalendarIds(
-            locked.readCalendarIds,
-            missing,
-          ),
-        }
-      : {};
   return {
     lastErrorCode: refused.length > 0 ? ('provider_error' as const) : null,
     lastSyncedAt: stamp.now,
     nextSyncAt: nextReadSyncAt(stamp.now, stamp.random),
     updatedAt: stamp.now,
-    ...pruned,
+    ...pruneFields(locked.readCalendarIds, missing),
   };
 }
 

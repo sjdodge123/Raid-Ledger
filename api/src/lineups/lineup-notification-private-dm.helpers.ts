@@ -199,7 +199,7 @@ function composeTiebreakerOpenMessage(
   const cta =
     tiebreaker.mode === 'veto' ? 'Cast your veto now' : 'Vote in the bracket';
   const deadlineLine = tiebreaker.roundDeadline
-    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:R>.`
+    ? ` Round closes <t:${Math.floor(tiebreaker.roundDeadline.getTime() / 1000)}:f>.`
     : '';
   const ballot = buildTiedGamesList(tiebreaker.tiedGames ?? [], clientUrl);
   const ctaLink = clientUrl

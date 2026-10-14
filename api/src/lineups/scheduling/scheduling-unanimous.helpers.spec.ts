@@ -165,13 +165,13 @@ describe('scheduling-unanimous.helpers', () => {
       const input = buildUnanimousNotification(makeRow(), 'America/New_York');
 
       // 2030-05-17T20:00Z is Fri 4:00 PM in New York.
-      expect(input.payload?.lockLabel).toBe('Lock in Fri 4:00 PM');
+      expect(input.payload?.lockLabel).toBe('Lock in Fri, May 17, 4:00 PM EDT');
     });
 
     it('U4: falls back to UTC for a corrupt timezone rather than throwing', () => {
       const input = buildUnanimousNotification(makeRow(), 'Not/AZone');
 
-      expect(input.payload?.lockLabel).toBe('Lock in Fri 8:00 PM');
+      expect(input.payload?.lockLabel).toBe('Lock in Fri, May 17, 8:00 PM UTC');
     });
   });
 });

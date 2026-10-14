@@ -17,6 +17,9 @@
  *      `notification-embed.buttons.ts:buildLineupButton` render the **Lock**
  *      button (`?lock=<slotId>`) beside the plain poll link;
  *   4. `payload.lineupId` / `payload.matchId` deep-link the poll;
+ *   4b. ROK-1784: the REAL rendered row is Lock in · Open Poll · … ·
+ *      Adjust Notifications, "Open Poll" a plain poll link, and the copy
+ *      carries no relative `<t:…:R>` token;
  *   5. un-voting and re-voting a member produces NO second notification
  *      (the permanent `sched-poll-unanimous:<matchId>:<slotId>` claim).
  *
@@ -233,6 +236,90 @@ function assertLockPayload(
   }
 }
 
+interface RenderedButton {
+  style?: number;
+  label?: string;
+  url?: string;
+}
+
+interface RenderedDm {
+  components: { components?: RenderedButton[] }[];
+}
+
+/** Discord's link-button style. */
+const LINK_STYLE = 5;
+
+/** Path + `lock` param of a rendered button URL (empty when unparseable). */
+function pathAndLock(url: string | undefined): {
+  path: string;
+  lock: string | null;
+} {
+  try {
+    const u = new URL(url ?? '');
+    return { path: u.pathname, lock: u.searchParams.get('lock') };
+  } catch {
+    return { path: '', lock: null };
+  }
+}
+
+/**
+ * ROK-1784 — render the DM through the REAL builder (`/admin/test/render-dm-embed`;
+ * bots cannot read bot DMs) and assert the primary row reads
+ * Lock in · Open Poll · … · Adjust Notifications, with "Open Poll" a plain
+ * link to the poll page (no `?lock=`), and that the copy carries no relative
+ * `<t:…:R>` token (it would read "closes an hour ago" once the moment passes).
+ */
+async function assertRenderedButtons(
+  api: ApiClient,
+  dm: TestNotification,
+  poll: CreatePollResponse,
+  slotId: number,
+): Promise<void> {
+  if (/<t:\d+:R>/.test(dm.message ?? '')) {
+    throw new Error(
+      `Expected no relative <t:…:R> token in the DM, got "${dm.message ?? ''}"`,
+    );
+  }
+  const r = await api.post<RenderedDm>('/admin/test/render-dm-embed', {
+    type: 'community_lineup',
+    title: dm.title,
+    message: dm.message,
+    ...(dm.payload ? { payload: dm.payload } : {}),
+  });
+  const row = r.components[r.components.length - 1]?.components ?? [];
+  const labels = row.map((b) => b.label ?? '?');
+  const pollPath = `/community-lineup/${poll.lineupId}/schedule/${poll.id}`;
+  const lock = row[0];
+  const open = row[1];
+  const lockUrl = pathAndLock(lock?.url);
+  const openUrl = pathAndLock(open?.url);
+  if (
+    !dm.payload?.lockLabel ||
+    lock?.label !== dm.payload.lockLabel ||
+    lockUrl.path !== pollPath ||
+    lockUrl.lock !== String(slotId)
+  ) {
+    throw new Error(
+      `Expected button 1 "${String(dm.payload?.lockLabel)}" → ${pollPath}?lock=${slotId}, got [${labels.join(', ')}] url=${String(lock?.url)}`,
+    );
+  }
+  if (
+    open?.label !== 'Open Poll' ||
+    open.style !== LINK_STYLE ||
+    openUrl.path !== pollPath ||
+    openUrl.lock !== null
+  ) {
+    throw new Error(
+      `Expected button 2 "Open Poll" link → ${pollPath} (no ?lock=), got [${labels.join(', ')}] url=${String(open?.url)}`,
+    );
+  }
+  if (labels[labels.length - 1] !== 'Adjust Notifications' || row.length > 5) {
+    throw new Error(
+      `Expected ≤5 buttons ending "Adjust Notifications", got [${labels.join(', ')}]`,
+    );
+  }
+}
+
 /**
  * Un-vote then re-vote one member and prove no SECOND notification follows.
  * The re-vote is confirmed on the poll page before counting, so the vote
@@ -314,6 +401,7 @@ const unanimousTimeDmsTheCreator: SmokeTest = {
       const slot = await readSlot(ctx.api, base, slotId);
       assertCopy(dm, poll.gameName, slot);
       assertLockPayload(dm, poll, slotId);
+      await assertRenderedButtons(ctx.api, dm, poll, slotId);
 
       await assertOnlyOnce(
         ctx,

@@ -212,11 +212,25 @@ const LOCK_BUTTON_SUBTYPES = new Set([
 ]);
 
 /**
+ * The slot a lock-in DM's Lock button targets, or null when the DM is not a
+ * lock subtype or carries no `slotId` (then it keeps the plain vote link).
+ */
+function lockSlotId(
+  sub: string | undefined,
+  payload: Record<string, unknown> | undefined,
+): string | null {
+  if (!sub || !LOCK_BUTTON_SUBTYPES.has(sub)) return null;
+  return payload?.slotId != null ? toStr(payload.slotId) : null;
+}
+
+/**
  * Poll-page button for a lineup DM that names a match.
  *
  * ROK-1604: the creator's expiry warning carries `slotId` + `lockLabel` and
  * links with `?lock=<slotId>`, which opens the lock-in CONFIRM on the page
  * (never a direct commit). Every other subtype keeps the plain vote link.
+ * ROK-1784: a lock DM also gets a plain "Open Poll" inline button
+ * (`buildOpenPollButton`).
  */
 function buildScheduleButton(
   sub: string | undefined,
@@ -226,8 +240,8 @@ function buildScheduleButton(
   clientUrl: string,
 ): ButtonBuilder {
   const pollUrl = `${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`;
-  const slotId = payload?.slotId != null ? toStr(payload.slotId) : null;
-  if (sub && LOCK_BUTTON_SUBTYPES.has(sub) && slotId) {
+  const slotId = lockSlotId(sub, payload);
+  if (slotId) {
     const label =
       typeof payload?.lockLabel === 'string' && payload.lockLabel
         ? payload.lockLabel
@@ -243,6 +257,33 @@ function buildScheduleButton(
     .setURL(pollUrl);
 }
 
+/**
+ * ROK-1784: a lock-in DM's primary button is the `?lock=` confirm, so the
+ * recipient also needs a plain link that just opens the poll. Returns null
+ * for every DM whose primary button is not the Lock link.
+ */
+function buildOpenPollButton(
+  payload: Record<string, unknown> | undefined,
+  clientUrl: string,
+): ButtonBuilder | null {
+  const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
+  const matchId = payload?.matchId != null ? toStr(payload.matchId) : null;
+  const sub = payload?.subtype as string | undefined;
+  if (!lineupId || !matchId || !lockSlotId(sub, payload)) return null;
+  return new ButtonBuilder()
+    .setLabel('Open Poll')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/community-lineup/${lineupId}/schedule/${matchId}`);
+}
+
+/** Plain "View Lineup" link to the lineup page. */
+function viewLineupButton(clientUrl: string, lineupId: string): ButtonBuilder {
+  return new ButtonBuilder()
+    .setLabel('View Lineup')
+    .setStyle(ButtonStyle.Link)
+    .setURL(`${clientUrl}/community-lineup/${lineupId}`);
+}
+
 /** Extra buttons to add to the main action row for specific types. */
 export function buildInlineButtons(
   type: NotificationType,
@@ -252,29 +293,21 @@ export function buildInlineButtons(
   if (type === 'lineup_steam_nudge') {
     const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
     if (!lineupId) return [];
-    return [
-      new ButtonBuilder()
-        .setLabel('View Lineup')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
-    ];
+    return [viewLineupButton(clientUrl, lineupId)];
   }
   if (type === 'community_lineup') {
     const sub = payload?.subtype as string | undefined;
     const lineupId = payload?.lineupId != null ? toStr(payload.lineupId) : null;
     if (!lineupId) return [];
+    const openPoll = buildOpenPollButton(payload, clientUrl);
+    if (openPoll) return [openPoll];
     // Only add View Lineup inline when primary button goes elsewhere
     const needsInline =
       sub === 'lineup_match_member' ||
       sub === 'lineup_event_created' ||
       sub === 'lineup_scheduling_open';
     if (!needsInline) return [];
-    return [
-      new ButtonBuilder()
-        .setLabel('View Lineup')
-        .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/community-lineup/${lineupId}`),
-    ];
+    return [viewLineupButton(clientUrl, lineupId)];
   }
   return [];
 }

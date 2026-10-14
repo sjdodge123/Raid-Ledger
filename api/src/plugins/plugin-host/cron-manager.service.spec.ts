@@ -1,9 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { SchedulerRegistry } from '@nestjs/schedule';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { CronJob } from 'cron';
 import { CronManagerService } from './cron-manager.service';
 import { PluginRegistryService } from './plugin-registry.service';
+import { EXTENSION_POINTS } from './extension-points';
 import type { CronRegistrar } from './extension-points';
+import { PLUGIN_EVENTS } from './plugin-manifest.interface';
 
 let service: CronManagerService;
 const createdJobs: CronJob[] = [];
@@ -253,5 +256,43 @@ describe('CronManagerService — bootstrap & deactivation', () => {
 
     it('should allow re-registration after deactivation + re-activation', () =>
       testReRegistrationAfterDeactivation());
+  });
+});
+
+// Runtime install (Codex back-review, ROK-1783): `install()` emits only
+// INSTALLED, so the jobs must register off that event through the real
+// @OnEvent wiring — not only off ACTIVATED.
+describe('CronManagerService — runtime install', () => {
+  let app: TestingModule;
+
+  beforeEach(async () => {
+    await setupEach();
+    app = await Test.createTestingModule({
+      imports: [EventEmitterModule.forRoot()],
+      providers: [
+        CronManagerService,
+        { provide: SchedulerRegistry, useValue: mockSchedulerRegistry },
+        { provide: PluginRegistryService, useValue: mockPluginRegistry },
+      ],
+    }).compile();
+    await app.init();
+  });
+  afterEach(async () => {
+    for (const j of createdJobs) void j.stop();
+    createdJobs.length = 0;
+    await app.close();
+  });
+
+  it('emitting INSTALLED registers the CronRegistrar adapter jobs', async () => {
+    mockPluginRegistry.getAdapter.mockReturnValue(makeSingleJobAdapter());
+    await app
+      .get(EventEmitter2)
+      .emitAsync(PLUGIN_EVENTS.INSTALLED, { slug: 'pelican' });
+
+    expect(mockPluginRegistry.getAdapter).toHaveBeenCalledWith(
+      EXTENSION_POINTS.CRON_REGISTRAR,
+      'pelican',
+    );
+    expect([...registeredJobNames]).toEqual(['pelican:sync']);
   });
 });

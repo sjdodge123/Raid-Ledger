@@ -2,12 +2,13 @@
  * Profile → Calendars smoke (ROK-1594) — desktop AND mobile projects. Since
  * ROK-1780 the Calendars page renders inline on Profile → My Integrations.
  *
- * No live Google: a DEMO_MODE seed inserts a fake-provider connection for the
- * signed-in admin, the spec drives Manage → Disconnect → confirm on it, and
+ * No live Google: a DEMO_MODE seed inserts a fake-provider connection for a
+ * fresh member, the spec drives Manage → Disconnect → confirm on it, and
  * checks the `?error=` banner the OAuth callback lands on.
  *
- * Both projects run in parallel as the same admin, so every assertion is
- * scoped to the connection id THIS run seeded (`data-connection-id`).
+ * Desktop and mobile run in parallel on one DB. Anything that depends on how
+ * many connections the viewer has (the status line drops `· <email>` once
+ * there are 2+, ROK-1783) runs as a member seeded for THIS run only.
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
@@ -17,13 +18,6 @@ import { isPhoneLayout } from './helpers';
 
 const PAGE = '/profile/integrations';
 const SETTINGS = '/admin/settings/calendar-sync';
-
-/** DEMO_MODE + admin: `{ accountLabel? }` → 201 `{ id }`, a `demo-fake:` row owned by the caller. */
-async function seedConnection(token: string, accountLabel: string): Promise<number> {
-    const res = (await apiPost(token, '/admin/test/calendar/seed-connection', { accountLabel })) as { id: number };
-    expect(typeof res.id).toBe('number');
-    return res.id;
-}
 
 let token: string;
 
@@ -36,16 +30,19 @@ test.beforeAll(async () => {
 });
 
 test('connected card → Manage → Disconnect → confirm removes the connection', async ({ page }, testInfo) => {
-    const label = `smoke-${testInfo.project.name}-${Date.now()}@example.com`;
-    const id = await seedConnection(token, label);
+    // A fresh member with exactly ONE connection: on the shared admin the other
+    // project's concurrent seed made it two, and the line read just `Connected`.
+    const member = await seedMemberWithConnection(testInfo.project.name);
     try {
+        await signInOnboardedMember(page, member.userId);
         await page.goto(PAGE);
-        const card = page.locator(`[data-testid="calendar-connection-card"][data-connection-id="${id}"]`);
+        const card = page.locator(`[data-testid="calendar-connection-card"][data-connection-id="${member.connectionId}"]`);
+        await expect(page.getByTestId('calendar-connection-card'), 'the member has exactly one connection').toHaveCount(1);
         // `seed-connection` never stamps `lastSyncedAt`, so this is the pre-sync
         // line; a read cron landing mid-test would flip it to the exact
         // `readStatusLine` copy, which is the only other value accepted.
         await expectStatus(card.getByTestId('calendar-connection-status'), [
-            `Connected · ${label}`, ...syncedLines(!isPhoneLayout(testInfo)),
+            `Connected · ${member.label}`, ...syncedLines(!isPhoneLayout(testInfo)),
         ]);
         const manage = card.getByTestId('calendar-manage');
         // A long account label must truncate, not widen the card: a phone-width
@@ -58,7 +55,7 @@ test('connected card → Manage → Disconnect → confirm removes the connectio
         await page.getByTestId('calendar-disconnect-confirm').click();
         await expect(card).toHaveCount(0);
     } finally {
-        await apiDelete(token, `/users/me/calendars/${id}`).catch(() => undefined);
+        await removeMember(member.userId);
     }
 });
 
@@ -91,22 +88,32 @@ async function expectStatus(status: ReturnType<Page['getByTestId']>, allowed: st
     }).toPass({ timeout: 10_000 });
 }
 
-interface Member { userId: number; connectionId: number }
+interface Member { userId: number; connectionId: number; label: string }
+
+/** A fresh member (quiet DMs) with exactly one seeded fake-provider connection. */
+async function seedMemberWithConnection(project: string): Promise<Member> {
+    const user = (await apiPost(token, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
+    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
+    const label = `smoke-${project}-${Date.now()}@example.com`;
+    try {
+        const conn = (await apiPost(token, '/admin/test/calendar/seed-connection', {
+            userId: user.userId, accountLabel: label,
+        })) as { id?: number };
+        if (typeof conn.id !== 'number') throw new Error(`seed-connection: ${JSON.stringify(conn)}`);
+        return { userId: user.userId, connectionId: conn.id, label };
+    } catch (err) {
+        await removeMember(user.userId);
+        throw err;
+    }
+}
 
 /** A fresh member with one seeded connection; `readAccess` flips its read grant. */
 async function seedMember(project: string, readAccess: 'granted' | 'missing'): Promise<Member> {
-    const user = (await apiPost(token, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
-    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
-    const member = { userId: user.userId, connectionId: -1 };
+    const member = await seedMemberWithConnection(project);
     try {
-        const conn = (await apiPost(token, '/admin/test/calendar/seed-connection', {
-            userId: member.userId, accountLabel: `smoke-read-${project}-${Date.now()}@example.com`,
-        })) as { id?: number };
-        if (typeof conn.id !== 'number') throw new Error(`seed-connection: ${JSON.stringify(conn)}`);
-        member.connectionId = conn.id;
         const start = new Date(Date.now() + 3 * 86_400_000);
         const busy = (await apiPost(token, '/admin/test/calendar/seed-busy', {
-            connectionId: conn.id, readAccess,
+            connectionId: member.connectionId, readAccess,
             blocks: [{ start: start.toISOString(), end: new Date(start.getTime() + 3_600_000).toISOString() }],
         })) as { inserted?: number };
         expect(busy.inserted, `seed-busy body: ${JSON.stringify(busy)}`).toBe(1);
