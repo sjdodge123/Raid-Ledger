@@ -8,7 +8,8 @@ import { server } from '../../../test/mocks/server';
 import { GAME_SERVERS_CALENDAR_URL, GAME_SERVERS_STATUS_URL } from '../../../test/mocks/pelican-handlers';
 import { createTestQueryClient } from '../../../test/render-helpers';
 import { useTimezoneStore } from '../../../stores/timezone-store';
-import { STATUS_REFETCH_MS, usePelicanCalendarItems } from './use-pelican-calendar-items';
+import { useGameFilterStore } from '../../../stores/game-filter-store';
+import { STATUS_REFETCH_MS, activeGameFilter, usePelicanCalendarItems } from './use-pelican-calendar-items';
 
 const REGISTRY_URL = 'http://localhost:3000/games/configured';
 const range = { from: '2026-10-11T00:00:00.000Z', to: '2026-10-18T00:00:00.000Z' };
@@ -21,6 +22,8 @@ const statuses: GameServerStatusDto[] = [{ ...base, state: 'running', checkedAt:
 
 let requests: string[] = [];
 const record = ({ request }: { request: Request }) => { requests.push(request.url); };
+const knownGames = (...slugs: string[]) => slugs.map((slug) => ({ slug, name: slug, coverUrl: null }));
+const registryRequests = () => requests.filter((u) => u.includes('/games/configured'));
 const serverRequests = () => requests.filter((u) => u.includes('/game-servers/') || u.includes('/games/configured'));
 
 function useData() {
@@ -42,6 +45,7 @@ beforeEach(() => {
     requests = [];
     server.events.on('request:start', record);
     useTimezoneStore.setState({ resolved: 'UTC' });
+    useGameFilterStore.getState()._reset();
 });
 afterEach(() => { server.events.removeListener('request:start', record); });
 
@@ -76,6 +80,7 @@ describe('usePelicanCalendarItems', () => {
 
     it('applies the game filter client-side with no calendar refetch', async () => {
         useData();
+        useGameFilterStore.setState({ allKnownGames: knownGames('valheim', 'wow') });
         const { result, rerender } = renderLayer({ selected: new Set(['valheim']), enabled: true });
         await waitFor(() => expect(result.current).toHaveLength(2));
         rerender({ selected: new Set(['wow']), enabled: true });
@@ -91,5 +96,38 @@ describe('usePelicanCalendarItems', () => {
         const query = client.getQueryCache().find({ queryKey: ['game-servers', 'status'] });
         expect(STATUS_REFETCH_MS).toBe(60_000);
         expect(query?.observers[0]?.options.refetchInterval).toBe(60_000);
+    });
+
+    it('with every known game selected, shows every server and never fetches the registry', async () => {
+        useData();
+        useGameFilterStore.setState({ allKnownGames: knownGames('wow') });
+        // gameId 7 is unknown to the registry/filter: still shown, because no filter is active.
+        const { result } = renderLayer({ selected: new Set(['wow']), enabled: true });
+        await waitFor(() => expect(result.current).toHaveLength(2));
+        expect(registryRequests()).toEqual([]);
+    });
+
+    it('with a known game deselected, hides servers outside the selection', async () => {
+        useData();
+        useGameFilterStore.setState({ allKnownGames: knownGames('valheim', 'wow') });
+        const { result } = renderLayer({ selected: new Set(['wow']), enabled: true });
+        await waitFor(() => expect(registryRequests()).toHaveLength(1));
+        await waitFor(() => expect(serverRequests()).toHaveLength(3));
+        expect(result.current).toEqual([]);
+    });
+});
+
+describe('activeGameFilter', () => {
+    it('is undefined ("all games") when no known game is deselected', () => {
+        expect(activeGameFilter(undefined, knownGames('a'))).toBeUndefined();
+        expect(activeGameFilter(new Set(['a', 'b']), knownGames('a', 'b'))).toBeUndefined();
+        expect(activeGameFilter(new Set<string>(), [])).toBeUndefined();
+    });
+
+    it('is the selection when a known game is deselected (including "None")', () => {
+        const some = new Set(['a']);
+        expect(activeGameFilter(some, knownGames('a', 'b'))).toBe(some);
+        const none = new Set<string>();
+        expect(activeGameFilter(none, knownGames('a'))).toBe(none);
     });
 });
