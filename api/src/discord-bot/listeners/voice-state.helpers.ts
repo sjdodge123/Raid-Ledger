@@ -66,6 +66,11 @@ export function buildDiscordMember(
   };
 }
 
+/** True for a general-lobby binding (per-game presence detection). */
+export function isLobbyBinding(binding: ResolvedBinding): boolean {
+  return binding.bindingPurpose === 'general-lobby';
+}
+
 /** Resolve a voice channel from the guild. */
 export function resolveVoiceChannel(
   clientService: DiscordBotClientService,

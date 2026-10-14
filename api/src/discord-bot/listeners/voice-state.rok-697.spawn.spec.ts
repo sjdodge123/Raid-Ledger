@@ -84,7 +84,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
     bindingPurpose: 'game-voice-monitor' as const,
     gameId: 1,
     gameName: 'Rise of Kingdoms',
-    config: { minPlayers: 2 },
+    config: { minPlayers: 2, allowJustChatting: true },
   };
 
   // ─── AC1: Spawn immediately with unanimous game activity ───────────────────
@@ -608,7 +608,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       bindingPurpose: 'game-voice-monitor' as const,
       gameId: 1,
       gameName: 'Rise of Kingdoms',
-      config: { minPlayers: 2 },
+      config: { minPlayers: 2, allowJustChatting: true },
       recurrenceGroupId: 'series-1',
     };
 
@@ -824,7 +824,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
       bindingPurpose: 'game-voice-monitor' as const,
       gameId: null,
       gameName: null,
-      config: { minPlayers: 2 },
+      config: { minPlayers: 2, allowJustChatting: true },
     };
 
     it('arms and fires the 15-minute delayed spawn at/above minPlayers (RED on main)', async () => {
@@ -916,7 +916,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         bindingPurpose: 'game-voice-monitor' as const,
         gameId: 1,
         gameName: 'Rise of Kingdoms',
-        config: { minPlayers: 2 },
+        config: { minPlayers: 2, allowJustChatting: true },
       };
       const handler = await setupWithBinding('voice-b4-imm', binding);
       mockPresenceDetector.detectGameForMember.mockResolvedValue({
@@ -939,7 +939,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         bindingPurpose: 'game-voice-monitor' as const,
         gameId: 1,
         gameName: 'Rise of Kingdoms',
-        config: { minPlayers: 2 },
+        config: { minPlayers: 2, allowJustChatting: true },
       };
       const handler = await setupWithBinding('voice-b4-p2', binding);
       mockAdHocEventService.handleVoiceJoin.mockResolvedValue(false); // gated
@@ -963,7 +963,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         bindingPurpose: 'game-voice-monitor' as const,
         gameId: 1,
         gameName: 'Rise of Kingdoms',
-        config: { minPlayers: 2 },
+        config: { minPlayers: 2, allowJustChatting: true },
       };
       const handler = await setupWithBinding('voice-b4-sched', binding);
       // Presence-null → non-unanimous → delayed path scheduled at join time.
@@ -987,7 +987,7 @@ describe('VoiceStateListener — ROK-697 game activity spawn constraints — spa
         bindingPurpose: 'game-voice-monitor' as const,
         gameId: null,
         gameName: null,
-        config: { minPlayers: 2 },
+        config: { minPlayers: 2, allowJustChatting: true },
       };
       const handler = await setupWithBinding('voice-b4-inert', binding, [
         { id: 'user-1', displayName: 'Player1' },

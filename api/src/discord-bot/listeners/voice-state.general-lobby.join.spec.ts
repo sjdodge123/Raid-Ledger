@@ -405,7 +405,7 @@ function presenceChangeNoOpTests() {
 }
 
 function presenceChangeNonLobbyTest() {
-  it('does nothing when channel is not a general-lobby binding', async () => {
+  it('a monitor-only channel neither leaves nor rosters a member off its game (ROK-1782 c)', async () => {
     let localVoiceHandler: (oldState: unknown, newState: unknown) => void;
     let presenceHandler: (...args: unknown[]) => void;
     const mockClient = createMockClient();
@@ -448,6 +448,7 @@ function presenceChangeNonLobbyTest() {
     await jest.advanceTimersByTimeAsync(2100);
     mocks.presenceDetector.detectGameForMember.mockClear();
     mocks.adHocEventService.handleVoiceLeave.mockClear();
+    mocks.adHocEventService.handleVoiceJoin.mockClear();
     presenceHandler!(null, {
       userId: 'u-nogame',
       member: {
@@ -457,8 +458,11 @@ function presenceChangeNonLobbyTest() {
       },
     });
     await jest.advanceTimersByTimeAsync(100);
-    expect(mocks.presenceDetector.detectGameForMember).not.toHaveBeenCalled();
+    // ROK-1782 ruling (c): the monitor IS consulted now (it checks whether the
+    // member started its game), but a member not on the bound game is neither
+    // moved out of nor rostered into anything.
     expect(mocks.adHocEventService.handleVoiceLeave).not.toHaveBeenCalled();
+    expect(mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
   });
 }
 

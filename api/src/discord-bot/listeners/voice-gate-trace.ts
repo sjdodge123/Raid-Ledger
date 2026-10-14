@@ -37,7 +37,10 @@ export type GateOutcome =
   // ROK-1390: a game-binding spawn reached with only bots in the room. Bots
   // still count toward the threshold (MED-2/AC12) but are never rostered
   // (ROK-1445 AC9), so the immediate spawn has nobody to mint the event for.
-  | 'no-human-members';
+  | 'no-human-members'
+  // ROK-1782 ruling (a): a game-voice-monitor on a channel that also has a
+  // general-lobby binding — the lobby's per-game detection decides the spawn.
+  | 'yielded-to-lobby';
 
 /**
  * Fields rendered into the trace line. `gameId: null` is printed literally —
