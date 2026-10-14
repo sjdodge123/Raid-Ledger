@@ -13,6 +13,22 @@ const SENTRY_DSN =
 const isProduction = process.env.NODE_ENV === 'production';
 const telemetryDisabled = process.env.DISABLE_TELEMETRY === 'true';
 
+/** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
+const PII_HEADER_DENY = {
+  deny: ['forwarded', '-ip', 'remote-', 'via', '-user'],
+};
+const V10_DATA_COLLECTION = {
+  userInfo: false,
+  cookies: false,
+  httpHeaders: { request: PII_HEADER_DENY, response: PII_HEADER_DENY },
+  httpBodies: [],
+  urlQueryParams: PII_HEADER_DENY,
+  genAI: { inputs: false, outputs: false },
+  databaseQueryData: false,
+  queues: false,
+  graphQL: { document: false, variables: false },
+} satisfies Sentry.NodeOptions['dataCollection'];
+
 if (!telemetryDisabled && isProduction) {
   Sentry.init({
     dsn: SENTRY_DSN,
@@ -22,6 +38,15 @@ if (!telemetryDisabled && isProduction) {
     // its events in a separate Sentry bucket instead of polluting the prod inbox.
     environment: process.env.SENTRY_ENVIRONMENT ?? 'production',
     tracesSampleRate: isProduction ? 0.1 : 1.0,
+    // Sentry v11 streams spans by default, which turns beforeSendTransaction
+    // into a no-op and would skip the ROK-1592 secret scrub below. Keep the
+    // v10 transaction model until the scrub moves to beforeSendSpan.
+    traceLifecycle: 'static',
+    // Sentry v11 dropped sendDefaultPii; an unset dataCollection now collects
+    // bodies, cookies and DB query data. This is the documented v10 baseline.
+    dataCollection: V10_DATA_COLLECTION,
+    // v11 defaults this to true; keep v10 issue grouping.
+    attachStacktrace: false,
     beforeSend(event) {
       // ROK-1365: drop synthetic CSP-report noise before anything else. The
       // /csp-report controller captures real browser violations via

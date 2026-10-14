@@ -44,7 +44,7 @@
     "@nestjs/throttler": "^6.7.1",
     "@nestjs/websockets": "^11.2.7",
     "@raid-ledger/contract": "*",
-    "@sentry/nestjs": "^10.73.0",
+    "@sentry/nestjs": "^11.6.0",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.11",
     "chrono-node": "^2.10.2",
