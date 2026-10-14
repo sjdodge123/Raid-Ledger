@@ -7,10 +7,7 @@
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import {
-  loginAsAdmin,
-  truncateAllTables,
-} from '../../../common/testing/integration-helpers';
+import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -136,10 +133,6 @@ beforeAll(async () => {
     { guildId, kind: 'member', guildMemberId: memberIds.deleg },
   ]);
   tokens.admin = await loginAsAdmin(testApp.request, testApp.seed);
-});
-
-afterAll(async () => {
-  testApp.seed = await truncateAllTables(testApp.db);
 });
 
 describe('GET /:id — view matrix', () => {

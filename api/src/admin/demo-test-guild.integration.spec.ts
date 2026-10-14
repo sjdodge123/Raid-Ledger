@@ -6,16 +6,15 @@
  * linked through a character GUID, an outsider, and a rank-1 editor grant.
  * Proven through the real `/plugins/wow/guilds/:id` access matrix.
  */
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
-import {
-  loginAsAdmin,
-  truncateAllTables,
-} from '../common/testing/integration-helpers';
+import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
 import { AuthService } from '../auth/auth.service';
 import { SettingsService } from '../settings/settings.service';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
+import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
+import { nonEmpty } from '../common/testing/narrow';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
@@ -36,9 +35,32 @@ function seed(body: Record<string, unknown>) {
     .send(body);
 }
 
-/** Seed with the integration seed's own WoW game. */
+/**
+ * The baseline integration seed's only game is the non-WoW `test-game`, which
+ * the fixture rejects with 400 — so the suite seeds its own WoW game row.
+ */
+async function seedWowGame(): Promise<void> {
+  const [existing] = await testApp.db
+    .select({ id: schema.games.id })
+    .from(schema.games)
+    .where(eq(schema.games.slug, WOW_FOREVER_GAME_SLUG))
+    .limit(1);
+  if (existing) return;
+  nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name: 'World of Warcraft: Forever',
+        slug: WOW_FOREVER_GAME_SLUG,
+      })
+      .returning({ id: schema.games.id }),
+    'WoW game',
+  );
+}
+
+/** Seed against the suite's WoW game. */
 async function seedGuild(name: string): Promise<SeedGuildResponse> {
-  const res = await seed({ name, gameSlug: testApp.seed.game.slug });
+  const res = await seed({ name, gameSlug: WOW_FOREVER_GAME_SLUG });
   expect(res.status).toBe(200);
   return res.body as SeedGuildResponse;
 }
@@ -59,11 +81,13 @@ function viewGuild(guildId: number, token: string) {
 beforeAll(async () => {
   testApp = await getTestApp();
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);
+  await seedWowGame();
   await setDemoMode(true);
 });
 
-afterAll(async () => {
-  testApp.seed = await truncateAllTables(testApp.db);
+// No truncate here: integration-setup.ts's global afterAll (closeTestApp)
+// runs first and ends the DB client; its beforeAll truncates every file.
+afterAll(() => {
   if (ORIGINAL_DEMO_MODE === undefined) delete process.env.DEMO_MODE;
   else process.env.DEMO_MODE = ORIGINAL_DEMO_MODE;
 });
