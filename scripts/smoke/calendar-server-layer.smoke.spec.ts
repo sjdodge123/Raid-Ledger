@@ -131,20 +131,67 @@ async function seedMember(token: string): Promise<number> {
     return user.userId;
 }
 
-/**
- * A 30-minute slot inside `w`, on ONE app-tz day: 30 min after the start,
- * or — when that would cross midnight — 90 min before the end.
- */
-async function slotInside(page: Page, w: LayerWindow): Promise<{ start: string; end: string; date: string }> {
-    const early = Date.parse(w.start) + 30 * 60_000;
-    const late = Date.parse(w.end) - 90 * 60_000;
-    for (const t of [early, late]) {
-        const start = new Date(t).toISOString();
-        const end = new Date(t + 30 * 60_000).toISOString();
-        const date = await appDate(page, start);
-        if (date === (await appDate(page, end))) return { start, end, date };
+const SLOT_MS = 30 * 60_000;
+interface Slot { start: string; end: string; date: string }
+interface ListedEvent { id: number; startTime: string; endTime: string }
+
+const overlaps = (s: Slot, e: ListedEvent): boolean =>
+    Date.parse(e.startTime) < Date.parse(s.end) && Date.parse(s.start) < Date.parse(e.endTime);
+
+/** Every event that could overlap [from, to): starts in [from - 2d, to), all pages. */
+async function eventsNear(token: string, from: number, to: number): Promise<ListedEvent[]> {
+    const out: ListedEvent[] = [];
+    const range = `startAfter=${new Date(from - 2 * DAY_MS).toISOString()}&endBefore=${new Date(to).toISOString()}`;
+    for (let page = 1; page <= 20; page++) {
+        const body = (await apiGet(token, `/events?${range}&limit=100&page=${page}`)) as
+            { data?: ListedEvent[]; meta?: { hasMore?: boolean } } | null;
+        if (!body?.data) throw new Error(`GET /events?${range} failed`);
+        out.push(...body.data);
+        if (!body.meta?.hasMore) return out;
     }
-    throw new Error(`no single-day 30-min slot inside window ${w.start} → ${w.end}`);
+    throw new Error(`GET /events?${range}: more than 20 pages`);
+}
+
+/** 30-min slots inside `w` (≥30 min clear of start, ≥60 min of end), each on ONE app-tz day. */
+async function slotsInside(page: Page, w: LayerWindow): Promise<Slot[]> {
+    const slots: Slot[] = [];
+    for (let t = Date.parse(w.start) + SLOT_MS; t + 3 * SLOT_MS <= Date.parse(w.end); t += SLOT_MS) {
+        const start = new Date(t).toISOString();
+        const end = new Date(t + SLOT_MS).toISOString();
+        const date = await appDate(page, start);
+        if (date === (await appDate(page, end))) slots.push({ start, end, date });
+    }
+    return slots;
+}
+
+/**
+ * Create `title` in a 30-min slot inside a future window that NO other event
+ * overlaps (an overlapping card stacks over ours at phone width). Each project
+ * starts from a different slot; a sibling that lands in the same slot anyway is
+ * caught by the re-read, and the event moves on. Fails loudly if none is free.
+ */
+async function createInFreeSlot(
+    token: string, page: Page, windows: LayerWindow[], title: string, project: string,
+): Promise<{ id: number; slot: Slot }> {
+    const offset = Math.max(0, ['desktop', 'mobile', 'tablet'].indexOf(project)) * 3;
+    for (const w of windows) {
+        const all = await slotsInside(page, w);
+        const slots = [...all.slice(offset % (all.length || 1)), ...all.slice(0, offset % (all.length || 1))];
+        const busy = await eventsNear(token, Date.parse(w.start), Date.parse(w.end));
+        for (const slot of slots) {
+            if (busy.some((e) => overlaps(slot, e))) continue;
+            const created = (await apiPost(token, '/events', {
+                title, startTime: slot.start, endTime: slot.end, maxAttendees: 10, gameId: seed?.gameId,
+            })) as { id?: number };
+            if (typeof created.id !== 'number') throw new Error(`POST /events: ${JSON.stringify(created)}`);
+            const rivals = (await eventsNear(token, Date.parse(slot.start), Date.parse(slot.end)))
+                .filter((e) => e.id !== created.id && overlaps(slot, e));
+            if (rivals.length === 0) return { id: created.id, slot };
+            await apiDelete(token, `/events/${created.id}`);
+            busy.push(...rivals);
+        }
+    }
+    throw new Error(`no 30-min slot free of other events inside any of ${windows.length} future windows`);
 }
 
 test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
@@ -190,23 +237,27 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
     test('clicking an event under a band still opens the event', async ({ page, world }, testInfo) => {
         const token = await getAdminToken();
         const now = Date.now();
-        const win = (await runningWindows(token)).find((w) => Date.parse(w.start) > now + 5 * 60_000);
-        expect(win, 'a future window of the running server').toBeDefined();
-        if (!win) return;
+        const windows = (await runningWindows(token)).filter((w) => Date.parse(w.start) > now + 5 * 60_000);
+        expect(windows.length, 'a future window of the running server').toBeGreaterThan(0);
         await page.goto('/calendar');
-        const slot = await slotInside(page, win);
         const title = world.uid('rok-1774-under-band');
-        const event = (await apiPost(token, '/events', {
-            title, startTime: slot.start, endTime: slot.end, maxAttendees: 10, gameId: seed?.gameId,
-        })) as { id: number };
+        const { id, slot } = await createInFreeSlot(token, page, windows, title, testInfo.project.name);
         try {
             await openGrid(page, testInfo, slot.date);
             await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
             const card = page.locator('.rbc-event').filter({ hasText: title }).first();
+            await expect(card).toBeVisible({ timeout: 15_000 });
+            // Centre it in every scroll container, clear of the phone's fixed tab bar.
+            await card.evaluate((el) => el.scrollIntoView({ block: 'center', inline: 'center', behavior: 'instant' }));
+            await expect.poll(() => card.evaluate((el) => {
+                const r = el.getBoundingClientRect();
+                const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+                return !!hit && el.contains(hit);
+            }), 'our card is topmost at its centre (no band, nav or other event over it)').toBe(true);
             await card.click({ timeout: 15_000 });
-            await expect(page).toHaveURL(new RegExp(`/events/${event.id}(\\?|$)`));
+            await expect(page).toHaveURL(new RegExp(`/events/${id}(\\?|$)`));
         } finally {
-            await apiDelete(token, `/events/${event.id}`);
+            await apiDelete(token, `/events/${id}`);
         }
     });
 
