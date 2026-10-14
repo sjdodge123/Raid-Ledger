@@ -1049,11 +1049,15 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 - Keep the band behind events (`backgroundEvents`, `pointer-events: none`) — an event under a band must
   stay clickable. The glyph is the ONLY layer element that takes the pointer; it stops pointer/mouse/touch
   down so react-big-calendar's slot selection never starts on it.
-- Let labels and tooltips **wrap** (`break-words`); never truncate a server name or a time. A window
-  crossing local midnight is split per day; later segments read "… (cont.)" (the host adds it).
-- Open the tooltip on hover, keyboard focus or tap, and **flip it left** when the glyph sits within one
-  tooltip width + gap (256 + 8px) of the grid's right edge (`chooseTipSide`), so Fri/Sat columns and
-  Day view never clip it. The glyph's `aria-label` carries both tooltip lines.
+- Let tooltips **wrap** (`break-words`); never truncate a server name or a time in a tooltip. A band
+  label is one line: it ellipsizes when the band is narrow or short, and it hides entirely on a band
+  shorter than one line. The full text stays in its `title` and in the band's screen-reader text. A
+  window crossing local midnight is split per day; later segments read "… (cont.)" (the host adds it).
+- Open the tooltip on hover, keyboard focus or tap (a second tap, a tap elsewhere or Escape closes it).
+  Place it with `placeTip`: open right when it fits, otherwise toward the side with more room, with
+  `max-width` capped to that room, so it never leaves the grid on any column or on a 375px phone.
+  Markers at the same local minute share one glyph whose tooltip lists each one. The glyph's
+  `aria-label` carries the tooltip lines.
 - Zone every item with `useTimezoneStore.resolved`, the same as events.
 
 **DON'T**
@@ -1067,7 +1071,7 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 **Where it lives.** Host pieces: `web/src/components/calendar/layers/` — `calendar-layers.css` (band +
 tick z-order), `LayerWindowLabel.tsx`, `LayerMarkerTick.tsx`, `LayerGlyph.tsx` (tooltip + flip),
 `LayerDayColumnWrapper.tsx` (ticks per day column), `CalendarLayerGrid.tsx` + `calendar-layer-context.ts`
-(grid ref for the flip), `calendar-layer-events.ts` (zoning, midnight split, `chooseTipSide`),
+(grid ref for the flip), `calendar-layer-events.ts` (zoning, midnight split), `layer-tip-placement.ts` (`placeTip`),
 `use-calendar-layer-data.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
 (`calendar-layer-section.tsx`). Smoke: `scripts/smoke/calendar-server-layer.smoke.spec.ts`.
 
