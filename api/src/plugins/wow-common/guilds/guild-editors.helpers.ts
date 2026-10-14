@@ -142,12 +142,9 @@ export async function deleteGrant(
   return rows.length > 0;
 }
 
-/** Postgres unique violation (a concurrent duplicate grant). */
-export function isUniqueViolation(err: unknown): boolean {
-  return (
-    typeof err === 'object' &&
-    err !== null &&
-    'code' in err &&
-    err.code === '23505'
-  );
-}
+/**
+ * Postgres unique violation (a concurrent duplicate grant). Drizzle wraps the
+ * driver error in `DrizzleQueryError` with SQLSTATE 23505 on `.cause`, so the
+ * shared helper checks both `code` and `cause.code`.
+ */
+export { isUniqueViolation } from '../../../lineups/lineups-nomination.helpers';
