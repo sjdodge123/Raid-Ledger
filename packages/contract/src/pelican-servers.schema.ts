@@ -75,6 +75,8 @@ export const PelicanServerRowSchema = z
     statusCheckedAt: isoOrNull,
     /** The last complete listing did not include this server. */
     missing: z.boolean(),
+    /** A schedule's stored next run is not an occurrence of its cron in this server's timezone (ROK-1096). */
+    tzMismatch: z.boolean(),
   })
   .strict();
 export type PelicanServerRowDto = z.infer<typeof PelicanServerRowSchema>;

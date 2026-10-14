@@ -35,19 +35,38 @@ export class PelicanConfigService {
 
   /** Current config; parsed `.strict()` so a leaked key field throws. */
   async getConfig(): Promise<PelicanConfig> {
-    const [panelUrl, apiKey, ownTz] = await Promise.all([
+    const [panelUrl, apiKey, tz] = await Promise.all([
       this.settings.get(SETTING_KEYS.PELICAN_PANEL_URL),
       this.settings.get(SETTING_KEYS.PELICAN_CLIENT_API_KEY),
-      this.settings.get(SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE),
+      this.readDefaultTimezone(),
     ]);
-    const inherited = ownTz === null || ownTz === '';
-    const defaultTimezone = inherited ? await this.communityTimezone() : ownTz;
     return PelicanConfigSchema.parse({
       panelUrl,
       apiKeySet: apiKey !== null && apiKey !== '',
-      defaultTimezone,
-      timezoneInherited: inherited,
+      defaultTimezone: tz.defaultTimezone,
+      timezoneInherited: tz.inherited,
     });
+  }
+
+  /**
+   * The plugin's default timezone (ROK-1096 D8): its own setting, else the
+   * community timezone, else UTC. Never reads the client API key.
+   */
+  async resolveDefaultTimezone(): Promise<string> {
+    return (await this.readDefaultTimezone()).defaultTimezone;
+  }
+
+  private async readDefaultTimezone(): Promise<{
+    defaultTimezone: string;
+    inherited: boolean;
+  }> {
+    const ownTz = await this.settings.get(
+      SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE,
+    );
+    if (ownTz !== null && ownTz !== '') {
+      return { defaultTimezone: ownTz, inherited: false };
+    }
+    return { defaultTimezone: await this.communityTimezone(), inherited: true };
   }
 
   /** Apply a validated update: omitted = unchanged, `''` = cleared. */
