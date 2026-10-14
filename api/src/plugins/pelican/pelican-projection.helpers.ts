@@ -116,8 +116,9 @@ function projectServer(
     return;
   }
   if (hasTzMismatch(group, tz)) result.tzMismatchServerIds.push(serverId);
+  const lastStopMs = latestStopBefore(group, tz, input.range.from);
   const events = group.flatMap((s) =>
-    scheduleEvents(s, tz, input.range, result),
+    scheduleEvents(s, { tz, range: input.range, lastStopMs }, result),
   );
   const { kept, truncated } = capEvents(events);
   if (truncated) result.truncatedServerIds.push(serverId);
@@ -169,11 +170,46 @@ function parseEffect(effect: string): GameServerEffect | null {
   return parsed.success ? parsed.data : null;
 }
 
+/** Per-server expansion context shared by every schedule of the server. */
+interface ExpandContext {
+  tz: string;
+  range: ProjectionRange;
+  /** Effect time (ms) of the server's latest stop/kill before `from`, if any. */
+  lastStopMs: number | null;
+}
+
+/**
+ * The latest stop/kill effect before `from` across the server's schedules.
+ * A bad cron is skipped here — its own expansion records it as `bad_cron`.
+ */
+function latestStopBefore(
+  group: readonly ProjectionSchedule[],
+  tz: string,
+  from: Date,
+): number | null {
+  let latest: number | null = null;
+  for (const s of group) {
+    const effect = parseEffect(s.effect);
+    if (effect === null || !isStop(effect)) continue;
+    const offsetMs = s.effectOffsetS * 1000;
+    try {
+      const run = prevBefore(
+        toCronExpression(s),
+        tz,
+        new Date(from.getTime() - offsetMs),
+      );
+      latest = Math.max(latest ?? -Infinity, run.getTime() + offsetMs);
+    } catch {
+      continue;
+    }
+  }
+  return latest;
+}
+
 /** In-range runs + the look-behind/look-ahead runs (D4, D7) of one schedule. */
 function scheduleEvents(
   s: ProjectionSchedule,
-  tz: string,
-  range: ProjectionRange,
+  ctx: ExpandContext,
   result: ProjectionResult,
 ): ProjectionEvent[] {
   const effect = parseEffect(s.effect);
@@ -186,7 +222,7 @@ function scheduleEvents(
     return [];
   }
   try {
-    return expandSchedule(s, effect, tz, range);
+    return expandSchedule(s, effect, ctx);
   } catch {
     result.skipped.push({
       serverId: s.serverId,
@@ -197,11 +233,27 @@ function scheduleEvents(
   }
 }
 
+/**
+ * A start's look-behind run: the first run at/after the server's latest
+ * stop before `from` — so the opener of a window spanning `from` is stable
+ * whatever `from` is (ruling 2: later starts while open are absorbed).
+ * With no stop schedule it is simply the last run before `from`.
+ */
+function startLookBehind(
+  expr: string,
+  tz: string,
+  from: Date,
+  lastStopRunMs: number | null,
+): Date[] {
+  if (lastStopRunMs === null) return [prevBefore(expr, tz, from)];
+  const run = nextAtOrAfter(expr, tz, new Date(lastStopRunMs));
+  return run.getTime() < from.getTime() ? [run] : [];
+}
+
 function expandSchedule(
   s: ProjectionSchedule,
   effect: GameServerEffect,
-  tz: string,
-  range: ProjectionRange,
+  { tz, range, lastStopMs }: ExpandContext,
 ): ProjectionEvent[] {
   const expr = toCronExpression(s);
   const offsetMs = s.effectOffsetS * 1000;
@@ -217,8 +269,14 @@ function expandSchedule(
   const out = expandBetween(expr, tz, from, to, PELICAN_PROJECTION_CAP + 1).map(
     (run) => event(run, true),
   );
-  if (effect === 'start' || isStop(effect))
+  if (effect === 'start') {
+    const stopRunMs = lastStopMs === null ? null : lastStopMs - offsetMs;
+    for (const run of startLookBehind(expr, tz, from, stopRunMs))
+      out.push(event(run, false));
+  }
+  if (isStop(effect)) {
     out.push(event(prevBefore(expr, tz, from), false));
-  if (isStop(effect)) out.push(event(nextAtOrAfter(expr, tz, to), false));
+    out.push(event(nextAtOrAfter(expr, tz, to), false));
+  }
   return out;
 }

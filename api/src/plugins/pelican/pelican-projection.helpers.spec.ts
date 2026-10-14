@@ -178,6 +178,22 @@ const localHour = (iso: string): number =>
 const markerTimes = (r: ReturnType<typeof project>): string[] =>
   r.items.flatMap((i) => (i.kind === 'marker' ? [i.at] : []));
 
+describe('projectSchedules — look-behind opener is stable (review fix)', () => {
+  const SUNDAY_STOP = sched('0 2 * * 0', 'stop', { name: 'Night down' });
+  const WEEK =
+    'window 2026-10-11T22:00:00.000Z -> 2026-10-18T06:00:00.000Z Evening up';
+
+  it.each([
+    ['Wednesday', '2026-10-14T12:00:00-04:00', '2026-10-15T12:00:00-04:00'],
+    ['Friday', '2026-10-16T12:00:00-04:00', '2026-10-17T12:00:00-04:00'],
+  ])(
+    'daily start + Sunday stop, range from %s → opens Sun 18:00',
+    (_day, from, to) => {
+      expect(briefs(project([START, SUNDAY_STOP], from, to))).toEqual([WEEK]);
+    },
+  );
+});
+
 describe('projectSchedules — DST', () => {
   it.each([
     [
