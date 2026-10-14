@@ -5,8 +5,9 @@
  * timezone override), the mapping surviving a re-sync (incl. while missing),
  * the member-facing visibility filter and the guards.
  *
- * Calendar items stay `[]` until S5 (ROK-1096, D12), so visibility is proven
- * on `GET /game-servers/status`, the only member feed with Pelican output.
+ * Visibility is proven here on `GET /game-servers/status` and the repository
+ * filter; the calendar side (projected schedules, ROK-1096) and the admin
+ * row's `tzMismatch` are pinned in `pelican-projection.integration.spec.ts`.
  */
 import { eq } from 'drizzle-orm';
 import {

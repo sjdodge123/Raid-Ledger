@@ -2,9 +2,15 @@
  * ROK-1094 — POST /admin/test/pelican/seed-servers (integration, real DB).
  * The DEMO_MODE fixture the fleet UI test plan seeds before each run: four
  * admin-table rows, a fake unreachable connection, and reset on re-run.
+ * ROK-1096: the running+mapped row also gets a start/stop window + nightly
+ * restart, and the offline row a schedule its timezone override mismatches.
  * (403 without DEMO_MODE is the shared DemoModeGuard's own spec.)
  */
-import { PelicanServerListResponseSchema } from '@raid-ledger/contract';
+import {
+  GameServerCalendarResponseSchema,
+  PelicanServerListResponseSchema,
+  PelicanServerRowSchema,
+} from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
   loginAsAdmin,
@@ -13,7 +19,8 @@ import {
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from './pelican.constants';
+import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
+import { DEMO_RESTART_OFFSET_S } from './pelican-demo-seed-schedules.helpers';
 import {
   DEMO_PELICAN_API_KEY,
   DEMO_PELICAN_PANEL_URL,
@@ -55,6 +62,23 @@ async function adminRows() {
   const res = await adminGet('/admin/plugins/pelican/servers');
   const body = PelicanServerListResponseSchema.parse(res.body);
   return new Map(body.data.map((r) => [r.id, r]));
+}
+
+/** Pelican items over the next 3 days, as `window:<label>` / `marker:<effect>`; all must be `serverId`'s. */
+async function pelicanCalendarKinds(serverId: number): Promise<string[]> {
+  const from = new Date();
+  const to = new Date(from.getTime() + 3 * 86_400_000);
+  const q = `from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`;
+  const cal = await adminGet(`/game-servers/calendar?${q}`);
+  const items = GameServerCalendarResponseSchema.parse(cal.body).data.filter(
+    (i) => i.provider === PELICAN_PROVIDER_LABEL,
+  );
+  expect(new Set(items.map((i) => i.serverKey))).toEqual(
+    new Set([String(serverId)]),
+  );
+  return items.map((i) =>
+    i.kind === 'window' ? `window:${i.label}` : `marker:${i.effect}`,
+  );
 }
 
 beforeAll(async () => {
@@ -132,5 +156,51 @@ describe('POST /admin/test/pelican/seed-servers (ROK-1094)', () => {
     const reset = second.servers.find((s) => s.kind === 'offline_unmapped');
     expect(stored.find((r) => r.id === reset?.id)?.gameId).toBeNull();
     expect(second.gameId).toBe(first.gameId);
+  });
+});
+
+describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () => {
+  it('seeds calendar schedules: a window + restart markers on the running row, and a fixable tz warning (ROK-1096)', async () => {
+    const seeded = await seed();
+    const byKind = new Map(seeded.servers.map((s) => [s.kind, s]));
+    const running = byKind.get('running_mapped');
+    const mismatched = byKind.get('offline_unmapped');
+    if (!running || !mismatched) throw new Error('seed: kinds missing');
+
+    const rows = await adminRows();
+    const tzView = seeded.servers.map((s) => [
+      s.kind,
+      s.scheduleCount,
+      s.tzMismatch,
+      rows.get(s.id)?.tzMismatch,
+    ]);
+    expect(tzView).toEqual([
+      ['running_mapped', 3, false, false],
+      ['offline_unmapped', 1, true, true],
+      ['unknown_hidden', 0, false, false],
+      ['missing', 0, false, false],
+    ]);
+    const stored = await testApp.db.select().from(schema.pelicanSchedules);
+    expect(
+      stored
+        .filter((r) => r.serverId === running.id)
+        .map((r) => [r.effect, r.effectOffsetS, r.nextRunAt])
+        .sort(),
+    ).toEqual([
+      ['restart', DEMO_RESTART_OFFSET_S, null],
+      ['start', 0, null],
+      ['stop', 0, null],
+    ]);
+
+    const kinds = await pelicanCalendarKinds(running.id);
+    expect(kinds).toContain('window:Evening open');
+    expect(kinds).toContain('marker:restart');
+
+    const fixed = await testApp.request
+      .patch(`/admin/plugins/pelican/servers/${mismatched.id}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ timezone: seeded.tzMismatchFixTimezone });
+    expect(fixed.status).toBe(200);
+    expect(PelicanServerRowSchema.parse(fixed.body).tzMismatch).toBe(false);
   });
 });

@@ -13,6 +13,8 @@ import type { PluginRegistryService } from '../plugin-host/plugin-registry.servi
 import { PelicanAdapterRegistration } from './pelican-adapters';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
+import type { PelicanConfigService } from './pelican-config.service';
+import type { PelicanSchedulesRepository } from './pelican-schedules.repository';
 import type { PelicanServersRepository } from './pelican-servers.repository';
 import type { PelicanStatusService } from './pelican-status.service';
 import type { PelicanSyncService } from './pelican-sync.service';
@@ -30,8 +32,14 @@ function cronRegistrar() {
 
 function provider(rows = [pelicanRow(1)]) {
   const repo = { listPollable: jest.fn(() => Promise.resolve(rows)) };
+  const schedules = { listServable: jest.fn(() => Promise.resolve([])) };
+  const config = {
+    resolveDefaultTimezone: jest.fn(() => Promise.resolve('UTC')),
+  };
   return new PelicanGameServerProvider(
     repo as unknown as PelicanServersRepository,
+    schedules as unknown as PelicanSchedulesRepository,
+    config as unknown as PelicanConfigService,
   );
 }
 
@@ -140,9 +148,10 @@ describe('PelicanGameServerProvider', () => {
     expect(out.map((s) => s.serverKey)).toEqual(['2']);
   });
 
-  it('returns no calendar items until S5 (D12)', async () => {
+  it('returns no calendar items when no schedules are stored', async () => {
     const p = provider();
-    await expect(p.getCalendarItems()).resolves.toEqual([]);
+    const range = { from: new Date(0), to: new Date(86_400_000) };
+    await expect(p.getCalendarItems(range)).resolves.toEqual([]);
     expect(p.pluginSlug).toBe('pelican');
     expect(p.providerLabel).toBe('Pelican');
   });
