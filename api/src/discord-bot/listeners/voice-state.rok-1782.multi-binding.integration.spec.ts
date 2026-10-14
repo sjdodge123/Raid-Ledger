@@ -347,7 +347,7 @@ describe('ROK-1782 — a general lobby and a monitor on one channel', () => {
       .select({ leftAt: schema.adHocParticipants.leftAt })
       .from(schema.adHocParticipants)
       .where(eq(schema.adHocParticipants.discordUserId, 'u1'));
-    expect(u1?.leftAt).not.toBeNull();
+    expect(u1?.leftAt).toBeInstanceOf(Date);
   });
 });
 
