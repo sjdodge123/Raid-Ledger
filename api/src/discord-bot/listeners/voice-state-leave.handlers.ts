@@ -1,5 +1,6 @@
 import type { GuildMember } from 'discord.js';
 import {
+  isLobbyBinding,
   resolveVoiceChannel,
   spawnTimerKey,
   type ResolvedBinding,
@@ -59,8 +60,13 @@ export async function handleChannelLeave(
     );
     return;
   }
+  const lobbyWins = bindings.some(isLobbyBinding);
   for (const binding of bindings) {
-    await removeChannelMember(deps, channelId, binding, userId, timers);
+    // ROK-1782 (a): a monitor yielded to a lobby armed no timer of its own, and
+    // its `(channel, game)` key is shared with the lobby's group for that game
+    // — its occupancy cancel would kill a still-qualifying lobby spawn.
+    if (!lobbyWins || isLobbyBinding(binding))
+      await removeChannelMember(deps, channelId, binding, userId, timers);
     // ROK-1446 D6: leave is shared by both binding kinds, so the lobby gate in
     // `markLobbyDirty` is what keeps monitor channels out (D1).
     markLobbyDirty(deps, binding, channelId);

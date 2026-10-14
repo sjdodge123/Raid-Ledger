@@ -92,6 +92,30 @@ describe('ROK-1782 (a) — no duplicate event when both bindings match', () => {
   });
 });
 
+describe('ROK-1782 (a) — a yielded monitor never cancels a lobby spawn', () => {
+  it('a leave below the monitor minPlayers keeps the lobby BG3 timer', async () => {
+    h = await setupRok1445Harness(monitor());
+    const bigMonitor = gameBinding({
+      gameName: BG3.gameName,
+      config: { minPlayers: 5 },
+    });
+    h.mocks.channelBindingsService.getBindingsWithGameNames.mockResolvedValue([
+      bigMonitor,
+      lobbyBinding(),
+    ]);
+    // Interleaved so the lobby BG3 group is ARMED, not spawned immediately.
+    await h.joinMember({ id: 'u1', ...BG3 });
+    await h.joinMember({ id: 'u3', ...VALHEIM });
+    await h.joinMember({ id: 'u2', ...BG3 });
+    expect(h.spawnTimerKeys()).toHaveLength(1);
+    // Occupancy drops to 2 < the monitor's 5 — the shared (channel, BG3) key.
+    await h.leaveMember('u3');
+    expect(h.spawnTimerKeys()).toHaveLength(1);
+    await h.advanceSpawnDelay();
+    expect(h.eventKeys()).toEqual(['bind-gl:1']);
+  });
+});
+
 describe('ROK-1782 (c) — monitor presence recheck only on a game change', () => {
   const bg3Monitor: ResolvedBinding = {
     bindingId: 'bind-game',
