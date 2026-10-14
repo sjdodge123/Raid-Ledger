@@ -5,7 +5,7 @@
  * it renders the same DOM as the default wrapper.
  */
 import { forwardRef, type CSSProperties, type ReactNode } from 'react';
-import { markersForColumn } from './calendar-layer-events';
+import { groupCoincidentMarkers, markersForColumn } from './calendar-layer-events';
 import { useCalendarLayerContext } from './calendar-layer-context';
 import { LayerMarkerTick } from './LayerMarkerTick';
 
@@ -19,11 +19,11 @@ export interface LayerDayColumnWrapperProps {
 export const LayerDayColumnWrapper = forwardRef<HTMLDivElement, LayerDayColumnWrapperProps>(
     function LayerDayColumnWrapper({ children, className, style, date }, ref) {
         const ctx = useCalendarLayerContext();
-        const ticks = ctx && date ? markersForColumn(ctx.markers, date) : [];
+        const ticks = ctx && date ? groupCoincidentMarkers(markersForColumn(ctx.markers, date)) : [];
         return (
             <div ref={ref} className={className} style={style}>
                 {children}
-                {ticks.map((m) => <LayerMarkerTick key={m.id} marker={m} />)}
+                {ticks.map((g) => <LayerMarkerTick key={g.key} marker={g.head} coincident={g.rest} />)}
             </div>
         );
     },

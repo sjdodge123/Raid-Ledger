@@ -17,6 +17,28 @@
     min-height: 0;
     padding: 0;
     box-shadow: none;
+    /* Lets the label below react to the band's own height (Codex P2: short bands). */
+    container-type: size;
+}
+
+/*
+ * A band shorter than ~3 label lines keeps its label on ONE line with an
+ * ellipsis (full text in `title` + the sr-only span); a band shorter than one
+ * line hides the visible label entirely rather than clipping it mid-glyph.
+ */
+@container (max-height: 2.75rem) {
+    .rl-layer-window-text {
+        display: block;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+    }
+}
+
+@container (max-height: 1rem) {
+    .rl-layer-window-text {
+        display: none;
+    }
 }
 
 /* The band shows its own label; RBC's "6:00 PM – 2:00 AM" row is noise here. */

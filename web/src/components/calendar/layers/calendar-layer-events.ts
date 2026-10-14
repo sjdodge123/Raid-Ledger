@@ -83,14 +83,22 @@ export function markersForColumn(markers: readonly ZonedLayerMarker[], columnDat
     return markers.filter((m) => m.dayKey === key);
 }
 
-export interface TipSideInput {
-    anchorRight: number;
-    boundaryRight: number;
-    tipWidth?: number;
-    gap?: number;
+/** Markers drawn at the same spot of a day column; one glyph lists them all. */
+export interface ZonedLayerMarkerGroup {
+    key: string;
+    head: ZonedLayerMarker;
+    rest: ZonedLayerMarker[];
 }
 
-/** Open the tooltip to the LEFT when it would not fit right of the glyph (AC8). */
-export function chooseTipSide({ anchorRight, boundaryRight, tipWidth = 256, gap = 8 }: TipSideInput): 'left' | 'right' {
-    return anchorRight + gap + tipWidth > boundaryRight ? 'left' : 'right';
+/** Group markers that land on the same local day + minute, so none hides another. */
+export function groupCoincidentMarkers(markers: readonly ZonedLayerMarker[]): ZonedLayerMarkerGroup[] {
+    const groups = new Map<string, ZonedLayerMarkerGroup>();
+    const sorted = [...markers].sort((a, b) => Date.parse(a.marker.at) - Date.parse(b.marker.at));
+    for (const m of sorted) {
+        const key = `${m.dayKey}@${m.minuteOfDay}`;
+        const group = groups.get(key);
+        if (group) group.rest.push(m);
+        else groups.set(key, { key, head: m, rest: [] });
+    }
+    return [...groups.values()];
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { CalendarLayerItem, CalendarLayerMarker, CalendarLayerWindow } from '../../../plugins/calendar-layer';
 import {
-    chooseTipSide, isLayerEvent, markersForColumn, splitAtMidnight, toLayerBackgroundEvents, zonedMarkers,
+    groupCoincidentMarkers, isLayerEvent, markersForColumn, splitAtMidnight, toLayerBackgroundEvents, zonedMarkers,
 } from './calendar-layer-events';
 
 const NY = 'America/New_York';
@@ -79,17 +79,32 @@ describe('zonedMarkers + markersForColumn', () => {
     });
 });
 
-describe('chooseTipSide', () => {
-    it('opens left when the 256px tip + 8px gap would pass the boundary', () => {
-        expect(chooseTipSide({ anchorRight: 900, boundaryRight: 1000 })).toBe('left');
-        expect(chooseTipSide({ anchorRight: 737, boundaryRight: 1000 })).toBe('left');
+describe('zonedMarkers on DST days (wall-clock, not elapsed-from-midnight)', () => {
+    it('2026-03-08 New York (23h day): 08:30Z is 4:30 AM EDT → minute 270, not 210', () => {
+        const [m] = zonedMarkers([marker('spring', '2026-03-08T08:30:00Z')], NY);
+        expect([m?.dayKey, m?.minuteOfDay]).toEqual(['2026-03-08', 270]);
     });
 
-    it('opens right when the tip fits exactly', () => {
-        expect(chooseTipSide({ anchorRight: 736, boundaryRight: 1000 })).toBe('right');
+    it('2026-11-01 New York (25h day): 10:30Z is 5:30 AM EST → minute 330, not 390', () => {
+        const [m] = zonedMarkers([marker('fall', '2026-11-01T10:30:00Z')], NY);
+        expect([m?.dayKey, m?.minuteOfDay]).toEqual(['2026-11-01', 330]);
+    });
+});
+
+describe('groupCoincidentMarkers', () => {
+    it('folds markers at the same local minute into one group, ordered by time, and keeps others apart', () => {
+        const groups = groupCoincidentMarkers(zonedMarkers([
+            marker('b', '2026-02-10T09:05:30Z'),
+            marker('a', '2026-02-10T09:05:00Z'),
+            marker('c', '2026-02-10T10:00:00Z'),
+        ], NY));
+        expect(groups.map((g) => [g.head.id, g.rest.map((m) => m.id)])).toEqual([['a', ['b']], ['c', []]]);
     });
 
-    it("opens right for Day view's left-edge glyph on a phone", () => {
-        expect(chooseTipSide({ anchorRight: 80, boundaryRight: 375 })).toBe('right');
+    it('does not fold the same minute on different days', () => {
+        const groups = groupCoincidentMarkers(zonedMarkers([
+            marker('d1', '2026-02-10T09:05:00Z'), marker('d2', '2026-02-11T09:05:00Z'),
+        ], NY));
+        expect(groups.map((g) => g.rest.length)).toEqual([0, 0]);
     });
 });
