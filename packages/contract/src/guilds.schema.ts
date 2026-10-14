@@ -45,7 +45,8 @@ export const GuildMemberRowSchema = z
     rankName: z.string().nullable(),
     /** Linked character's `roleOverride ?? role`. */
     effectiveRole: CharacterRoleSchema.nullable(),
-    characterId: id.nullable(),
+    /** `characters.id` is a UUID; null when no RL character links (D9). */
+    characterId: z.string().uuid().nullable(),
     isMain: z.boolean(),
   })
   .strict();
@@ -78,6 +79,23 @@ export const MyGuildsSchema = z
   .object({ guilds: z.array(GuildSummarySchema) })
   .strict();
 export type MyGuilds = z.infer<typeof MyGuildsSchema>;
+
+/** `GET /plugins/wow/guilds?gameId=` — guilds of a game the viewer can open. */
+export const GuildListQuerySchema = z
+  .object({ gameId: z.coerce.number().int().positive() })
+  .strict();
+export type GuildListQuery = z.infer<typeof GuildListQuerySchema>;
+
+/** `GET /plugins/wow/guilds/by-character/:characterId` — the badge's guild. */
+export const CharacterGuildSchema = z
+  .object({
+    data: z
+      .object({ guild: GuildSummarySchema, rankName: z.string().nullable() })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+export type CharacterGuild = z.infer<typeof CharacterGuildSchema>;
 
 export const GUILD_EDITOR_KINDS = ['rank', 'member'] as const;
 export const GuildEditorKindSchema = z.enum(GUILD_EDITOR_KINDS);
