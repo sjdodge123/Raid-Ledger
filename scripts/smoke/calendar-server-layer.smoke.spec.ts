@@ -21,10 +21,17 @@
  * - Views: phones (mobile project) drive Day via the view switcher; desktop and
  *   tablet click the toolbar's Week button (the page forces Month on mount, as
  *   `calendar.smoke.spec.ts` notes).
+ * - Teardown: see `joinTeardownGroup` — the LAST project out restores Pelican's
+ *   activation and the admin's saved game filter to what they were before the
+ *   first seed, so later specs never draw the seeded bands.
  */
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { API_BASE, apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
 import { isDesktop, isMobile } from './helpers';
 
 const RUNNING = 'Demo Server — Running';
@@ -117,6 +124,59 @@ async function resetSavedGameFilter(): Promise<void> {
     await apiPatch(await getAdminToken(), '/users/me/preferences', { preferences: { calendarGameFilter: [] } });
 }
 
+/*
+ * Teardown. There is no Pelican teardown fixture, and the seed activates the
+ * plugin and leaves seeded servers that every later calendar spec would draw.
+ * desktop/mobile/tablet run this file against ONE API (one machine), so the
+ * global state may only be restored by the LAST project out. Each project
+ * drops a member file in a temp dir keyed by the API; the first one in records
+ * the baseline (exclusive create, read before ANY seed); the last one out
+ * restores it. Deactivating is enough to hide the leftover rows: the API serves
+ * only active providers and the web draws no inactive layer. A member file
+ * left by a crashed worker only SKIPS teardown (as before this fix) until it
+ * goes stale; it never makes teardown run early.
+ */
+interface Baseline { pelicanActive: boolean; calendarGameFilter: unknown }
+
+const GROUP_DIR = join(tmpdir(), `rl-smoke-rok-1774-${createHash('sha1').update(API_BASE).digest('hex').slice(0, 12)}`);
+const BASELINE_FILE = join(GROUP_DIR, 'baseline.json');
+const STALE_MS = 2 * 60 * 60_000;
+
+const isFresh = (file: string): boolean => Date.now() - statSync(file).mtimeMs < STALE_MS;
+const liveMembers = (): string[] =>
+    readdirSync(GROUP_DIR).filter((f) => f.endsWith('.member') && isFresh(join(GROUP_DIR, f)));
+
+async function currentBaseline(token: string): Promise<Baseline> {
+    const status = (await apiGet(token, '/system/status')) as { activePlugins?: string[] } | null;
+    const prefs = (await apiGet(token, '/users/me/preferences')) as { data?: Record<string, unknown> } | null;
+    return {
+        pelicanActive: (status?.activePlugins ?? []).includes('pelican'),
+        calendarGameFilter: prefs?.data?.calendarGameFilter ?? [],
+    };
+}
+
+/** Join BEFORE seeding; returns this worker's member file. */
+async function joinTeardownGroup(token: string, project: string): Promise<string> {
+    mkdirSync(GROUP_DIR, { recursive: true });
+    try { if (!isFresh(BASELINE_FILE)) rmSync(BASELINE_FILE); } catch { /* no baseline yet */ }
+    const baseline = JSON.stringify(await currentBaseline(token));
+    try { writeFileSync(BASELINE_FILE, baseline, { flag: 'wx' }); } catch { /* a sibling recorded it first */ }
+    const member = join(GROUP_DIR, `${project}-${process.pid}.member`);
+    writeFileSync(member, '');
+    return member;
+}
+
+/** Leave; the last project out restores the baseline. */
+async function leaveTeardownGroup(token: string, member: string): Promise<void> {
+    rmSync(member, { force: true });
+    if (liveMembers().length > 0) return; // a sibling project still needs the seed
+    let baseline: Baseline | null = null;
+    try { baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) as Baseline; } catch { return; }
+    rmSync(BASELINE_FILE, { force: true });
+    await apiPatch(token, '/users/me/preferences', { preferences: { calendarGameFilter: baseline.calendarGameFilter } });
+    if (!baseline.pelicanActive) await apiPost(token, '/admin/plugins/pelican/deactivate');
+}
+
 /**
  * A 30-minute slot inside `w`, on ONE app-tz day: 30 min after the start,
  * or — when that would cross midnight — 90 min before the end.
@@ -134,10 +194,17 @@ async function slotInside(page: Page, w: LayerWindow): Promise<{ start: string; 
 }
 
 test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
+    let member: string | null = null;
+
     test.beforeAll(async () => {
         const token = await getAdminToken();
+        member = await joinTeardownGroup(token, test.info().project.name);
         seed = await ensureSeeded(token);
         await resetSavedGameFilter();
+    });
+
+    test.afterAll(async () => {
+        if (member) await leaveTeardownGroup(await getAdminToken(), member);
     });
 
     test('band with its label renders on the grid; hidden/unmapped servers never do', async ({ page }, testInfo) => {
