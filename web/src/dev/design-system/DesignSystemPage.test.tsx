@@ -617,3 +617,20 @@ describe('DesignSystemPage — NP-3 synced away row (ROK-1595)', () => {
         expect(within(synced).getByRole('button', { name: /ignore/i })).toBeInTheDocument();
     });
 });
+
+describe('DesignSystemPage — TabRow demo (ROK-1785)', () => {
+    beforeEach(() => {
+        mockUseSystemStatus.mockReset();
+        window.history.replaceState(null, '', '/');
+    });
+
+    it('mounts the real TabRow: hash links, hidden tab dropped, panel id prefixed', () => {
+        demoMode(true);
+        renderWithProviders(<DesignSystemPage />);
+        const demo = screen.getByTestId('ds-tab-row');
+        const nav = within(demo).getByRole('navigation', { name: 'Demo page sections' });
+        expect(within(nav).getByRole('link', { name: 'Overview' })).toHaveAttribute('aria-current', 'page');
+        expect(within(nav).queryByRole('link', { name: 'Loot' })).toBeNull();
+        expect(within(demo).getByRole('region', { name: 'Overview' })).toHaveAttribute('id', 'ds-tab-overview');
+    });
+});
