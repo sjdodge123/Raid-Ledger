@@ -117,14 +117,31 @@ describe('GuildAccessService (real DB)', () => {
       { guildId, kind: 'member', guildMemberId: picked.memberId },
     ]);
 
-    const all = { view: true, edit: true, manage: true };
     const editor = { view: true, edit: true, manage: false };
-    expect(await rights(gm.actor, guildId)).toEqual(all);
+    // GM_RANK_IMPLIES_EDIT is off: rank 0 alone is view-only.
+    expect(await rights(gm.actor, guildId)).toEqual({
+      view: true,
+      edit: false,
+      manage: false,
+    });
     expect(await rights(officer.actor, guildId)).toEqual(editor);
     expect(await rights(picked.actor, guildId)).toEqual(editor);
     expect(await rights(plain.actor, guildId)).toEqual({
       view: true,
       edit: false,
+      manage: false,
+    });
+  });
+
+  it('a GM with an explicit member grant edits but never manages editors', async () => {
+    const guildId = await seedGuild('Stormwind Keep');
+    const gm = await seedMember({ guildId, username: 'gm2', rankIndex: 0 });
+    await testApp.db
+      .insert(schema.guildEditors)
+      .values({ guildId, kind: 'member', guildMemberId: gm.memberId });
+    expect(await rights(gm.actor, guildId)).toEqual({
+      view: true,
+      edit: true,
       manage: false,
     });
   });
@@ -149,11 +166,17 @@ describe('GuildAccessService (real DB)', () => {
     const guildId = await seedGuild('Darnassus Wardens');
     const gm = await seedMember({ guildId, username: 'left', rankIndex: 0 });
     await testApp.db
+      .insert(schema.guildEditors)
+      .values({ guildId, kind: 'member', guildMemberId: gm.memberId });
+    expect(await access.canEdit(gm.actor, guildId)).toBe(true);
+    await testApp.db
       .update(schema.users)
       .set({ deactivatedAt: new Date() })
       .where(eq(schema.users.id, gm.actor.id));
     expect(await access.isMember(gm.actor.id, guildId)).toBe(false);
+    expect(await access.canView(gm.actor, guildId)).toBe(false);
     expect(await access.canEdit(gm.actor, guildId)).toBe(false);
+    expect(await access.myGuilds(gm.actor.id)).toEqual([]);
   });
 
   it('membership is per guild; admin/operator edit any guild', async () => {

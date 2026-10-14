@@ -19,6 +19,16 @@ export interface GuildActor {
 /** The guild master is rank 0 — the only built-in rank meaning (spec §3). */
 export const GM_RANK_INDEX = 0;
 
+/**
+ * SECURITY (ROK-1785 review, Lead decision pending the operator): rank 0 does
+ * NOT imply edit rights. Member GUIDs are claimed first-come from unsigned
+ * LedgerLink exports, so anyone could claim the GM's GUID. Until the follow-up
+ * "verify character ownership" story ships, the GM edits only through an
+ * explicit `guild_editors` grant made by an admin/operator. Flipping this to
+ * `true` restores implicit GM edit rights (managing editors stays staff-only).
+ */
+export const GM_RANK_IMPLIES_EDIT = false;
+
 /** Admin and operator see and edit every guild. */
 export function isStaff(actor: GuildActor): boolean {
   return actor.role === 'admin' || actor.role === 'operator';
@@ -48,20 +58,22 @@ export class GuildAccessService {
     return this.isMember(actor.id, guildId);
   }
 
-  /** Admin/operator, the GM, or a delegated rank / member row. */
+  /**
+   * Admin/operator, or an explicit `guild_editors` grant (rank or member).
+   * The GM counts only while `GM_RANK_IMPLIES_EDIT` is on.
+   */
   async canEdit(actor: GuildActor, guildId: number): Promise<boolean> {
     if (isStaff(actor)) return true;
     const rows = await findLinkedMemberRows(this.db, actor.id, guildId);
     if (rows.length === 0) return false;
-    if (rows.some(isGuildMaster)) return true;
+    if (GM_RANK_IMPLIES_EDIT && rows.some(isGuildMaster)) return true;
     return this.hasDelegation(guildId, rows);
   }
 
-  /** Granting/revoking editors: admin/operator or the GM only. */
-  async canManageEditors(actor: GuildActor, guildId: number): Promise<boolean> {
-    if (isStaff(actor)) return true;
-    const rows = await findLinkedMemberRows(this.db, actor.id, guildId);
-    return rows.some(isGuildMaster);
+  /** Granting/revoking editors: admin/operator only (no DB lookup). */
+  canManageEditors(actor: GuildActor, guildId: number): Promise<boolean> {
+    void guildId;
+    return Promise.resolve(isStaff(actor));
   }
 
   /** Guilds the user is a member of (nav entry point), by name. */

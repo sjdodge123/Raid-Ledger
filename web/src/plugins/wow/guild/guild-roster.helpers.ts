@@ -59,12 +59,12 @@ export function realmLabel(realmSlug: string | null): string | null {
     return realmSlug.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
-/** Ranks the GM may delegate to: every non-GM rank (rank 0 is implicit). */
+/** Ranks staff may delegate to: every non-GM rank (rank grants start at 1; grant the GM as a member). */
 export function delegableRanks(page: GuildPage): { rankIndex: number; name: string }[] {
     return page.ranks.flatMap((r) => (r.rankIndex !== null && r.rankIndex > 0 ? [{ rankIndex: r.rankIndex, name: rankLabel(r) }] : []));
 }
 
-/** Members the GM may delegate to: everyone below the GM rank. */
+/** Members staff may delegate to: everyone, the Guild Master included (rank 0 is not implicit). */
 export function delegableMembers(page: GuildPage): GuildMemberRow[] {
-    return page.ranks.flatMap((r) => r.members).filter((m) => m.rankIndex !== 0);
+    return page.ranks.flatMap((r) => r.members);
 }

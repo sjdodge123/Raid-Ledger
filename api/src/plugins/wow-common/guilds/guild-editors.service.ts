@@ -29,7 +29,7 @@ import { findGuild, rankNamesInSnapshot } from './guild-queries.helpers';
 
 /**
  * ROK-1785 — the Editors panel: list / grant / revoke delegated editors.
- * Only `canManageEditors` (GM, admin, operator) reaches any of it (spec §3).
+ * Only `canManageEditors` (admin, operator) reaches any of it (spec §3).
  */
 @Injectable()
 export class GuildEditorsService {

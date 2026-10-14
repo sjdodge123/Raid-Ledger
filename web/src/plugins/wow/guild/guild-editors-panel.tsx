@@ -1,7 +1,8 @@
 /**
- * ROK-1785 — "Page editors": who may edit this guild's page. Admins,
- * operators and the Guild Master always can; whoever manages editors
- * delegates to whole ranks or chosen members (removable chips, design-system
+ * ROK-1785 — "Page editors": who may edit this guild's page. Admins and
+ * operators always can; the Guild Master needs an explicit grant until
+ * character ownership is verified (api `GM_RANK_IMPLIES_EDIT`). Staff
+ * delegate to whole ranks or chosen members (removable chips, design-system
  * §4.3). The prototype put this on the Resources tab; Resources is hidden in
  * S1, so it is a collapsible card on Overview until that tab ships.
  */
@@ -15,6 +16,9 @@ import { Card } from './guild-bits';
 import { AddMemberEditor, AddRankEditor } from './guild-editor-forms';
 import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from './use-guild';
 
+/** Rank 0 is not an implicit editor: staff grant the GM explicitly. */
+const GM_HINT = 'Add your Guild Master as an editor.';
+
 function AlwaysEditors(): JSX.Element {
     return (
         <div>
@@ -22,7 +26,6 @@ function AlwaysEditors(): JSX.Element {
             <ul className="flex flex-col gap-1 text-sm text-secondary">
                 <li className="flex items-center gap-2">Raid Ledger admins <RoleBadge role="admin" /></li>
                 <li className="flex items-center gap-2">Raid Ledger operators <RoleBadge role="operator" /></li>
-                <li>The Guild Master (rank 0)</li>
             </ul>
         </div>
     );
@@ -57,10 +60,11 @@ function DelegatedEditors({ page }: { page: GuildPage }): JSX.Element {
     return (
         <div className="flex flex-col gap-3">
             <h3 className="text-sm font-semibold text-foreground">Delegated</h3>
+            <p className="text-sm text-secondary" data-testid="guild-editors-gm-hint">{GM_HINT}</p>
             <ul aria-label="Page editors" className="flex flex-wrap gap-2">
                 {list.map((e) => <EditorChip key={e.id} editor={e} disabled={pending} onRemove={() => remove.mutate(e.id)} />)}
             </ul>
-            {editors.isSuccess && list.length === 0 && <p className="text-sm text-muted">No one yet. Add a rank or a member below.</p>}
+            {editors.isSuccess && list.length === 0 && <p className="text-sm text-muted">No one yet. Add a rank or a member below — start with your Guild Master.</p>}
             {error && <p role="alert" className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-sm text-danger">{error.message}</p>}
             <AddRankEditor page={page} editors={list} pending={pending} onAdd={(i) => add.mutate(i)} />
             <AddMemberEditor page={page} editors={list} pending={pending} onAdd={(i) => add.mutate(i)} />

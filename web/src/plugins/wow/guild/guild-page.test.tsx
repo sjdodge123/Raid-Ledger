@@ -112,6 +112,9 @@ describe('GuildPage (ROK-1785)', () => {
         const panel = await screen.findByTestId('guild-editors-panel');
         await userEvent.click(within(panel).getByText('Page editors'));
         expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Rank: Raider');
+        expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Add your Guild Master as an editor.');
+        const memberSelect = within(panel).getByTestId('guild-editor-member-select');
+        expect(within(memberSelect).getByRole('option', { name: /Grimtusk/ }), 'the GM must be grantable as a member').toHaveValue('1');
         const rankOptions = within(within(panel).getByTestId('guild-editor-rank-select')).getAllByRole('option');
         expect(rankOptions.map((o) => o.textContent)).toEqual(['Pick one…']);
         await userEvent.selectOptions(within(panel).getByTestId('guild-editor-member-select'), '3');

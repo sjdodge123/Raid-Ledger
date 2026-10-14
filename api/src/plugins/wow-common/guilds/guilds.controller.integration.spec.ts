@@ -144,7 +144,7 @@ afterAll(async () => {
 
 describe('GET /:id — view matrix', () => {
   it.each([
-    ['gm', { canEdit: true, canManageEditors: true }],
+    ['gm', { canEdit: false, canManageEditors: false }],
     ['officer', { canEdit: true, canManageEditors: false }],
     ['deleg', { canEdit: true, canManageEditors: false }],
     ['plain', { canEdit: false, canManageEditors: false }],
@@ -188,7 +188,7 @@ describe('GET /:id — view matrix', () => {
 });
 
 describe('editors endpoints — manage matrix', () => {
-  it.each(['gm', 'admin'] as const)('%s lists editors', async (who) => {
+  it.each(['admin'] as const)('%s lists editors', async (who) => {
     const res = await get(`/${guildId}/editors`, who);
     expect(res.status).toBe(200);
     expect(res.body.editors).toEqual(
@@ -203,7 +203,7 @@ describe('editors endpoints — manage matrix', () => {
     );
   });
 
-  it.each(['officer', 'deleg', 'plain', 'removed', 'outsider'] as const)(
+  it.each(['gm', 'officer', 'deleg', 'plain', 'removed', 'outsider'] as const)(
     '%s → 403 on list, create and delete',
     async (who) => {
       const auth = `Bearer ${tokens[who]}`;
@@ -220,8 +220,8 @@ describe('editors endpoints — manage matrix', () => {
     },
   );
 
-  it('GM grants a rank, a duplicate is 409, delete is 204 then 404', async () => {
-    const auth = `Bearer ${tokens.gm}`;
+  it('admin grants a rank, a duplicate is 409, delete is 204 then 404', async () => {
+    const auth = `Bearer ${tokens.admin}`;
     const post = () =>
       testApp.request
         .post(`${BASE}/${guildId}/editors`)
@@ -233,7 +233,7 @@ describe('editors endpoints — manage matrix', () => {
     expect(created.body).toMatchObject({
       kind: 'rank',
       rankName: 'Rank 3',
-      grantedBy: 'gm',
+      grantedBy: testApp.seed.adminUser.username,
     });
     expect((await post()).status).toBe(409);
     const del = () =>
@@ -242,6 +242,19 @@ describe('editors endpoints — manage matrix', () => {
         .set('Authorization', auth);
     expect((await del()).status).toBe(204);
     expect((await del()).status).toBe(404);
+  });
+
+  it('the GM edits only after admin grants them as a member (GM_RANK_IMPLIES_EDIT off)', async () => {
+    const created = await testApp.request
+      .post(`${BASE}/${guildId}/editors`)
+      .set('Authorization', `Bearer ${tokens.admin}`)
+      .send({ kind: 'member', guildMemberId: memberIds.gm });
+    expect(created.status).toBe(201);
+    const res = await get(`/${guildId}`, 'gm');
+    expect(res.body.viewer).toEqual({ canEdit: true, canManageEditors: false });
+    await testApp.db
+      .delete(schema.guildEditors)
+      .where(eq(schema.guildEditors.id, created.body.id as number));
   });
 
   it('400 on rank 0 and on a member of another guild', async () => {
@@ -255,7 +268,7 @@ describe('editors endpoints — manage matrix', () => {
     const send = (body: object) =>
       testApp.request
         .post(`${BASE}/${guildId}/editors`)
-        .set('Authorization', `Bearer ${tokens.gm}`)
+        .set('Authorization', `Bearer ${tokens.admin}`)
         .send(body);
     expect((await send({ kind: 'rank', rankIndex: 0 })).status).toBe(400);
     expect(
@@ -307,7 +320,7 @@ describe('GET /?gameId= and /mine', () => {
         id: guildId,
         rankIndex: 0,
         rankName: 'Rank 0',
-        canEdit: true,
+        canEdit: false,
       }),
     ]);
     const plain = await get('/mine', 'plain');

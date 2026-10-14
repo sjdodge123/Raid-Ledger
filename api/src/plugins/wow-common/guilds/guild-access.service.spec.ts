@@ -10,7 +10,11 @@ import {
   createDrizzleMock,
   type MockDb,
 } from '../../../common/testing/drizzle-mock';
-import { GuildAccessService, type GuildActor } from './guild-access.service';
+import {
+  GM_RANK_IMPLIES_EDIT,
+  GuildAccessService,
+  type GuildActor,
+} from './guild-access.service';
 import type { LinkedMemberRow } from './guild-membership.helpers';
 
 const GUILD = 7;
@@ -61,12 +65,27 @@ describe('GuildAccessService access matrix', () => {
     },
   );
 
-  it('the GM (rank 0) may view, edit and manage editors', async () => {
-    db.where.mockResolvedValue([member(1, 0)]);
+  it('the GM (rank 0) without a grant may view only (GM_RANK_IMPLIES_EDIT off)', async () => {
+    db.where
+      .mockResolvedValueOnce([member(1, 0)]) // canView
+      .mockResolvedValueOnce([member(1, 0)]) // canEdit membership
+      .mockResolvedValueOnce([]); // canEdit delegation: no grant
+    expect(await matrix(actor('member'))).toEqual({
+      view: true,
+      edit: false,
+      manage: false,
+    });
+  });
+
+  it('the GM with an explicit member grant may edit but not manage editors', async () => {
+    db.where
+      .mockResolvedValueOnce([member(1, 0)]) // canView
+      .mockResolvedValueOnce([member(1, 0)]) // canEdit membership
+      .mockResolvedValueOnce([{ id: 8 }]); // canEdit delegation
     expect(await matrix(actor('member'))).toEqual({
       view: true,
       edit: true,
-      manage: true,
+      manage: false,
     });
   });
 
@@ -74,8 +93,7 @@ describe('GuildAccessService access matrix', () => {
     db.where
       .mockResolvedValueOnce([member(2, 1)]) // canView
       .mockResolvedValueOnce([member(2, 1)]) // canEdit membership
-      .mockResolvedValueOnce([{ id: 9 }]) // canEdit delegation
-      .mockResolvedValueOnce([member(2, 1)]); // canManageEditors
+      .mockResolvedValueOnce([{ id: 9 }]); // canEdit delegation
     expect(await matrix(actor('member'))).toEqual({
       view: true,
       edit: true,
@@ -92,8 +110,7 @@ describe('GuildAccessService access matrix', () => {
     db.where
       .mockResolvedValueOnce([member(4, 3)]) // canView
       .mockResolvedValueOnce([member(4, 3)]) // canEdit membership
-      .mockResolvedValueOnce([]) // canEdit delegation: no grant
-      .mockResolvedValueOnce([member(4, 3)]); // canManageEditors
+      .mockResolvedValueOnce([]); // canEdit delegation: no grant
     expect(await matrix(actor('member'))).toEqual({
       view: true,
       edit: false,
@@ -114,6 +131,12 @@ describe('GuildAccessService access matrix', () => {
   it('a rank-less member row is still checked for a member grant', async () => {
     queue([member(5, null)], [{ id: 11 }]);
     expect(await service.canEdit(actor('member'), GUILD)).toBe(true);
+  });
+});
+
+describe('GM_RANK_IMPLIES_EDIT', () => {
+  it('is off until character ownership is verified', () => {
+    expect(GM_RANK_IMPLIES_EDIT).toBe(false);
   });
 });
 
