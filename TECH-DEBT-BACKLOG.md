@@ -2634,3 +2634,10 @@ same day (#1278, #1279, #1280).
 
 - **[low]** `api/src/discord-bot/listeners/voice-state-gate.handlers.ts` (`yieldMonitorToLobby`) — a game-voice-monitor event that is already running when a general-lobby binding is later added to the same channel stops receiving joiners (every monitor join now yields to the lobby), and the lobby's per-game group can mint a second ad-hoc event for the same game alongside it. Narrow: needs a binding edit mid-session.
   Suggested: in the yield path, route joiners into an existing monitor event (`getActiveBindingEventGameId`) instead of yielding, or end/hand over the monitor event when the lobby binding is created.
+
+### 2026-10-14 — fix/rok-1782-quickplay-multi-binding (surfaced during re-review)
+
+- **low** — `api/src/discord-bot/listeners/voice-state.handlers.ts:~282,~310` (lobby game-switch spawn): a spawn triggered by members switching games mints the event immediately. It skips the 15-minute mixed-room delay, and it does not cancel a pending `(channel, game)` spawn timer. A later timer firing is idempotent (set-keyed roster), so nothing is duplicated. This behaviour predates ROK-1782. Suggested: cancel the pending timer on a switch spawn, and decide whether switch spawns should honour the mixed-room delay.
+- **low** — `api/src/discord-bot/listeners/voice-state.handlers.ts` (`handleVoiceJoin`): there is no in-flight spawn lock, so two presence switches arriving at the same moment can race to spawn. This predates ROK-1782. Suggested: a per-`(channel, game)` in-flight promise map around the spawn.
+- **nit** — `api/src/discord-bot/listeners/voice-state.handlers.ts` is at exactly 300 counted lines, so the next edit will trip `max-lines`. Suggested: extract the game-switch helpers into their own file.
+- **nit** — `api/src/discord-bot/listeners/voice-state.rok-1782.multi-binding.spec.ts:~157-170`: there is no case for an uncached previous presence (`handlePresenceUpdate(ctx, 'ch', gm, null)` should run detection once). Suggested: add that case.
