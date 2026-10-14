@@ -287,6 +287,31 @@ describe('editors endpoints — manage matrix', () => {
   });
 });
 
+describe('deactivated users', () => {
+  it('lose their roster link; their role stops counting (membership: guild-access.integration)', async () => {
+    const setDeactivated = (at: Date | null) =>
+      testApp.db
+        .update(schema.users)
+        .set({ deactivatedAt: at })
+        .where(eq(schema.users.username, 'deleg'));
+    await setDeactivated(new Date());
+    try {
+      const res = await get(`/${guildId}`, 'plain');
+      const rank3 = (
+        res.body.ranks as {
+          rankIndex: number;
+          members: { name: string; characterId: string | null }[];
+        }[]
+      ).find((r) => r.rankIndex === 3);
+      const deleg = rank3?.members.find((m) => m.name === 'deleg');
+      expect(deleg?.characterId).toBeNull();
+      expect(res.body.roleCounts).toMatchObject({ dps: 2 });
+    } finally {
+      await setDeactivated(null);
+    }
+  });
+});
+
 describe('GET /by-character/:characterId', () => {
   it('401 without a token', async () => {
     expect((await get(`/by-character/${charIds.gm}`)).status).toBe(401);

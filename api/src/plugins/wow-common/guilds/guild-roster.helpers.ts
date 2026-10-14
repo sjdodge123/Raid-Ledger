@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import {
   CharacterRoleSchema,
@@ -17,7 +17,12 @@ import { inLatestSnapshot } from './guild-membership.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guilds, guildMembers, characters } = schema;
+const { guilds, guildMembers, characters, users } = schema;
+
+/** The character's owner is active — a deactivated user's characters never link (D3). */
+export function ownerIsActive() {
+  return sql`exists (select 1 from ${users} where ${users.id} = ${characters.userId} and ${users.deactivatedAt} is null)`;
+}
 
 /** One raw roster row as the query returns it. */
 export interface RawRosterRow {
@@ -119,6 +124,7 @@ export async function loadRosterRows(
         isNotNull(guildMembers.guid),
         eq(characters.addonGuid, guildMembers.guid),
         eq(characters.gameId, guilds.gameId),
+        ownerIsActive(),
       ),
     )
     .where(and(eq(guildMembers.guildId, guildId), inLatestSnapshot()))
