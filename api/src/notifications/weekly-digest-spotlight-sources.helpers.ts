@@ -20,7 +20,10 @@ import {
   ATTENDED_SIGNUP_SQL,
   SHOWS_ACTIVITY_SQL,
 } from './weekly-digest-recap.helpers';
-import { GUILD_MEMBER_SEEN } from './weekly-digest-milestones-sql.helpers';
+import {
+  GUILD_MEMBER_SEEN,
+  VISIBLE_GAME,
+} from './weekly-digest-milestones-sql.helpers';
 import { SPOTLIGHT_BARS } from './weekly-digest-spotlight.helpers';
 import type {
   BossKillsCandidate,
@@ -44,8 +47,6 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
-/** Raw-SQL twin of `VISIBILITY_FILTER` (hidden/banned games), alias `g`. */
-const VISIBLE_GAME = sql.raw('g.hidden = false AND g.banned = false');
 
 /**
  * A1 — per game, opted-out-filtered day-rollup seconds this week vs the

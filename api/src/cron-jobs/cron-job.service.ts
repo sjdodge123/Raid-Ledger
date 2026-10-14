@@ -104,6 +104,7 @@ export class CronJobService implements OnApplicationBootstrap, OnModuleDestroy {
 
   @OnEvent(PLUGIN_EVENTS.ACTIVATED)
   handlePluginActivated(): void {
+    if (this.pluginActivatedTimer) clearTimeout(this.pluginActivatedTimer);
     this.pluginActivatedTimer = setTimeout(() => {
       this.pluginActivatedTimer = null;
       this.syncJobs().catch((err) =>

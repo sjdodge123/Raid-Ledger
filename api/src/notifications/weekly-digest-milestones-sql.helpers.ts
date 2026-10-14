@@ -39,7 +39,7 @@ const WINDOW_END_DATE = sql.raw('NOW()::date');
 const ROLLUP_IN_WINDOW = sql`r.period_start >= ${WINDOW_START_DATE}
         AND r.period_start < ${WINDOW_END_DATE}`;
 /** Raw-SQL twin of `VISIBILITY_FILTER` (hidden/banned games), alias `g`. */
-const VISIBLE_GAME = sql.raw('g.hidden = false AND g.banned = false');
+export const VISIBLE_GAME = sql.raw('g.hidden = false AND g.banned = false');
 const ACTIVE_MEMBER = sql.raw(ACTIVE_MEMBER_SQL_AND.trimEnd());
 
 /**

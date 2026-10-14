@@ -199,8 +199,10 @@ async function replaceBlocks(
  * every calendar is gone (404/410) must NOT be stored as `[]` — `[]` reads
  * as "primary" (`selectReadCalendarIds`), so the next sync would import a
  * calendar the user never chose. Instead reading stops (`readEnabled:
- * false`), the stale ids stay so a re-enable fails visibly rather than
- * silently reading primary, and `provider_error` tells the user why.
+ * false`) and `lastErrorCode` is set to `provider_error`. The stale ids stay,
+ * so a later re-enable hits the same 404 and stops again instead of reading
+ * primary. KNOWN GAP (TECH-DEBT-BACKLOG 2026-10-14): the web does not surface
+ * `provider_error` on the read card yet, so the stop is silent to the user.
  */
 function pruneFields(locked: readonly string[], missing: readonly string[]) {
   if (missing.length === 0) return {};
