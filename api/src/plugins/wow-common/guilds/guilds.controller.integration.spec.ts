@@ -312,6 +312,39 @@ describe('deactivated users', () => {
   });
 });
 
+describe('editors endpoints — cross-guild delete', () => {
+  it("a manager of another guild cannot delete this guild's editor; the row survives", async () => {
+    const [grant] = nonEmpty(
+      await testApp.db
+        .insert(schema.guildEditors)
+        .values({ guildId, kind: 'rank', rankIndex: 2 })
+        .returning(),
+      'grant',
+    );
+    try {
+      for (const who of ['gm', 'officer', 'deleg'] as const) {
+        const res = await testApp.request
+          .delete(`${BASE}/${otherGuildId}/editors/${grant.id}`)
+          .set('Authorization', `Bearer ${tokens[who]}`);
+        expect([403, 404]).toContain(res.status);
+      }
+      const admin = await testApp.request
+        .delete(`${BASE}/${otherGuildId}/editors/${grant.id}`)
+        .set('Authorization', `Bearer ${tokens.admin}`);
+      expect(admin.status).toBe(404);
+      const rows = await testApp.db
+        .select()
+        .from(schema.guildEditors)
+        .where(eq(schema.guildEditors.id, grant.id));
+      expect(rows).toHaveLength(1);
+    } finally {
+      await testApp.db
+        .delete(schema.guildEditors)
+        .where(eq(schema.guildEditors.id, grant.id));
+    }
+  });
+});
+
 describe('GET /by-character/:characterId', () => {
   it('401 without a token', async () => {
     expect((await get(`/by-character/${charIds.gm}`)).status).toBe(401);
