@@ -286,7 +286,8 @@ export async function findLeadingFutureSlot(
 }
 
 /**
- * `Lock in <Ddd h:mm A>` in the community timezone, ≤80 chars. A corrupt
+ * `Lock in <Ddd, Mmm D, h:mm A>` in the community timezone, ≤80 chars. The
+ * date (ROK-1784) keeps the label unambiguous when the DM is read days later. A corrupt
  * timezone falls back to UTC rather than aborting the sweep (mirrors
  * `formatEpoch`'s guard).
  *
@@ -296,6 +297,8 @@ export async function findLeadingFutureSlot(
 export function formatLockLabel(iso: string, timeZone: string): string {
   const opts: Intl.DateTimeFormatOptions = {
     weekday: 'short',
+    month: 'short',
+    day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
@@ -332,7 +335,7 @@ export function buildExpiryWarnCopy(
   return {
     title: `Your ${gameName} poll closes soon`,
     message:
-      `Nobody has locked in a time and the poll closes <t:${unix(deadline)}:R>. ` +
+      `Nobody has locked in a time. The poll closes <t:${unix(deadline)}:f>. ` +
       `The leading time is <t:${unix(leadingIso)}:f>.`,
     lockLabel: formatLockLabel(leadingIso, timeZone),
   };
@@ -356,7 +359,7 @@ export function buildNoLeaderWarnCopy(
   return {
     title: `Your ${gameName} poll closes soon`,
     message:
-      `No time worked for the group yet and the poll closes ` +
-      `<t:${unix(deadline)}:R>. Suggest a new time or start a new poll.`,
+      `No time worked for the group yet. The poll closes ` +
+      `<t:${unix(deadline)}:f>. Suggest a new time or start a new poll.`,
   };
 }
