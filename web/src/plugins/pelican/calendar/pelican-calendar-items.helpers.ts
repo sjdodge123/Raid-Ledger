@@ -48,7 +48,7 @@ export function formatLocalTime(iso: string, tz: string): string {
     const text = new Intl.DateTimeFormat('en-US', {
         hour: 'numeric', minute: '2-digit', timeZone: tz,
     }).format(new Date(iso));
-    return text.replace(/[  ]/g, ' ');
+    return text.replace(/[\u202f\u00a0]/g, ' ');
 }
 
 /** "Online · checked 2 min ago"; under a minute → "just now"; no row → "Status not checked yet". */
