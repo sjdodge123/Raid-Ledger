@@ -14,24 +14,23 @@
  *   the browser's) — the same rule the grid zones events with.
  * - Concurrency: desktop, mobile and tablet share ONE API. The seed wipes and
  *   re-inserts `pelican_servers` in one transaction (see `ensureSeeded`), and
- *   every assertion reads names, never row ids. Pelican is never deactivated globally: the gating test removes
- *   `pelican` from THIS page's `/system/status` (the only source of the web
- *   plugin store's `activeSlugs`), so a sibling worker is never pulled out from
- *   under. The real deactivate is a step in the fleet test plan instead.
+ *   every assertion reads names, never row ids. Pelican is never switched off
+ *   globally: the gating test removes `pelican` from THIS page's
+ *   `/system/status` (the only source of the web plugin store's
+ *   `activeSlugs`), so a sibling worker is never pulled out from under. The
+ *   real switch-off is a step in the fleet test plan instead.
  * - Views: phones (mobile project) drive Day via the view switcher; desktop and
  *   tablet click the toolbar's Week button (the page forces Month on mount, as
  *   `calendar.smoke.spec.ts` notes).
- * - Teardown: see `joinTeardownGroup` — the LAST project out restores Pelican's
- *   activation and the admin's saved game filter to what they were before the
- *   first seed, so later specs never draw the seeded bands.
+ * - No global teardown: the projects run concurrently against ONE API with ONE
+ *   shared admin, so no project may flip a global toggle or write the admin's
+ *   preferences (a last-one-out restore raced a joining worker, Codex P2). The
+ *   saved-filter test runs as a FRESH per-run member instead.
  */
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type { Locator, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
-import { API_BASE, apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
+import { signInOnboardedMember } from './browser-session';
 import { isDesktop, isMobile } from './helpers';
 
 const RUNNING = 'Demo Server — Running';
@@ -120,61 +119,16 @@ async function openFilters(page: Page, testInfo: TestInfo): Promise<Locator> {
     return sheet;
 }
 
-async function resetSavedGameFilter(): Promise<void> {
-    await apiPatch(await getAdminToken(), '/users/me/preferences', { preferences: { calendarGameFilter: [] } });
+/** `token`'s saved calendar filter back to "every game" (an empty list resolves to all). */
+async function resetSavedGameFilter(token: string): Promise<void> {
+    await apiPatch(token, '/users/me/preferences', { preferences: { calendarGameFilter: [] } });
 }
 
-/*
- * Teardown. There is no Pelican teardown fixture, and the seed activates the
- * plugin and leaves seeded servers that every later calendar spec would draw.
- * desktop/mobile/tablet run this file against ONE API (one machine), so the
- * global state may only be restored by the LAST project out. Each project
- * drops a member file in a temp dir keyed by the API; the first one in records
- * the baseline (exclusive create, read before ANY seed); the last one out
- * restores it. Deactivating is enough to hide the leftover rows: the API serves
- * only active providers and the web draws no inactive layer. A member file
- * left by a crashed worker only SKIPS teardown (as before this fix) until it
- * goes stale; it never makes teardown run early.
- */
-interface Baseline { pelicanActive: boolean; calendarGameFilter: unknown }
-
-const GROUP_DIR = join(tmpdir(), `rl-smoke-rok-1774-${createHash('sha1').update(API_BASE).digest('hex').slice(0, 12)}`);
-const BASELINE_FILE = join(GROUP_DIR, 'baseline.json');
-const STALE_MS = 2 * 60 * 60_000;
-
-const isFresh = (file: string): boolean => Date.now() - statSync(file).mtimeMs < STALE_MS;
-const liveMembers = (): string[] =>
-    readdirSync(GROUP_DIR).filter((f) => f.endsWith('.member') && isFresh(join(GROUP_DIR, f)));
-
-async function currentBaseline(token: string): Promise<Baseline> {
-    const status = (await apiGet(token, '/system/status')) as { activePlugins?: string[] } | null;
-    const prefs = (await apiGet(token, '/users/me/preferences')) as { data?: Record<string, unknown> } | null;
-    return {
-        pelicanActive: (status?.activePlugins ?? []).includes('pelican'),
-        calendarGameFilter: prefs?.data?.calendarGameFilter ?? [],
-    };
-}
-
-/** Join BEFORE seeding; returns this worker's member file. */
-async function joinTeardownGroup(token: string, project: string): Promise<string> {
-    mkdirSync(GROUP_DIR, { recursive: true });
-    try { if (!isFresh(BASELINE_FILE)) rmSync(BASELINE_FILE); } catch { /* no baseline yet */ }
-    const baseline = JSON.stringify(await currentBaseline(token));
-    try { writeFileSync(BASELINE_FILE, baseline, { flag: 'wx' }); } catch { /* a sibling recorded it first */ }
-    const member = join(GROUP_DIR, `${project}-${process.pid}.member`);
-    writeFileSync(member, '');
-    return member;
-}
-
-/** Leave; the last project out restores the baseline. */
-async function leaveTeardownGroup(token: string, member: string): Promise<void> {
-    rmSync(member, { force: true });
-    if (liveMembers().length > 0) return; // a sibling project still needs the seed
-    let baseline: Baseline | null = null;
-    try { baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8')) as Baseline; } catch { return; }
-    rmSync(BASELINE_FILE, { force: true });
-    await apiPatch(token, '/users/me/preferences', { preferences: { calendarGameFilter: baseline.calendarGameFilter } });
-    if (!baseline.pelicanActive) await apiPost(token, '/admin/plugins/pelican/deactivate');
+/** A fresh member for THIS run only (quiet DMs); the caller deletes it. */
+async function seedMember(token: string): Promise<number> {
+    const user = (await apiPost(token, '/admin/test/seed-non-guild-user', { quietDms: true })) as { userId?: number };
+    if (typeof user.userId !== 'number') throw new Error(`seed-non-guild-user: ${JSON.stringify(user)}`);
+    return user.userId;
 }
 
 /**
@@ -194,17 +148,12 @@ async function slotInside(page: Page, w: LayerWindow): Promise<{ start: string; 
 }
 
 test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
-    let member: string | null = null;
-
+    // The seed activates Pelican (idempotent) and is NEVER undone: deactivating a
+    // shared plugin mid-run is what raced the sibling projects. A Pelican layer
+    // left active with seeded servers is harmless to other specs, because its
+    // bands are `pointer-events:none`. Fleet/CI envs are disposable.
     test.beforeAll(async () => {
-        const token = await getAdminToken();
-        member = await joinTeardownGroup(token, test.info().project.name);
-        seed = await ensureSeeded(token);
-        await resetSavedGameFilter();
-    });
-
-    test.afterAll(async () => {
-        if (member) await leaveTeardownGroup(await getAdminToken(), member);
+        seed = await ensureSeeded(await getAdminToken());
     });
 
     test('band with its label renders on the grid; hidden/unmapped servers never do', async ({ page }, testInfo) => {
@@ -257,21 +206,27 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
     });
 
     test('Filters "None" hides every band with no new calendar request', async ({ page }, testInfo) => {
-        await openGrid(page, testInfo);
-        await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
-        const requests = countLayerRequests(page);
+        // "None" SAVES the filter, so this runs as a fresh member: the shared
+        // admin's preference is never written by any project.
+        const admin = await getAdminToken();
+        const memberId = await seedMember(admin);
         try {
+            const memberJwt = await signInOnboardedMember(page, memberId);
+            await openGrid(page, testInfo);
+            await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
+            const requests = countLayerRequests(page);
             const filters = await openFilters(page, testInfo);
             await filters.getByRole('button', { name: 'None' }).click();
             await expect(filters.getByText(/^0 of \d+ selected$/)).toBeVisible();
             await expect(page.locator(BAND)).toHaveCount(0);
             await expect(page.getByTestId('layer-marker-glyph')).toHaveCount(0);
             expect(requests.calendar(), 'the game filter is client-side (no refetch)').toBe(0);
+            await resetSavedGameFilter(memberJwt);
+            await openGrid(page, testInfo);
+            await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
         } finally {
-            await resetSavedGameFilter();
+            await apiDelete(admin, `/users/${memberId}`).catch(() => undefined);
         }
-        await openGrid(page, testInfo);
-        await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
     });
 
     test('with Pelican inactive no band or tick renders and no layer request fires', async ({ page }, testInfo) => {
