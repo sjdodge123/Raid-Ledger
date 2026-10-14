@@ -14,7 +14,6 @@ import * as Sentry from '@sentry/react';
 import { scrubBreadcrumb } from './lib/sentry-scrub';
 import {
     scrubErrorEvent,
-    scrubRecordingEvent,
     scrubReplayEventUrls,
     scrubTransactionEvent,
 } from './lib/sentry-scrub-events';
@@ -31,20 +30,46 @@ const isLocalhost = ['localhost', '127.0.0.1'].includes(
 // Track transport-level send failures (e.g. 403 from invalid DSN)
 let _lastTransportFailed = false;
 
+const replaysSessionSampleRate = 0;
+const replaysOnErrorSampleRate = isProduction ? 1.0 : 0;
+
+/** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
+const PII_KEY_DENY = { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] };
+const V10_DATA_COLLECTION = {
+    userInfo: false,
+    cookies: false,
+    httpHeaders: { request: PII_KEY_DENY, response: PII_KEY_DENY },
+    httpBodies: [],
+    urlQueryParams: PII_KEY_DENY,
+    genAI: { inputs: false, outputs: false },
+    databaseQueryData: false,
+    queues: false,
+    graphQL: { document: false, variables: false },
+} satisfies Sentry.BrowserOptions['dataCollection'];
+
 if (!telemetryDisabled) {
     Sentry.init({
         dsn: SENTRY_DSN,
         enabled: !isLocalhost,
         environment: isProduction ? 'production' : 'development',
         tracesSampleRate: isProduction ? 0.1 : 1.0,
-        replaysSessionSampleRate: 0,
-        replaysOnErrorSampleRate: isProduction ? 1.0 : 0,
+        replaysSessionSampleRate,
+        replaysOnErrorSampleRate,
+        // Sentry v11 streams spans by default, which turns
+        // beforeSendTransaction into a no-op and would skip the ROK-1366
+        // scrub below. Keep the v10 transaction model until it moves to
+        // beforeSendSpan.
+        traceLifecycle: 'static',
+        // v11 dropped sendDefaultPii; pin the v10 data-collection baseline.
+        dataCollection: V10_DATA_COLLECTION,
+        // v11 defaults this to true; keep v10 issue grouping.
+        attachStacktrace: false,
         // ROK-1366: the navigation PerformanceEntry keeps the pre-strip URL
         // (fragment included) — scrub it from spans, replay and replay urls.
         beforeSendTransaction: (event) => scrubTransactionEvent(event),
         integrations: [
             Sentry.browserTracingIntegration(),
-            Sentry.replayIntegration({ beforeAddRecordingEvent: scrubRecordingEvent }),
+            // Replay is added lazily below (lib/sentry-replay.ts).
             { name: 'ScrubReplayUrls', processEvent: scrubReplayEventUrls },
         ],
         // ROK-1162: drop AbortError noise (TanStack Query cancels in-flight
@@ -90,6 +115,11 @@ if (!telemetryDisabled) {
             };
         },
     });
+    // Replay loads in its own chunk after init, and not at all when no replay
+    // would ever be sampled.
+    if (replaysSessionSampleRate > 0 || replaysOnErrorSampleRate > 0) {
+        void import('./lib/sentry-replay').then((m) => m.addReplayIntegration());
+    }
 }
 
 /**
