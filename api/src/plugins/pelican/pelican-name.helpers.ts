@@ -43,7 +43,9 @@ export function redactServerName(name: string, id: number): string {
 }
 
 /** Member-facing fallback label per schedule effect (ROK-1096 ruling 1). */
-export const SCHEDULE_EFFECT_LABELS: Readonly<Record<GameServerEffect, string>> = {
+export const SCHEDULE_EFFECT_LABELS: Readonly<
+  Record<GameServerEffect, string>
+> = {
   restart: 'Restart',
   stop: 'Stop',
   start: 'Server online',

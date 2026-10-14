@@ -40,7 +40,10 @@ export function toCronExpression(row: CronFields): string {
 }
 
 function iterate(expr: string, tz: string, fromMs: number): CronExpression {
-  return CronExpressionParser.parse(expr, { currentDate: new Date(fromMs), tz });
+  return CronExpressionParser.parse(expr, {
+    currentDate: new Date(fromMs),
+    tz,
+  });
 }
 
 /** Occurrences in `[from, to)`, chronological, at most `limit` of them. */

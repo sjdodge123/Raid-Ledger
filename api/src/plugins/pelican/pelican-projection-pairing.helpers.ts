@@ -45,23 +45,32 @@ function marker(e: ProjectionEvent): ProjectedSpan {
 /**
  * Walk time-sorted events (D6, ruling 2): start opens a window, a second
  * start while open is ignored, stop/kill closes it (or is a marker when
- * nothing is open), every other effect is a marker. A start never closed
- * becomes a `start` marker.
+ * nothing is open), every other effect is a marker. Starts never closed —
+ * the opener and any it absorbed — become `start` markers, so a start
+ * schedule with no stop/kill schedule yields one marker per run.
  */
-export function pairEvents(sorted: readonly ProjectionEvent[]): ProjectedSpan[] {
+export function pairEvents(
+  sorted: readonly ProjectionEvent[],
+): ProjectedSpan[] {
   const out: ProjectedSpan[] = [];
-  let open: ProjectionEvent | null = null;
+  let pending: ProjectionEvent[] = [];
   for (const e of sorted) {
+    const open = pending[0];
     if (e.effect === 'start') {
-      open ??= e;
-    } else if (isStop(e.effect) && open !== null) {
-      out.push({ kind: 'window', start: open.at, end: e.at, label: open.label });
-      open = null;
+      pending.push(e);
+    } else if (isStop(e.effect) && open !== undefined) {
+      out.push({
+        kind: 'window',
+        start: open.at,
+        end: e.at,
+        label: open.label,
+      });
+      pending = [];
     } else {
       out.push(marker(e));
     }
   }
-  if (open !== null) out.push(marker(open));
+  out.push(...pending.map(marker));
   return out;
 }
 
@@ -69,7 +78,11 @@ const spanStart = (s: ProjectedSpan): number =>
   s.kind === 'window' ? s.start : s.at;
 
 /** Window overlaps `[from, to)`; marker lies inside it. Windows are not clipped (D7). */
-export function overlapsRange(s: ProjectedSpan, from: number, to: number): boolean {
+export function overlapsRange(
+  s: ProjectedSpan,
+  from: number,
+  to: number,
+): boolean {
   if (s.kind === 'window') return s.start < to && s.end > from;
   return s.at >= from && s.at < to;
 }
@@ -85,7 +98,14 @@ export function toCalendarItem(
   if (s.kind === 'window') {
     const start = new Date(s.start).toISOString();
     const end = new Date(s.end).toISOString();
-    return { kind: 'window', ...base, start, end, label: s.label, source: 'schedule' };
+    return {
+      kind: 'window',
+      ...base,
+      start,
+      end,
+      label: s.label,
+      source: 'schedule',
+    };
   }
   const at = new Date(s.at).toISOString();
   return { kind: 'marker', ...base, at, effect: s.effect, label: s.label };

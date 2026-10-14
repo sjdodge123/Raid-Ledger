@@ -9,7 +9,10 @@ import {
   type GameServerEffect,
 } from '@raid-ledger/contract';
 import type { PelicanScheduleRow } from '../../drizzle/schema';
-import { PELICAN_PROJECTION_CAP, PELICAN_PROVIDER_LABEL } from './pelican.constants';
+import {
+  PELICAN_PROJECTION_CAP,
+  PELICAN_PROVIDER_LABEL,
+} from './pelican.constants';
 import { redactScheduleLabel, redactServerName } from './pelican-name.helpers';
 import {
   expandBetween,
@@ -28,13 +31,21 @@ import {
   type ProjectionServerBase,
 } from './pelican-projection-pairing.helpers';
 
-export interface ProjectionSchedule
-  extends Pick<
-    PelicanScheduleRow,
-    | 'id' | 'serverId' | 'name' | 'cronMinute' | 'cronHour' | 'cronDayOfMonth'
-    | 'cronMonth' | 'cronDayOfWeek' | 'isActive' | 'nextRunAt' | 'effect'
-    | 'effectOffsetS'
-  > {
+export interface ProjectionSchedule extends Pick<
+  PelicanScheduleRow,
+  | 'id'
+  | 'serverId'
+  | 'name'
+  | 'cronMinute'
+  | 'cronHour'
+  | 'cronDayOfMonth'
+  | 'cronMonth'
+  | 'cronDayOfWeek'
+  | 'isActive'
+  | 'nextRunAt'
+  | 'effect'
+  | 'effectOffsetS'
+> {
   gameId: number;
   /** Raw panel name — redacted here before it reaches an item. */
   serverName: string;
@@ -81,11 +92,13 @@ export function projectSchedules(input: ProjectionInput): ProjectionResult {
   const { gameIds } = input;
   const groups = new Map<number, ProjectionSchedule[]>();
   for (const s of input.schedules) {
-    if (!s.isActive || (gameIds !== undefined && !gameIds.includes(s.gameId))) continue;
+    if (!s.isActive || (gameIds !== undefined && !gameIds.includes(s.gameId)))
+      continue;
     groups.set(s.serverId, [...(groups.get(s.serverId) ?? []), s]);
   }
   const serverIds = [...groups.keys()].sort((a, b) => a - b);
-  for (const id of serverIds) projectServer(id, groups.get(id) ?? [], input, result);
+  for (const id of serverIds)
+    projectServer(id, groups.get(id) ?? [], input, result);
   return result;
 }
 
@@ -103,21 +116,31 @@ function projectServer(
     return;
   }
   if (hasTzMismatch(group, tz)) result.tzMismatchServerIds.push(serverId);
-  const events = group.flatMap((s) => scheduleEvents(s, tz, input.range, result));
+  const events = group.flatMap((s) =>
+    scheduleEvents(s, tz, input.range, result),
+  );
   const { kept, truncated } = capEvents(events);
   if (truncated) result.truncatedServerIds.push(serverId);
   const from = input.range.from.getTime();
   const to = input.range.to.getTime();
-  const base: ProjectionServerBase = {
+  const base = serverBase(serverId, first);
+  const spans = pairEvents(kept.sort(compareEvents))
+    .filter((s) => overlapsRange(s, from, to))
+    .sort(compareSpans);
+  result.items.push(...spans.map((s) => toCalendarItem(s, base)));
+}
+
+/** Member-safe facts every item of one server carries (D13). */
+function serverBase(
+  serverId: number,
+  first: ProjectionSchedule,
+): ProjectionServerBase {
+  return {
     serverKey: String(serverId),
     serverName: redactServerName(first.serverName, serverId),
     gameId: first.gameId,
     provider: PELICAN_PROVIDER_LABEL,
   };
-  const spans = pairEvents(kept.sort(compareEvents))
-    .filter((s) => overlapsRange(s, from, to))
-    .sort(compareSpans);
-  result.items.push(...spans.map((s) => toCalendarItem(s, base)));
 }
 
 /**
@@ -135,7 +158,9 @@ function capEvents(events: ProjectionEvent[]): {
     return { kept: events, truncated: false };
   }
   const allowed = new Set(inRange.slice(0, PELICAN_PROJECTION_CAP));
-  const kept = events.filter((e) => (e.inRange ? allowed.has(e) : e.at <= last.at));
+  const kept = events.filter((e) =>
+    e.inRange ? allowed.has(e) : e.at <= last.at,
+  );
   return { kept, truncated: true };
 }
 
@@ -153,13 +178,21 @@ function scheduleEvents(
 ): ProjectionEvent[] {
   const effect = parseEffect(s.effect);
   if (effect === null) {
-    result.skipped.push({ serverId: s.serverId, scheduleId: s.id, reason: 'bad_effect' });
+    result.skipped.push({
+      serverId: s.serverId,
+      scheduleId: s.id,
+      reason: 'bad_effect',
+    });
     return [];
   }
   try {
     return expandSchedule(s, effect, tz, range);
   } catch {
-    result.skipped.push({ serverId: s.serverId, scheduleId: s.id, reason: 'bad_cron' });
+    result.skipped.push({
+      serverId: s.serverId,
+      scheduleId: s.id,
+      reason: 'bad_cron',
+    });
     return [];
   }
 }
@@ -184,7 +217,8 @@ function expandSchedule(
   const out = expandBetween(expr, tz, from, to, PELICAN_PROJECTION_CAP + 1).map(
     (run) => event(run, true),
   );
-  if (effect === 'start' || isStop(effect)) out.push(event(prevBefore(expr, tz, from), false));
+  if (effect === 'start' || isStop(effect))
+    out.push(event(prevBefore(expr, tz, from), false));
   if (isStop(effect)) out.push(event(nextAtOrAfter(expr, tz, to), false));
   return out;
 }
