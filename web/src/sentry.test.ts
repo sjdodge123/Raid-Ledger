@@ -163,3 +163,70 @@ describe('web Sentry Replay is lazy-loaded (Sentry 11 upgrade)', () => {
         expect(Sentry.addIntegration).not.toHaveBeenCalled();
     });
 });
+
+describe('web Sentry Replay chunk-load failure (Sentry 11 upgrade)', () => {
+    let rejections: unknown[];
+    const onRejection = (reason: unknown) => rejections.push(reason);
+
+    beforeEach(() => {
+        rejections = [];
+        process.on('unhandledRejection', onRejection);
+    });
+
+    afterEach(() => {
+        process.off('unhandledRejection', onRejection);
+        vi.doUnmock('./lib/sentry-replay');
+        vi.unstubAllEnvs();
+        vi.restoreAllMocks();
+    });
+
+    it('swallows a rejected Replay import without an unhandled rejection', async () => {
+        vi.resetModules();
+        vi.stubEnv('PROD', true);
+        vi.doMock('./lib/sentry-replay', () => {
+            throw new Error('chunk load failed');
+        });
+        const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+        const Sentry = await import('@sentry/react');
+        (Sentry.init as unknown as MockFn).mockClear();
+        (Sentry.addIntegration as unknown as MockFn).mockClear();
+        await import('./sentry');
+        await vi.dynamicImportSettled();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(rejections, 'Replay import rejection must be handled').toEqual([]);
+        expect(debug).toHaveBeenCalledWith('[sentry] Replay chunk failed to load', expect.any(Error));
+        expect(Sentry.init).toHaveBeenCalledTimes(1);
+        expect(Sentry.addIntegration).not.toHaveBeenCalled();
+    });
+});
+
+describe('web Sentry v11 privacy options pin the v10 baseline', () => {
+    it('passes static lifecycle, the v10 dataCollection and no attached stacktraces', async () => {
+        vi.resetModules();
+        const Sentry = await import('@sentry/react');
+        const initMock = Sentry.init as unknown as MockFn;
+        initMock.mockClear();
+        await import('./sentry');
+        const config = at(initMock.mock.calls, 0)[0] as Record<string, unknown>;
+        const deny = { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] };
+        expect({
+            traceLifecycle: config['traceLifecycle'],
+            dataCollection: config['dataCollection'],
+            attachStacktrace: config['attachStacktrace'],
+        }).toEqual({
+            traceLifecycle: 'static',
+            dataCollection: {
+                userInfo: false,
+                cookies: false,
+                httpHeaders: { request: deny, response: deny },
+                httpBodies: [],
+                urlQueryParams: deny,
+                genAI: { inputs: false, outputs: false },
+                databaseQueryData: false,
+                queues: false,
+                graphQL: { document: false, variables: false },
+            },
+            attachStacktrace: false,
+        });
+    });
+});
