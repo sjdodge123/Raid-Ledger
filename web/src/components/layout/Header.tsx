@@ -35,8 +35,8 @@ function DesktopNav({ pathname, user }: { pathname: string; user: User | null })
         <>
             <nav aria-label="Main navigation" className="hidden md:flex items-center gap-6">
                 {NAV_LINKS.map(({ to, label }) => <Link key={to} to={to} className={navClass(pathname, to)}>{label}</Link>)}
-                {/* Plugin links show from lg: at md (768) the core links already fill the row (ROK-1785). */}
-                {user && <span className="hidden lg:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
+                {/* Plugin links show from md; a filler picks icon-only (md) vs text (lg) itself, since at 768 the core links already fill the row (ROK-1785). */}
+                {user && <span className="hidden md:contents"><PluginSlot name="nav:primary-links" context={{ pathname }} /></span>}
                 {user && (
                     <>
                         <span className="w-px h-5 bg-edge" aria-hidden="true" />
