@@ -9,7 +9,7 @@ import type { GuildPage } from '@raid-ledger/contract';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { WidgetCard } from './guild-bits';
 import { GuildEditorsCard } from './guild-editors-panel';
-import { rankLabel, roleCounts } from './guild-roster.helpers';
+import { rankLabel } from './guild-roster.helpers';
 import { RoleSummary } from './role-bits';
 
 function RankCounts({ page }: { page: GuildPage }): JSX.Element {
@@ -39,7 +39,7 @@ function MembersSummary({ page }: { page: GuildPage }): JSX.Element {
     return (
         <WidgetCard id="members-summary" title={`Members · ${page.guild.memberCount}`} action={<SeeRosterLink />}>
             <div className="flex flex-col gap-3" data-testid="guild-members-summary">
-                <RoleSummary counts={roleCounts(page.ranks)} />
+                <RoleSummary counts={page.roleCounts} />
                 <RankCounts page={page} />
             </div>
         </WidgetCard>

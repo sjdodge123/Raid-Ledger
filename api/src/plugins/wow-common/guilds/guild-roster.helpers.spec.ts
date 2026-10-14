@@ -16,6 +16,7 @@ function row(over: Partial<RawRosterRow>): RawRosterRow {
     rankIndex: 2,
     rankName: 'Raider',
     characterId: null,
+    userId: null,
     role: null,
     roleOverride: null,
     isMain: null,

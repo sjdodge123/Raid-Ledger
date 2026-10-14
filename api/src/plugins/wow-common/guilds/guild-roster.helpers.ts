@@ -28,6 +28,8 @@ export interface RawRosterRow {
   rankIndex: number | null;
   rankName: string | null;
   characterId: string | null;
+  /** Owner of the linked character (null when unlinked). */
+  userId: number | null;
   role: string | null;
   roleOverride: string | null;
   isMain: boolean | null;
@@ -104,6 +106,7 @@ export async function loadRosterRows(
       rankIndex: guildMembers.rankIndex,
       rankName: guildMembers.rankName,
       characterId: characters.id,
+      userId: characters.userId,
       role: characters.role,
       roleOverride: characters.roleOverride,
       isMain: characters.isMain,

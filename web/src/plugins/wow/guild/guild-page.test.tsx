@@ -30,6 +30,8 @@ function makePage(canManageEditors = false): GuildPageDto {
             { rankIndex: 0, rankName: 'Guild Master', members: [row({ memberId: 1, name: 'Grimtusk', rankIndex: 0, rankName: 'Guild Master', effectiveRole: 'tank', characterId: LINKED_ID, isMain: true })] },
             { rankIndex: 2, rankName: 'Raider', members: [row({ memberId: 2, name: 'Stormcall', effectiveRole: 'healer', characterId: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d' }), row({ memberId: 3, name: 'Nolinkadin' })] },
         ],
+        // Deliberately NOT what the roster rows would tally (1/1/0): the UI must show the server's per-user counts.
+        roleCounts: { tank: 2, healer: 4, dps: 7, unknown: 1 },
     };
 }
 
@@ -79,13 +81,13 @@ describe('GuildPage (ROK-1785)', () => {
         expect(within(raiders).getByTestId('guild-member-unlinked')).toHaveTextContent('Nolinkadin');
     });
 
-    it('counts roles in the Overview members summary with a #roster jump', async () => {
+    it('shows the server role counts (one per user) in the Overview summary with a #roster jump', async () => {
         serve(makePage());
         renderPage();
         const summary = await screen.findByTestId('guild-members-summary');
-        expect(within(summary).getByTestId('guild-role-count-tank')).toHaveTextContent('1Tank');
-        expect(within(summary).getByTestId('guild-role-count-healer')).toHaveTextContent('1Heal');
-        expect(within(summary).getByTestId('guild-role-count-dps')).toHaveTextContent('0DPS');
+        expect(within(summary).getByTestId('guild-role-count-tank')).toHaveTextContent('2Tank');
+        expect(within(summary).getByTestId('guild-role-count-healer')).toHaveTextContent('4Heal');
+        expect(within(summary).getByTestId('guild-role-count-dps')).toHaveTextContent('7DPS');
         expect(screen.getByTestId('guild-see-roster')).toHaveAttribute('href', '#roster');
     });
 

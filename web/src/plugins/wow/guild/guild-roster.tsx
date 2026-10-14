@@ -9,7 +9,7 @@ import type { GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/con
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
 import { CharacterLink } from './character-link';
 import { Card, Pill, SectionTitle } from './guild-bits';
-import { ROLE_META, rankLabel, roleCounts } from './guild-roster.helpers';
+import { ROLE_META, rankLabel } from './guild-roster.helpers';
 import { CharRoleBadge, RoleSummary } from './role-bits';
 
 const OPEN_RANKS_UP_TO = 2;
@@ -52,7 +52,7 @@ export function GuildRoster({ page }: { page: GuildPage }): JSX.Element {
         <section id="members" className="scroll-mt-4" data-testid="guild-roster">
             <SectionTitle title="Members" blurb={`${count} members · ranks from the latest LedgerLink export`} />
             <Card className="flex flex-col gap-3">
-                <RoleSummary counts={roleCounts(page.ranks)} />
+                <RoleSummary counts={page.roleCounts} />
                 {page.ranks.length === 0
                     ? <p className="py-6 text-center text-sm text-muted">No members yet. Import a LedgerLink guild export to fill the roster.</p>
                     : <div>{page.ranks.map((g) => <RankGroup key={g.rankIndex ?? 'none'} group={g} />)}</div>}

@@ -30,6 +30,7 @@ import {
   listGuildsOfGame,
   rankNamesByMemberId,
 } from './guild-queries.helpers';
+import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 
 /**
@@ -83,6 +84,7 @@ export class GuildPageService {
       importedBy,
       viewer: { canEdit, canManageEditors },
       ranks: groupRoster(rows),
+      roleCounts: computeRoleCounts(rows),
     };
   }
 

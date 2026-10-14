@@ -63,6 +63,21 @@ export const GuildRankGroupSchema = z
 export type GuildRankGroup = z.infer<typeof GuildRankGroupSchema>;
 
 /** `GET /plugins/wow/guilds/:id` — hero fields + roster grouped by rank. */
+/**
+ * Roster role mix: ONE count per linked RL user (their main in this guild,
+ * else their highest-rank character). Unlinked members are not counted;
+ * a linked character with no role counts as `unknown`.
+ */
+export const GuildRoleCountsSchema = z
+  .object({
+    tank: z.number().int().nonnegative(),
+    healer: z.number().int().nonnegative(),
+    dps: z.number().int().nonnegative(),
+    unknown: z.number().int().nonnegative(),
+  })
+  .strict();
+export type GuildRoleCounts = z.infer<typeof GuildRoleCountsSchema>;
+
 export const GuildPageSchema = z
   .object({
     guild: GuildSummarySchema,
@@ -70,6 +85,7 @@ export const GuildPageSchema = z
     importedBy: z.string().nullable(),
     viewer: GuildViewerAccessSchema,
     ranks: z.array(GuildRankGroupSchema),
+    roleCounts: GuildRoleCountsSchema,
   })
   .strict();
 export type GuildPage = z.infer<typeof GuildPageSchema>;

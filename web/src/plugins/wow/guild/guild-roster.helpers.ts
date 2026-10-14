@@ -33,15 +33,6 @@ export function tabLabel(id: string): string {
     return GUILD_TABS.find((t) => t.id === id)?.label ?? 'Overview';
 }
 
-/** Linked rows by effective role (unlinked rows have no role). */
-export function roleCounts(ranks: readonly GuildRankGroup[]): Record<CharacterRole, number> {
-    const counts: Record<CharacterRole, number> = { tank: 0, healer: 0, dps: 0 };
-    for (const member of ranks.flatMap((r) => r.members)) {
-        if (member.effectiveRole) counts[member.effectiveRole] += 1;
-    }
-    return counts;
-}
-
 export function rankLabel(group: Pick<GuildRankGroup, 'rankIndex' | 'rankName'>): string {
     if (group.rankName) return group.rankName;
     return group.rankIndex === null ? 'Unranked' : `Rank ${group.rankIndex}`;
