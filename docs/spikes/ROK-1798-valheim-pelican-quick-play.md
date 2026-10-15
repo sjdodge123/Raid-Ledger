@@ -274,17 +274,21 @@ Slices 1 and 2 are independent and can run in parallel. Slice 4 depends on slice
 
 ---
 
-## Open operator questions (numbered, with recommended defaults)
+## Operator rulings (2026-10-15)
 
-1. **Opt-in scope:** do we enable this per server, or for every Pelican server whose game has a parser? **Default:** per-server toggle, off by default.
-2. **Spawn threshold:** does a solo player tending their farm open a Quick Play? **Default:** spawn when **≥2 players** have been present together for **≥3 min**. The voice path's own threshold was not checked in this spike.
-3. **Unlinked Steam players:** show them as anonymous participants (character name), or drop them? **Default:** show them as anonymous, matching unlinked Discord members.
-4. **Voice plus server overlap for the same game:** **Default:** attach to the existing live Quick Play. Never run two concurrent Quick Plays for one game.
-5. **Discord announcement for server-born sessions:** **Default:** post to the game's existing Quick Play-bound channel if there is one, otherwise web-only (no new channels).
-6. **Scheduled-event suppression:** should server presence during a scheduled Valheim event suppress spawning and extend that event, as voice does? **Default:** yes.
-7. **Panel-unreachable timeout** before ending a live session: **Default:** 15 min.
-8. **Crossplay / Xbox players:** **Default:** out of scope for v1, Steam-only. Revisit after one crossplay log sample.
-9. **Pelican permissions:** create a dedicated RL subuser with `websocket.connect` plus the existing read permissions, and **no** `control.console`. **Default:** yes. RL never sends console commands.
+**Headline:** a Quick Play is ONE session made of everyone in the bound Discord voice channel AND everyone on the game's Pelican server, **deduplicated**: a Steam player whose SteamID64 maps to a Raid Ledger user who is also in voice is one participant, not two (dedupe on `user_id` once linked; an unlinked Steam row and a Discord row never merge).
+
+1. **Opt-in:** no new toggle surface. It lives inside the **existing Pelican panel integration config** (the per-server settings we already have).
+2. **Spawn threshold / grace / kill switch:** reuse the **existing Quick Play settings** (the same thresholds, grace period and `AD_HOC_EVENTS_ENABLED` the voice path uses). No Pelican-specific numbers.
+3. **Unlinked players:** show them by **in-game character name** (from `Got character ZDOID from <name>`), falling back to the SteamID64 when no character line has been seen yet.
+4. Voice plus server overlap → one Quick Play (the headline above). **Yes.**
+5. Announce in the game's existing Quick Play-bound channel, otherwise web-only. **Yes.**
+6. Server presence suppresses spawning and extends a live scheduled event. **Yes.**
+7. Panel-unreachable timeout 15 min. **Yes.**
+8. Crossplay out of scope for v1. **Yes.**
+9. Dedicated RL subuser with `websocket.connect`, no `control.console`. **Yes.**
+
+**Follow-on (operator, same day):** the Valheim-specific parsing should live in a **Valheim game plugin** like the WoW one, and a Valheim armory (character page, map discovery) is being investigated in ROK-1799. Build slices for this spike wait for that spike's plugin-boundary answer.
 
 ---
 
