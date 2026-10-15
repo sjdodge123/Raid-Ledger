@@ -26,9 +26,15 @@ export interface ServerPresencePlayer {
 
 export interface ServerPresenceSink {
   /** A player is now on the server (may spawn or join the game's live Quick Play). */
-  playerJoined(source: ServerPresenceSource, player: ServerPresencePlayer): Promise<void>;
+  playerJoined(
+    source: ServerPresenceSource,
+    player: ServerPresencePlayer,
+  ): Promise<void>;
   /** A character line named a player who was already present. */
-  playerRenamed(source: ServerPresenceSource, player: ServerPresencePlayer): Promise<void>;
+  playerRenamed(
+    source: ServerPresenceSource,
+    player: ServerPresencePlayer,
+  ): Promise<void>;
   /** A player left the server (Quick Play keeps them while they are still in voice). */
   playerLeft(source: ServerPresenceSource, steamId: string): Promise<void>;
   /**
