@@ -88,6 +88,18 @@ function outcomeOf(
   return { ...base, ok: p.to === GuildScheduledEventStatus.Completed };
 }
 
+/** An outcome for an event the pass never sent to Discord. */
+function skipped(eventId: number, errorMessage: string): SECompletionOutcome {
+  return {
+    eventId,
+    discordEventId: null,
+    from: null,
+    to: null,
+    ok: false,
+    errorMessage,
+  };
+}
+
 /**
  * Complete one event's Discord SE and report the outcome (ROK-577, ROK-944).
  * Behaviour is unchanged from the old void version: the DB binding is
@@ -102,17 +114,12 @@ export async function completeScheduledEventWithOutcome(
 ): Promise<SECompletionOutcome> {
   const progress: CompletionProgress = { from: null, to: null };
   let seId: string | null = null;
-  const fail = (errorMessage: string): SECompletionOutcome => ({
-    ...outcomeOf(eventId, seId, progress),
-    ok: false,
-    errorMessage,
-  });
   try {
-    if (!client.isConnected()) return fail('bot-not-connected');
+    if (!client.isConnected()) return skipped(eventId, 'bot-not-connected');
     const guild = client.getGuild();
-    if (!guild) return fail('no-guild');
+    if (!guild) return skipped(eventId, 'no-guild');
     seId = await getScheduledEventId(db, eventId);
-    if (!seId) return fail('no-discord-event-id');
+    if (!seId) return skipped(eventId, 'no-discord-event-id');
     await tryCompleteEvent(guild, eventId, seId, progress);
     await clearScheduledEventId(db, eventId);
     return outcomeOf(eventId, seId, progress);

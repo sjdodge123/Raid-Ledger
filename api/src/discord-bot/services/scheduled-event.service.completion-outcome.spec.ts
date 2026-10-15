@@ -14,15 +14,20 @@ import {
  * (the old "always success" behaviour) and the 50013 / timeout cases fail on
  * `ok` and `errorCode`.
  */
-describe('completeScheduledEvent — per-event outcome (ROK-944)', () => {
+async function setupBoundEvent(): Promise<ScheduledEventMocks> {
+  const mocks = await setupScheduledEventTestModule();
+  mocks.mockDb.select.mockReturnValue(
+    mocks.createSelectChain([{ discordScheduledEventId: 'se-1' }]),
+  );
+  mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+  return mocks;
+}
+
+describe('completeScheduledEvent — outcome on success (ROK-944)', () => {
   let mocks: ScheduledEventMocks;
 
   beforeEach(async () => {
-    mocks = await setupScheduledEventTestModule();
-    mocks.mockDb.select.mockReturnValue(
-      mocks.createSelectChain([{ discordScheduledEventId: 'se-1' }]),
-    );
-    mocks.mockDb.update.mockReturnValue(mocks.createUpdateChain());
+    mocks = await setupBoundEvent();
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -40,6 +45,16 @@ describe('completeScheduledEvent — per-event outcome (ROK-944)', () => {
       ok: true,
     });
   });
+});
+
+describe('completeScheduledEvent — outcome on failure (ROK-944)', () => {
+  let mocks: ScheduledEventMocks;
+
+  beforeEach(async () => {
+    mocks = await setupBoundEvent();
+  });
+
+  afterEach(() => jest.clearAllMocks());
 
   it('reports the Discord error code and message when the edit fails', async () => {
     mocks.mockGuild.scheduledEvents.fetch.mockResolvedValue({

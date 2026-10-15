@@ -141,34 +141,34 @@ describe('cleanupScheduledEventsForTest (ROK-1623) - failed delete and no guild'
   });
 });
 
-describe('triggerScheduledEventCompletionForTest (ROK-944)', () => {
-  const ok = {
-    eventId: 1,
-    discordEventId: 'se-1',
-    from: 'Scheduled',
-    to: 'Completed',
-    ok: true,
-  };
-  const failed = {
-    eventId: 2,
-    discordEventId: 'se-2',
-    from: 'Scheduled',
-    to: null,
-    ok: false,
-    errorCode: 50013,
-    errorMessage: 'Missing Permissions',
-  };
+const ok = {
+  eventId: 1,
+  discordEventId: 'se-1',
+  from: 'Scheduled',
+  to: 'Completed',
+  ok: true,
+};
+const failed = {
+  eventId: 2,
+  discordEventId: 'se-2',
+  from: 'Scheduled',
+  to: null,
+  ok: false,
+  errorCode: 50013,
+  errorMessage: 'Missing Permissions',
+};
 
-  function moduleRefFor(run: unknown) {
-    const completeExpiredEventsDetailed = jest.fn().mockResolvedValue(run);
-    const get = jest.fn().mockReturnValue({ completeExpiredEventsDetailed });
-    return {
-      moduleRef: { get } as unknown as ModuleRef,
-      get,
-      completeExpiredEventsDetailed,
-    };
-  }
+function moduleRefFor(run: unknown) {
+  const completeExpiredEventsDetailed = jest.fn().mockResolvedValue(run);
+  const get = jest.fn().mockReturnValue({ completeExpiredEventsDetailed });
+  return {
+    moduleRef: { get } as unknown as ModuleRef,
+    get,
+    completeExpiredEventsDetailed,
+  };
+}
 
+describe('triggerScheduledEventCompletionForTest outcomes (ROK-944)', () => {
   it('runs one completion pass on the non-strict ScheduledEventService', async () => {
     const { moduleRef, get, completeExpiredEventsDetailed } = moduleRefFor({
       outcomes: [ok],
@@ -184,7 +184,9 @@ describe('triggerScheduledEventCompletionForTest (ROK-944)', () => {
     const result = await triggerScheduledEventCompletionForTest(moduleRef);
     expect(result).toEqual({ success: false, outcomes: [ok, failed] });
   });
+});
 
+describe('triggerScheduledEventCompletionForTest skip reasons (ROK-944)', () => {
   it('stays successful with a named reason when there were no candidates', async () => {
     const { moduleRef } = moduleRefFor({
       outcomes: [],
