@@ -2,6 +2,7 @@ import type { CharacterDto } from '@raid-ledger/contract';
 import type { CharacterSyncAdapter } from '../plugins/plugin-host/extension-points';
 import {
   withDisplayEquipment,
+  withDisplayLockouts,
   withDisplayOverrides,
   withDisplayTalents,
 } from './characters-display-equipment.helpers';
@@ -109,5 +110,44 @@ describe('withDisplayTalents / withDisplayOverrides (ROK-1744)', () => {
     const gearOnly = await withDisplayOverrides(stored, failing, logger);
     expect(gearOnly.equipment).toBe(equipment);
     expect(gearOnly.talents).toBeNull();
+  });
+});
+
+describe('withDisplayLockouts (ROK-1743)', () => {
+  const logger = { warn: jest.fn() };
+  beforeEach(() => logger.warn.mockReset());
+  const lockouts = {
+    source: 'addon',
+    syncedAt: '2026-10-09T00:00:00.000Z',
+    instances: [],
+  };
+  const hook = (resolveDisplayLockouts: jest.Mock): CharacterSyncAdapter =>
+    ({ resolveDisplayLockouts }) as unknown as CharacterSyncAdapter;
+
+  it('sets lockouts via withDisplayOverrides, passing id + variant', async () => {
+    const resolve = jest.fn().mockResolvedValue(lockouts);
+    const out = await withDisplayOverrides(stored, hook(resolve), logger);
+    expect(out.lockouts).toBe(lockouts);
+    expect(resolve).toHaveBeenCalledWith({
+      id: 'char-1',
+      gameVariant: 'classic_anniversary',
+    });
+  });
+
+  it('leaves the DTO without a lockouts key when the hook returns undefined', async () => {
+    const resolve = jest.fn().mockResolvedValue(undefined);
+    const out = await withDisplayLockouts(stored, hook(resolve), logger);
+    expect(out).toBe(stored);
+    expect('lockouts' in out).toBe(false);
+  });
+
+  it('a throwing lockouts hook leaves the DTO unchanged and warns', async () => {
+    const resolve = jest.fn().mockRejectedValue(new Error('lockouts down'));
+    await expect(
+      withDisplayLockouts(stored, hook(resolve), logger),
+    ).resolves.toBe(stored);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('lockouts down'),
+    );
   });
 });
