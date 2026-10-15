@@ -10,7 +10,9 @@
  *     delegated-editor rank), `member` (rank 3) — each owning a main character
  *     whose `addon_guid` is its roster GUID — and `outsider` (no character);
  *   - two roster rows with no RL character (ranks 2 and 4);
- *   - a `guild_editors` rank grant for rank 1, granted by the GM.
+ *   - a `guild_editors` rank grant for rank 1, granted by the GM;
+ *   - (ROK-1787) guild-tagged raids: a weekly series + one past raid with
+ *     attendance recorded — see `demo-test-guild-raids.helpers.ts`.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -48,6 +50,11 @@ import {
   upsertSeedUser,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
+import {
+  ensureGuildRaids,
+  raiderOf,
+  type SeededGuildRaids,
+} from './demo-test-guild-raids.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -78,6 +85,8 @@ export interface SeedGuildResponse {
   users: Record<SeedGuildRole, SeedGuildUser>;
   /** Roster rows with no RL character (ranks 2 and 4). */
   unlinkedMemberIds: number[];
+  /** ROK-1787 — guild-tagged events for the Raids tab. */
+  raids: SeededGuildRaids;
 }
 
 interface SeededRoster {
@@ -112,6 +121,7 @@ export class DemoTestGuildController {
       now,
     });
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
+    const raids = await this.seedRaids({ guildId, gameId, hash, now }, users);
     return {
       guildId,
       gameId,
@@ -120,7 +130,23 @@ export class DemoTestGuildController {
       editorRankIndex: SEED_GUILD_EDITOR_RANK,
       users,
       unlinkedMemberIds: unlinked,
+      raids,
     };
+  }
+
+  /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */
+  private seedRaids(
+    ctx: RosterCtx,
+    users: Record<SeedGuildRole, SeedGuildUser>,
+  ): Promise<SeededGuildRaids> {
+    return ensureGuildRaids(this.db, {
+      guildId: ctx.guildId,
+      gameId: ctx.gameId,
+      now: ctx.now,
+      gm: raiderOf(users.gm),
+      officer: raiderOf(users.officer),
+      member: raiderOf(users.member),
+    });
   }
 
   /** Roster rows + their owners; `unlinked` collects owner-less member ids. */
