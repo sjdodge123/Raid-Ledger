@@ -2693,3 +2693,6 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-15 — feat/rok-1775-pelican-month-schedule (surfaced during fleet UI verify, plan `2026-10-15-0244-1a80` step 8)
 - **low** — calendar game filter: choosing **None** saves an empty selection (`[]`), but on reload `[]` is read as "all games" (53/53 selected), so the None choice does not survive a reload and plugin-layer rows come back. Seen on env rok-1775. The game-filter persistence code is not touched by ROK-1775, so this is believed to predate it; that has not been confirmed on main. Suggested: persist an explicit `none` sentinel (or store hidden games instead of selected games) so empty ≠ all.
+
+### 2026-10-15 — feat/rok-1743-saved-instances (surfaced during fleet UI verify, plan `2026-10-15-0615-799e`)
+- **low** — theme mode **Auto**: when the OS colour scheme flips while a page is open, `data-scheme` and the header switch but card surfaces keep the old scheme until a reload. Seen on the character page on env rok-1743. Page-wide, not specific to the new panel, so believed to predate this story. Not yet reproduced on main. Suggested: find where card surface tokens are resolved once (cached computed style or a theme snapshot) instead of following `data-scheme`, and re-resolve on the `prefers-color-scheme` change event.
