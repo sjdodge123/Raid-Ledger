@@ -182,6 +182,13 @@ Parallel: V0, V3 and ROK-1798 slices 1–3 can run together; V4 runs in the mod 
 
 ---
 
+## Operator rulings (2026-10-15)
+
+- **Q1 data source: option A.** The RL Valheim Link mod ships in the operator's **GamerSaloon Valheim modpack** (`github.com/sjdodge123/GamerSaloon-Valheim-Modpack`), so every client gets it.
+- **Q2 repo:** the mod lives under the operator's GitHub org **`Raid-Ledger-Plugins`** (which already hosts `coworker-bot`), not under `sjdodge123/`. Its wire contract still lives in Raid Ledger (`packages/contract/valheim-link/v1/`), per the LedgerLink rule.
+- **Q4 item names/icons:** the operator points at **https://www.valheim.tools/items** as a source. Use it as a reference for item ids, names and categories, and for link-outs. Before copying icons or bulk data from it, check its terms. The game's own ObjectDB export from the mod (the default) stays the source for icons we host, because it matches the installed game version and the modded items.
+- Q3 and Q5–Q9: not yet ruled; the defaults below stand until the operator says otherwise.
+
 ## Operator questions (recommended default in bold)
 
 1. **Data source:** build our own client+server mod and add it to the modpack (A), adopt a server-character mod (B), or accept web uploads (C)? **Default: A.**
