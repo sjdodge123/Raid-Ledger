@@ -6,16 +6,18 @@ import {
   OnModuleDestroy,
   Optional,
 } from '@nestjs/common';
+import { OnEvent } from '@nestjs/event-emitter';
 import { SettingsService } from '../../../settings/settings.service';
 import {
   EXTENSION_POINTS,
   type GameLogParser,
 } from '../../plugin-host/extension-points';
+import { PLUGIN_EVENTS } from '../../plugin-host/plugin-manifest.interface';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from '../pelican.constants';
 import { PelicanClientFactory } from '../pelican-client.factory';
 import type { WingsSocketFactory } from '../pelican-console-socket.helpers';
-import { errName } from './pelican-presence.helpers';
+import { errName, PRESENCE_STOPPED_STATES } from './pelican-presence.helpers';
 import {
   PelicanPresenceRepository,
   type PresenceServerRow,
@@ -41,6 +43,12 @@ interface Running {
   key: string;
 }
 
+interface Plan {
+  targets: Map<number, Target>;
+  /** Tracked servers Pelican reports offline/stopping. */
+  stopped: PresenceServerRow[];
+}
+
 /**
  * Pelican presence supervisor (ROK-1800 L5, ROK-1798 Q5). Holds one console
  * session per eligible server: `presence_tracking` on, still listed, not
@@ -48,7 +56,8 @@ interface Running {
  * `game-log-parser`. Nothing runs while the Pelican plugin is inactive or
  * unconfigured, Quick Play (`AD_HOC_EVENTS_ENABLED`) is off, or no
  * `SERVER_PRESENCE_SINK` is bound. Reconciled on boot and after every status
- * poll. Assumes a single API process (Q5).
+ * poll; every session stops (without emptying) when Pelican is deactivated.
+ * Assumes a single API process (Q5).
  */
 @Injectable()
 export class PelicanPresenceSupervisor
@@ -56,6 +65,8 @@ export class PelicanPresenceSupervisor
 {
   private readonly logger = new Logger(PelicanPresenceSupervisor.name);
   private readonly sessions = new Map<number, Running>();
+  /** Stopped servers already emptied this offline spell (once each). */
+  private readonly emptiedStopped = new Set<number>();
   private reconciling = false;
   private warnedNoSink = false;
 
@@ -83,6 +94,23 @@ export class PelicanPresenceSupervisor
 
   /** App shutdown: close sockets WITHOUT emptying — a restart rehydrates. */
   async onModuleDestroy(): Promise<void> {
+    await this.stopAll();
+  }
+
+  /**
+   * Pelican deactivated: its status-poll cron (the reconcile trigger) is
+   * removed, so close every socket now. Like shutdown this does NOT empty:
+   * deactivation stops observing, it is no evidence anyone left, and ending
+   * live Quick Plays for players still on the server would be a false
+   * departure. Reactivation's first reconcile rehydrates the roster.
+   */
+  @OnEvent(PLUGIN_EVENTS.DEACTIVATED)
+  async handlePluginDeactivated(payload: { slug: string }): Promise<void> {
+    if (payload.slug !== PELICAN_PLUGIN_ID) return;
+    await this.stopAll();
+  }
+
+  private async stopAll(): Promise<void> {
     const all = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.all(all.map((r) => r.session.stop(false)));
@@ -93,7 +121,9 @@ export class PelicanPresenceSupervisor
     if (this.reconciling) return;
     this.reconciling = true;
     try {
-      await this.apply(await this.desired());
+      const plan = await this.desired();
+      await this.apply(plan.targets);
+      await this.emptyStopped(plan.stopped);
     } catch (err) {
       this.logger.error(`Presence reconcile failed: ${errName(err)}`);
     } finally {
@@ -105,6 +135,7 @@ export class PelicanPresenceSupervisor
     for (const [id, running] of [...this.sessions]) {
       if (desired.get(id)?.key === running.key) continue;
       this.sessions.delete(id);
+      this.emptiedStopped.add(id);
       await running.session.stop(true);
     }
     for (const [id, target] of desired) {
@@ -112,20 +143,51 @@ export class PelicanPresenceSupervisor
     }
   }
 
-  private async desired(): Promise<Map<number, Target>> {
-    const targets = new Map<number, Target>();
-    if (!this.sinkBound()) return targets;
-    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return targets;
-    if (!(await this.settings.getAdHocEventsEnabled())) return targets;
-    const panelUrl = await this.factory.panelUrl();
-    if (!panelUrl) return targets;
+  private async desired(): Promise<Plan> {
+    const plan: Plan = { targets: new Map(), stopped: [] };
+    const panelUrl = await this.enabledPanelUrl();
+    if (!panelUrl) return plan;
     for (const row of await this.repo.listTracked()) {
       const parser = this.eligibleParser(row);
-      if (!parser) continue;
-      const key = `${row.identifier}|${row.gameId}|${row.gameSlug}|${panelUrl}`;
-      targets.set(row.id, { row, parser, key });
+      if (parser) {
+        const key = `${row.identifier}|${row.gameId}|${row.gameSlug}|${panelUrl}`;
+        plan.targets.set(row.id, { row, parser, key });
+        this.emptiedStopped.delete(row.id);
+      } else if (PRESENCE_STOPPED_STATES.has(row.currentState ?? '')) {
+        plan.stopped.push(row);
+      }
     }
-    return targets;
+    return plan;
+  }
+
+  /** The panel URL when presence may run at all, else null. */
+  private async enabledPanelUrl(): Promise<string | null> {
+    if (!this.sinkBound()) return null;
+    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return null;
+    if (!(await this.settings.getAdHocEventsEnabled())) return null;
+    return this.factory.panelUrl();
+  }
+
+  /**
+   * A server that stopped while no session watched it (e.g. while the API
+   * was down) still has persisted presence: empty it once per offline spell.
+   */
+  private async emptyStopped(rows: PresenceServerRow[]): Promise<void> {
+    for (const row of rows) {
+      if (this.sessions.has(row.id) || this.emptiedStopped.has(row.id)) {
+        continue;
+      }
+      this.emptiedStopped.add(row.id);
+      const source = { pelicanServerId: row.id, gameId: row.gameId };
+      try {
+        const open = (await this.sink?.openPresence(source)) ?? [];
+        if (open.length > 0) await this.sink?.serverEmptied(source);
+      } catch (err) {
+        this.logger.error(
+          `Presence empty failed for stopped server ${row.id}: ${errName(err)}`,
+        );
+      }
+    }
   }
 
   private sinkBound(): boolean {
@@ -151,6 +213,8 @@ export class PelicanPresenceSupervisor
     const conn = await this.factory.connect();
     const panelUrl = await this.factory.panelUrl();
     if (!conn || !panelUrl || !this.sink) return;
+    // Deactivated mid-reconcile: never open a socket nothing will close.
+    if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return;
     const { row, parser, key } = target;
     const session = new PelicanPresenceSession({
       source: { pelicanServerId: row.id, gameId: row.gameId },

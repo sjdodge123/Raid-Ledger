@@ -1,4 +1,12 @@
 import { Logger } from '@nestjs/common';
+import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
+import { Test } from '@nestjs/testing';
+import { SettingsService as SettingsToken } from '../../../settings/settings.service';
+import { PLUGIN_EVENTS } from '../../plugin-host/plugin-manifest.interface';
+import { PluginRegistryService as RegistryToken } from '../../plugin-host/plugin-registry.service';
+import { PelicanClientFactory as FactoryToken } from '../pelican-client.factory';
+import { PelicanPresenceRepository as RepoToken } from './pelican-presence.repository';
+import { SERVER_PRESENCE_SINK } from './server-presence.sink';
 import type { SettingsService } from '../../../settings/settings.service';
 import type { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
 import type { PelicanClientFactory } from '../pelican-client.factory';
@@ -7,7 +15,10 @@ import type {
   PelicanPresenceRepository,
   PresenceServerRow,
 } from './pelican-presence.repository';
-import { PelicanPresenceSupervisor } from './pelican-presence.supervisor';
+import {
+  PelicanPresenceSupervisor,
+  PRESENCE_SOCKET_FACTORY,
+} from './pelican-presence.supervisor';
 import {
   fakeParser,
   fakeSink,
@@ -79,7 +90,8 @@ function harness(opts: Opts = {}) {
     await supervisor.reconcile();
     await jest.advanceTimersByTimeAsync(PRESENCE_REPLAY_SETTLE_MS);
   };
-  return { supervisor, sink, wings, state, reconcile };
+  const deps = { registry, factory, repo, settings };
+  return { supervisor, sink, wings, state, reconcile, deps };
 }
 
 beforeEach(() => jest.useFakeTimers());
@@ -147,4 +159,50 @@ it('shutdown closes sockets without emptying (a restart rehydrates)', async () =
   await h.supervisor.onModuleDestroy();
   expect(h.supervisor.activeServerIds).toEqual([]);
   expect(h.sink.serverEmptied).not.toHaveBeenCalled();
+});
+
+it('empties a server that stopped while no session watched it, once (FB1 #3)', async () => {
+  const h = harness({
+    rows: [row(1, { currentState: 'offline' })],
+    open: [{ steamId: 'A', displayName: 'Alice' }],
+  });
+  await h.reconcile();
+  await h.reconcile();
+  expect(h.wings.sockets).toHaveLength(0);
+  expect(h.sink.serverEmptied.mock.calls).toEqual([
+    [{ pelicanServerId: 1, gameId: 42 }],
+  ]);
+});
+
+it('does not empty a stopped server with no persisted presence (FB1 #3)', async () => {
+  const h = harness({ rows: [row(1, { currentState: 'offline' })] });
+  await h.reconcile();
+  expect(h.sink.openPresence).toHaveBeenCalledTimes(1);
+  expect(h.sink.serverEmptied.mock.calls).toEqual([]);
+});
+
+it('Pelican deactivation stops every session without emptying (FB1 #4)', async () => {
+  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  const app = await Test.createTestingModule({
+    imports: [EventEmitterModule.forRoot()],
+    providers: [
+      { provide: PelicanPresenceSupervisor, useValue: h.supervisor },
+      { provide: RegistryToken, useValue: h.deps.registry },
+      { provide: FactoryToken, useValue: h.deps.factory },
+      { provide: RepoToken, useValue: h.deps.repo },
+      { provide: SettingsToken, useValue: h.deps.settings },
+      { provide: SERVER_PRESENCE_SINK, useValue: h.sink },
+      { provide: PRESENCE_SOCKET_FACTORY, useValue: h.wings.factory },
+    ],
+  }).compile();
+  await app.init();
+  await h.reconcile();
+  const events = app.get(EventEmitter2);
+  await events.emitAsync(PLUGIN_EVENTS.DEACTIVATED, { slug: 'valheim' });
+  expect(h.supervisor.activeServerIds).toEqual([1]);
+  await events.emitAsync(PLUGIN_EVENTS.DEACTIVATED, { slug: 'pelican' });
+  expect(h.supervisor.activeServerIds).toEqual([]);
+  expect(h.wings.sockets[0]?.close).toHaveBeenCalled();
+  expect(h.sink.serverEmptied.mock.calls).toEqual([]);
+  await app.close();
 });
