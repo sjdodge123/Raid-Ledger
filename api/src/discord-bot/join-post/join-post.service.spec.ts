@@ -166,38 +166,6 @@ describe('JoinPostService.publish — idempotency', () => {
     expect(result.pinned).toBe(true);
   });
 
-  it('re-creates when the edit says 10008 (a stale cached copy), not 503', async () => {
-    const chan = fakeChannel('c1');
-    const stale = fakeMessage('m1');
-    stale.edit.mockRejectedValue(discordError(10008));
-    chan.messages.fetch.mockResolvedValue(stale);
-    const { service, store } = setup([chan], {
-      [CHAN_KEY]: 'c1',
-      [MSG_KEY]: 'm1',
-    });
-    const result = await service.publish('c1');
-    expect(result.outcome).toBe('recreated');
-    expect(chan.send).toHaveBeenCalledTimes(1);
-    expect(store.get(MSG_KEY)).toBe(result.messageId);
-    expect(result.messageId).not.toBe('m1');
-  });
-
-  it('adopts an orphaned post instead of sending a duplicate on 10008', async () => {
-    const chan = fakeChannel('c1');
-    const orphan = fakeMessage('m-orphan');
-    chan.messages.fetch.mockRejectedValue(discordError(10008));
-    chan.messages.fetchPins.mockResolvedValue({ items: [{ message: orphan }] });
-    const { service, store } = setup([chan], {
-      [CHAN_KEY]: 'c1',
-      [MSG_KEY]: 'gone',
-    });
-    const result = await service.publish('c1');
-    expect(chan.send).not.toHaveBeenCalled();
-    expect(result.outcome).toBe('adopted');
-    expect(orphan.edit).toHaveBeenCalledTimes(1);
-    expect(store.get(MSG_KEY)).toBe('m-orphan');
-  });
-
   it('a transient fetch failure is a 503: no send, ids untouched', async () => {
     const chan = fakeChannel('c1');
     chan.messages.fetch.mockRejectedValue(discordError(0));
@@ -222,6 +190,41 @@ describe('JoinPostService.publish — idempotency', () => {
     expect(own.edit).toHaveBeenCalledTimes(1);
     expect(chan.send).not.toHaveBeenCalled();
     expect(store.get(MSG_KEY)).toBe('m-own');
+  });
+});
+
+describe('JoinPostService.publish — 10008 recovery', () => {
+  it('re-creates when the edit says 10008 (a stale cached copy), not 503', async () => {
+    const chan = fakeChannel('c1');
+    const stale = fakeMessage('m1');
+    stale.edit.mockRejectedValue(discordError(10008));
+    chan.messages.fetch.mockResolvedValue(stale);
+    const { service, store } = setup([chan], {
+      [CHAN_KEY]: 'c1',
+      [MSG_KEY]: 'm1',
+    });
+    const pending = service.publish('c1');
+    await expect(pending).resolves.toMatchObject({ outcome: 'recreated' });
+    const result = await pending;
+    expect(chan.send).toHaveBeenCalledTimes(1);
+    expect(store.get(MSG_KEY)).toBe(result.messageId);
+    expect(result.messageId).not.toBe('m1');
+  });
+
+  it('adopts an orphaned post instead of sending a duplicate on 10008', async () => {
+    const chan = fakeChannel('c1');
+    const orphan = fakeMessage('m-orphan');
+    chan.messages.fetch.mockRejectedValue(discordError(10008));
+    chan.messages.fetchPins.mockResolvedValue({ items: [{ message: orphan }] });
+    const { service, store } = setup([chan], {
+      [CHAN_KEY]: 'c1',
+      [MSG_KEY]: 'gone',
+    });
+    const result = await service.publish('c1');
+    expect(chan.send).not.toHaveBeenCalled();
+    expect(result.outcome).toBe('adopted');
+    expect(orphan.edit).toHaveBeenCalledTimes(1);
+    expect(store.get(MSG_KEY)).toBe('m-orphan');
   });
 });
 
