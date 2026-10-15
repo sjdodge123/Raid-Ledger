@@ -2,7 +2,8 @@
  * ROK-1767 — GameRoleReconcileService against a real DB with the Discord
  * helpers mocked: adds/removes applied and audited, grants only for bot adds,
  * the mutation cap, per-game failure isolation (Sentry), and grantNow's
- * opt-out gate.
+ * opt-out gate + existing-grant restore, and the idle-since date counting
+ * event attendance.
  *
  * Mocks are `jest.spyOn` on the live module objects, NOT `jest.mock`: the
  * integration `setupFilesAfterEnv` imports AppModule → this service → the
@@ -39,6 +40,7 @@ const mocked = {
   fetchGuildMembers: jest.spyOn(discord, 'fetchGuildMembers'),
   fetchRoleState: jest.spyOn(discord, 'fetchRoleState'),
   memberHoldsRole: jest.spyOn(discord, 'memberHoldsRole'),
+  cachedMemberLacksRole: jest.spyOn(discord, 'cachedMemberLacksRole'),
   addMemberRole: jest.spyOn(discord, 'addMemberRole'),
   removeMemberRole: jest.spyOn(discord, 'removeMemberRole'),
 };
@@ -51,6 +53,7 @@ beforeEach(() => {
   mocked.fetchGuildMembers.mockResolvedValue(MEMBERS);
   mocked.fetchRoleState.mockRejectedValue(new Error('fetchRoleState unset'));
   mocked.memberHoldsRole.mockRejectedValue(new Error('memberHoldsRole unset'));
+  mocked.cachedMemberLacksRole.mockReturnValue(false);
   mocked.addMemberRole.mockResolvedValue(true);
   mocked.removeMemberRole.mockResolvedValue(true);
   captureException.mockReturnValue('event-id');
@@ -108,6 +111,37 @@ async function played(userId: number, gameId: number, days: number) {
     gameId,
     discordActivityName: 'Game',
     startedAt: new Date(Date.now() - days * 86_400_000),
+  });
+}
+
+/** Voice attendance at a scheduled event for `gameId`, left `days` ago. */
+async function attendedEvent(
+  u: { id: number; discordId: string },
+  gameId: number,
+  days: number,
+) {
+  const end = new Date(Date.now() - days * 86_400_000);
+  const [ev] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: `GRR Raid ${++seq}`,
+        creatorId: testApp.seed.adminUser.id,
+        gameId,
+        duration: [new Date(end.getTime() - 3_600_000), end],
+      })
+      .returning(),
+    'event',
+  );
+  await testApp.db.insert(schema.eventVoiceSessions).values({
+    eventId: ev.id,
+    userId: u.id,
+    discordUserId: u.discordId,
+    discordUsername: 'voice-user',
+    firstJoinAt: new Date(end.getTime() - 3_600_000),
+    lastLeaveAt: end,
+    totalDurationSec: 3600,
+    classification: 'full',
   });
 }
 
@@ -323,5 +357,46 @@ describe('GameRoleReconcileService (ROK-1767)', () => {
       expect.stringMatching(/^played /),
     );
     expect(await grantsOf(roleRowId)).toEqual([keen.id]);
+  });
+
+  it('idle-since dates the last play across presence AND event attendance', async () => {
+    const gameId = await makeGame('Raids');
+    const roleRowId = await link(gameId, 'role-att');
+    const raider = await makeUser();
+    await played(raider.id, gameId, 40);
+    await attendedEvent(raider, gameId, 20);
+    await grant(roleRowId, raider);
+    liveState([raider.discordId], [raider.discordId]);
+
+    await service.runReconciliation();
+
+    const attendedOn = new Date(Date.now() - 20 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    expect(await auditOf(roleRowId)).toEqual([
+      { action: 'role_removed', reason: `idle since ${attendedOn}` },
+    ]);
+  });
+
+  it('grantNow restores a granted role the member no longer holds', async () => {
+    const gameId = await makeGame('Restore');
+    const roleRowId = await link(gameId, 'role-back');
+    const u = await makeUser();
+    await grant(roleRowId, u);
+    mocked.cachedMemberLacksRole.mockReturnValue(true);
+    mocked.memberHoldsRole.mockResolvedValue(false);
+
+    expect(await service.grantNow(u.id, gameId)).toBe(true);
+
+    expect(mocked.addMemberRole).toHaveBeenCalledWith(
+      GUILD,
+      u.discordId,
+      'role-back',
+      expect.stringMatching(/^played /),
+    );
+    expect(await grantsOf(roleRowId)).toEqual([u.id]);
+    expect((await auditOf(roleRowId)).map((a) => a.action)).toEqual([
+      'role_added',
+    ]);
   });
 });
