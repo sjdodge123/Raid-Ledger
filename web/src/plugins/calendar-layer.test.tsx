@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { act, renderHook } from '@testing-library/react';
 import { clearRegistry, registerPlugin } from './plugin-registry';
 import { usePluginStore } from '../stores/plugin-store';
+import { useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-store';
 import { useCalendarLayers } from './calendar-layer';
 import type { CalendarLayer, CalendarLayerItem, CalendarLayerRange } from './calendar-layer';
 
@@ -165,5 +166,20 @@ describe('useCalendarLayers — registration freeze (ROK-1774)', () => {
         } finally {
             vi.unstubAllEnvs();
         }
+    });
+});
+
+describe('useCalendarLayers — viewer-hidden layers (ROK-1775)', () => {
+    it('calls a layer the viewer hid with enabled=false and drops its items', () => {
+        const { a, b } = setupTwoLayers();
+        setActive(['a', 'b']);
+        act(() => useCalendarLayerFilterStore.getState().loadHiddenLayers(['b:layer']));
+        const { result } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        expect(result.current.map((i) => i.id)).toEqual(['a1']);
+        expect(a.spy).toHaveBeenLastCalledWith(RANGE, undefined, true);
+        expect(b.spy).toHaveBeenLastCalledWith(RANGE, undefined, false);
+        act(() => useCalendarLayerFilterStore.getState()._reset());
+        expect(b.spy).toHaveBeenLastCalledWith(RANGE, undefined, true);
+        expect(result.current.map((i) => i.id)).toEqual(['a1', 'b1', 'b2']);
     });
 });
