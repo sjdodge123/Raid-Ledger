@@ -36,6 +36,9 @@
 #                                        # this only trims duplicated local work for
 #                                        # a single-workspace small fix. Composes
 #                                        # with --static (e.g. --static --scope=auto).
+#   ./scripts/validate-ci.sh --fleet --integration-parallel=2  # Run integration
+#                                        # shards 2 at a time (ROK-1793; opt-in,
+#                                        # = INTEGRATION_PARALLEL=2; default 1).
 #   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
 #                                        # (e.g. pg_dump). Use in CI to ensure
 #                                        # backup integration tests never silently
@@ -2473,6 +2476,9 @@ main() {
       --only-unit) _set_only_mode unit; shift ;;
       --no-coverage) no_coverage=true; shift ;;
       --fleet) fleet_mode=true; no_coverage=true; shift ;;
+      # ROK-1793: the fleet runner gets only RL_SLOT/RL_TARGET from the laptop
+      # env, so INTEGRATION_PARALLEL rides in as a flag (rl_validate_ci args).
+      --integration-parallel=*) export INTEGRATION_PARALLEL="${1#--integration-parallel=}"; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done
