@@ -89,6 +89,7 @@ const LAZY_NAMED = [
   { name: 'app-entry', kb: 163.2, why: "ROK-1779: the former entry body (App, router, query client, shared core). main.tsx now imports it dynamically, after the telemetry decision and Sentry.init, so Sentry's fetch/XHR wrappers exist before native-fetch.ts captures them; measured 2026-10-15, and the index-* entry fell to 5.4 KB by the same move" },
   { name: 'calendar-page', kb: 12.7, why: 'route; +0.13 KB ROK-1775 server-schedule layer in Month (date-header glyph) and Schedule (muted rows), +0.1 KB Schedule lists server-only days with a muted header (Lead ruling) — the layer pieces share the calendar chunk with CalendarView, their only importer' },
   { name: 'lfg-group-page', kb: 11.81, why: 'route' },
+  { name: 'guild-page', kb: 10.0, why: 'route; was on lazyDefault (9.76). +0.24 KB ROK-1787 guild S3: Raids tab, schedule, attendance leaderboard, role composition, hero Next-raid chip; measured 11.57 KB gz vs the 11.57 default cap (fleet build 0.0 KB over)' },
 ];
 
 const mapValues = (obj, fn) =>
