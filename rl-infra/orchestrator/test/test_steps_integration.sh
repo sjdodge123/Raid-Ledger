@@ -102,6 +102,22 @@ test_steps_duration_null() {
     assert_eq "$duration" "null" "duration_s should be null (M1 best-effort)"
 }
 
+# ROK-1793 S0: a `[step-time] <name> <s>` line stamps the NEXT matching row.
+test_steps_duration_from_step_time() {
+    CURRENT_TEST_NAME="[step-time] fills duration_s on the matching row only"
+    local task_id="durtime01"
+    bash "$BIN_DIR/task-start" "$task_id" --tool rl_validate_ci --slot 1 -- \
+        /bin/sh -c "printf '[step-time] Lint (all) 12.3\nLint (all): PASS\n[step-time] Other step 9.9\nUnit tests + coverage: SKIPPED\n'" \
+        >/dev/null 2>&1 || true
+    wait_for_terminal "$task_id" 5000 || true
+    sleep 2.5
+    local d0 d1
+    d0=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[0].duration_s' 2>/dev/null || echo "")
+    d1=$(bash "$BIN_DIR/task-status" "$task_id" 2>/dev/null | jq -r '.steps[1].duration_s' 2>/dev/null || echo "")
+    assert_eq "$d0" "12.3" "duration_s should come from the preceding [step-time] line"
+    assert_eq "$d1" "null" "a [step-time] for a different name must not stamp this row"
+}
+
 # Non-matching output lines do NOT pollute steps[].
 test_steps_no_false_positives() {
     CURRENT_TEST_NAME="non-status lines do NOT pollute steps[]"
@@ -120,5 +136,6 @@ run_test "ac-m1-4-plain" test_steps_plain_lines
 run_test "ac-m1-5-ansi" test_steps_ansi_lines
 run_test "duration-null" test_steps_duration_null
 run_test "no-false-positives" test_steps_no_false_positives
+run_test "duration-step-time" test_steps_duration_from_step_time
 
 print_test_summary
