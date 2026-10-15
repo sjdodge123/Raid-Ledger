@@ -76,17 +76,21 @@ function readSetters(): PreferenceSetters {
 
 /**
  * ROK-1775: when the viewer changes (logout, another login, impersonation),
- * drop the previous viewer's hidden-layer set and the unscoped
- * `['user-preferences']` entries the profile panels cache.
+ * drop the previous viewer's hidden-layer set, the unscoped
+ * `['user-preferences']` entries the profile panels cache, and the departing
+ * viewer's own scoped snapshot — it never goes stale and toggle writes do not
+ * update it, so reusing it on their next login would restore old preferences.
  */
 function useResetOnViewerChange(viewer: number | 'anon'): void {
     const queryClient = useQueryClient();
     const previous = useRef(viewer);
     useEffect(() => {
-        if (previous.current === viewer) return;
+        const departing = previous.current;
+        if (departing === viewer) return;
         previous.current = viewer;
         useCalendarLayerFilterStore.getState().clearViewer();
         queryClient.removeQueries({ queryKey: ['user-preferences'], exact: true });
+        queryClient.removeQueries({ queryKey: ['user-preferences', departing], exact: true });
     }, [viewer, queryClient]);
 }
 

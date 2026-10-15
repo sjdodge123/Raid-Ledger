@@ -77,6 +77,24 @@ describe('useThemeSync — calendar hidden layers (ROK-1775)', () => {
         expect(hidden()).toEqual([]);
     });
 
+    it('a viewer who logs out and back in gets their SAVED preference, not the snapshot cached before they left', async () => {
+        prefsByUser.set(4, {});
+        auth.user = { id: 4 };
+        const { rerender } = renderSync();
+        await waitFor(() => expect(useCalendarLayerFilterStore.getState().hydrated).toBe(true));
+        expect(hidden()).toEqual([]);
+
+        prefsByUser.set(4, { calendarHiddenLayers: [LAYER] }); // the toggle write landed server-side
+        auth.user = null; // logout
+        rerender();
+        expect(useCalendarLayerFilterStore.getState().hydrated).toBe(false);
+
+        auth.user = { id: 4 }; // same viewer signs back in
+        rerender();
+        await waitFor(() => expect(useCalendarLayerFilterStore.getState().hydrated).toBe(true));
+        expect(hidden()).toEqual([LAYER]);
+    });
+
     it('a failed preference load still hydrates, so layers are not held off forever', async () => {
         auth.user = { id: 3 };
         const { getMyPreferences } = await import('../lib/api-client');
