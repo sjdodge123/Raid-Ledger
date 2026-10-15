@@ -1,7 +1,7 @@
 /**
  * ROK-1786 — guild content endpoints against a real database: the permission
- * matrix (admin, granted editor, plain member, non-member) on every route,
- * the profile upsert + GM-post stamp, addon create / duplicate 409 / update /
+ * matrix (admin, granted editor, plain member, ungranted rank-0 GM, non-member)
+ * on every route, the profile upsert + GM-post stamp, addon create / duplicate 409 / update /
  * delete / reorder, cross-guild writes denied, and `gmPostHeadline` on /mine.
  */
 import * as bcrypt from 'bcrypt';
@@ -16,7 +16,7 @@ const BASE = '/plugins/wow/guilds';
 const CF = 'https://www.curseforge.com/wow/addons/details';
 const WAGO = 'https://addons.wago.io/addons/weakauras';
 
-type Who = 'deleg' | 'plain' | 'outsider';
+type Who = 'deleg' | 'plain' | 'gm' | 'outsider';
 type Actor = Who | 'admin';
 
 let testApp: TestApp;
@@ -45,7 +45,10 @@ async function insertGuild(name: string): Promise<number> {
   return g.id;
 }
 
-/** A local-login user with a character; a member row unless an outsider. */
+/**
+ * A local-login user with a character; a member row unless an outsider. The
+ * `gm` sits at rank 0 with NO editor grant (`GM_RANK_IMPLIES_EDIT` is off).
+ */
 async function seedUser(who: Who): Promise<number | null> {
   const email = `${who}@guild-content.test`;
   const [user] = nonEmpty(
@@ -85,8 +88,8 @@ async function seedUser(who: Who): Promise<number | null> {
         guildId,
         guid,
         characterName: `content${who}`,
-        rankIndex: 3,
-        rankName: 'Rank 3',
+        rankIndex: who === 'gm' ? 0 : 3,
+        rankName: who === 'gm' ? 'Guild Master' : 'Rank 3',
         source: 'addon_import',
         lastSeenAt: SNAP,
       })
@@ -118,6 +121,7 @@ beforeAll(async () => {
   otherGuildId = await insertGuild('Content Other');
   const delegMember = await seedUser('deleg');
   await seedUser('plain');
+  await seedUser('gm');
   await seedUser('outsider');
   await testApp.db
     .insert(schema.guildEditors)
@@ -143,23 +147,27 @@ describe('permission matrix', () => {
     ['admin', 200],
     ['deleg', 200],
     ['plain', 200],
+    ['gm', 200],
     ['outsider', 403],
   ] as const)('reads: %s → %i', async (who, status) => {
     expect((await call('get', `/${guildId}/profile`, who)).status).toBe(status);
     expect((await call('get', `/${guildId}/addons`, who)).status).toBe(status);
   });
 
-  it.each(['plain', 'outsider'] as const)('writes: %s → 403', async (who) => {
-    const id = `/${guildId}`;
-    const results = await Promise.all([
-      call('patch', `${id}/profile`, who, { gmPost: 'x' }),
-      call('post', `${id}/addons`, who, { url: CF }),
-      call('patch', `${id}/addons/${otherAddonId}`, who, { note: 'x' }),
-      call('delete', `${id}/addons/${otherAddonId}`, who),
-      call('put', `${id}/addons/order`, who, { ids: [otherAddonId] }),
-    ]);
-    expect(results.map((r) => r.status)).toEqual([403, 403, 403, 403, 403]);
-  });
+  it.each(['plain', 'gm', 'outsider'] as const)(
+    'writes: %s → 403',
+    async (who) => {
+      const id = `/${guildId}`;
+      const results = await Promise.all([
+        call('patch', `${id}/profile`, who, { gmPost: 'x' }),
+        call('post', `${id}/addons`, who, { url: CF }),
+        call('patch', `${id}/addons/${otherAddonId}`, who, { note: 'x' }),
+        call('delete', `${id}/addons/${otherAddonId}`, who),
+        call('put', `${id}/addons/order`, who, { ids: [otherAddonId] }),
+      ]);
+      expect(results.map((r) => r.status)).toEqual([403, 403, 403, 403, 403]);
+    },
+  );
 
   it('401 without a token; admin gets 404 for a missing guild', async () => {
     const anon = await testApp.request.get(`${BASE}/${guildId}/profile`);
@@ -204,11 +212,15 @@ describe('profile', () => {
   });
 
   it('/mine carries the GM post headline', async () => {
+    const post = await call('patch', `/${guildId}/profile`, 'admin', {
+      gmPost: 'Mine headline\nSecond line',
+    });
+    expect(post.status).toBe(200);
     const res = await call('get', '/mine', 'plain');
     const mine = (res.body.guilds as { id: number }[]).find(
       (g) => g.id === guildId,
     );
-    expect(mine).toMatchObject({ gmPostHeadline: 'Raid Tuesday 8pm' });
+    expect(mine).toMatchObject({ gmPostHeadline: 'Mine headline' });
   });
 });
 
