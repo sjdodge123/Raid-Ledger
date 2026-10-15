@@ -32,6 +32,7 @@ import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
 import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { DemoTestGuildController } from './demo-test-guild.controller';
+import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
 import { DemoTestJoinPostController } from './demo-test-join-post.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
 import { ItadSettingsController } from './itad-settings.controller';
@@ -131,6 +132,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestSignInLinkController,
     DemoTestBrowserSessionController,
     DemoTestGuildController,
+    DemoTestGameRolesController,
     DemoTestJoinPostController,
     AiChatTestController,
     SlashCommandTestController,

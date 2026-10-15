@@ -109,6 +109,9 @@ import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listene
 import { LfgModule } from '../lfg/lfg.module';
 import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { GameRolesSettingsController } from './game-roles/game-roles-settings.controller';
+import { GameRoleReconcileService } from './game-roles/game-role-reconcile.service';
+import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-delete.listener';
 
 @Module({
   imports: [
@@ -137,6 +140,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     DiscordBotInviteController,
     LfgBoardSettingsController,
     WeeklyDigestSettingsController,
+    GameRolesSettingsController,
     JoinPostSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
@@ -185,6 +189,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ActivityListener,
     VoiceStateListener,
     GameActivityService,
+    // ROK-1767: auto-maintained per-game Discord roles.
+    GameRoleReconcileService,
+    GameRoleAccountDeleteListener,
     PresenceGameDetectorService,
     VoiceAttendanceService,
     EventAutoExtendService,

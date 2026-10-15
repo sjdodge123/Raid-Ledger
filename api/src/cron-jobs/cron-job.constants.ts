@@ -278,6 +278,11 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
       'Cross-references DB users against Discord guild membership and deactivates users no longer in the guild — daily at 07:00 UTC',
     category: 'Maintenance',
   },
+  GameRoleReconcileService_reconcile: {
+    description:
+      "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
+    category: 'Maintenance',
+  },
   EphemeralVoiceScheduler_scanCreateWindow: {
     description:
       'Creates ephemeral voice channels for opted-in events entering their create-buffer window every 60 seconds',
