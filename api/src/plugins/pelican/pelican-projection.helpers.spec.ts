@@ -176,7 +176,9 @@ describe('projectSchedules — Pelican crons are always UTC (ROK-1795)', () => {
 
   it('projects the Valheim Wed/Fri 00:00–04:00 cron as 00:00Z–04:00Z windows', () => {
     expect(
-      briefs(project([up, down], '2026-10-12T00:00:00Z', '2026-10-19T00:00:00Z')),
+      briefs(
+        project([up, down], '2026-10-12T00:00:00Z', '2026-10-19T00:00:00Z'),
+      ),
     ).toEqual([
       'window 2026-10-14T00:00:00.000Z -> 2026-10-14T04:00:00.000Z Valheim up',
       'window 2026-10-16T00:00:00.000Z -> 2026-10-16T04:00:00.000Z Valheim up',
@@ -185,7 +187,9 @@ describe('projectSchedules — Pelican crons are always UTC (ROK-1795)', () => {
 
   it('does not follow US DST: after 2026-11-01 the windows stay 00:00Z–04:00Z', () => {
     expect(
-      briefs(project([up, down], '2026-11-02T00:00:00Z', '2026-11-09T00:00:00Z')),
+      briefs(
+        project([up, down], '2026-11-02T00:00:00Z', '2026-11-09T00:00:00Z'),
+      ),
     ).toEqual([
       'window 2026-11-04T00:00:00.000Z -> 2026-11-04T04:00:00.000Z Valheim up',
       'window 2026-11-06T00:00:00.000Z -> 2026-11-06T04:00:00.000Z Valheim up',
@@ -261,7 +265,6 @@ describe('projectSchedules — offset', () => {
       markerTimes(project([s], '2026-10-14T00:00:00Z', '2026-10-14T12:00:00Z')),
     ).toEqual(['2026-10-14T00:01:00.000Z']);
   });
-
 });
 
 describe('projectSchedules — filtering', () => {
@@ -302,7 +305,6 @@ describe('projectSchedules — cap, skips', () => {
       project([sched('0 * * * *', 'command')], ...day).truncatedServerIds,
     ).toEqual([]);
   });
-
 
   it('skips a bad cron schedule without dropping the rest', () => {
     const badCron = sched('61 4 * * *', 'restart');

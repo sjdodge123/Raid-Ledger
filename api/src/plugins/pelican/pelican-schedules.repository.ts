@@ -22,7 +22,6 @@ export interface PelicanServableSchedule extends PelicanScheduleRow {
   serverName: string;
 }
 
-
 /** Drizzle access to `pelican_schedules` (ROK-1773). */
 @Injectable()
 export class PelicanSchedulesRepository {
@@ -81,5 +80,4 @@ export class PelicanSchedulesRepository {
       gameId === null ? [] : [{ ...schedule, gameId, serverName }],
     );
   }
-
 }

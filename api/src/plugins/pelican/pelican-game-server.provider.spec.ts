@@ -70,7 +70,6 @@ describe('PelicanGameServerProvider.getCalendarItems (ROK-1096)', () => {
     }
   });
 
-
   it('passes gameIds to the repository and omits them when absent', async () => {
     const { provider, listServable } = build([]);
     await provider.getCalendarItems(RANGE, [7, 9]);
@@ -116,7 +115,6 @@ describe('PelicanGameServerProvider.getCalendarItems filtering (ROK-1096)', () =
       `Pelican projection skipped server 42 schedule ${bad.id}: bad_cron`,
     ]);
   });
-
 });
 
 describe('PelicanGameServerProvider.getStatuses (ROK-1776)', () => {

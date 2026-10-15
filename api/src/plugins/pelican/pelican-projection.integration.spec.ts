@@ -1,19 +1,17 @@
 /**
  * ROK-1096 — stored Pelican schedules projected onto the member calendar,
  * end to end against a real database: `GET /game-servers/calendar` (any
- * member) and the admin row's `tzMismatch` on `GET/PATCH
- * /admin/plugins/pelican/servers`. Servers + schedules are written straight
- * to the DB; nothing talks to a panel.
+ * member). Servers + schedules are written straight to the DB; nothing
+ * talks to a panel.
  *
- * Range: 2026-11-02T12:00Z → 2026-11-03T12:00Z. America/New_York is on EST
- * (UTC-5) throughout (DST ended 2026-11-01), so 18:00 local = 23:00Z,
- * 02:00 local = 07:00Z and 04:00 local = 09:00Z.
+ * Range: 2026-11-02T12:00Z → 2026-11-03T12:00Z. Pelican crons are always UTC
+ * (ROK-1795): the main server's stale `timezone = America/New_York` column is
+ * ignored, so "0 23" projects at 23:00Z, "0 7" at 07:00Z and "0 9" at 09:00Z.
  */
 import {
   GameServerCalendarItemSchema,
   GameServerCalendarResponseSchema,
   PelicanServerListResponseSchema,
-  PelicanServerRowSchema,
   type GameServerCalendarItemDto,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -89,7 +87,6 @@ async function insertServer(
         identifier: s.identifier,
         name: s.name,
         gameId: testApp.seed.game.id,
-        timezone: 'UTC',
         currentState: 'running',
         lastSyncedAt: new Date(),
         ...overrides,
@@ -137,25 +134,26 @@ interface Seeded {
 }
 
 /**
- * main (NY, seeded game): start 18:00 + stop 02:00 + restart 04:00 (+300 s)
- * + an INACTIVE backup 20:00. other (UTC, second game): restart 06:00.
- * hidden / unmapped / missing (UTC): restart 05:00 each — must not show.
+ * main (seeded game; stale NY column, ignored): start 23:00Z + stop 07:00Z +
+ * restart 09:00Z (+300 s) + an INACTIVE backup 01:00Z. other (second game):
+ * restart 06:00Z. hidden / unmapped / missing: restart 05:00Z — must not show.
  */
 async function seedCalendar(): Promise<Seeded> {
   const otherGameId = await insertSecondGame();
   const main = await insertServer(N.main, {
     name: `Valheim ${ADDRESS}:2456`,
+    // ROK-1795: a leftover override from before the fix — must be ignored.
     timezone: NY,
   });
-  await insertSchedule(main.id, '0 18 * * *', 'start', {
+  await insertSchedule(main.id, '0 23 * * *', 'start', {
     name: 'Evening open',
   });
-  await insertSchedule(main.id, '0 2 * * *', 'stop', { name: 'Late close' });
-  await insertSchedule(main.id, '0 4 * * *', 'restart', {
+  await insertSchedule(main.id, '0 7 * * *', 'stop', { name: 'Late close' });
+  await insertSchedule(main.id, '0 9 * * *', 'restart', {
     name: `Nightly restart ${ADDRESS}:27015`,
     effectOffsetS: RESTART_OFFSET_S,
   });
-  await insertSchedule(main.id, '0 20 * * *', 'backup', { isActive: false });
+  await insertSchedule(main.id, '0 1 * * *', 'backup', { isActive: false });
   const other = await insertServer(N.other, { gameId: otherGameId });
   await insertSchedule(other.id, '0 6 * * *', 'restart');
   const hiddenEtc = [
@@ -218,7 +216,7 @@ describe('GET /game-servers/calendar — Pelican projection (ROK-1096)', () => {
     expect(view(items)).toEqual([
       ['window', M, '2026-11-02T23:00:00.000Z', '2026-11-03T07:00:00.000Z'],
       ['marker', String(other.id), '2026-11-03T06:00:00.000Z', 'restart'],
-      // 04:00 EST = 09:00Z, plus the 300 s cumulative task offset.
+      // "0 9" UTC = 09:00Z, plus the 300 s cumulative task offset.
       ['marker', M, '2026-11-03T09:05:00.000Z', 'restart'],
     ]);
     const labels = items.map((i) => [i.serverKey, i.kind, i.label]);
@@ -267,44 +265,19 @@ describe('GET /game-servers/calendar — Pelican projection (ROK-1096)', () => {
   });
 });
 
-describe('GET/PATCH /admin/plugins/pelican/servers — tzMismatch (ROK-1096)', () => {
-  it('flags a server whose next_run_at is not a run time in its zone, and clears it after the right override', async () => {
-    // 04:00Z is a run of "0 4 * * *" in UTC, but 23:00 EST in New York.
-    const nextRunAt = new Date('2026-11-03T04:00:00.000Z');
-    const wrong = await insertServer(N.main, { timezone: NY });
-    await insertSchedule(wrong.id, '0 4 * * *', 'restart', { nextRunAt });
-    const right = await insertServer(N.other);
-    await insertSchedule(right.id, '0 4 * * *', 'restart', { nextRunAt });
-    // An inactive schedule never flags, even with an off-cron next_run_at.
-    await insertSchedule(right.id, '0 4 * * *', 'stop', {
-      isActive: false,
-      nextRunAt: new Date('2026-11-03T04:30:00.000Z'),
+describe('GET /admin/plugins/pelican/servers — no timezone fields (ROK-1795)', () => {
+  it('lists rows without timezone or tzMismatch, even for a stale NY column', async () => {
+    const server = await insertServer(N.main, { timezone: NY });
+    await insertSchedule(server.id, '0 4 * * *', 'restart', {
+      nextRunAt: new Date('2026-11-03T04:00:00.000Z'),
     });
-    const flags = async () => {
-      const res = await testApp.request
-        .get('/admin/plugins/pelican/servers')
-        .set('Authorization', `Bearer ${adminToken}`);
-      expect(res.status).toBe(200);
-      const body = PelicanServerListResponseSchema.parse(res.body);
-      return body.data.map((r) => [r.id, r.tzMismatch]);
-    };
-    expect(await flags()).toEqual([
-      [wrong.id, true],
-      [right.id, false],
-    ]);
-
-    const fixed = await testApp.request
-      .patch(`/admin/plugins/pelican/servers/${wrong.id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ timezone: 'UTC' });
-    expect(fixed.status).toBe(200);
-    expect(PelicanServerRowSchema.parse(fixed.body)).toMatchObject({
-      timezone: 'UTC',
-      tzMismatch: false,
-    });
-    expect(await flags()).toEqual([
-      [wrong.id, false],
-      [right.id, false],
-    ]);
+    const res = await testApp.request
+      .get('/admin/plugins/pelican/servers')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const body = PelicanServerListResponseSchema.parse(res.body);
+    expect(body.data.map((r) => r.id)).toEqual([server.id]);
+    expect(res.text).not.toContain('timezone');
+    expect(res.text).not.toContain('tzMismatch');
   });
 });
