@@ -192,6 +192,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1785: `granted_by` is SET NULL; the grant belongs to the guild page,
   // not to the admin who made it, so it survives the granter's wipe.
   schema.guildEditors,
+  // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
+  // are SET NULL audit columns; the guild's content outlives its editor.
+  schema.guildProfiles,
+  schema.guildRecommendedAddons,
 ];
 
 /**

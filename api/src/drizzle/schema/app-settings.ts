@@ -215,6 +215,9 @@ export const SETTING_KEYS = {
   PELICAN_CLIENT_API_KEY: 'pelican_client_api_key',
   /** ROK-121: IANA tz for Pelican schedules; unset ⇒ community default_timezone. */
   PELICAN_DEFAULT_TIMEZONE: 'pelican_default_timezone',
+  /** ROK-1786: JSON array of `PinnedAddon` shown on every guild page.
+   *  Unset ⇒ LedgerLink only (`readPinnedAddons`); `[]` ⇒ none. */
+  GUILD_PINNED_ADDONS: 'guild_pinned_addons',
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
