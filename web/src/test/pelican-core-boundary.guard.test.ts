@@ -36,11 +36,13 @@ function sourceFiles(dir: string): string[] {
     });
 }
 
-/** The host API files themselves: `plugins/calendar-layer*.ts(x)`. */
+const HOST_API_PREFIXES = ['calendar-layer', 'game-server-status'];
+
+/** The host API files themselves: `plugins/calendar-layer*.ts(x)` and `plugins/game-server-status*.ts(x)` (ROK-1776). */
 function hostApiFiles(): string[] {
     const dir = join(WEB_SRC, 'plugins');
     return readdirSync(dir)
-        .filter((entry) => entry.startsWith('calendar-layer') && isShippedSource(entry))
+        .filter((entry) => HOST_API_PREFIXES.some((p) => entry.startsWith(p)) && isShippedSource(entry))
         .map((entry) => join(dir, entry));
 }
 
@@ -68,6 +70,7 @@ describe('Pelican core boundary guard (ROK-1774)', () => {
 
     it('the host API files are part of the scan', () => {
         expect(hostApiFiles().map((file) => relative(WEB_SRC, file))).toContain('plugins/calendar-layer.ts');
+        expect(hostApiFiles().map((file) => relative(WEB_SRC, file))).toContain('plugins/game-server-status.ts');
     });
 
     it('no core component, page or host API file imports Pelican plugin code', () => {
