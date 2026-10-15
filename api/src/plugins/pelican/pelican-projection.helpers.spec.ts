@@ -10,7 +10,11 @@ import {
   type ProjectionSchedule,
 } from './pelican-projection.helpers';
 
-const NY = 'America/New_York';
+/**
+ * Pelican crons are always UTC (ROK-1795). The schedules below are the old
+ * New York-local fixtures rewritten as UTC crons (EDT = UTC-4), so the
+ * expected instants are unchanged.
+ */
 let nextId = 1;
 
 function cron(
@@ -48,7 +52,6 @@ function sched(
     onlyWhenOnline: false,
     gameId: 7,
     serverName: 'Valheim',
-    serverTimezone: NY,
     ...over,
   };
 }
@@ -61,7 +64,6 @@ function project(
 ) {
   return projectSchedules({
     schedules,
-    defaultTimezone: 'UTC',
     range: { from: new Date(from), to: new Date(to) },
     ...extra,
   });
@@ -76,8 +78,8 @@ function brief(item: GameServerCalendarItemDto): string {
 const briefs = (input: ReturnType<typeof project>): string[] =>
   input.items.map(brief);
 
-const START = sched('0 18 * * *', 'start', { name: 'Evening up' });
-const STOP = sched('0 2 * * *', 'stop', { name: 'Night down' });
+const START = sched('0 22 * * *', 'start', { name: 'Evening up' });
+const STOP = sched('0 6 * * *', 'stop', { name: 'Night down' });
 
 const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
   [
@@ -117,7 +119,7 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
     [
       'a second start while open is ignored',
-      [START, sched('0 20 * * *', 'start', { name: 'Late up' }), STOP],
+      [START, sched('0 0 * * *', 'start', { name: 'Late up' }), STOP],
       '2026-10-14T12:00:00-04:00',
       '2026-10-15T12:00:00-04:00',
       [
@@ -126,7 +128,7 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
     [
       'restart inside an open window → window + marker',
-      [START, sched('0 22 * * *', 'restart'), STOP],
+      [START, sched('0 2 * * *', 'restart'), STOP],
       '2026-10-14T12:00:00-04:00',
       '2026-10-15T12:00:00-04:00',
       [
@@ -136,7 +138,7 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
     [
       'kill closes a window like stop',
-      [START, sched('0 2 * * *', 'kill')],
+      [START, sched('0 6 * * *', 'kill')],
       '2026-10-14T12:00:00-04:00',
       '2026-10-15T12:00:00-04:00',
       [
@@ -145,7 +147,7 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
     [
       'start with no stop schedule → start markers',
-      [sched('0 18 * * *', 'start')],
+      [sched('0 22 * * *', 'start')],
       '2026-10-14T00:00:00-04:00',
       '2026-10-16T00:00:00-04:00',
       [
@@ -162,25 +164,50 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
   ];
 
+describe('projectSchedules — Pelican crons are always UTC (ROK-1795)', () => {
+  const up = sched('0 0 * * 3,5', 'start', {
+    name: 'Valheim up',
+    nextRunAt: new Date('2026-10-16T00:00:00Z'),
+  });
+  const down = sched('0 4 * * 3,5', 'stop', {
+    name: 'Valheim down',
+    nextRunAt: new Date('2026-10-16T04:00:00Z'),
+  });
+
+  it('projects the Valheim Wed/Fri 00:00–04:00 cron as 00:00Z–04:00Z windows', () => {
+    expect(
+      briefs(
+        project([up, down], '2026-10-12T00:00:00Z', '2026-10-19T00:00:00Z'),
+      ),
+    ).toEqual([
+      'window 2026-10-14T00:00:00.000Z -> 2026-10-14T04:00:00.000Z Valheim up',
+      'window 2026-10-16T00:00:00.000Z -> 2026-10-16T04:00:00.000Z Valheim up',
+    ]);
+  });
+
+  it('does not follow US DST: after 2026-11-01 the windows stay 00:00Z–04:00Z', () => {
+    expect(
+      briefs(
+        project([up, down], '2026-11-02T00:00:00Z', '2026-11-09T00:00:00Z'),
+      ),
+    ).toEqual([
+      'window 2026-11-04T00:00:00.000Z -> 2026-11-04T04:00:00.000Z Valheim up',
+      'window 2026-11-06T00:00:00.000Z -> 2026-11-06T04:00:00.000Z Valheim up',
+    ]);
+  });
+});
+
 describe('projectSchedules — windows (D6/D7, ruling 2)', () => {
   it.each(WINDOW_CASES)('%s', (_label, schedules, from, to, expected) => {
     expect(briefs(project(schedules, from, to))).toEqual(expected);
   });
 });
 
-const localHour = (iso: string): number =>
-  Number(
-    new Intl.DateTimeFormat('en-US', {
-      timeZone: NY,
-      hour: 'numeric',
-      hourCycle: 'h23',
-    }).format(new Date(iso)),
-  );
 const markerTimes = (r: ReturnType<typeof project>): string[] =>
   r.items.flatMap((i) => (i.kind === 'marker' ? [i.at] : []));
 
 describe('projectSchedules — look-behind opener is stable (review fix)', () => {
-  const SUNDAY_STOP = sched('0 2 * * 0', 'stop', { name: 'Night down' });
+  const SUNDAY_STOP = sched('0 6 * * 0', 'stop', { name: 'Night down' });
   const WEEK =
     'window 2026-10-11T22:00:00.000Z -> 2026-10-18T06:00:00.000Z Evening up';
 
@@ -188,7 +215,7 @@ describe('projectSchedules — look-behind opener is stable (review fix)', () =>
     ['Wednesday', '2026-10-14T12:00:00-04:00', '2026-10-15T12:00:00-04:00'],
     ['Friday', '2026-10-16T12:00:00-04:00', '2026-10-17T12:00:00-04:00'],
   ])(
-    'daily start + Sunday stop, range from %s → opens Sun 18:00',
+    'daily start + Sunday stop, range from %s → opens Sun 22:00Z',
     (_day, from, to) => {
       expect(briefs(project([START, SUNDAY_STOP], from, to))).toEqual([WEEK]);
     },
@@ -202,7 +229,7 @@ describe('projectSchedules — only_when_online (Lead ruling)', () => {
   ] as const;
 
   it('drops start runs of an only-when-online schedule (no window, no marker)', () => {
-    const start = sched('0 18 * * *', 'start', { onlyWhenOnline: true });
+    const start = sched('0 22 * * *', 'start', { onlyWhenOnline: true });
     expect(briefs(project([start, STOP], ...day))).toEqual([
       'marker stop 2026-10-15T06:00:00.000Z Night down',
     ]);
@@ -210,8 +237,8 @@ describe('projectSchedules — only_when_online (Lead ruling)', () => {
   });
 
   it('keeps restart and stop runs of only-when-online schedules', () => {
-    const restart = sched('0 22 * * *', 'restart', { onlyWhenOnline: true });
-    const stop = sched('0 2 * * *', 'stop', {
+    const restart = sched('0 2 * * *', 'restart', { onlyWhenOnline: true });
+    const stop = sched('0 6 * * *', 'stop', {
       name: 'Night down',
       onlyWhenOnline: true,
     });
@@ -222,44 +249,10 @@ describe('projectSchedules — only_when_online (Lead ruling)', () => {
   });
 });
 
-describe('projectSchedules — DST', () => {
-  it.each([
-    [
-      'DST end',
-      '2026-10-30T12:00:00Z',
-      '2026-11-03T00:00:00Z',
-      [
-        '2026-10-31T08:00:00.000Z',
-        '2026-11-01T09:00:00.000Z',
-        '2026-11-02T09:00:00.000Z',
-      ],
-    ],
-    [
-      'DST start',
-      '2026-03-06T12:00:00Z',
-      '2026-03-10T00:00:00Z',
-      [
-        '2026-03-07T09:00:00.000Z',
-        '2026-03-08T08:00:00.000Z',
-        '2026-03-09T08:00:00.000Z',
-      ],
-    ],
-  ])(
-    '0 4 * * * restart in New York, %s: 04:00 local every day',
-    (_l, from, to, expected) => {
-      const at = markerTimes(
-        project([sched('0 4 * * *', 'restart')], from, to),
-      );
-      expect(at).toEqual(expected);
-      expect(at.map(localHour)).toEqual([4, 4, 4]);
-    },
-  );
-});
-
-describe('projectSchedules — offset and default tz', () => {
+describe('projectSchedules — offset', () => {
   it('applies the (cumulative) effect offset exactly once', () => {
     const r = project(
-      [sched('0 4 * * *', 'restart', { effectOffsetS: 300 })],
+      [sched('0 8 * * *', 'restart', { effectOffsetS: 300 })],
       '2026-10-14T00:00:00-04:00',
       '2026-10-15T00:00:00-04:00',
     );
@@ -267,23 +260,10 @@ describe('projectSchedules — offset and default tz', () => {
   });
 
   it('keeps an effect at 00:01 whose cron fired at 23:59 the day before the range (D4)', () => {
-    const s = sched('59 23 * * *', 'backup', {
-      effectOffsetS: 120,
-      serverTimezone: 'UTC',
-    });
+    const s = sched('59 23 * * *', 'backup', { effectOffsetS: 120 });
     expect(
       markerTimes(project([s], '2026-10-14T00:00:00Z', '2026-10-14T12:00:00Z')),
     ).toEqual(['2026-10-14T00:01:00.000Z']);
-  });
-
-  it('uses the plugin default tz when the server has no override', () => {
-    const r = project(
-      [sched('0 4 * * *', 'restart', { serverTimezone: null })],
-      '2026-10-14T00:00:00Z',
-      '2026-10-15T00:00:00Z',
-      { defaultTimezone: 'Europe/Berlin' },
-    );
-    expect(markerTimes(r)).toEqual(['2026-10-14T02:00:00.000Z']);
   });
 });
 
@@ -308,7 +288,7 @@ describe('projectSchedules — filtering', () => {
   });
 });
 
-describe('projectSchedules — cap, tz flag, skips', () => {
+describe('projectSchedules — cap, skips', () => {
   const day = ['2026-10-14T00:00:00Z', '2026-10-16T00:00:00Z'] as const;
 
   it('caps at 500 in-range occurrences per server and reports it', () => {
@@ -326,27 +306,12 @@ describe('projectSchedules — cap, tz flag, skips', () => {
     ).toEqual([]);
   });
 
-  it('flags a tz mismatch but still projects the server', () => {
-    const s = sched('0 4 * * *', 'restart', {
-      serverTimezone: 'UTC',
-      nextRunAt: new Date('2026-10-14T08:00:00Z'),
-    });
-    const r = project([s], ...day);
-    expect(r.tzMismatchServerIds).toEqual([1]);
-    expect(r.items).toHaveLength(2);
-  });
-
-  it('skips a bad tz server and a bad cron schedule without dropping the rest', () => {
-    const badTz = sched('0 4 * * *', 'restart', {
-      serverId: 2,
-      serverTimezone: 'Mars/Olympus',
-    });
+  it('skips a bad cron schedule without dropping the rest', () => {
     const badCron = sched('61 4 * * *', 'restart');
     const good = sched('0 4 * * *', 'backup');
-    const r = project([badTz, badCron, good], ...day);
+    const r = project([badCron, good], ...day);
     expect(r.skipped).toEqual([
       { serverId: 1, scheduleId: badCron.id, reason: 'bad_cron' },
-      { serverId: 2, reason: 'bad_tz' },
     ]);
     expect(r.items.map((i) => i.kind === 'marker' && i.effect)).toEqual([
       'backup',

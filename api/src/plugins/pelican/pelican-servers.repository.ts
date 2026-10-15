@@ -64,7 +64,7 @@ export class PelicanServersRepository {
   /**
    * Upsert by `panel_uuid`. Updates ONLY `identifier`, `name`,
    * `last_synced_at` and `missing_since` — never the admin mapping
-   * (`game_id`, `show_on_calendar`, `timezone`) or the status columns (D4).
+   * (`game_id`, `show_on_calendar`) or the status columns (D4).
    */
   async upsertListed(
     tx: Executor,

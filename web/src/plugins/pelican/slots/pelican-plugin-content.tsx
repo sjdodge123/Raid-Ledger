@@ -29,7 +29,7 @@ export function PelicanPanel() {
                     </>
                 )}
             </section>
-            {config && isPelicanConfigured(config) && <PelicanServersSection defaultTimezone={config.defaultTimezone} />}
+            {config && isPelicanConfigured(config) && <PelicanServersSection />}
         </IntegrationCard>
     );
 }

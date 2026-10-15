@@ -37,7 +37,6 @@ export function servableSchedule(
     effectOffsetS: 0,
     gameId: 7,
     serverName: 'Valheim',
-    serverTimezone: 'UTC',
     ...over,
   };
 }

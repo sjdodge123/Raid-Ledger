@@ -56,9 +56,6 @@ export const PelicanConfigSchema = z
   .object({
     panelUrl: z.string().nullable(),
     apiKeySet: z.boolean(),
-    defaultTimezone: z.string(),
-    /** True when no Pelican tz is stored and the community default applies. */
-    timezoneInherited: z.boolean(),
   })
   .strict();
 export type PelicanConfig = z.infer<typeof PelicanConfigSchema>;
@@ -84,14 +81,6 @@ export const PelicanConfigUpdateSchema = z
       // Pelican keys are `pacc_`/`papp_` + ASCII token. Anything else would
       // make the Bearer header throw an error whose message carries the key.
       .regex(PELICAN_API_KEY_CHARSET, 'API key contains invalid characters')
-      .optional(),
-    defaultTimezone: z
-      .string()
-      .trim()
-      .max(64)
-      .refine((v) => v === '' || isValidIanaTimezone(v), {
-        message: 'Default timezone must be a valid IANA timezone',
-      })
       .optional(),
   })
   .strict();
