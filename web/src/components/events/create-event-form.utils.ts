@@ -56,9 +56,12 @@ function getDefaultState(): FormState {
  * config, cap, reminders, voice, content instances — but deliberately NOT the
  * old start date/time, which the organizer is choosing fresh. Recurrence is
  * dropped for the same reason edit mode drops it: a new one-off, not a series.
+ * The guild tag is dropped too (ROK-1787): only a guild editor may tag, and the
+ * Guild field is hidden from everyone else, so an inherited tag would 403 a
+ * non-editor's create with no way to clear it. Editors re-pick the guild.
  */
 function getCopyModeState(copyFromEvent: EventResponseDto, resolved: string): FormState {
-    return { ...getEditModeState(copyFromEvent, resolved), startDate: '', startTime: '' };
+    return { ...getEditModeState(copyFromEvent, resolved), startDate: '', startTime: '', guildId: null };
 }
 
 export function getInitialState(

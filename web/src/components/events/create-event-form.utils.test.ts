@@ -104,7 +104,10 @@ describe('guildId (ROK-1787)', () => {
         expect(getInitialState(undefined, TZ).guildId).toBeNull();
         const tagged = buildEndedEvent({ guildId: 9 });
         expect(getInitialState(tagged, TZ).guildId, 'edit mode must show the existing tag').toBe(9);
-        expect(getInitialState(undefined, TZ, null, tagged).guildId, 'a follow-up keeps the guild').toBe(9);
+        expect(
+            getInitialState(undefined, TZ, null, tagged).guildId,
+            'a copy/follow-up drops the guild — a non-editor cannot see or clear it, so it would 403',
+        ).toBeNull();
         expect(getInitialState(buildEndedEvent(), TZ).guildId, 'an untagged event (no field) reads as null').toBeNull();
     });
 
