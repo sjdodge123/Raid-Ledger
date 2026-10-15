@@ -62,6 +62,7 @@ describe('summarizeServerStatuses (ROK-1776)', () => {
             label: '1 of 3 servers offline',
             title: 'Alpha: Online, Bravo: Offline, Charlie: Starting',
             checkedAt: ago(60_000),
+            servers: 3,
         });
     });
 

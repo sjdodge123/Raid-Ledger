@@ -9,6 +9,8 @@ export interface ServerStatusSummary {
     title: string;
     /** The OLDEST checkedAt across the servers, ISO. */
     checkedAt: string;
+    /** How many servers the summary covers. */
+    servers: number;
 }
 
 /** Worst first: the chip shows the worst state across a game's servers. */
@@ -31,7 +33,12 @@ const TITLE: Record<GameServerState, string> = {
     running: 'Online', starting: 'Starting', stopping: 'Stopping', offline: 'Offline', unknown: 'Unknown',
 };
 
-/** The state to show: a check older than the shared threshold (or unparseable) degrades to unknown. */
+/**
+ * The state to show: a check older than the shared threshold (or unparseable) degrades to unknown.
+ * `checkedAt` is server time and `now` is client time: a client clock more than the threshold fast
+ * shows "unknown" (and a skewed "checked N min ago"). Accepted — the response carries no server
+ * time to correct against, and the server already degrades stale rows at request time.
+ */
 export function effectiveState(s: Pick<GameServerStatusDto, 'state' | 'checkedAt'>, now: number): GameServerState {
     const age = now - Date.parse(s.checkedAt);
     return age <= GAME_SERVER_STATUS_STALE_MS ? s.state : 'unknown';
@@ -62,5 +69,6 @@ export function summarizeServerStatuses(
         label: summaryLabel(worst, worstCount, views.length),
         title: views.map((v) => `${v.name}: ${TITLE[v.state]}`).join(', '),
         checkedAt: oldestCheckedAt(statuses, first.checkedAt),
+        servers: views.length,
     };
 }

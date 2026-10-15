@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { act, screen, waitFor } from '@testing-library/react';
+import { delay, http, HttpResponse } from 'msw';
 import type { GameServerState, GameServerStatusDto } from '@raid-ledger/contract';
 import { server } from '../../test/mocks/server';
 import { GAME_SERVERS_STATUS_URL } from '../../test/mocks/pelican-handlers';
@@ -8,7 +8,7 @@ import { renderWithProviders } from '../../test/render-helpers';
 import { usePluginStore } from '../../stores/plugin-store';
 import { clearRegistry, registerPlugin } from '../../plugins/plugin-registry';
 import { gameServerStatusesKey } from '../../hooks/use-game-server-statuses';
-import { GameServerStatusChip } from './GameServerStatusChip';
+import { GameServerStatusChip, STATUS_CLOCK_TICK_MS } from './GameServerStatusChip';
 
 const NOW = new Date('2026-10-14T12:00:00.000Z');
 const BADGE = { icon: '/x.svg', color: '#000', label: 'X' };
@@ -31,7 +31,7 @@ function activateProvider() {
     usePluginStore.setState({ activeSlugs: new Set(['test-gs']) });
 }
 
-describe('GameServerStatusChip (ROK-1776)', () => {
+function installHooks() {
     beforeEach(() => {
         vi.useFakeTimers({ toFake: ['Date'] });
         vi.setSystemTime(NOW);
@@ -44,6 +44,10 @@ describe('GameServerStatusChip (ROK-1776)', () => {
         usePluginStore.setState({ activeSlugs: new Set<string>() });
         vi.useRealTimers();
     });
+}
+
+describe('GameServerStatusChip (ROK-1776)', () => {
+    installHooks();
 
     it('shows the online chip with its checked-at age, requesting only this game', async () => {
         activateProvider();
@@ -92,5 +96,41 @@ describe('GameServerStatusChip (ROK-1776)', () => {
         expect(chip.getAttribute('data-tone')).toBe('danger');
         expect(chip.getAttribute('title')).toBe('Alpha: Online, Beta: Offline, Gamma: Starting');
         expect(screen.getByText('checked 4 min ago')).toBeTruthy();
+        expect(chip.textContent).toBe('1 of 3 servers offline: Alpha: Online, Beta: Offline, Gamma: Starting');
+    });
+});
+
+describe('GameServerStatusChip — no id, errors and frozen queries (ROK-1776)', () => {
+    installHooks();
+
+    it('makes no request without a real game id', () => {
+        activateProvider();
+        respond([status('Valheim Main', 'running')]);
+        const { queryClient } = renderWithProviders(<GameServerStatusChip gameId={undefined} />);
+        expect(queryClient.getQueryState(gameServerStatusesKey(undefined))?.fetchStatus).toBe('idle');
+        expect(requests).toEqual([]);
+    });
+
+    it('drops the chip when a refetch fails instead of keeping the old state', async () => {
+        activateProvider();
+        respond([status('Valheim Main', 'running')]);
+        const { queryClient } = renderWithProviders(<GameServerStatusChip gameId={7} />);
+        await screen.findByText('Server online');
+        server.use(http.get(GAME_SERVERS_STATUS_URL, () => HttpResponse.json({ message: 'down' }, { status: 503 })));
+        await act(() => queryClient.refetchQueries({ queryKey: gameServerStatusesKey(7) }));
+        expect(queryClient.getQueryState(gameServerStatusesKey(7))?.status).toBe('error');
+        await waitFor(() => expect(screen.queryByTestId('game-server-status')).toBeNull());
+    });
+
+    it('ages a frozen query out to unknown on its own clock', async () => {
+        vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], now: NOW });
+        activateProvider();
+        respond([status('Valheim Main', 'running')]);
+        renderWithProviders(<GameServerStatusChip gameId={7} />);
+        await screen.findByText('Server online');
+        // Every later fetch hangs (offline laptop / paused query): data and dataUpdatedAt freeze.
+        server.use(http.get(GAME_SERVERS_STATUS_URL, async () => { await delay('infinite'); return HttpResponse.json({}); }));
+        act(() => { vi.advanceTimersByTime(5 * 60_000 + STATUS_CLOCK_TICK_MS); });
+        expect(screen.getByTestId('game-server-status').textContent).toBe('Server status unknownchecked 7 min ago');
     });
 });
