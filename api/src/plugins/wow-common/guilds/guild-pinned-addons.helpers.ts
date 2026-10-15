@@ -1,9 +1,9 @@
 import { Logger } from '@nestjs/common';
+import { PinnedAddonListSchema, type PinnedAddon } from '@raid-ledger/contract';
 import {
-  PinnedAddonListSchema,
-  type PinnedAddon,
-} from '@raid-ledger/contract';
-import { SETTING_KEYS, type SettingKey } from '../../../drizzle/schema/app-settings';
+  SETTING_KEYS,
+  type SettingKey,
+} from '../../../drizzle/schema/app-settings';
 
 type SettingGetter = (key: SettingKey) => Promise<string | null>;
 
