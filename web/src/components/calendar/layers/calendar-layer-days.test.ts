@@ -50,6 +50,21 @@ describe('groupLayerItemsByDay (ROK-1775)', () => {
         ]);
     });
 
+    it('groups onto the right days across the 2026-11-01 fall-back night (EDT → EST)', () => {
+        const days = groupLayerItemsByDay([
+            // 10 PM EDT on Oct 31 → 3 AM EST on Nov 1 (a 6-hour window over the repeated 1 AM hour).
+            win('w-dst', '2026-11-01T02:00:00Z', '2026-11-01T08:00:00Z'),
+            // 6 PM → 11:30 PM EST on Nov 1: a 24h-from-midnight day would spill it into Nov 2.
+            win('w-eve', '2026-11-01T23:00:00Z', '2026-11-02T04:30:00Z'),
+        ], TZ);
+        expect([...days.keys()]).toEqual(['2026-10-31', '2026-11-01']);
+        expect(titles(days, '2026-10-31')).toEqual(['Server up · Valheim Dedicated · 10:00 PM – 3:00 AM']);
+        expect(titles(days, '2026-11-01')).toEqual([
+            'Server up · Valheim Dedicated · 10:00 PM – 3:00 AM',
+            'Server up · Valheim Dedicated · 6:00 PM – 11:30 PM',
+        ]);
+    });
+
     it('drops an item with an unparseable time instead of throwing', () => {
         expect(groupLayerItemsByDay([marker('bad', 'not-a-date', 'x')], TZ).size).toBe(0);
     });
