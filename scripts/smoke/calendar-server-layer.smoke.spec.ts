@@ -29,7 +29,7 @@
  *   preferences (a last-one-out restore raced a joining worker, Codex P2). The
  *   saved-filter test runs as a FRESH per-run member instead.
  */
-import type { Locator, Page, TestInfo } from '@playwright/test';
+import type { Locator, Page, Response, TestInfo } from '@playwright/test';
 import { test, expect } from './base';
 import { apiDelete, apiGet, apiPatch, apiPost, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
@@ -261,11 +261,23 @@ async function topmostPointOn(card: Locator): Promise<CardHit> {
 /** ROK-1775 — the Filters "Server schedules" checkbox (Layers group). */
 const LAYER_TOGGLE = { name: 'Server schedules' } as const;
 
-/** Click the layer checkbox and wait until the preference write has landed. */
+/** True for the preferences PATCH that carries `calendarHiddenLayers`. */
+function isHiddenLayersSave(r: Response): boolean {
+    if (r.request().method() !== 'PATCH' || !r.url().includes('/users/me/preferences')) return false;
+    const body = r.request().postDataJSON() as { preferences?: Record<string, unknown> } | null;
+    return body?.preferences !== undefined && 'calendarHiddenLayers' in body.preferences;
+}
+
+/**
+ * Click the layer checkbox and wait until THIS preference write has landed.
+ * Writes are debounced (800 ms) and batched, and the page's own mount writes the
+ * forced Month view (`calendarView`) on desktop — a bare "any preferences PATCH"
+ * wait can resolve on that one and reload before the layer write is ever sent.
+ */
 async function setLayerShown(page: Page, filters: Locator, shown: boolean): Promise<void> {
     const box = filters.getByRole('checkbox', LAYER_TOGGLE);
     await expect(box).toBeChecked({ checked: !shown, timeout: 15_000 });
-    const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes('/users/me/preferences'));
+    const saved = page.waitForResponse(isHiddenLayersSave);
     await box.click();
     expect((await saved).ok(), 'calendarHiddenLayers preference saved').toBe(true);
     await expect(box).toBeChecked({ checked: shown });
