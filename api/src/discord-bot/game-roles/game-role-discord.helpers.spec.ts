@@ -3,10 +3,16 @@
  * (never the gateway op-8 chunk, which is rate limited per shard and shared
  * with every other member search) and retries ONE rate limit, bounded.
  */
-import { Collection, type Guild, type GuildMember } from 'discord.js';
+import {
+  Collection,
+  RateLimitError,
+  type Guild,
+  type GuildMember,
+} from 'discord.js';
 import {
   fetchGuildMembers,
   fetchRoleState,
+  MAX_MEMBER_PAGES,
   MEMBER_PAGE_SIZE,
   withRateLimitRetry,
 } from './game-role-discord.helpers';
@@ -66,6 +72,17 @@ describe('fetchGuildMembers', () => {
   });
 });
 
+describe('fetchGuildMembers page cap', () => {
+  it('throws instead of returning a truncated list when the cap is hit', async () => {
+    const { guild, list } = fakeGuild([]);
+    list.mockResolvedValue(page(0, MEMBER_PAGE_SIZE));
+    await expect(fetchGuildMembers(guild)).rejects.toThrow(
+      /member list incomplete/i,
+    );
+    expect(list).toHaveBeenCalledTimes(MAX_MEMBER_PAGES);
+  });
+});
+
 describe('fetchRoleState', () => {
   it('reads holders from the REST list when nothing was prefetched', async () => {
     const { guild, fetch } = fakeGuild([page(0, 2)]);
@@ -89,17 +106,29 @@ describe('withRateLimitRetry', () => {
   });
 
   it('honours a REST RateLimitError retryAfter (ms) and caps the wait', async () => {
-    const restLimit = Object.assign(new Error('429'), {
-      name: 'RateLimitError',
+    // The real class: its `name` getter is `RateLimitError[<route>]`.
+    const restLimit = new RateLimitError({
+      timeToReset: 600_000,
+      limit: 10,
+      method: 'GET',
+      hash: 'h',
+      url: 'https://discord.com/api/v10/guilds/g/members',
+      route: '/guilds/:id/members',
+      majorParameter: 'g',
+      global: false,
       retryAfter: 600_000,
+      sublimitTimeout: 0,
+      scope: 'user',
     });
+    expect(restLimit.name).toBe('RateLimitError[/guilds/:id/members]');
     const op = jest
       .fn()
       .mockRejectedValueOnce(restLimit)
       .mockResolvedValueOnce('ok');
     const wait = jest.fn().mockResolvedValue(undefined);
-    await withRateLimitRetry(op, wait);
+    const out = await withRateLimitRetry(op, wait).catch(() => 'rethrown');
     expect(wait).toHaveBeenCalledWith(60_000);
+    expect(out).toBe('ok');
   });
 
   it('rethrows a second rate limit instead of retrying forever', async () => {

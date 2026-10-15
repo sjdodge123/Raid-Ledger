@@ -6,6 +6,7 @@
 import {
   Collection,
   PermissionFlagsBits,
+  RateLimitError,
   type Guild,
   type GuildMember,
   type Role,
@@ -108,7 +109,7 @@ export type GuildMembers = Collection<string, GuildMember>;
 /** Discord's max page size for `GET /guilds/{id}/members`. */
 export const MEMBER_PAGE_SIZE = 1000;
 /** Page bound: 250k members, far past any guild this app serves. */
-const MAX_MEMBER_PAGES = 250;
+export const MAX_MEMBER_PAGES = 250;
 /** Longest rate-limit wait honoured before the single retry. */
 const MAX_RATE_LIMIT_WAIT_MS = 60_000;
 
@@ -127,7 +128,11 @@ function rateLimitDelayMs(err: unknown): number | null {
     const secs = typeof data?.retry_after === 'number' ? data.retry_after : 1;
     return Math.ceil(secs * 1000);
   }
-  if (err.name === 'RateLimitError' && 'retryAfter' in err) {
+  // @discordjs/rest names it `RateLimitError[<route>]`, never bare.
+  const isRest =
+    err instanceof RateLimitError ||
+    (typeof err.name === 'string' && err.name.startsWith('RateLimitError'));
+  if (isRest && 'retryAfter' in err) {
     return typeof err.retryAfter === 'number' ? err.retryAfter : 1000;
   }
   return null;
@@ -158,9 +163,13 @@ async function listAllMembers(guild: Guild): Promise<GuildMembers> {
     });
     for (const [id, m] of page) all.set(id, m);
     after = page.lastKey();
-    if (page.size < MEMBER_PAGE_SIZE || after === undefined) break;
+    if (page.size < MEMBER_PAGE_SIZE || after === undefined) return all;
   }
-  return all;
+  // A truncated list would read every unlisted holder as departed and
+  // revoke their grants, so a cap hit fails the run instead.
+  throw new Error(
+    `Guild member list incomplete: stopped at the ${MAX_MEMBER_PAGES}-page cap`,
+  );
 }
 
 /**
