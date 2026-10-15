@@ -53,10 +53,13 @@ function LoadingState(): JSX.Element {
     );
 }
 
-function ActiveTab({ active, page }: { active: string; page: GuildPageDto }): JSX.Element {
+type RaidsQuery = UseQueryResult<GuildRaidsDto, Error>;
+
+function ActiveTab({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
     if (active === 'roster') return <GuildRoster page={page} />;
+    if (active === 'raids') return <GuildRaidsTab query={raids} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} />;
-    return <GuildOverview page={page} />;
+    return <GuildOverview page={page} raids={raids.data} />;
 }
 
 /** Resources shows once it has content, or straight away for an editor. */
@@ -67,14 +70,6 @@ function useShowResources(page: GuildPageDto): boolean {
 }
 
 /** Scroll the panel top back into view when a tab switch happens below it (prototype `GuildTabPanel`). */
-type RaidsQuery = UseQueryResult<GuildRaidsDto, Error>;
-
-function ActiveTab({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
-    if (active === 'roster') return <GuildRoster page={page} />;
-    if (active === 'raids') return <GuildRaidsTab query={raids} />;
-    return <GuildOverview page={page} raids={raids.data} />;
-}
-
 function TabPanel({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
