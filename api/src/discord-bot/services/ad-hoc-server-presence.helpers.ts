@@ -97,15 +97,23 @@ export async function resolveSteamIdentity(
   return rows[0] ?? null;
 }
 
-/** SteamIDs of every row still on the server — merged voice rows included. */
+/** SteamIDs of every row still on THIS server — merged voice rows included. */
 export async function listOnServerSteamIds(
   db: Db,
   eventId: number,
+  pelicanServerId: number,
 ): Promise<string[]> {
   const rows = await db
     .select({ steamId: p.steamId })
     .from(p)
-    .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)));
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        eq(p.pelicanServerId, pelicanServerId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+      ),
+    );
   return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
 }
 
@@ -127,15 +135,23 @@ export async function hasOpenServerPlayers(
   return rows[0] !== undefined;
 }
 
-/** Open rows still on the server — the rehydrate set for the supervisor. */
+/** Open rows still on THIS server — the rehydrate set for its session. */
 export async function listOpenServerPresence(
   db: Db,
   eventId: number,
+  pelicanServerId: number,
 ): Promise<ServerPresencePlayer[]> {
   const rows = await db
     .select({ steamId: p.steamId, displayName: p.discordUsername })
     .from(p)
-    .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)));
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        eq(p.pelicanServerId, pelicanServerId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+      ),
+    );
   return rows.flatMap((r) =>
     r.steamId ? [{ steamId: r.steamId, displayName: r.displayName }] : [],
   );

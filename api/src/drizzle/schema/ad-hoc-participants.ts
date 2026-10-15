@@ -49,6 +49,8 @@ export const adHocParticipants = pgTable(
     inVoice: boolean('in_voice').notNull().default(true),
     /** ROK-1800: currently on the game server. A row closes only when both are false. */
     onServer: boolean('on_server').notNull().default(false),
+    /** ROK-1800: the Pelican server a server-present row is on (no FK: presence only). */
+    pelicanServerId: integer('pelican_server_id'),
     /** Display name — Discord username, or character name / SteamID64. */
     discordUsername: varchar('discord_username', { length: 255 }).notNull(),
     discordAvatarHash: varchar('discord_avatar_hash', { length: 255 }),

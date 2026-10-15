@@ -131,7 +131,10 @@ export class AdHocNotificationService implements OnModuleDestroy {
     eventId: number,
     bindingId: string,
     _event: { id: number; title: string; gameName?: string },
-    participants: Array<{ discordUserId: string; discordUsername: string }>,
+    participants: Array<{
+      discordUserId: string | null;
+      discordUsername: string;
+    }>,
     effectiveGameId?: number | null,
   ): Promise<void> {
     // ROK-1446 D9: a general-lobby room already carries this session inside its

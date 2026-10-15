@@ -29,6 +29,8 @@ export interface ServerPresenceMemberInfo {
   displayName: string;
   /** RL user resolved from the SteamID (linked account), else null. */
   userId: number | null;
+  /** ROK-1800: the Pelican server the player is on (scopes cleanup). */
+  pelicanServerId?: number;
 }
 
 /** Discord identity of a voice member, as the voice path supplies it. */
@@ -123,6 +125,7 @@ export async function upsertSteamParticipant(
         .update(t)
         .set({
           steamId: member.steamId,
+          pelicanServerId: member.pelicanServerId ?? null,
           ...presenceFields(userRow, 'server'),
         })
         .where(eq(t.id, userRow.id));
@@ -137,6 +140,7 @@ const steamConflictSet = (now: Date) => ({
   leftAt: null,
   joinedAt: rejoinJoinedAt(now),
   onServer: true,
+  pelicanServerId: sql`COALESCE(excluded.pelican_server_id, ${t.pelicanServerId})`,
   // A closed row re-opens from the server alone.
   inVoice: sql`${t.leftAt} IS NULL AND ${t.inVoice}`,
   // A merged row keeps its Discord name; a Steam-only row takes the
@@ -167,6 +171,7 @@ async function insertOrRejoinSteamRow(
       sessionCount: 1,
       inVoice: false,
       onServer: true,
+      pelicanServerId: member.pelicanServerId ?? null,
     })
     .onConflictDoUpdate({
       target: [t.eventId, t.steamId],

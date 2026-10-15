@@ -5466,6 +5466,12 @@
           "notNull": true,
           "default": false
         },
+        "pelican_server_id": {
+          "name": "pelican_server_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
         "discord_username": {
           "name": "discord_username",
           "type": "varchar(255)",

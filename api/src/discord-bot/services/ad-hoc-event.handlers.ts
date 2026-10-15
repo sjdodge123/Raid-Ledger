@@ -21,6 +21,10 @@ import {
   setGracePeriodStatus,
 } from './ad-hoc-event.helpers';
 
+import {
+  findVoiceSpawnTarget,
+  withGameSpawnLock,
+} from './ad-hoc-game-spawn-lock';
 /** In-memory state for an active ad-hoc event. */
 export interface ActiveAdHocState {
   eventId: number;
@@ -105,14 +109,26 @@ export async function spawnNewEvent(
   member: VoiceMemberInfo,
   resolvedGameName?: string,
 ): Promise<number | null> {
-  const eventId = await createAdHocEvent(
+  const created = await createAdHocEvent(
     deps,
     bindingId,
     effectiveBinding,
     member,
     resolvedGameName,
   );
-  if (!eventId) return null;
+  if (!created) return null;
+  const { eventId } = created;
+  if (created.existing) {
+    await joinRaceWinner(
+      deps,
+      eventKey,
+      bindingId,
+      effectiveGameId,
+      member,
+      eventId,
+    );
+    return eventId;
+  }
   registerNewEvent(deps, eventKey, eventId, effectiveGameId, member);
   await enrollMember(deps, eventId, member);
   await broadcastSpawn(
@@ -155,6 +171,27 @@ async function enrollMember(
 ): Promise<void> {
   await deps.participantService.addParticipant(eventId, member);
   await deps.autoSignupParticipant(eventId, member);
+}
+
+/**
+ * ROK-1800: the game-server path created this game's Quick Play while we
+ * waited on the spawn lock — adopt it under our key and join it.
+ */
+async function joinRaceWinner(
+  deps: AdHocHandlerDeps,
+  eventKey: string,
+  bindingId: string,
+  effectiveGameId: number | null | undefined,
+  member: VoiceMemberInfo,
+  eventId: number,
+): Promise<void> {
+  const state: ActiveAdHocState = {
+    eventId,
+    memberSet: new Set<string>(),
+    ...(effectiveGameId !== undefined ? { gameId: effectiveGameId } : {}),
+  };
+  deps.activeEvents.set(eventKey, state);
+  await handleJoinExisting(deps, state, eventKey, bindingId, member);
 }
 
 /** Register a new event in active state and track voice attendance. */
@@ -248,19 +285,20 @@ async function createAdHocEvent(
   binding: { gameId: number | null | undefined },
   triggerMember: VoiceMemberInfo,
   resolvedGameName?: string,
-): Promise<number | null> {
-  let creatorId = triggerMember.userId;
-  if (!creatorId) {
-    creatorId = await findAdminFallback(deps.db);
-    if (!creatorId) return null;
-  }
-  return createAdHocEventRow(
-    deps.db,
-    bindingId,
-    { gameId: binding.gameId ?? null },
-    creatorId,
-    resolvedGameName,
-  );
+): Promise<{ eventId: number; existing: boolean } | null> {
+  const creatorId = triggerMember.userId ?? (await findAdminFallback(deps.db));
+  if (!creatorId) return null;
+  const gameId = binding.gameId ?? null;
+  const create = (db: PostgresJsDatabase<typeof schema>) =>
+    createAdHocEventRow(db, bindingId, { gameId }, creatorId, resolvedGameName);
+  if (gameId === null)
+    return { eventId: await create(deps.db), existing: false };
+  // ROK-1800: one Quick Play per game — the server path takes the same lock.
+  return withGameSpawnLock(deps.db, gameId, async (tx) => {
+    const live = await findVoiceSpawnTarget(tx, gameId, bindingId);
+    if (live) return { eventId: live.id, existing: true };
+    return { eventId: await create(tx), existing: false };
+  });
 }
 
 async function notifySpawn(
