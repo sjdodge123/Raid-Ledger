@@ -231,20 +231,20 @@ describe('web Sentry v11 privacy options pin the v10 baseline', () => {
     });
 });
 
+async function freshSentry() {
+    vi.resetModules();
+    const Sentry = await import('@sentry/react');
+    for (const fn of [Sentry.init, Sentry.captureMessage]) {
+        (fn as unknown as MockFn).mockClear();
+    }
+    const mod = await import('./sentry');
+    return { Sentry, mod };
+}
+
 describe('web Sentry runtime opt-out gate (ROK-1779)', () => {
     afterEach(() => {
         vi.unstubAllEnvs();
     });
-
-    async function freshSentry() {
-        vi.resetModules();
-        const Sentry = await import('@sentry/react');
-        for (const fn of [Sentry.init, Sentry.captureMessage]) {
-            (fn as unknown as MockFn).mockClear();
-        }
-        const mod = await import('./sentry');
-        return { Sentry, mod };
-    }
 
     it('does not initialise at import time', async () => {
         const { Sentry, mod } = await freshSentry();
