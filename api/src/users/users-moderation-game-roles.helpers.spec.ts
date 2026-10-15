@@ -12,15 +12,29 @@ jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
 const captured = Sentry.captureException as jest.Mock;
 
 const GRANTS = [
-  { roleId: 'role-a', discordUserId: 'd-1' },
-  { roleId: 'role-b', discordUserId: 'd-1' },
+  { gameRoleId: 11, roleId: 'role-a', discordUserId: 'd-1' },
+  { gameRoleId: 12, roleId: 'role-b', discordUserId: 'd-1' },
 ];
+
+const auditValues = jest.fn();
 
 function fakeDb(rows: typeof GRANTS) {
   const where = jest.fn().mockResolvedValue(rows);
   const innerJoin = jest.fn(() => ({ where }));
   const from = jest.fn(() => ({ innerJoin }));
-  return { select: jest.fn(() => ({ from })) } as never;
+  return {
+    select: jest.fn(() => ({ from })),
+    insert: jest.fn(() => ({ values: auditValues })),
+  } as never;
+}
+
+/** The activity_log rows written, as { entityId, action, reason }. */
+function audits(): { entityId: unknown; action: unknown; reason: unknown }[] {
+  return auditValues.mock.calls.map(([v]: [Record<string, unknown>]) => ({
+    entityId: v.entityId,
+    action: v.action,
+    reason: (v.metadata as { reason?: unknown } | undefined)?.reason,
+  }));
 }
 
 function fakeGuild(removeRole: jest.Mock): Guild {
@@ -29,7 +43,10 @@ function fakeGuild(removeRole: jest.Mock): Guild {
 
 const logger = { warn: jest.fn() } as unknown as Logger;
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => {
+  jest.clearAllMocks();
+  auditValues.mockResolvedValue(undefined);
+});
 
 describe('revokeGameRoleGrants', () => {
   it('removes every role the bot granted the user', async () => {
@@ -71,5 +88,54 @@ describe('revokeGameRoleGrants', () => {
     await revokeGameRoleGrants(fakeDb([]), fakeGuild(removeRole), 5, logger);
     expect(removeRole).not.toHaveBeenCalled();
     expect(captured).not.toHaveBeenCalled();
+  });
+
+  it('writes a role_removed audit row for each successful removal (wipe)', async () => {
+    const removeRole = jest.fn().mockResolvedValue(undefined);
+    await revokeGameRoleGrants(
+      fakeDb(GRANTS),
+      fakeGuild(removeRole),
+      5,
+      logger,
+    );
+    expect(audits()).toEqual([
+      {
+        entityId: 11,
+        action: 'role_removed',
+        reason: 'user banned (data wiped)',
+      },
+      {
+        entityId: 12,
+        action: 'role_removed',
+        reason: 'user banned (data wiped)',
+      },
+    ]);
+  });
+
+  it('account deletion audits with its own reason', async () => {
+    const removeRole = jest.fn().mockResolvedValue(undefined);
+    await revokeGameRoleGrants(
+      fakeDb(GRANTS.slice(0, 1)),
+      fakeGuild(removeRole),
+      5,
+      logger,
+      'deleted',
+    );
+    expect(audits()).toEqual([
+      { entityId: 11, action: 'role_removed', reason: 'account deleted' },
+    ]);
+  });
+
+  it('a failed removal writes no audit row; a failed audit is reported, not thrown', async () => {
+    const removeRole = jest
+      .fn()
+      .mockRejectedValueOnce(new Error('Missing Permissions'))
+      .mockResolvedValueOnce(undefined);
+    auditValues.mockRejectedValueOnce(new Error('db down'));
+    await expect(
+      revokeGameRoleGrants(fakeDb(GRANTS), fakeGuild(removeRole), 5, logger),
+    ).resolves.toBeUndefined();
+    expect(audits().map((a) => a.entityId)).toEqual([12]);
+    expect(captured).toHaveBeenCalledTimes(2);
   });
 });

@@ -4,6 +4,8 @@
  * the wipe first takes back every role the bot granted. Best-effort like the
  * rest of the moderation cascade: a failure is logged + reported and the wipe
  * still proceeds (the Discord kick, when requested, drops the roles anyway).
+ * A hard account delete (`user.deleting`) runs the same revoke. Each removal
+ * writes the same `role_removed` audit row the reconcile writes.
  */
 import type { Logger } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
@@ -12,10 +14,24 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { Guild } from 'discord.js';
 import * as schema from '../drizzle/schema';
 import { removeMemberRole } from '../discord-bot/game-roles/game-role-discord.helpers';
+import { writeAudit } from '../discord-bot/game-roles/game-role-reconcile.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const REASON = 'Raid Ledger: user banned with data wipe';
+/** Why the roles are being taken back. */
+export type GameRoleRevokeCause = 'banned' | 'deleted';
+
+const REASONS: Record<GameRoleRevokeCause, { discord: string; audit: string }> =
+  {
+    banned: {
+      discord: 'Raid Ledger: user banned with data wipe',
+      audit: 'user banned (data wiped)',
+    },
+    deleted: {
+      discord: 'Raid Ledger: account deleted',
+      audit: 'account deleted',
+    },
+  };
 
 function report(logger: Logger, userId: number, err: unknown): void {
   const detail = err instanceof Error ? err.message : String(err);
@@ -29,10 +45,41 @@ function loadGrants(db: Db, userId: number) {
   const g = schema.discordGameRoleGrants;
   const r = schema.discordGameRoles;
   return db
-    .select({ roleId: r.roleId, discordUserId: g.discordUserId })
+    .select({
+      gameRoleId: g.gameRoleId,
+      roleId: r.roleId,
+      discordUserId: g.discordUserId,
+    })
     .from(g)
     .innerJoin(r, eq(g.gameRoleId, r.id))
     .where(eq(g.userId, userId));
+}
+
+type Grant = Awaited<ReturnType<typeof loadGrants>>[number];
+
+/** Take one role back and audit it; a failure is reported, never thrown. */
+async function revokeOne(
+  db: Db,
+  guild: Guild,
+  userId: number,
+  grant: Grant,
+  ctx: { logger: Logger; cause: GameRoleRevokeCause },
+): Promise<void> {
+  const { gameRoleId, roleId, discordUserId } = grant;
+  const reason = REASONS[ctx.cause];
+  try {
+    if (!(await removeMemberRole(guild, discordUserId, roleId, reason.discord)))
+      return;
+    await writeAudit(db, {
+      gameRoleId,
+      action: 'role_removed',
+      userId,
+      discordUserId,
+      reason: reason.audit,
+    });
+  } catch (err) {
+    report(ctx.logger, userId, err);
+  }
 }
 
 /** Remove every bot-granted game role from the user. Never throws. */
@@ -41,15 +88,14 @@ export async function revokeGameRoleGrants(
   guild: Guild | null,
   userId: number,
   logger: Logger,
+  cause: GameRoleRevokeCause = 'banned',
 ): Promise<void> {
   try {
     const grants = await loadGrants(db, userId);
     if (grants.length === 0) return;
     if (!guild) throw new Error('Discord bot offline; roles left in place');
-    for (const { roleId, discordUserId } of grants) {
-      await removeMemberRole(guild, discordUserId, roleId, REASON).catch(
-        (err: unknown) => report(logger, userId, err),
-      );
+    for (const grant of grants) {
+      await revokeOne(db, guild, userId, grant, { logger, cause });
     }
   } catch (err) {
     report(logger, userId, err);
