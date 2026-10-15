@@ -156,7 +156,8 @@ export async function loadRecent(
       duration: events.duration,
       signedUp: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED})`,
       recorded: sql<number>`(select count(*)::int from ${s} and s.attendance_status is not null)`,
-      attended: sql<number>`(select count(*)::int from ${s} and s.attendance_status = 'attended')`,
+      // Only signed-up attendees, so `attended` never exceeds `signedUp`.
+      attended: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED} and s.attendance_status = 'attended')`,
     })
     .from(events)
     .where(and(guildEvents(guildId), endedBetween(since, now)))

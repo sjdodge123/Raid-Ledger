@@ -153,3 +153,11 @@ export function toAttendanceRows(
   }
   return rows.sort(compareAttendance);
 }
+
+/** Hero "Next raid": the first upcoming card that has not started yet. */
+export function nextRaidOf<T extends { startTime: string }>(
+  cards: readonly T[],
+  now: Date,
+): T | null {
+  return cards.find((c) => new Date(c.startTime) > now) ?? null;
+}

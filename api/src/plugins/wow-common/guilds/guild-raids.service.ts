@@ -18,6 +18,7 @@ import { findGuild } from './guild-queries.helpers';
 import {
   ATTENDANCE_WINDOW_WEEKS,
   neededFor,
+  nextRaidOf,
   toAttendanceRows,
   toComposition,
   toSchedule,
@@ -105,7 +106,7 @@ export class GuildRaidsService {
           attendance.of,
         ),
       },
-      nextRaid: cards[0] ?? null,
+      nextRaid: nextRaidOf(cards, now),
     };
   }
 

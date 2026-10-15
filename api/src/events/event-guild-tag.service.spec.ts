@@ -136,6 +136,15 @@ describe('EventGuildTagService.assertUpdate', () => {
     ).resolves.toBeUndefined();
   });
 
+  it('leaves a missing event to the event service (no throw)', async () => {
+    const t = tagger();
+    const { svc } = setup({ tagger: t });
+    await svc.assertUpdate(actor, 999, { guildId: 9 });
+    expect(t.assertCanTag).not.toHaveBeenCalled();
+  });
+});
+
+describe('EventGuildTagService.assertUpdate — ownership first', () => {
   it('leaves a non-owner to the event service owner 403 (no guild answer leaks)', async () => {
     const t = tagger();
     const existing = { gameId: 3, guildId: 9, creatorId: 99 };
@@ -153,12 +162,5 @@ describe('EventGuildTagService.assertUpdate', () => {
     const { svc } = setup({ tagger: t, existing });
     await svc.assertUpdate(admin, 1, { guildId: 9 });
     expect(t.assertCanTag).toHaveBeenCalledWith(admin, 9, 3);
-  });
-
-  it('leaves a missing event to the event service (no throw)', async () => {
-    const t = tagger();
-    const { svc } = setup({ tagger: t });
-    await svc.assertUpdate(actor, 999, { guildId: 9 });
-    expect(t.assertCanTag).not.toHaveBeenCalled();
   });
 });

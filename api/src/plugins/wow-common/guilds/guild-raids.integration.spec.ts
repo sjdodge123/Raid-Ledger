@@ -159,6 +159,11 @@ async function seedEvents(): Promise<void> {
   await signup(done, 'member', { attendanceStatus: 'attended' });
   await signup(done, 'alt', { attendanceStatus: 'no_show' });
   await signup(done, 'pug', { attendanceStatus: 'attended' });
+  // Declined but showed up: not "signed up", so not in the attended numerator.
+  await signup(done, 'outsider', {
+    status: 'declined',
+    attendanceStatus: 'attended',
+  });
   const unrecorded = await ev({ key: 'unrecorded', startH: -24 });
   await signup(unrecorded, 'member');
   const old = await ev({ key: 'old', startH: -24 * 70 });
@@ -243,6 +248,7 @@ describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
         signedUp: 1,
         attended: null,
       }),
+      // attended ⊆ signedUp: the declined-but-attended outsider is excluded.
       expect.objectContaining({ id: ids.done, signedUp: 3, attended: 2 }),
     ]);
   });

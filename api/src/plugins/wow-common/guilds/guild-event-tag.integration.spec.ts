@@ -17,6 +17,7 @@ type Who = 'officer' | 'gm' | 'plain' | 'outsider';
 let testApp: TestApp;
 let guildId: number;
 let otherGameGuildId: number;
+let otherGameId: number;
 const tokens = {} as Record<Who | 'admin', string>;
 
 async function insertGuild(name: string, gameId: number): Promise<number> {
@@ -99,6 +100,14 @@ const patch = (who: Who | 'admin', id: number, payload: object) =>
     .set('Authorization', `Bearer ${tokens[who]}`)
     .send(payload);
 
+const patchSeries = (who: Who, id: number, data: object) =>
+  testApp.request
+    .patch(`/events/${id}/series`)
+    .set('Authorization', `Bearer ${tokens[who]}`)
+    .send({ scope: 'all', data });
+
+const weekly = { frequency: 'weekly', until: '2027-01-27T23:00:00.000Z' };
+
 async function storedGuildId(eventId: number): Promise<number | null> {
   const [row] = nonEmpty(
     await testApp.db
@@ -123,6 +132,7 @@ beforeAll(async () => {
       .returning(),
     'game',
   );
+  otherGameId = otherGame.id;
   otherGameGuildId = await insertGuild('Elsewhere', otherGame.id);
   await seedUser('officer', 1);
   await seedUser('gm', 0);
@@ -207,5 +217,35 @@ describe('PATCH /events/:id guildId', () => {
     expect(await storedGuildId(id)).toBe(doomed);
     await testApp.db.delete(schema.guilds).where(eq(schema.guilds.id, doomed));
     expect(await storedGuildId(id)).toBeNull();
+  });
+});
+
+describe('PATCH /events/:id/series guildId', () => {
+  it('non-editor tagging their own series → 403, tag unchanged', async () => {
+    const created = await post('plain', body({ recurrence: weekly }));
+    const id = created.body.id as number;
+    expect((await patchSeries('plain', id, { guildId })).status).toBe(403);
+    expect(await storedGuildId(id)).toBeNull();
+  });
+
+  it('a game change that strands the tag → 400, tag unchanged', async () => {
+    const created = await post(
+      'officer',
+      body({ guildId, recurrence: weekly }),
+    );
+    const id = created.body.id as number;
+    const res = await patchSeries('officer', id, { gameId: otherGameId });
+    expect(res.status).toBe(400);
+    expect(await storedGuildId(id)).toBe(guildId);
+  });
+});
+
+describe('guild check vs ownership', () => {
+  it('non-owner PATCH with a guildId gets the owner 403, not the guild answer', async () => {
+    const created = await post('officer', body());
+    const id = created.body.id as number;
+    const res = await patch('plain', id, { guildId: otherGameGuildId });
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('You can only update your own events');
   });
 });

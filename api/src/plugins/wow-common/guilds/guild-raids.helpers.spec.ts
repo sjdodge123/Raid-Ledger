@@ -2,6 +2,7 @@ import type { RawRosterRow } from './guild-roster.helpers';
 import {
   frequencyOf,
   neededFor,
+  nextRaidOf,
   toAttendanceRows,
   toComposition,
   toSchedule,
@@ -151,5 +152,15 @@ describe('toAttendanceRows', () => {
 
   it('is empty when nothing was recorded (of = 0)', () => {
     expect(toAttendanceRows(members, new Map([[10, 1]]), 0)).toEqual([]);
+  });
+});
+
+describe('nextRaidOf', () => {
+  it('skips a raid already in progress', () => {
+    const now = d('2026-11-01T20:00:00.000Z');
+    const live = { id: 1, startTime: '2026-11-01T19:00:00.000Z' };
+    const next = { id: 2, startTime: '2026-11-08T19:00:00.000Z' };
+    expect(nextRaidOf([live, next], now)?.id).toBe(2);
+    expect(nextRaidOf([live], now)).toBeNull();
   });
 });
