@@ -42,7 +42,7 @@ import {
 } from '../../helpers/polling.js';
 import { readLastMessages } from '../../helpers/messages.js';
 import {
-  endLfgSession,
+  endSpawnedLfgSession,
   lfgNowVoiceJoin,
   lfgNowVoiceLeave,
   type LfgNowVoiceResult,
@@ -406,35 +406,6 @@ async function driveHeadCount(
  * forum surface — `lfg-board.test.ts` / `lfg-board-spawn-indicator-phase.ts`.
  */
 
-/**
- * Tear down the session this run spawned, if any (a no-op when none was).
- *
- * The ephemeral reaper only deletes the `⏰ … — Playing now` channel 30 min
- * after the session ends, and a CI run's API and DB are gone long before
- * that. Drained afterwards so the post's closing re-render lands before the
- * binding it routes through is deleted. Errors are reported, not thrown, so a
- * cleanup failure never replaces the test's real one.
- */
-async function endSpawnedSession(run: Run): Promise<void> {
-  try {
-    const res = await endLfgSession(run.ctx.api, run.game.id);
-    if (res.ended && !res.channelDestroyed) {
-      console.warn(
-        `[lfm-playing] session ended for game ${run.game.id} but its temp ` +
-          `voice channel was NOT deleted — never created, bot offline, ` +
-          `already gone, or the delete failed; if it exists it may be ` +
-          `orphaned in the guild`,
-      );
-    }
-    await awaitProcessing(run.ctx.api);
-  } catch (err) {
-    console.warn(
-      `[lfm-playing] end-session cleanup failed for game ${run.game.id} — ` +
-        `its temp voice channel may be orphaned: ${String(err)}`,
-    );
-  }
-}
-
 /** AC7 proper: join moves the count up, leave moves it back down. */
 async function runPlayingNow(ctx: TestContext): Promise<void> {
   const game = await pickIdleGame(ctx);
@@ -474,7 +445,7 @@ async function runPlayingNow(ctx: TestContext): Promise<void> {
     // FIRST, while the binding still routes the post's closing re-render:
     // ends the spawned session and force-destroys its temp voice channel,
     // which a CI run would otherwise orphan in the shared guild.
-    await endSpawnedSession(run);
+    await endSpawnedLfgSession(run.ctx.api, run.game.id, 'lfm-playing');
     // After a spawn both intents are already `converted`, so these 404 —
     // `withdrawLfgIntent` swallows that by design. They matter on the failure
     // path, where the spawn never happened and the hands are still live.

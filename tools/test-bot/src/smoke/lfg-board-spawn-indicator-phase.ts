@@ -18,6 +18,7 @@ import {
   seedFixtureUser,
   type FixtureUser,
 } from './fixtures.js';
+import { endLfgSession } from './fixtures-lfg-now.js';
 import { readForumThreads, type ForumThreadSnapshot } from './fixtures-lfg-board.js';
 import {
   describeThreads,
@@ -39,6 +40,8 @@ export const JOIN_LABEL_SPAWNS = "+1 · I'm in · starts the group";
 export const DEFAULT_INDICATOR_EMOJI = '🎉';
 /** `▸ PLAYING NOW · N in voice` — the spawned (`playing`) author line. */
 const PLAYING_AUTHOR = /^▸ PLAYING NOW · \d+ in voice$/u;
+/** The temp voice channel's link in a PLAYING NOW description (`lfm-playing`). */
+const VOICE_LINK = /https:\/\/discord\.com\/channels\/\d+\/(\d+)/u;
 
 /** The join button on a thread's starter message, if it carries one. */
 function joinButton(t: ForumThreadSnapshot | null): SimpleComponent | null {
@@ -155,8 +158,48 @@ async function assertIndicatorGone(run: Run): Promise<void> {
 }
 
 /**
+ * Regression for the 2026-10-15 dev-guild flood (INV-DEV-GUILD-FLOOD): this
+ * phase's spawn left one `⏰ <game> — Playing now` channel per CI run, because
+ * nothing ended the session. End it here and require the temp voice channel to
+ * be ACTUALLY deleted — `ended` alone would pass while the channel leaked.
+ *
+ * Waits for the post's voice link first: the spawn paints PLAYING NOW before
+ * the channel is claimed, and ending the session inside that window would
+ * report `channelDestroyed: false` while the late create still leaks it.
+ */
+async function assertSessionTornDown(run: Run): Promise<void> {
+  let description = '';
+  try {
+    await pollForCondition(async () => {
+      const threads = await readForumThreads(forumId(run));
+      const t = threads.find((x) => x.id === run.threadId) ?? null;
+      description = t?.starterMessage?.embeds[0]?.description ?? '';
+      return VOICE_LINK.test(description) ? true : null;
+    }, run.ctx.config.timeoutMs);
+  } catch {
+    throw new Error(
+      `ROK-1619 teardown precondition: thread ${run.threadId ?? '?'} never ` +
+        `linked the session's temp voice channel — last description ` +
+        `"${description}"`,
+    );
+  }
+  const res = await endLfgSession(run.ctx.api, run.game.id);
+  if (!res.ended || !res.channelDestroyed) {
+    throw new Error(
+      `ROK-1619 teardown: ending the spawned session on "${run.game.name}" ` +
+        `must destroy its temp voice channel — got ended=${String(res.ended)}, ` +
+        `channelDestroyed=${String(res.channelDestroyed)} (event ` +
+        `${String(res.eventId)}); a false here is a ⏰ channel leaked into the ` +
+        `shared guild`,
+    );
+  }
+  await awaitProcessing(run.ctx.api);
+}
+
+/**
  * The whole phase: first now-hand arms the indicator, the second spawns the
- * session and the indicator must be gone. Hands are `run.second` and
+ * session and the indicator must be gone, then the session is torn down and
+ * its temp voice channel must be gone too. Hands are `run.second` and
  * `run.third` so the suite's shared cleanup withdraws them.
  */
 export async function assertSpawnIndicatorLifecycle(run: Run): Promise<void> {
@@ -167,4 +210,5 @@ export async function assertSpawnIndicatorLifecycle(run: Run): Promise<void> {
   await raiseNowHand(run, run.third, null);
   await assertSpawned(run);
   await assertIndicatorGone(run);
+  await assertSessionTornDown(run);
 }
