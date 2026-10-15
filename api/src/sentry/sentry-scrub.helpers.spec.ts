@@ -107,12 +107,56 @@ describe('scrubSecrets', () => {
     expect(json).toContain(`callback?code=${REDACTED}&state=${REDACTED}`);
   });
 
-  it('returns the same event object and survives cycles', () => {
+  it('returns the same event object and survives cycles without mutating them', () => {
     const extra: Record<string, unknown> = { token: SECRET };
     extra.self = extra;
-    const event = { extra };
+    const event: { extra: unknown } = { extra };
     expect(scrubSecrets(event)).toBe(event);
-    expect(extra.token).toBe(REDACTED);
+    expect(extra.token).toBe(SECRET);
+    expect(event.extra).toEqual({ token: REDACTED, self: '[circular]' });
+  });
+
+  it('ROK-1779: scrubs frozen caller-owned objects into copies without throwing', () => {
+    const headers = Object.freeze({ authorization: `Bearer ${SECRET}` });
+    const owned = Object.freeze({
+      job: Object.freeze({ refreshToken: SECRET, note: 'keep' }),
+      pairs: Object.freeze([Object.freeze(['access_token', SECRET])]),
+    });
+    const event: { request: unknown; extra: unknown } = {
+      request: { headers, query_string: owned.pairs },
+      extra: { owned },
+    };
+    expect(() => scrubSecrets(event)).not.toThrow();
+    expect(JSON.stringify(event)).not.toContain(SECRET);
+    expect(event.extra).toEqual({
+      owned: {
+        job: { refreshToken: REDACTED, note: 'keep' },
+        pairs: [['access_token', REDACTED]],
+      },
+    });
+    expect(headers.authorization).toBe(`Bearer ${SECRET}`);
+    expect(owned.job.refreshToken).toBe(SECRET);
+    expect(owned.pairs[0]?.[1]).toBe(SECRET);
+  });
+
+  it('ROK-1779: never ships a value deeper than the depth bound unscrubbed', () => {
+    let deep: Record<string, unknown> = { note: `?access_token=${SECRET}` };
+    for (let i = 0; i < 30; i += 1) deep = { next: deep };
+    const event: { extra: unknown } = { extra: deep };
+    scrubSecrets(event);
+    expect(JSON.stringify(event.extra)).not.toContain(SECRET);
+    expect(JSON.stringify(event.extra)).toContain('[truncated]');
+  });
+
+  it('ROK-1779: an Error in extra is copied with its message scrubbed', () => {
+    const err = new Error(`boom ?access_token=${SECRET}`);
+    const event: { extra: unknown } = { extra: { err } };
+    scrubSecrets(event);
+    expect(JSON.stringify(event.extra)).not.toContain(SECRET);
+    expect(JSON.stringify(event.extra)).toContain(
+      `boom ?access_token=${REDACTED}`,
+    );
+    expect(err.message).toContain(SECRET);
   });
 
   it('scrubString leaves "error code=50007" prose alone', () => {
