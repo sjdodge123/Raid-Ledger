@@ -30,6 +30,23 @@ describe('groupLayerItemsByDay (ROK-1775)', () => {
         expect([...days.keys()]).toEqual(['2026-10-14', '2026-10-15']);
     });
 
+    it('counts a window ending 30 seconds past local midnight on the next day too (no sub-minute pruning)', () => {
+        // 8 PM → 00:00:30 New York.
+        const days = groupLayerItemsByDay([win('w-tail', '2026-10-15T00:00:00Z', '2026-10-15T04:00:30Z')], TZ);
+        expect([...days.keys()]).toEqual(['2026-10-14', '2026-10-15']);
+    });
+
+    it('counts a whole sub-minute window on its own day', () => {
+        // 10:00:00 → 10:00:30 AM New York.
+        const days = groupLayerItemsByDay([win('w-blip', '2026-10-15T14:00:00Z', '2026-10-15T14:00:30Z')], TZ);
+        expect([...days.keys()]).toEqual(['2026-10-15']);
+    });
+
+    it('does not count the next day for a window ending exactly at local midnight', () => {
+        const days = groupLayerItemsByDay([win('w-edge', '2026-10-15T00:00:00Z', '2026-10-15T04:00:00Z')], TZ);
+        expect([...days.keys()]).toEqual(['2026-10-14']);
+    });
+
     it('buckets a marker by the VIEWER\'s local day, not UTC', () => {
         // 02:30Z on the 15th is 10:30 PM on the 14th in New York.
         const days = groupLayerItemsByDay([marker('m1', '2026-10-15T02:30:00Z', 'Restart · Valheim Dedicated · 10:30 PM')], TZ);

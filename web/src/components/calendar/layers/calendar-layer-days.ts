@@ -2,15 +2,15 @@
  * ROK-1775 — pure bucketing of plugin layer items into the viewer's local days,
  * for the views that draw no bands: the Month glyph tooltip and the Schedule
  * (phone list) rows. A window crossing local midnight counts on EVERY day it
- * touches (split with the same `splitAtMidnight` as the Week/Day bands); a
- * marker counts on its own day. Each bucket is sorted by time.
+ * touches — however briefly: unlike the Week/Day bands' `splitAtMidnight`,
+ * nothing under a minute is pruned here (that pruning is only about drawable
+ * band height). A marker counts on its own day. Each bucket is sorted by time.
  */
-import { format } from 'date-fns';
+import { addDays, format, startOfDay } from 'date-fns';
 import { toZonedDate } from '../../../lib/timezone-utils';
 import type {
     CalendarLayerItem, CalendarLayerMarker, CalendarLayerWindow,
 } from '../../../plugins/calendar-layer';
-import { splitAtMidnight } from './calendar-layer-events';
 import type { LayerGlyphTip } from './LayerGlyph';
 
 /** One layer item on one local day. */
@@ -37,12 +37,27 @@ export function windowTipTitle(win: CalendarLayerWindow, start: Date, end: Date)
     return `${win.label} · ${formatLayerClock(start)} – ${formatLayerClock(end)}`;
 }
 
+/** Generous bound on the days one window may span (the widest query is ~3 months). */
+const MAX_WINDOW_DAYS = 120;
+
+/** The instant `[start, end)` enters each local day it overlaps: `start`, then every midnight before `end`. */
+export function windowDayStarts(start: Date, end: Date): Date[] {
+    if (!(end > start)) return [];
+    const out = [start];
+    let midnight = addDays(startOfDay(start), 1);
+    while (midnight < end && out.length < MAX_WINDOW_DAYS) {
+        out.push(midnight);
+        midnight = addDays(midnight, 1);
+    }
+    return out;
+}
+
 function windowEntries(win: CalendarLayerWindow, tz: string): LayerDayEntry[] {
     const start = toZonedDate(win.start, tz);
     const end = toZonedDate(win.end, tz);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return [];
     const tip: LayerGlyphTip = { title: windowTipTitle(win, start, end), detail: '' };
-    return splitAtMidnight(start, end).map((seg, idx) => ({ id: `${win.id}#${idx}`, kind: 'window', at: seg.start, tip }));
+    return windowDayStarts(start, end).map((at, idx) => ({ id: `${win.id}#${idx}`, kind: 'window', at, tip }));
 }
 
 function markerEntry(marker: CalendarLayerMarker, tz: string): LayerDayEntry[] {
