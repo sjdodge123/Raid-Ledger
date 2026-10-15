@@ -385,12 +385,14 @@ jobs:
           echo "::warning::API did not exit; releasing the lease anyway"
 
       # ROK-1769: the API's stdout/stderr, readable after a failed run.
+      # ROK-944: also surface the scheduled-event completion path (status
+      # PATCH errors, timeouts) so a pool-0 failure names its cause.
       - name: Show API errors
         if: failure()
         continue-on-error: true
         run: |
           [ -f api.log ] || { echo "no api.log"; exit 0; }
-          grep -iE "ephemeral|InvalidType|DiscordAPIError|Missing" api.log | tail -50 || true
+          grep -iE "ephemeral|InvalidType|DiscordAPIError|Missing|scheduled|ScheduledEvent|completion|timeout|429|rate.?limit" api.log | tail -100 || true
 
       - name: Upload API log
         if: failure()
