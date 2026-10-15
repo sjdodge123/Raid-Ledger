@@ -132,16 +132,17 @@ describe('Guild Overview raid widgets + hero chip (ROK-1787)', () => {
         expect(chip.tagName, 'a plain anchor fires hashchange; a router Link would not').toBe('A');
         expect(chip).toHaveAttribute('href', '#raids');
         expect(chip).toHaveTextContent('2/20 signed');
-        expect(within(chip).getByTestId('guild-next-raid-text'), 'date and count share one wrapping text run').toHaveTextContent(/Next raid: .+ · 2\/20 signed/);
+        expect(chip.lastElementChild, 'date and count share one wrapping text run').toHaveTextContent(/Next raid: .+ · 2\/20 signed/);
     });
 
     it('upcoming cards show the start time once (date, then the time range)', async () => {
         serve(FULL);
         renderPage('#raids');
-        const when = await screen.findAllByTestId('guild-upcoming-when');
+        const cards = await screen.findAllByTestId('guild-upcoming-event');
         const start = timeShort('2030-01-08T20:00:00.000Z');
-        const text = at(when, 0).textContent ?? '';
+        const range = timeRange('2030-01-08T20:00:00.000Z', '2030-01-08T23:00:00.000Z');
+        const text = within(at(cards, 0)).getByText(range, { exact: false }).textContent ?? '';
         expect(text.split(start).length - 1, `start time "${start}" should appear once in "${text}"`).toBe(1);
-        expect(text).toBe(`${dayLabel('2030-01-08T20:00:00.000Z')} · ${timeRange('2030-01-08T20:00:00.000Z', '2030-01-08T23:00:00.000Z')}`);
+        expect(text).toBe(`${dayLabel('2030-01-08T20:00:00.000Z')} · ${range}`);
     });
 });

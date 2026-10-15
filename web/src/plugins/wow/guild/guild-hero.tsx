@@ -46,7 +46,7 @@ function NextRaidChip({ raid }: { raid: GuildEventCardDto }): JSX.Element {
         <a href="#raids" className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
             <CalendarDaysIcon className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             {/* One inline text run, so a narrow screen wraps it as a sentence instead of splitting the count into its own flex column. */}
-            <span data-testid="guild-next-raid-text" className="min-w-0">
+            <span className="min-w-0">
                 <span className="text-foreground">Next raid: {whenLabel(raid.startTime)}</span>{' '}
                 <span className="whitespace-nowrap text-muted">· {signedShort(raid)}</span>
             </span>
