@@ -121,6 +121,41 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
     expect(s.saveGameRole).not.toHaveBeenCalled();
   });
 
+  it('maps a concurrent link of the same role (role_id unique violation) to the same 409', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    s.findOtherGameUsingRole.mockResolvedValue(null);
+    const pgErr = Object.assign(new Error('duplicate key value'), {
+      code: '23505',
+      constraint_name: 'discord_game_roles_role_id_unique',
+    });
+    s.saveGameRole.mockRejectedValue(
+      Object.assign(new Error('Failed query: insert'), { cause: pgErr }),
+    );
+
+    const res = await put({ roleId: 'shared-role', windowDays: 14 });
+
+    expect({ status: res.status, message: res.body.message }).toEqual({
+      status: 409,
+      message:
+        'That role is already linked to another game. Pick a different role.',
+    });
+  });
+
+  it('a unique violation on any other constraint is not masked as 409', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    s.findOtherGameUsingRole.mockResolvedValue(null);
+    s.saveGameRole.mockRejectedValue(
+      Object.assign(new Error('duplicate key value'), {
+        code: '23505',
+        constraint_name: 'some_other_unique',
+      }),
+    );
+
+    const res = await put({ roleId: 'shared-role', windowDays: 14 });
+
+    expect(res.status).toBe(500);
+  });
+
   describe('editing an existing link', () => {
     const LINKED = { roleId: 'old-role', botCreated: true };
     const FAIL: GameRolePreflightDto = {

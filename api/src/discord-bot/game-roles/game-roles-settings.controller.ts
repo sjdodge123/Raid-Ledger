@@ -63,6 +63,26 @@ function parseOrThrow<T>(schema: z.ZodType<T>, body: unknown): T {
   }
 }
 
+const ROLE_TAKEN =
+  'That role is already linked to another game. Pick a different role.';
+const ROLE_ID_UNIQUE = 'discord_game_roles_role_id_unique';
+
+/**
+ * A link racing past the pre-check hits the role_id unique constraint; that
+ * one violation is the same 409 the pre-check returns. Anything else is
+ * rethrown untouched. Drizzle wraps the driver error on `.cause`.
+ */
+function rethrowRoleTaken(err: unknown): never {
+  const pg = (e: unknown) =>
+    e as { code?: string; constraint_name?: string; cause?: unknown } | null;
+  for (const e of [pg(err), pg(pg(err)?.cause)]) {
+    if (e?.code === '23505' && e.constraint_name === ROLE_ID_UNIQUE) {
+      throw new ConflictException(ROLE_TAKEN);
+    }
+  }
+  throw err;
+}
+
 function assertPreflight(p: GameRolePreflightDto): void {
   if (!p.ok) {
     throw new UnprocessableEntityException({
@@ -127,7 +147,7 @@ export class GameRolesSettingsController {
       botCreated,
       windowDays: dto.windowDays,
       enabled,
-    });
+    }).catch(rethrowRoleTaken);
     const [summary] = await listGameRoleSummaries(
       this.db,
       this.botClient.getGuild(),
@@ -174,9 +194,7 @@ export class GameRolesSettingsController {
       if (
         (await findOtherGameUsingRole(this.db, dto.roleId, gameId)) !== null
       ) {
-        throw new ConflictException(
-          'That role is already linked to another game. Pick a different role.',
-        );
+        throw new ConflictException(ROLE_TAKEN);
       }
       assertPreflight(await preflightGameRole(guild, dto.roleId));
       return { roleId: dto.roleId, botCreated: false };
