@@ -122,14 +122,10 @@ export class DemoTestGuildController {
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input.name, now);
     const hash = guildKeyHash(input.name.toLowerCase());
-    const { users, unlinked } = await this.seedRoster({
-      guildId,
-      gameId,
-      hash,
-      now,
-    });
+    const ctx: RosterCtx = { guildId, gameId, hash, now };
+    const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
-    const raids = await this.seedRaids({ guildId, gameId, hash, now }, users);
+    const raids = await this.seedRaids(ctx, users);
     const content = input.withContent
       ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
       : null;
