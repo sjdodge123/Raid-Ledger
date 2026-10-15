@@ -12,7 +12,7 @@
  * panels render instead of variant-specific copy. ROK-1743: Forever saved
  * instances (`character.lockouts`, addon snapshot) render after Quests.
  */
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
@@ -32,6 +32,9 @@ import type {
     CharacterProfessionsDto,
     EquipmentItemDto,
 } from '@raid-ledger/contract';
+
+/** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
+const CharacterAddonsCard = lazy(() => import('./character-addons-card').then((m) => ({ default: m.CharacterAddonsCard })));
 
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
@@ -108,6 +111,7 @@ export function CharacterDetailSections({
             )}
             {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={variant} />}
+            <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
             <CharacterQuestsSection characterId={characterId} variant={variant} />
             <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}

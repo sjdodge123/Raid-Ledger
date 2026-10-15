@@ -28,6 +28,8 @@ export type SeedGuildRole = 'gm' | 'officer' | 'member' | 'outsider';
 export interface SeedGuildInput {
   name: string;
   gameSlug: string;
+  /** ROK-1786: also seed the GM post, rules, links and two addons. */
+  withContent: boolean;
 }
 
 /** The five roster rows, rank 0..4; `owner` = the user whose character links. */
@@ -58,7 +60,11 @@ const NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{2,47}$/;
 
 /** Body → validated input; 400 on a bad name or a non-WoW slug. */
 export function parseSeedGuildBody(body: unknown): SeedGuildInput {
-  const raw = (body ?? {}) as { name?: unknown; gameSlug?: unknown };
+  const raw = (body ?? {}) as {
+    name?: unknown;
+    gameSlug?: unknown;
+    withContent?: unknown;
+  };
   if (typeof raw.name !== 'string' || !NAME_RE.test(raw.name)) {
     throw new BadRequestException(
       'name: 3-48 chars, letters/digits/space/_/- (starts alphanumeric)',
@@ -68,7 +74,11 @@ export function parseSeedGuildBody(body: unknown): SeedGuildInput {
   if (typeof gameSlug !== 'string' || !ALL_WOW_GAME_SLUGS.includes(gameSlug)) {
     throw new BadRequestException('gameSlug must be a WoW game slug');
   }
-  return { name: raw.name, gameSlug };
+  const withContent = raw.withContent ?? false;
+  if (typeof withContent !== 'boolean') {
+    throw new BadRequestException('withContent must be a boolean');
+  }
+  return { name: raw.name, gameSlug, withContent };
 }
 
 /** Short stable hash of the guild key — keeps GUIDs within varchar(32). */

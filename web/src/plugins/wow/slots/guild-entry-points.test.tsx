@@ -30,7 +30,7 @@ const CHAR_ID = '5b3c6f3e-1d2a-4c9b-9a51-2f8e7d6c5b4a';
 function guild(id: number, name: string, memberCount = 12): MyGuild {
     return {
         id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
-        memberCount, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false,
+        memberCount, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false, gmPostHeadline: null,
     };
 }
 const ONE = [guild(11, 'Iron Vanguard')];
@@ -156,7 +156,7 @@ describe('GameDetailGuilds (game-detail:sections)', () => {
 describe('CharacterGuildBadge (character-detail:header-badges)', () => {
     it('in a guild → crest + name + rank, linking to the guild', async () => {
         server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
-            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined }, rankName: 'Officer', viewerCanOpen: true } })));
+            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined, gmPostHeadline: undefined }, rankName: 'Officer', viewerCanOpen: true } })));
         renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
         const badge = await screen.findByTestId('character-guild-badge');
         expect(badge).toHaveAttribute('href', '/guilds/11');
@@ -166,7 +166,7 @@ describe('CharacterGuildBadge (character-detail:header-badges)', () => {
 
     it('a viewer who cannot open the guild → plain text, no link', async () => {
         server.use(http.get(`${API}/by-character/${CHAR_ID}`, () =>
-            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined }, rankName: 'Officer', viewerCanOpen: false } })));
+            HttpResponse.json({ data: { guild: { ...guild(11, 'Iron Vanguard'), rankIndex: undefined, rankName: undefined, canEdit: undefined, gmPostHeadline: undefined }, rankName: 'Officer', viewerCanOpen: false } })));
         renderWithProviders(<CharacterGuildBadge characterId={CHAR_ID} />);
         const badge = await screen.findByTestId('character-guild-badge');
         expect(badge.tagName, 'a non-member must not get a link to the guild page').toBe('SPAN');
