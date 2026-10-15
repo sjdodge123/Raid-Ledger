@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { http, HttpResponse } from 'msw';
 
 import { server } from '../../test/mocks/server';
-import { adminFetch } from './admin-fetch';
+import { adminFetch, AdminFetchError } from './admin-fetch';
 import {
     AUTH_METHOD_KEY,
 } from '../../lib/api/auth-storage-keys';
@@ -128,5 +128,27 @@ describe('adminFetch — ROK-1409 pre-flight + reactive backstop', () => {
 
         expect(refreshCalls).toBe(1);
         expect(result.header).toBe(`Bearer ${RENEWED_IMPERSONATION}`);
+    });
+});
+
+describe('adminFetch — structured error bodies (ROK-1740)', () => {
+    beforeEach(() => {
+        localStorage.clear();
+        authState.token = FRESH_TOKEN;
+    });
+
+    it('a failed POST throws AdminFetchError carrying the status and parsed body', async () => {
+        const body = { message: "The bot can't post in #general.", missing: ['Pin Messages'] };
+        server.use(http.post(`${API_BASE}/admin/thing`, () => HttpResponse.json(body, { status: 422 })));
+        const err: unknown = await adminFetch('/admin/thing', { method: 'POST' }, 'fallback')
+            .catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(AdminFetchError);
+        expect(err).toMatchObject({ message: body.message, status: 422, body });
+    });
+
+    it('falls back to the caller message when the error body is not JSON', async () => {
+        server.use(http.delete(`${API_BASE}/admin/thing`, () => new HttpResponse('boom', { status: 503 })));
+        await expect(adminFetch('/admin/thing', { method: 'DELETE' }, 'fallback'))
+            .rejects.toMatchObject({ message: 'fallback', status: 503, body: null });
     });
 });
