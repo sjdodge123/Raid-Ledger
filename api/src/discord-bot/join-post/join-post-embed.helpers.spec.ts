@@ -28,6 +28,13 @@ describe('buildJoinPostRow', () => {
       url: 'https://raid.example.com/login',
     });
   });
+
+  it('keeps a sub-path in the client URL', () => {
+    const row = buildJoinPostRow('https://example.com/raid/').toJSON();
+    expect(row.components[0]).toMatchObject({
+      url: 'https://example.com/raid/login',
+    });
+  });
 });
 
 describe('buildJoinPostEmbed', () => {

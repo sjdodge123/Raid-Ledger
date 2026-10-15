@@ -46,12 +46,14 @@ export function buildJoinPostEmbed(communityName: string): ChannelEmbed {
 }
 
 /**
- * The sign-in URL the button opens.
+ * The sign-in URL the button opens. Built by appending, like every other
+ * bot embed link (`${clientUrl}/path`), so a client URL served under a
+ * sub-path keeps it — `new URL('/login', base)` would drop it.
  *
  * @param clientUrl - The instance's configured client URL.
  */
 export function joinPostLoginUrl(clientUrl: string): string {
-  return new URL(JOIN_POST_LOGIN_PATH, clientUrl).toString();
+  return `${clientUrl.replace(/\/+$/, '')}${JOIN_POST_LOGIN_PATH}`;
 }
 
 /**
