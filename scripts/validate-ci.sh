@@ -1373,6 +1373,10 @@ _run_integration_shards_parallel() {
       echo "=== Integration shard ${i}/${shards} (parallel) ==="
       (
         set -o pipefail
+        # Own LOG_DIR per parallel shard: the slow-query specs unlink/append/read
+        # slow-queries.log there, so two shards sharing it would race (Codex P2).
+        export LOG_DIR="${tmp}.logdir${i}"
+        mkdir -p "$LOG_DIR"
         _integration_shard_jest "$i" "$shards" "$heap" "$(_integration_shard_redis_url "$i")" 2>&1 \
           | tee "${tmp}.shard${i}" \
           | awk -v p="[shard ${i}/${shards}] " '{ print p $0; fflush() }'
@@ -1409,6 +1413,7 @@ _run_integration_shards_parallel() {
       fi
       cat "${tmp}.shard${i}" >>"$tmp" 2>/dev/null || true
       rm -f "${tmp}.shard${i}"
+      rm -rf "${tmp}.logdir${i}"
     done
     if [ "$wave_failed" -eq 1 ]; then
       echo "Integration wave ${first}-${last} FAILED — stopping early"

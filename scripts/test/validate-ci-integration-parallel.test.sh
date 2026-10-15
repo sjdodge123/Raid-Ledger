@@ -49,6 +49,7 @@ done
 [[ -z "$shard" ]] && exit 0
 ev="$STUB_STATE/events"
 echo "start ${shard} heap=${NODE_OPTIONS#--max-old-space-size=} redis=${REDIS_URL:-<unset>}" >>"$ev"
+echo "logdir ${shard} ${LOG_DIR:-<unset>}" >>"$ev"
 : >"$STUB_STATE/started.${shard}"
 # A hung shard (bounded), so a test can prove its failing partner stops it.
 if [[ "${STUB_NPX_HANG_SHARD:-}" == "$shard" ]]; then
@@ -152,6 +153,9 @@ for i in 1 2 4; do
 done
 if [[ $RC -eq 0 ]] && grep -q -x -e '=== Shard results: PASS PASS PASS PASS ===' <<<"$OUT"; then pass; else
     fail "an all-PASS parallel run must return 0 with 4 PASS results, got rc=$RC, $(grep 'Shard results' <<<"$OUT")"; fi
+logdirs=$(grep -E '^logdir [0-9]+ ' <<<"$EVENTS" | awk '{print $3}')
+if [[ $(grep -c . <<<"$logdirs") -eq 4 && $(sort -u <<<"$logdirs" | grep -c .) -eq 4 ]] && ! grep -q -x -e '<unset>' <<<"$logdirs"; then pass; else
+    fail "each parallel shard must get its own LOG_DIR (slow-queries.log race), got: $(tr '\n' ',' <<<"$logdirs")"; fi
 if grep -q -e '^\[shard 2/4\]  PASS src/' <<<"$OUT"; then pass; else
     fail "parallel shard output must stream with a [shard i/N] prefix, got: $(grep -m2 'PASS src/' <<<"$OUT")"; fi
 
