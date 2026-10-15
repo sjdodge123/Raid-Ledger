@@ -24,11 +24,11 @@ vi.mock('../../hooks/use-notifications', () => ({ useNotifications: () => ({ mar
 
 const originalMatchMedia = window.matchMedia;
 function setDesktop(isDesktop: boolean): void {
-    window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+    window.matchMedia = (query: string): MediaQueryList => ({
         matches: isDesktop && query.includes('min-width'), media: query, onchange: null,
         addEventListener: vi.fn(), removeEventListener: vi.fn(),
-        addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: vi.fn(),
-    })) as unknown as typeof window.matchMedia;
+        addListener: vi.fn(), removeListener: vi.fn(), dispatchEvent: () => false,
+    });
 }
 
 interface Calls { writes: string[] }
@@ -126,6 +126,40 @@ describe('GameNotifyBell — desktop popover', () => {
         release();
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Failed to update notifications for this game'));
         await waitFor(() => expect(toggle).toHaveAttribute('aria-checked', 'true'));
+    });
+});
+
+describe('GameNotifyBell — desktop popover focus exit', () => {
+    beforeEach(() => setDesktop(true));
+
+    it('a Tab past the last link closes the popover and returns focus to the bell', async () => {
+        seed(false);
+        const user = userEvent.setup();
+        renderBell();
+        const bell = await screen.findByTestId('game-notify-bell');
+        await user.click(bell);
+        const dialog = await screen.findByRole('dialog', { name: 'Notifications for Valheim' });
+        await waitFor(() => expect(within(dialog).getByTestId('game-notify-switch')).not.toBeDisabled());
+        await user.tab();
+        expect(within(dialog).getByTestId('game-notify-switch')).toHaveFocus();
+        await user.tab();
+        expect(within(dialog).getByRole('link', { name: 'All notification settings →' })).toHaveFocus();
+        await user.tab();
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(bell).toHaveFocus();
+    });
+
+    it('Shift+Tab from the popover itself closes it and returns focus to the bell', async () => {
+        seed(false);
+        const user = userEvent.setup();
+        renderBell();
+        const bell = await screen.findByTestId('game-notify-bell');
+        await user.click(bell);
+        const dialog = await screen.findByRole('dialog', { name: 'Notifications for Valheim' });
+        await waitFor(() => expect(dialog).toHaveFocus());
+        await user.tab({ shift: true });
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+        expect(bell).toHaveFocus();
     });
 });
 

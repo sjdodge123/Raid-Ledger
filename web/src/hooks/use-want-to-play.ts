@@ -47,8 +47,7 @@ export function useWantToPlay(gameId: number | undefined) {
  */
 function useInterestToggleMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
-    const viewer = useViewerCacheScope();
-    const queryKey = gameInterestQueryKey(gameId, viewer);
+    const queryKey = gameInterestQueryKey(gameId, useViewerCacheScope());
 
     return useMutation<GameInterestResponseDto, Error, boolean>({
         mutationFn: (wantToPlay: boolean) =>

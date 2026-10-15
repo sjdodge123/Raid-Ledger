@@ -36,18 +36,42 @@ export function GameNotifyPanelBody({ gameName, muted, disabled, onMutedChange }
     );
 }
 
-/** Esc closes the popover and hands focus back to the bell. */
-function useEscapeToClose(open: boolean, onClose: () => void, returnFocusTo: RefObject<HTMLElement | null>): void {
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/** True when this Tab press would carry focus out of the popup (past either end). */
+function tabLeavesPopup(e: KeyboardEvent, popup: HTMLElement): boolean {
+    const items = Array.from(popup.querySelectorAll<HTMLElement>(FOCUSABLE));
+    const active = document.activeElement;
+    if (e.shiftKey) return active === popup || active === items[0];
+    return items.length === 0 || active === items[items.length - 1];
+}
+
+/**
+ * Esc, and a Tab past either end, close the popover and hand focus back to
+ * the bell: the popover is portalled to the end of `<body>`, so a Tab past
+ * its last link would otherwise leave it open with focus off the page.
+ * Focus moving to anything outside the popup and the bell (a screen reader
+ * jump) closes it too, matching `Combobox`'s close-on-blur.
+ */
+function usePopoverFocusExit(open: boolean, onClose: () => void, popupRef: RefObject<HTMLElement | null>,
+    returnFocusTo: RefObject<HTMLElement | null>): void {
     useEffect(() => {
-        if (!open) return;
+        const popup = popupRef.current;
+        if (!open || !popup) return;
+        const exit = (): void => { onClose(); returnFocusTo.current?.focus(); };
         const onKey = (e: KeyboardEvent): void => {
-            if (e.key !== 'Escape') return;
+            if (e.key === 'Escape') exit();
+            else if (e.key === 'Tab' && tabLeavesPopup(e, popup)) { e.preventDefault(); exit(); }
+        };
+        const onFocusOut = (e: FocusEvent): void => {
+            const next = e.relatedTarget;
+            if (!(next instanceof Node) || popup.contains(next) || returnFocusTo.current?.contains(next)) return;
             onClose();
-            returnFocusTo.current?.focus();
         };
         document.addEventListener('keydown', onKey);
-        return () => document.removeEventListener('keydown', onKey);
-    }, [open, onClose, returnFocusTo]);
+        popup.addEventListener('focusout', onFocusOut);
+        return () => { document.removeEventListener('keydown', onKey); popup.removeEventListener('focusout', onFocusOut); };
+    }, [open, onClose, popupRef, returnFocusTo]);
 }
 
 /** ≥1024px: a portalled `role="dialog"` popover anchored under the bell. */
@@ -59,7 +83,7 @@ export function GameNotifyPopover({ open, onClose, anchorRef, bellRef, container
     const popupRef = useRef<HTMLDivElement | null>(null);
     const titleId = useId();
     const pos = useAnchoredPopup(anchorRef, popupRef, open, onClose);
-    useEscapeToClose(open, onClose, bellRef);
+    usePopoverFocusExit(open, onClose, popupRef, bellRef);
     useEffect(() => { if (open) popupRef.current?.focus(); }, [open]);
     if (!open) return null;
     return createPortal(
