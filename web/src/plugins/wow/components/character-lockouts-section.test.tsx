@@ -47,6 +47,20 @@ describe('CharacterLockoutsSection', () => {
         expect(screen.getByText('3/10', { exact: false }).className).toContain('text-muted');
     });
 
+    it('colours a 0/0 lockout text-muted, not as a full clear', () => {
+        render(<CharacterLockoutsSection lockouts={lockouts([lockout({ killed: 0, total: 0 })])} />);
+        expect(screen.getByText('0/0', { exact: false }).className).toContain('text-muted');
+    });
+
+    it('renders duplicate instance/difficulty pairs without a React key warning', () => {
+        const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { container } = render(<CharacterLockoutsSection lockouts={lockouts([lockout(), lockout({ killed: 5 })])} />);
+        const keyWarnings = error.mock.calls.filter((args) => String(args[0]).includes('same key'));
+        error.mockRestore();
+        expect(keyWarnings).toEqual([]);
+        expect(rowsIn(container)).toHaveLength(2);
+    });
+
     it('omits the difficulty label when it is null', () => {
         const { container } = render(<CharacterLockoutsSection lockouts={lockouts([lockout({ difficulty: null })])} />);
         expect(rowsIn(container)[0]?.textContent).toBe('Molten Core3/10 bosses killedResets in 3d 4h');

@@ -21,7 +21,7 @@ function activeRows(instances: CharacterLockoutDto[], nowMs: number): LockoutRow
 }
 
 function LockoutRowItem({ lockout, resetIn }: LockoutRow) {
-    const cleared = lockout.killed >= lockout.total;
+    const cleared = lockout.total > 0 && lockout.killed >= lockout.total;
     return (
         <li data-lockout-row className="flex flex-wrap items-baseline gap-x-3 gap-y-1 min-w-0">
             <span className="text-sm text-foreground break-words min-w-0">{lockout.name}</span>
@@ -45,8 +45,8 @@ export function CharacterLockoutsSection({ lockouts }: { lockouts: CharacterLock
             <h2 className="text-lg font-semibold text-foreground mb-4">Saved instances</h2>
             <p className="-mt-3 mb-4 text-xs text-muted">{formatAddonSourceLine(lockouts.syncedAt)}</p>
             <ul className="space-y-2">
-                {rows.map((row) => (
-                    <LockoutRowItem key={`${row.lockout.instanceId}-${row.lockout.difficultyId}`} {...row} />
+                {rows.map((row, i) => (
+                    <LockoutRowItem key={`${row.lockout.instanceId}-${row.lockout.difficultyId}-${i}`} {...row} />
                 ))}
             </ul>
         </div>
