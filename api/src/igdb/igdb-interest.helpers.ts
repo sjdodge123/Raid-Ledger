@@ -9,11 +9,20 @@ import {
   isWishlistedByUser,
   getSteamWishlisters,
 } from './igdb-steam-interest.helpers';
+import {
+  STEAM_SYNC_SOURCES,
+  USER_HEART_SOURCES,
+  needsSuppression,
+  toDtoSource,
+} from './igdb-interest-sources.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
 export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
+
+/** Order heart sources ahead of Steam sync rows (ROK-1796). */
+const STEAM_SOURCE_LAST = sql`case when ${inArray(schema.gameInterests.source, STEAM_SYNC_SOURCES)} then 1 else 0 end`;
 
 /** SQL expression for distinct user count (ROK-804). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
@@ -43,7 +52,9 @@ export async function getInterestCount(
 }
 
 /**
- * Get user's interest source for a game.
+ * Get the current user's interest source for a game (ROK-1796: Steam
+ * library/wishlist rows count for the per-user heart; a real heart source is
+ * preferred over a Steam row when both exist).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -61,9 +72,10 @@ export async function getUserInterestSource(
       and(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
-        inArray(schema.gameInterests.source, HEART_SOURCES),
+        inArray(schema.gameInterests.source, USER_HEART_SOURCES),
       ),
     )
+    .orderBy(STEAM_SOURCE_LAST)
     .limit(1);
   return row?.source ?? null;
 }
@@ -107,7 +119,7 @@ export async function getInterestedPlayers(
   }));
 }
 
-/** Fetch batch counts and user interests in parallel (hearts only, ROK-804). */
+/** Fetch batch counts (hearts only, ROK-804) and the user's own hearts incl. Steam rows (ROK-1796). */
 async function fetchBatchData(
   db: PostgresJsDatabase<typeof schema>,
   gameIds: number[],
@@ -131,7 +143,7 @@ async function fetchBatchData(
         and(
           gameIdFilter,
           eq(schema.gameInterests.userId, userId),
-          sourceFilter,
+          inArray(schema.gameInterests.source, USER_HEART_SOURCES),
         ),
       ),
   ]);
@@ -179,6 +191,15 @@ export async function addInterest(
     .insert(schema.gameInterests)
     .values({ userId, gameId, source: 'manual' })
     .onConflictDoNothing();
+  // A manual re-heart lifts any earlier un-heart suppression (ROK-1796).
+  await db
+    .delete(schema.gameInterestSuppressions)
+    .where(
+      and(
+        eq(schema.gameInterestSuppressions.userId, userId),
+        eq(schema.gameInterestSuppressions.gameId, gameId),
+      ),
+    );
 
   const [count, players] = await Promise.all([
     getInterestCount(db, gameId),
@@ -187,8 +208,28 @@ export async function addInterest(
   return { wantToPlay: true, count, players, source: 'manual' as const };
 }
 
+/** Every stored interest source the user has for a game (all sources). */
+async function getAllUserSources(
+  db: Db,
+  gameId: number,
+  userId: number,
+): Promise<string[]> {
+  const rows = await db
+    .select({ source: schema.gameInterests.source })
+    .from(schema.gameInterests)
+    .where(
+      and(
+        eq(schema.gameInterests.gameId, gameId),
+        eq(schema.gameInterests.userId, userId),
+      ),
+    );
+  return rows.map((r) => r.source);
+}
+
 /**
- * Remove want-to-play interest (with auto-heart suppression for Discord and poll sources).
+ * Remove want-to-play interest. Writes a suppression when ANY auto source
+ * (Discord, poll, Steam library/wishlist) backed it, so the auto-heart and the
+ * daily Steam syncs do not re-create it (ROK-444, ROK-1031, ROK-1796).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -199,9 +240,9 @@ export async function removeInterest(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  const source = await getUserInterestSource(db, gameId, userId);
+  const sources = await getAllUserSources(db, gameId, userId);
 
-  if (source === 'discord' || source === 'poll') {
+  if (needsSuppression(sources)) {
     await db
       .insert(schema.gameInterestSuppressions)
       .values({ userId, gameId })
@@ -280,9 +321,7 @@ export async function fetchGameInterestResponse(
     wantToPlay: d.source !== null,
     count: d.count,
     players: d.players,
-    source: d.source
-      ? (d.source as 'manual' | 'steam' | 'discord' | 'poll')
-      : undefined,
+    source: toDtoSource(d.source),
     ownerCount: d.ownerCount,
     owners: d.owners,
     wishlisters: d.wishlisters,

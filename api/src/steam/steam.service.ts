@@ -9,6 +9,7 @@ import {
 import { eq, inArray, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { dropSuppressedRows } from './steam-interest-suppression.helpers';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
@@ -333,10 +334,11 @@ export class SteamService {
       lastSyncedAt: Date;
     }[],
   ): Promise<number> {
-    if (toInsert.length === 0) return 0;
+    const allowed = await dropSuppressedRows(this.db, toInsert);
+    if (allowed.length === 0) return 0;
     const inserted = await this.db
       .insert(schema.gameInterests)
-      .values(toInsert)
+      .values(allowed)
       .onConflictDoNothing()
       .returning({ id: schema.gameInterests.id });
     return inserted.length;
