@@ -29,17 +29,19 @@ interface Case {
     gameVariant: string | null; ruleset?: string | null; isArmoryImported?: boolean;
     equipment?: CharacterEquipmentDto | null; gameSlug?: string; registryPending?: boolean;
     lockouts?: CharacterLockoutsDto;
+    /** Extra fields on the cached character (race / gender / class / name). */
+    character?: Record<string, string | null>; renderUrl?: string | null;
 }
 
 /** Seeds the character + game registry caches; `registryPending` leaves the registry to load over the network. */
-function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null, gameSlug, registryPending, lockouts }: Case) {
+function renderSections({ gameVariant, ruleset = null, isArmoryImported = false, equipment = null, gameSlug, registryPending, lockouts, character = {}, renderUrl = null }: Case) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
-    client.setQueryData(['characters', 'char-1'], { id: 'char-1', gameId: 1, gameVariant, ruleset, ...(lockouts ? { lockouts } : {}) });
+    client.setQueryData(['characters', 'char-1'], { id: 'char-1', gameId: 1, gameVariant, ruleset, ...character, ...(lockouts ? { lockouts } : {}) });
     if (!registryPending) client.setQueryData(['game-registry'], { data: gameSlug ? [{ id: 1, slug: gameSlug, name: 'WoW' }] : [] });
     const { container } = render(
         <QueryClientProvider client={client}>
             <CharacterDetailSections equipment={equipment} talents={null} professions={null} gameVariant={gameVariant}
-                renderUrl={null} isArmoryImported={isArmoryImported} characterClass="Mage" isOwner={false}
+                renderUrl={renderUrl} isArmoryImported={isArmoryImported} characterClass="Mage" isOwner={false}
                 characterId="char-1" gameId={1} />
         </QueryClientProvider>,
     );
@@ -172,5 +174,25 @@ describe('CharacterDetailSections — Forever saved instances', () => {
         const container = renderSections({ gameVariant: 'wow_forever' });
         expect(screen.queryByText('Saved instances')).toBeNull();
         expect(container.querySelector('[data-lockout-row]')).toBeNull();
+    });
+});
+
+/** ROK-1747: the render slot's portrait is built from the cached character, with renderUrl standing in for the avatar. */
+describe('CharacterDetailSections — Forever portrait in the equipment render slot', () => {
+    const FOREVER_CHAR = { race: 'Night Elf', gender: 'female', class: 'Druid', name: 'Fernwhisper' };
+    const forever = { gameVariant: null, ruleset: null, gameSlug: 'world-of-warcraft-forever', equipment: EQUIPMENT, character: FOREVER_CHAR };
+    const quietQuests = () => server.use(http.get('http://localhost:3000/plugins/wow/characters/char-1/quests', () => HttpResponse.json({ quests: null })));
+
+    it('race + gender and no render → the race portrait fills the slot', () => {
+        quietQuests();
+        renderSections(forever);
+        const tiles = screen.getAllByTestId('equipment-portrait');
+        expect(tiles[0]?.querySelector('[data-testid="forever-portrait"]')?.getAttribute('data-portrait'), 'gender from the cached character reaches the slot portrait').toBe('race');
+    });
+
+    it('a Blizzard render wins over the portrait', () => {
+        quietQuests();
+        renderSections({ ...forever, renderUrl: 'https://render.example/main-raw.png' });
+        expect(screen.queryByTestId('equipment-portrait')).toBeNull();
     });
 });
