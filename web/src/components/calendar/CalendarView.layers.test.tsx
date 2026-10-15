@@ -95,6 +95,28 @@ describe('CalendarView month — layer glyph per day (ROK-1775)', () => {
     });
 });
 
+describe('CalendarView month — event-free month with layer items (ROK-1775 step 2)', () => {
+    afterEach(() => { mockEvents.data = { data: [EVENT] }; });
+
+    it('does not lay the "No events" overlay over the glyphs, and a glyph still opens its tooltip', () => {
+        mockEvents.data = { data: [] };
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} />);
+        expect(screen.queryByText('No events this month')).toBeNull();
+        const day = screen.getAllByTestId('layer-month-day')[0];
+        if (!day) throw new Error('no month day with a glyph');
+        const tip = within(day).getByRole('tooltip', { hidden: true });
+        fireEvent.click(within(day).getByTestId('layer-month-glyph'));
+        expect(tip.className).toContain('visible opacity-100');
+    });
+
+    it('still shows the "No events" overlay when the month has neither events nor layer items', () => {
+        mockEvents.data = { data: [] };
+        useCalendarLayerFilterStore.setState({ hiddenLayers: new Set(['fake:sched']) });
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} />);
+        expect(screen.getByText('No events this month')).toBeInTheDocument();
+    });
+});
+
 describe('CalendarView schedule — muted layer rows (ROK-1775)', () => {
     it('interleaves wrapping layer rows with the day\'s events by time', () => {
         renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView="schedule" />);

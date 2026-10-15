@@ -203,7 +203,8 @@ function CalendarGridBody({ s, className, isHeaderHidden, eventPropGetter, handl
                         }
                     }} />
             </CalendarLayerGrid>
-            {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && <CalendarEmptyState view={s.view} />}
+            {/* ROK-1775: a range whose only content is layer items (server schedules) isn't empty — the overlay would sit on their glyphs. */}
+            {!s.isLoading && !s.isFetching && s.calendarEvents.length === 0 && layer.dayEntries.size === 0 && <CalendarEmptyState view={s.view} />}
         </div>
     );
 }
