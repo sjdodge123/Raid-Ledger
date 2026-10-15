@@ -18,6 +18,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
 import { PelicanStatusService } from './pelican-status.service';
+import { PelicanClientFactory } from './pelican-client.factory';
 import { fakeServer } from './testing/pelican-fixtures';
 import {
   createFakePanel,
@@ -262,8 +263,8 @@ describe('GET /game-servers/status — unconfigured (ROK-1776)', () => {
     livePanelFor([row]);
     await poll();
     expect((await reload(row.id)).statusCheckedAt).toBeInstanceOf(Date);
-    // Drop the fake panel so the factory reads the real stored settings.
-    jest.restoreAllMocks();
+    // Drop only the fake panel so the factory reads the real stored settings.
+    jest.mocked(testApp.app.get(PelicanClientFactory).connect).mockRestore();
     const settings = testApp.app.get(SettingsService);
     await settings.set(SETTING_KEYS.PELICAN_PANEL_URL, 'https://panel.test');
     await settings.set(SETTING_KEYS.PELICAN_CLIENT_API_KEY, 'ptlc_fake');
