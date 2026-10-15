@@ -13,6 +13,7 @@ import { LayerMarkerTick } from '../../components/calendar/layers/LayerMarkerTic
 import type { LayerWindowEvent, ZonedLayerMarker } from '../../components/calendar/layers/calendar-layer-events';
 import '../../components/calendar/layers/calendar-layers.css';
 import { Section, StateFrame } from './design-system-bits';
+import { CalendarLayerViewFrames } from './calendar-layer-view-frames';
 
 /** The sample column spans 17:00–24:00; the band runs 18:00–22:00. */
 const FIRST_HOUR = 17;
@@ -56,7 +57,7 @@ export function CalendarLayerSection(): JSX.Element {
         <Section
             id="calendar-layer"
             title="Pattern — server-schedule layer (plugin calendar layers)"
-            blurb="A plugin's non-event time spans and instants on the Week/Day grid: a neutral edge-strong hatch band with a wrapping text-dim label, drawn behind events and pointer-events-none; a 2px solid edge-strong tick whose power glyph is the only pointer target. Hover, focus or tap the glyph for the tooltip; near the grid's right edge it opens to the left."
+            blurb="A plugin's non-event time spans and instants on the Week/Day grid (Month: one glyph per day; Schedule: muted rows): a neutral edge-strong hatch band with a wrapping text-dim label, drawn behind events and pointer-events-none; a 2px solid edge-strong tick whose power glyph is the only pointer target. Hover, focus or tap the glyph for the tooltip; near the grid's right edge it opens to the left."
         >
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
                 <StateFrame label="Band + tick · LayerWindowLabel + LayerMarkerTick" note="6–10 PM window, restart tick at 8:05 PM.">
@@ -65,6 +66,7 @@ export function CalendarLayerSection(): JSX.Element {
                 <StateFrame label="Continued segment · wraps, never truncates" note="The post-midnight part of a window that crosses midnight.">
                     <SampleColumn label="Server up · A Very Long Community Server Name That Wraps" continued withTick={false} />
                 </StateFrame>
+                <CalendarLayerViewFrames />
             </div>
         </Section>
     );

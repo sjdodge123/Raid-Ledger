@@ -12,6 +12,7 @@ import {
 } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api/fetch-api';
 import type { CalendarLayerRange } from '../../calendar-layer';
+import { mergeCalendarItems, splitCalendarRange } from './pelican-calendar-range.helpers';
 
 export { fetchGameRegistry } from '../../../lib/api/games-api';
 export { toPelicanLayerItems } from './pelican-calendar-items.helpers';
@@ -19,11 +20,19 @@ export { toPelicanLayerItems } from './pelican-calendar-items.helpers';
 export const GAME_SERVERS_CALENDAR_PATH = '/game-servers/calendar';
 export const GAME_SERVERS_STATUS_PATH = '/game-servers/status';
 
-/** Schedule items for the visible range. `gameIds` is never sent (spec Q3). */
-export async function fetchServerCalendar(range: CalendarLayerRange): Promise<GameServerCalendarItemDto[]> {
+async function fetchCalendarChunk(range: CalendarLayerRange): Promise<GameServerCalendarItemDto[]> {
     const qs = new URLSearchParams({ from: range.from, to: range.to });
     const res = await fetchApi(`${GAME_SERVERS_CALENDAR_PATH}?${qs.toString()}`, {}, GameServerCalendarResponseSchema);
     return res.data;
+}
+
+/**
+ * Schedule items for the visible range. `gameIds` is never sent (spec Q3). A
+ * range wider than the API's cap (the Schedule view's three months) is fetched
+ * in chunks within it and merged.
+ */
+export async function fetchServerCalendar(range: CalendarLayerRange): Promise<GameServerCalendarItemDto[]> {
+    return mergeCalendarItems(await Promise.all(splitCalendarRange(range).map(fetchCalendarChunk)));
 }
 
 /** Live state for every mapped server. */
