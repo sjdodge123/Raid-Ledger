@@ -122,7 +122,7 @@ describe('Regression: ROK-1797 — heart optimistic write keeps the bell mute', 
         vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(() => undefined));
 
         const { result } = renderHook(() => useWantToPlay(GAME_ID), { wrapper });
-        act(() => { result.current.toggle(true); });
+        await act(async () => { result.current.toggle(true); });
 
         await waitFor(() => {
             expect(queryClient.getQueryData(PER_GAME_KEY)).toEqual({
