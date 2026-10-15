@@ -213,3 +213,6 @@ export * from './ledgerlink-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+
+// Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
+export * from './discord-join-post.schema.js';
