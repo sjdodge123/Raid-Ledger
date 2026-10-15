@@ -81,7 +81,64 @@ describe('scrubPii strings (ROK-1779)', () => {
     expect(event.transaction).toBe('GET /events/:id');
     expect(event.message).toBe('v1.2.3');
   });
+});
 
+describe('PII scrub boundaries: versions, real IPs, camelCase keys (ROK-1779)', () => {
+  it('leaves real Chrome, Edge, Firefox and Android user agents intact', () => {
+    const uas = [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0',
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:131.0) Gecko/20100101 Firefox/131.0',
+      'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Mobile Safari/537.36',
+    ];
+    for (const ua of uas) expect(scrubPiiString(ua)).toBe(ua);
+    const event = scrubPii({
+      request: { headers: { 'User-Agent': uas[0] } },
+      contexts: { browser: { name: 'Chrome', version: '141.0.0.0' } },
+    });
+    expect(event.request).toEqual({ headers: { 'User-Agent': uas[0] } });
+    expect(event.contexts).toEqual({
+      browser: { name: 'Chrome', version: '141.0.0.0' },
+    });
+  });
+
+  it('still scrubs real IPv4/IPv6 addresses in URLs, headers and paths', () => {
+    expect(
+      scrubPiiString(
+        'from 192.168.1.20 via http://10.0.0.5:3000/x /ips/8.8.8.8 ip=172.16.0.1.',
+      ),
+    ).toBe('from [ip] via http://[ip]:3000/x /ips/[ip] ip=[ip].');
+    expect(scrubPiiString('x-forwarded-for: 203.0.113.9, 2001:db8::1')).toBe(
+      'x-forwarded-for: [ip], [ip]',
+    );
+    expect(scrubPiiString('not ips: 999.1.1.1 and 1.2.3.4.5')).toBe(
+      'not ips: 999.1.1.1 and 1.2.3.4.5',
+    );
+  });
+
+  it('redacts camelCase PII keys but not look-alikes', () => {
+    const event = scrubPii({
+      extra: {
+        discordUsername: 'bob',
+        userEmail: 'x',
+        ownerDisplayName: 'Bob',
+        clientIpAddress: 'x',
+        hostname: 'raid.example',
+        voicemail: 'on',
+      },
+    });
+    expect(event.extra).toEqual({
+      discordUsername: PII_REDACTED,
+      userEmail: PII_REDACTED,
+      ownerDisplayName: PII_REDACTED,
+      clientIpAddress: PII_REDACTED,
+      hostname: 'raid.example',
+      voicemail: 'on',
+    });
+  });
+});
+
+describe('scrubPii strings — identity and cycles (ROK-1779)', () => {
   it('survives a cyclic object', () => {
     const extra: Record<string, unknown> = { email: 'b@x.io' };
     extra['self'] = extra;

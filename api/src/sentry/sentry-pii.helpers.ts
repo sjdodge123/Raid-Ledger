@@ -19,8 +19,22 @@ const PII_KEY =
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const IPV6 =
   /(?<![\w:.])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::(?:ffff:)?[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6}(?:\.\d{1,3}){0,3})(?![\w:])/gi;
-const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
+// Real octets only, and not a product-token version (`Chrome/141.0.0.0`,
+// `Edg/129.0.0.0`): a match preceded by `Word/` at a token boundary is kept.
+const IPV4 =
+  /(?<![\w.]|(?:^|[\s(;,])[A-Za-z][\w.-]*\/)(?:(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)\.){3}(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?!\.?\w)/g;
+// camelCase compounds (`discordUsername`, `clientIpAddress`); case-sensitive
+// so `hostname` / `voicemail` stay.
+const PII_CAMEL_KEY =
+  /[a-z\d](?:User_?[Nn]ame|Display_?[Nn]ame|E-?[Mm]ail|I[Pp]_?[Aa]ddress|Community_?[Nn]ame)$/;
 const MAX_DEPTH = 12;
+
+/** `contexts.browser.version` etc. hold bare `141.0.0.0` — not an address. */
+const VERSION_KEY = /(?:^|[._-])[Vv]ersion$|[a-z\d]Version$/;
+
+function isPiiKey(key: string): boolean {
+  return PII_KEY.test(key) || PII_CAMEL_KEY.test(key);
+}
 
 export interface PiiScrubbableEvent {
   user?: object;
@@ -59,7 +73,8 @@ function scrubPiiValue(
   }
   const obj = value as Record<string, unknown>;
   for (const key of Object.keys(obj)) {
-    obj[key] = PII_KEY.test(key)
+    if (VERSION_KEY.test(key) && typeof obj[key] === 'string') continue;
+    obj[key] = isPiiKey(key)
       ? PII_REDACTED
       : scrubPiiValue(obj[key], seen, depth + 1);
   }
