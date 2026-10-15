@@ -96,22 +96,29 @@ export async function findOtherGameUsingRole(
 }
 
 /**
- * Upsert the link. The controller refuses a role change on an existing link
- * (unlink first), so the grant rows always belong to the saved role.
+ * Upsert the link and return the role it ends up with. The controller refuses
+ * a role change on an existing link (unlink first), so the grant rows always
+ * belong to the saved role. A concurrent PUT that linked the game first keeps
+ * ITS role: the conflict path only updates the non-role fields (a replaced
+ * `role_id` would orphan every member the first role was granted to), and the
+ * caller compares the returned role with its own.
  */
 export async function saveGameRole(
   db: GameRoleDb,
   input: SaveGameRoleInput,
-): Promise<void> {
+): Promise<{ roleId: string }> {
   const r = schema.discordGameRoles;
-  const { gameId, ...rest } = input;
-  await db
+  const { gameId, windowDays, enabled } = input;
+  const [row] = await db
     .insert(r)
-    .values({ gameId, ...rest })
+    .values(input)
     .onConflictDoUpdate({
       target: r.gameId,
-      set: { ...rest, updatedAt: new Date() },
-    });
+      set: { windowDays, enabled, updatedAt: new Date() },
+    })
+    .returning({ roleId: r.roleId });
+  if (!row) throw new Error(`game role link for game ${gameId} not saved`);
+  return row;
 }
 
 /** Stop managing a game (grants cascade; Discord roles stay — spec D2). */

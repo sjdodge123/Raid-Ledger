@@ -66,7 +66,9 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
     s.findGameName.mockResolvedValue('Valheim');
     s.findGameRoleLink.mockResolvedValue(null);
     s.findOtherGameUsingRole.mockResolvedValue(null);
-    s.saveGameRole.mockResolvedValue(undefined);
+    s.saveGameRole.mockImplementation((_db, input) =>
+      Promise.resolve({ roleId: input.roleId }),
+    );
     s.listGameRoleSummaries.mockResolvedValue([SUMMARY]);
   });
 
@@ -108,6 +110,27 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
         enabled: true,
       },
     );
+  });
+
+  it('a concurrent link that won the race keeps its role; the role this request created is deleted', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    d.createGameRole.mockResolvedValue({ id: 'new-role', name: 'smoke-gr-x' });
+    s.saveGameRole.mockResolvedValue({ roleId: 'winner-role' });
+
+    const res = await put({ roleId: null, windowDays: 10, name: 'smoke-gr-x' });
+
+    expect(res.status).toBe(200);
+    expect(d.deleteCreatedRole.mock.calls).toEqual([[guild, 'new-role']]);
+  });
+
+  it('a picked (not created) role that lost the race is never deleted', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    s.saveGameRole.mockResolvedValue({ roleId: 'winner-role' });
+
+    const res = await put({ roleId: 'picked-role', windowDays: 14 });
+
+    expect(res.status).toBe(200);
+    expect(d.deleteCreatedRole).not.toHaveBeenCalled();
   });
 
   it('refuses with 409 a role another game is already linked to', async () => {

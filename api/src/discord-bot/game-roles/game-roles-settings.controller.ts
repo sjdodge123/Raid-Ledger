@@ -141,13 +141,14 @@ export class GameRolesSettingsController {
     const { roleId, botCreated } = existing
       ? await this.keepRole(existing, dto.roleId, enabled)
       : await this.resolveRole(dto, gameId, gameName);
-    await saveGameRole(this.db, {
+    const saved = await saveGameRole(this.db, {
       gameId,
       roleId,
       botCreated,
       windowDays: dto.windowDays,
       enabled,
     }).catch(rethrowRoleTaken);
+    await this.dropLosingCreatedRole(existing, botCreated, roleId, saved);
     const [summary] = await listGameRoleSummaries(
       this.db,
       this.botClient.getGuild(),
@@ -155,6 +156,22 @@ export class GameRolesSettingsController {
     );
     if (!summary) throw new NotFoundException('Game role not saved');
     return summary;
+  }
+
+  /**
+   * A concurrent PUT linked the game between our read and our save, and the
+   * stored link kept its role. If this request created a role for it, that
+   * role is now unused: delete it (best-effort — the helper never throws).
+   */
+  private async dropLosingCreatedRole(
+    existing: unknown,
+    botCreated: boolean,
+    roleId: string,
+    saved: { roleId: string },
+  ): Promise<void> {
+    if (existing || !botCreated || saved.roleId === roleId) return;
+    const guild = this.botClient.getGuild();
+    if (guild) await deleteCreatedRole(guild, roleId);
   }
 
   /**
