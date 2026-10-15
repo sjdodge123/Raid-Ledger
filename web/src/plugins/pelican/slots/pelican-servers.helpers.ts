@@ -1,7 +1,8 @@
 /** Pure view helpers for the Pelican admin Servers section (ROK-1094). */
 import type { PelicanServerRowDto, PelicanServerUpdate, PelicanSyncResult } from '@raid-ledger/contract';
+import type { StatusChipTone } from '../../../components/ui/status-chip';
 
-export type ChipTone = 'success' | 'warning' | 'danger' | 'neutral';
+export type ChipTone = StatusChipTone;
 
 export interface StateChipView { tone: ChipTone; label: string; title: string }
 

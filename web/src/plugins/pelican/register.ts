@@ -20,3 +20,6 @@ pelican.registerCalendarLayer({
     filterDescription: 'Restarts and up-windows from linked game servers',
     useItems: usePelicanCalendarItems,
 });
+
+// Feeds the generic GET /game-servers/status — the event page's status chip (ROK-1776).
+pelican.registerGameServerProvider();
