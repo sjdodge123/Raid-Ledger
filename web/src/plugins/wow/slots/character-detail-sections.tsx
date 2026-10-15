@@ -9,9 +9,10 @@
  * request), so core's slot context needs no WoW field. ROK-1751: the game
  * slug (from the cached game registry) resolves LedgerLink Forever characters
  * whose ruleset is null; while the registry is still loading, neutral
- * panels render instead of variant-specific copy.
+ * panels render instead of variant-specific copy. ROK-1743: Forever saved
+ * instances (`character.lockouts`, addon snapshot) render after Quests.
  */
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
@@ -20,6 +21,7 @@ import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import { CharacterQuestsSection } from '../components/character-quests-section';
+import { CharacterLockoutsSection } from '../components/character-lockouts-section';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
@@ -30,6 +32,9 @@ import type {
     CharacterProfessionsDto,
     EquipmentItemDto,
 } from '@raid-ledger/contract';
+
+/** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
+const CharacterAddonsCard = lazy(() => import('./character-addons-card').then((m) => ({ default: m.CharacterAddonsCard })));
 
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
@@ -106,7 +111,9 @@ export function CharacterDetailSections({
             )}
             {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={variant} />}
+            <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
             <CharacterQuestsSection characterId={characterId} variant={variant} />
+            <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>

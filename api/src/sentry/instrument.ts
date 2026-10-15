@@ -1,17 +1,27 @@
 /**
  * Sentry instrumentation for the NestJS backend.
  * MUST be imported FIRST in main.ts — before any other imports.
- * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via DISABLE_TELEMETRY.
+ * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, opt-in via ENABLE_TELEMETRY=true (DISABLE_TELEMETRY=true still wins).
  */
 import * as Sentry from '@sentry/nestjs';
+import { config as loadEnvFile } from 'dotenv';
 import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
+import { scrubPii } from './sentry-pii.helpers';
+import { API_ENV_FILE, resolveBootTelemetry } from './telemetry-policy';
 
 const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
 
+// ROK-1779: ConfigModule loads .env only once Nest boots — too late for this
+// gate. Load the same file now (dotenv never overrides a set variable, like
+// ConfigModule), so ENABLE_TELEMETRY set only in .env counts here too.
+loadEnvFile({ path: API_ENV_FILE, quiet: true });
+
 const isProduction = process.env.NODE_ENV === 'production';
-const telemetryDisabled = process.env.DISABLE_TELEMETRY === 'true';
+// ROK-1779: the opt-in default lives in telemetry-policy.ts; the decision is
+// recorded there so GET /system/status serves exactly what this gate used.
+const telemetryDisabled = !resolveBootTelemetry();
 
 /** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
 const PII_HEADER_DENY = {
@@ -187,12 +197,13 @@ if (!telemetryDisabled && isProduction) {
       ) {
         event.fingerprint = ['discord-api-transient'];
       }
-      return scrubSecrets(event); // ROK-1592: redact tokens/secrets last
+      // ROK-1592: redact tokens/secrets last; ROK-1779: then personal data.
+      return scrubPii(scrubSecrets(event));
     },
     // ROK-1592: performance transactions (tracesSampleRate) carry request and
     // span URLs too — e.g. the OAuth callback's `?code=…&state=…`.
     beforeSendTransaction(event) {
-      return scrubSecrets(event);
+      return scrubPii(scrubSecrets(event));
     },
     // Filter out pg_catalog type introspection queries from the Postgres driver.
     // These are normal driver behavior (OID-to-JS type mapping) and trigger

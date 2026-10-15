@@ -1,4 +1,12 @@
-import { pgTable, serial, integer, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  serial,
+  integer,
+  text,
+  timestamp,
+  jsonb,
+} from 'drizzle-orm/pg-core';
+import type { FeedbackClientContext } from '@raid-ledger/contract';
 import { users } from './users';
 
 /**
@@ -16,5 +24,9 @@ export const feedback = pgTable('feedback', {
   pageUrl: text('page_url'),
   githubIssueUrl: text('github_issue_url'),
   clientLogs: text('client_logs'),
+  /** ROK-1313: `feedback/<id>.png|jpg`, relative to the uploads root. */
+  screenshotPath: text('screenshot_path'),
+  /** ROK-1313: viewport, user agent and app version at submit time. */
+  clientContext: jsonb('client_context').$type<FeedbackClientContext>(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });

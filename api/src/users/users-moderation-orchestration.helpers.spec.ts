@@ -21,6 +21,7 @@ import * as writes from './users-moderation.helpers';
 import * as audit from './users-admin-actions.helpers';
 import * as wipe from './users-delete.helpers';
 import * as gameRoles from './users-moderation-game-roles.helpers';
+import * as shots from '../feedback/feedback-screenshot-user.helpers';
 import * as authCache from '../auth/auth-user-cache';
 import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
@@ -29,6 +30,7 @@ jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
 jest.mock('./users-delete.helpers');
 jest.mock('./users-moderation-game-roles.helpers');
+jest.mock('../feedback/feedback-screenshot-user.helpers');
 jest.mock('../auth/auth-user-cache');
 jest.mock('../events/signup-cancel-batch.helpers');
 
@@ -40,6 +42,8 @@ const insertAdminAction = audit.insertAdminAction as jest.Mock;
 const wipeUserData = wipe.wipeUserData as jest.Mock;
 const reassignPugSlots = wipe.reassignPugSlots as jest.Mock;
 const revokeGameRoleGrants = gameRoles.revokeGameRoleGrants as jest.Mock;
+const selectShots = shots.selectUserScreenshotPaths as jest.Mock;
+const deleteShots = shots.deleteUserScreenshotsBestEffort as jest.Mock;
 const invalidateAuthUser = authCache.invalidateAuthUser as jest.Mock;
 const cancelAll = signupCancel.cancelAllUpcomingSignupsForUser as jest.Mock;
 
@@ -250,6 +254,50 @@ describe('runBan', () => {
         metadata: JSON.stringify({ dataWiped: true, discordKicked: false }),
       }),
     );
+  });
+
+  it("wipe: removes the user's feedback screenshot files after the wipe commits", async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    cancelAll.mockResolvedValue(0);
+    selectShots.mockResolvedValueOnce(['feedback/41.png']);
+    const deps = makeDeps();
+
+    await runBan(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      wipeData: true,
+      kickFromDiscord: false,
+    });
+
+    expect(deleteShots).toHaveBeenCalledWith(
+      ['feedback/41.png'],
+      TARGET.id,
+      deps.logger,
+    );
+    // Paths are read before the rows go; files are removed after the commit.
+    expect(at(selectShots.mock.invocationCallOrder, 0)).toBeLessThan(
+      at(wipeUserData.mock.invocationCallOrder, 0),
+    );
+    expect(at(deleteShots.mock.invocationCallOrder, 0)).toBeGreaterThan(
+      at(wipeUserData.mock.invocationCallOrder, 0),
+    );
+  });
+
+  it('wipe rollback keeps the screenshot files (rows still reference them)', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    cancelAll.mockResolvedValue(0);
+    selectShots.mockResolvedValueOnce(['feedback/41.png']);
+    wipeUserData.mockRejectedValueOnce(new Error('boom'));
+    const deps = makeDeps();
+
+    await runBan(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      wipeData: true,
+      kickFromDiscord: false,
+    });
+
+    expect(deleteShots).not.toHaveBeenCalled();
   });
 
   it('wipe failure keeps the ban and audits dataWiped:false (no throw)', async () => {

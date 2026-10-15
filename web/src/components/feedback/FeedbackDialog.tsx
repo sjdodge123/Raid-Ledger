@@ -13,6 +13,9 @@ import { Textarea } from '../ui/textarea';
 import { Checkbox } from '../ui/checkbox';
 import { Button } from '../ui/button';
 import { useMediaQuery } from '../../hooks/use-media-query';
+import { FeedbackScreenshotField } from './FeedbackScreenshotField';
+import { useScreenshotPaste } from './use-screenshot-paste';
+import type { FeedbackScreenshot } from './feedback-screenshot';
 
 /** Text-only labels (ROK-1651 ruling 15: the emoji is dropped). */
 const CATEGORIES: readonly RadioOption<FeedbackCategory>[] = [
@@ -39,34 +42,33 @@ interface FeedbackDialogProps {
     message: string;
     includeClientLogs: boolean;
     isSubmitting: boolean;
+    /** A screenshot is still being read — Send waits so it isn't dropped. */
+    isReadingScreenshot?: boolean;
     sentryError: boolean;
     submitError: Error | null;
     isError: boolean;
     onCategoryChange: (cat: FeedbackCategory) => void;
     onMessageChange: (msg: string) => void;
     onIncludeLogsChange: (include: boolean) => void;
+    screenshot: FeedbackScreenshot | null;
+    screenshotError: string | null;
+    onScreenshotFile: (file: File) => void;
+    onScreenshotRemove: () => void;
     onSubmit: () => void;
     onClose: () => void;
 }
 
-export function FeedbackDialog({
-    showSuccess, category, message, includeClientLogs, isSubmitting,
-    sentryError, submitError, isError, onCategoryChange, onMessageChange,
-    onIncludeLogsChange, onSubmit, onClose,
-}: FeedbackDialogProps): JSX.Element {
+export function FeedbackDialog(props: FeedbackDialogProps): JSX.Element {
+    const { showSuccess, message, isSubmitting, isReadingScreenshot = false, onSubmit, onClose, ...formProps } = props;
     const footer = !showSuccess && (
-        <Button fullWidth loading={isSubmitting} loadingLabel="Sending…" disabled={message.length < MIN_LENGTH} onClick={onSubmit}>
+        <Button fullWidth loading={isSubmitting} loadingLabel="Sending…" disabled={message.length < MIN_LENGTH || isReadingScreenshot}
+            onClick={onSubmit}>
             Send Feedback
         </Button>
     );
     return (
         <Modal isOpen onClose={onClose} title="Send Feedback" footer={footer}>
-            {showSuccess ? <SuccessState /> : (
-                <FeedbackForm category={category} message={message} includeClientLogs={includeClientLogs}
-                    sentryError={sentryError} submitError={submitError} isError={isError}
-                    onCategoryChange={onCategoryChange} onMessageChange={onMessageChange}
-                    onIncludeLogsChange={onIncludeLogsChange} />
-            )}
+            {showSuccess ? <SuccessState /> : <FeedbackForm message={message} {...formProps} />}
         </Modal>
     );
 }
@@ -100,18 +102,23 @@ function errorText(sentryError: boolean, submitError: Error | null): string {
     return submitError?.message || 'Something went wrong. Please try again.';
 }
 
-type FormProps = Omit<FeedbackDialogProps, 'showSuccess' | 'onClose' | 'onSubmit' | 'isSubmitting'>;
+type FormProps = Omit<FeedbackDialogProps, 'showSuccess' | 'onClose' | 'onSubmit' | 'isSubmitting' | 'isReadingScreenshot'>;
 
 function FeedbackForm({
     category, message, includeClientLogs, sentryError, submitError, isError,
     onCategoryChange, onMessageChange, onIncludeLogsChange,
+    screenshot, screenshotError, onScreenshotFile, onScreenshotRemove,
 }: FormProps): JSX.Element {
     const segmented = useMediaQuery(SEGMENTS_FIT);
+    // Only while the form shows: the success state must not swallow a paste.
+    useScreenshotPaste(onScreenshotFile);
     return (
         <div className="flex flex-col gap-4">
             <RadioGroup<FeedbackCategory> label="Category" appearance={segmented ? 'segmented' : 'list'} options={CATEGORIES}
                 value={category} onChange={onCategoryChange} />
             <MessageField message={message} onChange={onMessageChange} />
+            <FeedbackScreenshotField screenshot={screenshot} error={screenshotError}
+                onFile={onScreenshotFile} onRemove={onScreenshotRemove} />
             {category === 'bug' && (
                 <Checkbox label="Capture and send client logs" checked={includeClientLogs}
                     onChange={(e) => onIncludeLogsChange(e.target.checked)} />

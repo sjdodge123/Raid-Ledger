@@ -33,6 +33,10 @@ import {
 } from './users-moderation.helpers';
 import { reassignPugSlots, wipeUserData } from './users-delete.helpers';
 import { revokeGameRoleGrants } from './users-moderation-game-roles.helpers';
+import {
+  deleteUserScreenshotsBestEffort,
+  selectUserScreenshotPaths,
+} from '../feedback/feedback-screenshot-user.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -224,9 +228,14 @@ async function applyBanDataChanges(
   const guild = deps.discord.getGuild?.() ?? null;
   await revokeGameRoleGrants(deps.db, guild, row.id, deps.logger);
   try {
-    await deps.db.transaction(async (tx) => {
+    // ROK-1313: no `user.deleting` here, so collect the feedback screenshot
+    // paths before the rows go and delete the files once the wipe commits.
+    const shots = await deps.db.transaction(async (tx) => {
+      const paths = await selectUserScreenshotPaths(tx, row.id);
       await wipeUserData(tx, row.id, input.actorId);
+      return paths;
     });
+    await deleteUserScreenshotsBestEffort(shots, row.id, deps.logger);
     return true;
   } catch (err: unknown) {
     deps.logger.error(

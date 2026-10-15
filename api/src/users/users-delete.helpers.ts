@@ -17,6 +17,13 @@ import type { AnyPgColumn, PgTable } from 'drizzle-orm/pg-core';
 import { eq, inArray, or } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import { endMarkersInvolvingUser } from '../auth/impersonation/impersonation-markers.db';
+import { Logger } from '@nestjs/common';
+import {
+  deleteUserScreenshotsBestEffort,
+  selectUserScreenshotPaths,
+} from '../feedback/feedback-screenshot-user.helpers';
+
+const logger = new Logger('UserDelete');
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -199,6 +206,10 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // ROK-1785: `granted_by` is SET NULL; the grant belongs to the guild page,
   // not to the admin who made it, so it survives the granter's wipe.
   schema.guildEditors,
+  // ROK-1786: `gm_post_updated_by` / `created_by_user_id` / `updated_by_user_id`
+  // are SET NULL audit columns; the guild's content outlives its editor.
+  schema.guildProfiles,
+  schema.guildRecommendedAddons,
 ];
 
 /**
@@ -298,14 +309,21 @@ export async function wipeUserData(
   await reassignUserEntities(tx, userId, reassignToUserId);
 }
 
-/** Delete a user and cascade all related data in a transaction (ROK-405). */
+/**
+ * Delete a user and cascade all related data in a transaction (ROK-405).
+ * ROK-1313: the user's feedback screenshot paths are collected under row locks
+ * in the same transaction, and the files deleted only once it commits.
+ */
 export async function deleteUserTransaction(
   db: Db,
   userId: number,
   reassignToUserId: number,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  const shots = await db.transaction(async (tx) => {
+    const paths = await selectUserScreenshotPaths(tx, userId);
     await wipeUserData(tx, userId, reassignToUserId);
     await tx.delete(schema.users).where(eq(schema.users.id, userId));
+    return paths;
   });
+  await deleteUserScreenshotsBestEffort(shots, userId, logger);
 }

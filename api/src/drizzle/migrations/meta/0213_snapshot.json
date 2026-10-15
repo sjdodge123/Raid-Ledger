@@ -1,5 +1,5 @@
 {
-  "id": "3755c45f-32f1-4678-a64a-700dafa72815",
+  "id": "48b33cc1-dd91-46d4-878e-f580b2d2cad8",
   "prevId": "1885b6fd-be36-47d9-8790-ecb4106e1ba2",
   "version": "7",
   "dialect": "postgresql",
@@ -11153,6 +11153,117 @@
       },
       "isRLSEnabled": false
     },
+    "public.guild_profiles": {
+      "name": "guild_profiles",
+      "schema": "",
+      "columns": {
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "gm_post": {
+          "name": "gm_post",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_at": {
+          "name": "gm_post_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_by": {
+          "name": "gm_post_updated_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rules": {
+          "name": "rules",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "links": {
+          "name": "links",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_guild_profiles_gm_post_updated_by": {
+          "name": "idx_guild_profiles_gm_post_updated_by",
+          "columns": [
+            {
+              "expression": "gm_post_updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "guild_profiles_guild_id_guilds_id_fk": {
+          "name": "guild_profiles_guild_id_guilds_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "guild_profiles_gm_post_updated_by_users_id_fk": {
+          "name": "guild_profiles_gm_post_updated_by_users_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "gm_post_updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "guild_profiles_gm_post_length": {
+          "name": "guild_profiles_gm_post_length",
+          "value": "char_length(\"guild_profiles\".\"gm_post\") <= 4000"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.calendar_connections": {
       "name": "calendar_connections",
       "schema": "",
@@ -11951,194 +12062,6 @@
         "pelican_schedules_effect_offset_chk": {
           "name": "pelican_schedules_effect_offset_chk",
           "value": "\"pelican_schedules\".\"effect_offset_s\" BETWEEN 0 AND 86400"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "public.discord_game_role_grants": {
-      "name": "discord_game_role_grants",
-      "schema": "",
-      "columns": {
-        "game_role_id": {
-          "name": "game_role_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "discord_user_id": {
-          "name": "discord_user_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "granted_at": {
-          "name": "granted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "idx_discord_game_role_grants_user_id": {
-          "name": "idx_discord_game_role_grants_user_id",
-          "columns": [
-            {
-              "expression": "user_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "discord_game_role_grants_game_role_id_discord_game_roles_id_fk": {
-          "name": "discord_game_role_grants_game_role_id_discord_game_roles_id_fk",
-          "tableFrom": "discord_game_role_grants",
-          "tableTo": "discord_game_roles",
-          "columnsFrom": [
-            "game_role_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "discord_game_role_grants_user_id_users_id_fk": {
-          "name": "discord_game_role_grants_user_id_users_id_fk",
-          "tableFrom": "discord_game_role_grants",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "discord_game_role_grants_pk": {
-          "name": "discord_game_role_grants_pk",
-          "columns": [
-            "game_role_id",
-            "user_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.discord_game_roles": {
-      "name": "discord_game_roles",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "serial",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "game_id": {
-          "name": "game_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "role_id": {
-          "name": "role_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "bot_created": {
-          "name": "bot_created",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "window_days": {
-          "name": "window_days",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 14
-        },
-        "enabled": {
-          "name": "enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "last_reconciled_at": {
-          "name": "last_reconciled_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "discord_game_roles_game_id_games_id_fk": {
-          "name": "discord_game_roles_game_id_games_id_fk",
-          "tableFrom": "discord_game_roles",
-          "tableTo": "games",
-          "columnsFrom": [
-            "game_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "discord_game_roles_game_id_unique": {
-          "name": "discord_game_roles_game_id_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "game_id"
-          ]
-        }
-      },
-      "policies": {},
-      "checkConstraints": {
-        "discord_game_roles_window_days_range": {
-          "name": "discord_game_roles_window_days_range",
-          "value": "\"discord_game_roles\".\"window_days\" BETWEEN 1 AND 365"
         }
       },
       "isRLSEnabled": false

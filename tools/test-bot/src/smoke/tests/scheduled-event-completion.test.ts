@@ -38,9 +38,85 @@ async function rescheduleToThePast(
   });
 }
 
+/** One event's completion outcome from the trigger endpoint (ROK-944). */
+interface SECompletionOutcome {
+  eventId: number;
+  discordEventId: string | null;
+  from: string | null;
+  to: string | null;
+  ok: boolean;
+  errorCode?: number | string;
+  errorMessage?: string;
+}
+
+/** Trigger endpoint response — `outcomes`/`reason` are additive (ROK-944). */
+interface SECompletionTriggerResult {
+  success: boolean;
+  outcomes?: SECompletionOutcome[];
+  reason?: string;
+}
+
 /** Trigger the scheduled event completion cron via the test-only endpoint. */
-async function triggerCompletion(ctx: TestContext): Promise<void> {
-  await ctx.api.post('/admin/test/trigger-scheduled-event-completion', {});
+async function triggerCompletion(
+  ctx: TestContext,
+): Promise<SECompletionTriggerResult> {
+  return ctx.api.post<SECompletionTriggerResult>(
+    '/admin/test/trigger-scheduled-event-completion',
+    {},
+  );
+}
+
+/**
+ * Status of the captured Discord Scheduled Event, read by id via the bot's
+ * Discord API (HTTP, not cache). `null` = Discord no longer has it (10070),
+ * which the final check below also treats as completed-and-cleaned-up.
+ */
+async function fetchScheduledEventStatus(
+  seId: string,
+): Promise<GuildScheduledEventStatus | null> {
+  try {
+    const se = await getGuild().scheduledEvents.fetch({
+      guildScheduledEvent: seId,
+      force: true,
+    });
+    return se.status;
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10070) return null;
+    throw err;
+  }
+}
+
+/**
+ * Fail loudly — naming the Discord error code/message — when the completion
+ * pass did not complete THIS event (ROK-944: the pool-0 failure was a silent
+ * poll timeout because the trigger always said success). No outcome for our
+ * event is accepted only when the background cron already completed it
+ * between the reschedule and the trigger (it then has no Discord binding, so
+ * the pass's candidate query skips it).
+ */
+async function assertOwnOutcomeOk(
+  result: SECompletionTriggerResult,
+  eventId: number,
+  seId: string,
+): Promise<void> {
+  const own = result.outcomes?.find((o) => o.eventId === eventId);
+  if (own?.ok) return;
+  // The 5-minute background completion pass can finish this event before or
+  // during the trigger (missing outcome, or ok:false no-discord-event-id), so
+  // Discord's own status decides: Completed or gone (10070) is success.
+  const status = await fetchScheduledEventStatus(seId);
+  if (status === null || status === GuildScheduledEventStatus.Completed) {
+    return;
+  }
+  const detail = own
+    ? `failed ${own.from ?? '?'} -> ${own.to ?? '?'}: ` +
+      `code=${own.errorCode ?? 'none'} message=${own.errorMessage ?? 'none'}`
+    : `was not reached by the completion pass (reason=${result.reason ?? 'none'}, ` +
+      `success=${result.success}, outcomes=${JSON.stringify(result.outcomes ?? [])})`;
+  throw new Error(
+    `ROK-944: completing event ${eventId} (SE ${seId}) ${detail}; ` +
+      `SE is ${GuildScheduledEventStatus[status]}, not Completed`,
+  );
 }
 
 /**
@@ -108,8 +184,9 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
       await awaitProcessing(ctx.api);
       await flushEmbedQueue(ctx.api);
 
-      // Trigger the completion cron
-      await triggerCompletion(ctx);
+      // Trigger the completion cron; its own outcome must be ok (ROK-944)
+      const result = await triggerCompletion(ctx);
+      await assertOwnOutcomeOk(result, ev.id, created.id);
       await awaitProcessing(ctx.api);
 
       // Poll for the scheduled event to reach Completed status or be removed.
