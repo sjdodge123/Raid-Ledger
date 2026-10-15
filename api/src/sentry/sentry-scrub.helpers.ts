@@ -2,8 +2,10 @@
  * ROK-1592 (plan L13): redact secrets from a Sentry event before it leaves.
  *
  * `instrument.ts` must load first in main.ts, so this file imports nothing.
- * It mutates the event in place and returns the same object (beforeSend's
- * other branches return `event` by identity).
+ * ROK-1779: never writes to the objects it is handed — each scrubbed field
+ * is replaced by a scrubbed copy (cycle-safe, depth-bounded, never throws;
+ * mirrors `sentry-pii.helpers.ts`). Returns the same event object
+ * (beforeSend's other branches return `event` by identity).
  *
  * - Any key matching SECRET_KEY, at any depth, in `request`, `extra`,
  *   `contexts` and `breadcrumbs`, becomes REDACTED.
@@ -62,44 +64,92 @@ function isSecretKey(key: string, inRequest: boolean): boolean {
 
 interface Walk {
   inRequest: boolean;
-  seen: WeakSet<object>;
+  /** The current path's ancestors — a repeat is a cycle. */
+  ancestors: Set<object>;
 }
 
-function scrubArray(arr: unknown[], walk: Walk, depth: number): void {
+const CIRCULAR = '[circular]';
+const TRUNCATED = '[truncated]';
+type ScrubField = 'request' | 'spans' | 'extra' | 'contexts' | 'breadcrumbs';
+const FIELDS: ReadonlyArray<[ScrubField, boolean]> = [
+  ['request', true],
+  ['spans', true],
+  ['extra', false],
+  ['contexts', false],
+  ['breadcrumbs', false],
+];
+
+function scrubArray(arr: readonly unknown[], walk: Walk, depth: number) {
+  const out = arr.map((v: unknown) => scrubValue(v, walk, depth + 1));
   // Sentry's query_string may be `[name, value]` pairs.
   const [name] = arr;
-  if (arr.length === 2 && typeof name === 'string') {
-    if (isSecretKey(name, walk.inRequest)) arr[1] = REDACTED;
+  if (
+    arr.length === 2 &&
+    typeof name === 'string' &&
+    isSecretKey(name, walk.inRequest)
+  ) {
+    out[1] = REDACTED;
   }
-  arr.forEach((v, i) => {
-    arr[i] = scrubValue(v, walk, depth + 1);
-  });
+  return out;
 }
 
+/** Copy an object's own keys (plus an Error's name/message/stack), scrubbing each. */
+function copyEntries(obj: object, walk: Walk, depth: number) {
+  const out: Record<string, unknown> = {};
+  if (obj instanceof Error) {
+    out['name'] = obj.name;
+    out['message'] = scrubString(obj.message);
+    if (typeof obj.stack === 'string') out['stack'] = scrubString(obj.stack);
+  }
+  for (const key of Object.keys(obj)) {
+    out[key] = isSecretKey(key, walk.inRequest)
+      ? REDACTED
+      : scrubValue(Reflect.get(obj, key), walk, depth + 1);
+  }
+  return out;
+}
+
+/**
+ * Return a scrubbed COPY: request/extra/contexts can hold objects the app
+ * still owns, so they are never written to — a frozen one would throw.
+ * Cycles and depth are bounded.
+ */
 function scrubValue(value: unknown, walk: Walk, depth: number): unknown {
   if (typeof value === 'string') return scrubString(value);
-  if (!value || typeof value !== 'object' || depth > MAX_DEPTH) return value;
-  if (walk.seen.has(value)) return value;
-  walk.seen.add(value);
-  if (Array.isArray(value)) {
-    scrubArray(value as unknown[], walk, depth);
+  if (!value || typeof value !== 'object' || value instanceof Date) {
     return value;
   }
-  const obj = value as Record<string, unknown>;
-  for (const key of Object.keys(obj)) {
-    obj[key] = isSecretKey(key, walk.inRequest)
-      ? REDACTED
-      : scrubValue(obj[key], walk, depth + 1);
+  if (walk.ancestors.has(value)) return CIRCULAR;
+  if (depth > MAX_DEPTH) return TRUNCATED;
+  walk.ancestors.add(value);
+  try {
+    return Array.isArray(value)
+      ? scrubArray(value, walk, depth)
+      : copyEntries(value, walk, depth);
+  } finally {
+    walk.ancestors.delete(value);
   }
-  return obj;
+}
+
+/** Replace `target[key]` with its scrubbed copy; drop the field if that throws. */
+function replaceField(
+  target: ScrubbableEvent,
+  key: ScrubField,
+  inRequest: boolean,
+): void {
+  const value = target[key];
+  if (value === undefined) return;
+  try {
+    target[key] = scrubValue(value, { inRequest, ancestors: new Set() }, 0);
+  } catch {
+    Reflect.deleteProperty(target, key);
+  }
 }
 
 export function scrubSecrets<T extends ScrubbableEvent>(event: T): T {
-  const seen = new WeakSet<object>();
-  scrubValue(event.request, { inRequest: true, seen }, 0);
-  scrubValue(event.spans, { inRequest: true, seen }, 0);
-  for (const part of [event.extra, event.contexts, event.breadcrumbs]) {
-    scrubValue(part, { inRequest: false, seen }, 0);
+  const target: ScrubbableEvent = event;
+  for (const [field, inRequest] of FIELDS) {
+    replaceField(target, field, inRequest);
   }
   for (const ex of event.exception?.values ?? []) {
     if (typeof ex.value === 'string') ex.value = scrubString(ex.value);

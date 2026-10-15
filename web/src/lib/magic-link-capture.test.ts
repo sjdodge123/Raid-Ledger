@@ -112,8 +112,18 @@ describe('ROK-1366: index.html runs nothing that can read the fragment before th
 });
 
 describe('ROK-1366: tooltips.js is injected by the entry, only after the strip', () => {
-    it("is injected by main.tsx's second import, straight after ./lib/magic-link-capture", () => {
-        expect(importsOf('../main.tsx').slice(0, 2)).toEqual(['./lib/magic-link-capture', './lib/wowhead-tooltips-loader']);
+    it('is injected by the lazily imported app-entry.tsx, never statically by main.tsx', () => {
+        // ROK-1779: main.tsx awaits the telemetry decision before importing the
+        // app, so a loader in main.tsx would let tooltips.js run (and patch
+        // fetch/XHR) before native-fetch.ts captured them.
+        expect(importsOf('../main.tsx')).not.toContain('./lib/wowhead-tooltips-loader');
+        expect(readFileSync(join(here, '../main.tsx'), 'utf8')).toContain("import('./app-entry')");
+    });
+
+    it("is app-entry.tsx's last import, after ./App.tsx (native-fetch.ts captured first)", () => {
+        const specifiers = importsOf('../app-entry.tsx');
+        expect(specifiers.indexOf('./App.tsx')).toBeGreaterThanOrEqual(0);
+        expect(specifiers.at(-1)).toBe('./lib/wowhead-tooltips-loader');
     });
 
     it('the loader imports nothing, so it cannot evaluate anything ahead of the strip', () => {

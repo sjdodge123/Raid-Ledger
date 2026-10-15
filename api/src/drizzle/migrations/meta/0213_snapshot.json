@@ -1,5 +1,5 @@
 {
-  "id": "0f5e4aac-e6b4-4d2a-90e5-5dce9eb25f47",
+  "id": "48b33cc1-dd91-46d4-878e-f580b2d2cad8",
   "prevId": "1885b6fd-be36-47d9-8790-ecb4106e1ba2",
   "version": "7",
   "dialect": "postgresql",
@@ -11153,6 +11153,117 @@
       },
       "isRLSEnabled": false
     },
+    "public.guild_profiles": {
+      "name": "guild_profiles",
+      "schema": "",
+      "columns": {
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "gm_post": {
+          "name": "gm_post",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_at": {
+          "name": "gm_post_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_by": {
+          "name": "gm_post_updated_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rules": {
+          "name": "rules",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "links": {
+          "name": "links",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_guild_profiles_gm_post_updated_by": {
+          "name": "idx_guild_profiles_gm_post_updated_by",
+          "columns": [
+            {
+              "expression": "gm_post_updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "guild_profiles_guild_id_guilds_id_fk": {
+          "name": "guild_profiles_guild_id_guilds_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "guild_profiles_gm_post_updated_by_users_id_fk": {
+          "name": "guild_profiles_gm_post_updated_by_users_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "gm_post_updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "guild_profiles_gm_post_length": {
+          "name": "guild_profiles_gm_post_length",
+          "value": "char_length(\"guild_profiles\".\"gm_post\") <= 4000"
+        }
+      },
+      "isRLSEnabled": false
+    },
     "public.calendar_connections": {
       "name": "calendar_connections",
       "schema": "",
@@ -11688,78 +11799,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.calendar_feeds": {
-      "name": "calendar_feeds",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_encrypted": {
-          "name": "token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rotated_at": {
-          "name": "rotated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_fetched_at": {
-          "name": "last_fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "calendar_feeds_user_id_users_id_fk": {
-          "name": "calendar_feeds_user_id_users_id_fk",
-          "tableFrom": "calendar_feeds",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "calendar_feeds_token_hash_unique": {
-          "name": "calendar_feeds_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

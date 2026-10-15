@@ -62,8 +62,11 @@ services:
       CORS_ORIGIN: http://localhost:80
       ADMIN_PASSWORD: "${ADMIN_PASSWORD:-}"
       BACKUP_DIR: /data/backups
-      # ROK-306: Sentry telemetry opt-out — uncomment to disable error tracking.
-      # DISABLE_TELEMETRY: "true"
+      # ROK-306/ROK-1779: Sentry error reporting is OPT-IN (off when unset) for
+      # the API and (via /system/status) the web app. Uncomment to opt in; the
+      # maintainers' production instance must set it to keep reporting.
+      # DISABLE_TELEMETRY: "true" forces it off even when this is set.
+      # ENABLE_TELEMETRY: "true"
     volumes:
       - avatar_data:/data
     ports:

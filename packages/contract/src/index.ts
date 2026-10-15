@@ -22,6 +22,9 @@ export * from './signups.schema.js';
 // Characters
 export * from './characters.schema.js';
 
+// Character saved instances (ROK-1743)
+export * from './character-lockouts.schema.js';
+
 // Availability
 export * from './availability.schema.js';
 
@@ -213,3 +216,5 @@ export * from './ledgerlink-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+// Guild page content — GM post, rules, links, recommended addons (ROK-1786).
+export * from './guild-content.schema.js';

@@ -56,10 +56,11 @@ import { SlowQueriesModule } from './slow-queries/slow-queries.module';
 import { CspReportModule } from './csp-report/csp-report.module';
 import { GamesLookupModule } from './games-lookup/games-lookup.module';
 import { CalendarSyncModule } from './calendar-sync/calendar-sync.module';
+import { API_ENV_FILE } from './sentry/telemetry-policy';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env' }),
+    ConfigModule.forRoot({ isGlobal: true, envFilePath: API_ENV_FILE }),
     EventEmitterModule.forRoot({ maxListeners: 50 }),
     ScheduleModule.forRoot(),
     RateLimitModule,

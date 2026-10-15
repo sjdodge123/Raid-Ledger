@@ -1,5 +1,7 @@
+import { BINDING_PURPOSE_LABELS } from '@raid-ledger/contract';
 import {
   SlashCommandBuilder,
+  type SlashCommandStringOption,
   ChannelType,
   PermissionFlagsBits,
   type RESTPostAPIChatInputApplicationCommandsJSONBody,
@@ -41,5 +43,25 @@ export function buildBindDefinition(): RESTPostAPIChatInputApplicationCommandsJS
         .setDescription('Event series (recurrence group)')
         .setAutocomplete(true),
     )
+    .addStringOption(addPurposeOption)
     .toJSON();
+}
+
+/** ROK-1768: text purposes only; voice purposes stay detected. */
+function addPurposeOption(
+  opt: SlashCommandStringOption,
+): SlashCommandStringOption {
+  return opt
+    .setName('purpose')
+    .setDescription('Text-channel purpose (voice purposes are detected)')
+    .addChoices(
+      {
+        name: BINDING_PURPOSE_LABELS['game-announcements'],
+        value: 'game-announcements',
+      },
+      {
+        name: BINDING_PURPOSE_LABELS['quick-play-announcements'],
+        value: 'quick-play-announcements',
+      },
+    );
 }

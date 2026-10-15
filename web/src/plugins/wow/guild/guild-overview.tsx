@@ -1,7 +1,8 @@
 /**
  * ROK-1785 — the Overview tab: the prototype's bento widget grid
  * (`layout/OverviewTab.tsx`) — 3 columns at ≥1024px, 2 at ≥768px, 1 on phone.
- * S1 ships the Members summary (+ the GM's "Page editors" card); later stories
+ * S1 ships the Members summary (+ the GM's "Page editors" card); S2 the GM
+ * post (span 2, top); later stories
  * drop their widgets into the same grid.
  */
 import type { JSX } from 'react';
@@ -9,6 +10,7 @@ import type { GuildPage } from '@raid-ledger/contract';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { WidgetCard } from './guild-bits';
 import { GuildEditorsCard } from './guild-editors-panel';
+import { GmPostCard } from './gm-post-card';
 import { rankLabel } from './guild-roster.helpers';
 import { RoleSummary } from './role-bits';
 
@@ -49,6 +51,7 @@ function MembersSummary({ page }: { page: GuildPage }): JSX.Element {
 export function GuildOverview({ page }: { page: GuildPage }): JSX.Element {
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+            <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} />
             <MembersSummary page={page} />
             {page.viewer.canManageEditors && (
                 <div className="md:col-span-2"><GuildEditorsCard page={page} /></div>

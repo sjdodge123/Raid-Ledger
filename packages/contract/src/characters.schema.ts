@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { WowForeverRulesetSchema, WowForeverSelectableRulesetSchema } from './blizzard.schema.js';
+import { CharacterLockoutsSchema } from './character-lockouts.schema.js';
 
 // ==========================================
 // Character Role Enum
@@ -209,6 +210,8 @@ export const CharacterSchema = z.object({
     gameVariant: z.string().max(30).nullable(),
     equipment: CharacterEquipmentSchema.nullable(),
     talents: z.unknown().nullable(),
+    /** ROK-1743: addon saved instances (read-time, Forever only). */
+    lockouts: CharacterLockoutsSchema.optional(),
     professions: CharacterProfessionsSchema.nullable(),
     /** Cached enrichment data from third-party APIs (ROK-269) */
     enrichments: z.array(z.object({
