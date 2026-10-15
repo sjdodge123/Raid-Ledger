@@ -67,7 +67,7 @@ export function parseStoredLinks(value: unknown): GuildLinkGroup[] {
   return parsed.success ? parsed.data : [];
 }
 
-type ProfilePatch = Omit<Partial<GuildProfileInsert>, 'guildId'> & {
+export type ProfilePatch = Omit<Partial<GuildProfileInsert>, 'guildId'> & {
   updatedAt: Date;
 };
 
@@ -95,6 +95,24 @@ export function buildProfilePatch(
     patch.links = links.length > 0 ? links : null;
   }
   return patch;
+}
+
+/**
+ * The GM post's `_updated_at` / `_by` stamp moves only when the post text
+ * actually changes; re-saving the same text leaves the stored stamp alone.
+ */
+export function dropUnchangedGmPost(
+  patch: ProfilePatch,
+  stored: string | null | undefined,
+): ProfilePatch {
+  if (patch.gmPost === undefined || patch.gmPost !== (stored ?? null)) {
+    return patch;
+  }
+  const { gmPost, gmPostUpdatedAt, gmPostUpdatedBy, ...rest } = patch;
+  void gmPost;
+  void gmPostUpdatedAt;
+  void gmPostUpdatedBy;
+  return rest;
 }
 
 /** Map a stored row (or none yet) to the contract `GuildProfile`. */
