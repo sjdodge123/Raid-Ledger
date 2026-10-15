@@ -56,6 +56,8 @@ const ymd = (d: Date): string => d.toISOString().slice(0, 10);
 @Injectable()
 export class GameRoleReconcileService {
   private readonly logger = new Logger(GameRoleReconcileService.name);
+  /** Per-run Discord mutation budget; a field so tests can shrink it. */
+  mutationCap = GAME_ROLE_MUTATION_CAP;
 
   constructor(
     @Inject(DrizzleAsyncProvider) private readonly db: GameRoleDb,
@@ -83,13 +85,13 @@ export class GameRoleReconcileService {
     }
     const rows = await loadEnabledGameRoles(this.db, opts.gameId);
     const state: RunState = {
-      budget: GAME_ROLE_MUTATION_CAP,
+      budget: this.mutationCap,
       result: { added: 0, removed: 0, skippedOverCap: 0, failedGames: [] },
     };
     for (const row of rows) await this.reconcileGuarded(guild, row, state);
     if (state.result.skippedOverCap > 0) {
       this.logger.warn(
-        `[ROK-1767] Mutation cap ${GAME_ROLE_MUTATION_CAP} reached; ` +
+        `[ROK-1767] Mutation cap ${this.mutationCap} reached; ` +
           `${state.result.skippedOverCap} change(s) left for the next run`,
       );
     }

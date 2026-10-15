@@ -1,0 +1,251 @@
+/**
+ * ROK-1767 — GameRoleReconcileService against a real DB with the Discord
+ * helpers mocked: adds/removes applied and audited, grants only for bot adds,
+ * the mutation cap, per-game failure isolation (Sentry), and grantNow's
+ * opt-out gate.
+ */
+import * as Sentry from '@sentry/nestjs';
+import { eq } from 'drizzle-orm';
+import { GAME_ROLES_OPT_OUT_PREF_KEY } from '@raid-ledger/contract';
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import { truncateAllTables } from '../../common/testing/integration-helpers';
+import { nonEmpty } from '../../common/testing/narrow';
+import * as schema from '../../drizzle/schema';
+import type { CronJobService } from '../../cron-jobs/cron-job.service';
+import type { DiscordBotClientService } from '../discord-bot-client.service';
+import * as discord from './game-role-discord.helpers';
+import { GameRoleReconcileService } from './game-role-reconcile.service';
+
+jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
+jest.mock('./game-role-discord.helpers');
+const mocked = jest.mocked(discord);
+
+const GUILD = { id: 'guild-1' };
+let testApp: TestApp;
+let service: GameRoleReconcileService;
+let seq = 0;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mocked.addMemberRole.mockResolvedValue(true);
+  mocked.removeMemberRole.mockResolvedValue(true);
+  const bot = { getGuild: () => GUILD } as unknown as DiscordBotClientService;
+  const cron = {} as CronJobService;
+  service = new GameRoleReconcileService(testApp.db, cron, bot);
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+async function makeUser(): Promise<{ id: number; discordId: string }> {
+  seq += 1;
+  const discordId = `91000000000000${seq}`;
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({ discordId, username: `grr-${seq}`, role: 'member' })
+      .returning(),
+    'user',
+  );
+  return { id: u.id, discordId };
+}
+
+async function makeGame(name: string): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name, slug: `grr-${name}-${seq}`, igdbId: null })
+      .returning(),
+    'game',
+  );
+  return g.id;
+}
+
+async function link(gameId: number, roleId: string): Promise<number> {
+  const [r] = nonEmpty(
+    await testApp.db
+      .insert(schema.discordGameRoles)
+      .values({ gameId, roleId, windowDays: 14 })
+      .returning(),
+    'link',
+  );
+  return r.id;
+}
+
+async function played(userId: number, gameId: number, days: number) {
+  await testApp.db.insert(schema.gameActivitySessions).values({
+    userId,
+    gameId,
+    discordActivityName: 'Game',
+    startedAt: new Date(Date.now() - days * 86_400_000),
+  });
+}
+
+async function grant(gameRoleId: number, u: { id: number; discordId: string }) {
+  await testApp.db
+    .insert(schema.discordGameRoleGrants)
+    .values({ gameRoleId, userId: u.id, discordUserId: u.discordId });
+}
+
+const grantsOf = async (gameRoleId: number) =>
+  (
+    await testApp.db
+      .select()
+      .from(schema.discordGameRoleGrants)
+      .where(eq(schema.discordGameRoleGrants.gameRoleId, gameRoleId))
+  ).map((g) => g.userId);
+
+const auditOf = async (gameRoleId: number) =>
+  (
+    await testApp.db
+      .select()
+      .from(schema.activityLog)
+      .where(eq(schema.activityLog.entityId, gameRoleId))
+  ).map((a) => ({
+    action: a.action,
+    reason: (a.metadata as { reason: string }).reason,
+  }));
+
+function liveState(holders: string[], members: string[]): void {
+  mocked.fetchRoleState.mockResolvedValue({
+    holders: new Set(holders),
+    memberIds: new Set(members),
+  });
+}
+
+describe('GameRoleReconcileService (ROK-1767)', () => {
+  it('adds players, removes idle bot grants, never touches hand-assigned holders', async () => {
+    const gameId = await makeGame('Valheim');
+    const roleRowId = await link(gameId, 'role-1');
+    const [player, idler, handHolder] = [
+      await makeUser(),
+      await makeUser(),
+      await makeUser(),
+    ];
+    await played(player.id, gameId, 1);
+    await played(idler.id, gameId, 30);
+    await grant(roleRowId, idler);
+    liveState(
+      [idler.discordId, handHolder.discordId],
+      [player.discordId, idler.discordId, handHolder.discordId],
+    );
+
+    const result = await service.runReconciliation();
+
+    expect(result).toEqual({
+      added: 1,
+      removed: 1,
+      skippedOverCap: 0,
+      failedGames: [],
+    });
+    expect(mocked.addMemberRole).toHaveBeenCalledWith(
+      GUILD,
+      player.discordId,
+      'role-1',
+      expect.stringMatching(/^played /),
+    );
+    expect(mocked.removeMemberRole).toHaveBeenCalledWith(
+      GUILD,
+      idler.discordId,
+      'role-1',
+      expect.stringMatching(/^idle since /),
+    );
+    expect(mocked.removeMemberRole).not.toHaveBeenCalledWith(
+      GUILD,
+      handHolder.discordId,
+      expect.anything(),
+      expect.anything(),
+    );
+    expect(await grantsOf(roleRowId)).toEqual([player.id]);
+    const audit = await auditOf(roleRowId);
+    expect(audit.map((a) => a.action).sort()).toEqual([
+      'role_added',
+      'role_removed',
+    ]);
+    expect(audit.find((a) => a.action === 'role_removed')?.reason).toMatch(
+      /^idle since /,
+    );
+  });
+
+  it('stops at the mutation cap and reports the remainder', async () => {
+    const gameId = await makeGame('Cap Game');
+    const roleRowId = await link(gameId, 'role-cap');
+    const users = [await makeUser(), await makeUser(), await makeUser()];
+    for (const u of users) await played(u.id, gameId, 1);
+    liveState(
+      [],
+      users.map((u) => u.discordId),
+    );
+    service.mutationCap = 2;
+
+    const result = await service.runReconciliation();
+
+    expect(result).toEqual({
+      added: 2,
+      removed: 0,
+      skippedOverCap: 1,
+      failedGames: [],
+    });
+    expect(mocked.addMemberRole).toHaveBeenCalledTimes(2);
+    expect(await grantsOf(roleRowId)).toHaveLength(2);
+  });
+
+  it('isolates a failing game: reports it to Sentry and still runs the next', async () => {
+    const broken = await makeGame('Broken');
+    const fine = await makeGame('Fine');
+    await link(broken, 'role-broken');
+    const fineRowId = await link(fine, 'role-fine');
+    const u = await makeUser();
+    await played(u.id, fine, 1);
+    mocked.fetchRoleState.mockImplementation((_g, roleId) =>
+      roleId === 'role-broken'
+        ? Promise.reject(new Error('discord down'))
+        : Promise.resolve({
+            holders: new Set<string>(),
+            memberIds: new Set([u.discordId]),
+          }),
+    );
+
+    const result = await service.runReconciliation();
+
+    expect(result).toEqual({
+      added: 1,
+      removed: 0,
+      skippedOverCap: 0,
+      failedGames: [broken],
+    });
+    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+      tags: { gameId: String(broken) },
+    });
+    expect(await grantsOf(fineRowId)).toEqual([u.id]);
+  });
+
+  it('grantNow adds a new player but skips one who opted out', async () => {
+    const gameId = await makeGame('Live');
+    const roleRowId = await link(gameId, 'role-live');
+    const [keen, optedOut] = [await makeUser(), await makeUser()];
+    await testApp.db.insert(schema.userPreferences).values({
+      userId: optedOut.id,
+      key: GAME_ROLES_OPT_OUT_PREF_KEY,
+      value: true,
+    });
+    mocked.memberHoldsRole.mockResolvedValue(false);
+
+    expect(await service.grantNow(optedOut.id, gameId)).toBe(false);
+    expect(await service.grantNow(keen.id, gameId)).toBe(true);
+
+    expect(mocked.addMemberRole).toHaveBeenCalledTimes(1);
+    expect(mocked.addMemberRole).toHaveBeenCalledWith(
+      GUILD,
+      keen.discordId,
+      'role-live',
+      expect.stringMatching(/^played /),
+    );
+    expect(await grantsOf(roleRowId)).toEqual([keen.id]);
+  });
+});
