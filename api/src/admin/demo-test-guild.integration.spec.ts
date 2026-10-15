@@ -171,3 +171,60 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
     expect(members).toHaveLength(5);
   });
 });
+
+describe('POST /admin/test/wow/seed-guild — guild raids (ROK-1787)', () => {
+  it('seeds a tagged weekly series + a past raid the raids endpoint reads', async () => {
+    const out = await seedGuild('Raid Keepers');
+    expect(out.raids.seriesEventIds).toHaveLength(3);
+    const res = await testApp.request
+      .get(`/plugins/wow/guilds/${out.guildId}/raids`)
+      .set('Authorization', `Bearer ${tokenFor(out.users.gm)}`);
+    expect(res.status).toBe(200);
+    const [firstNight] = out.raids.seriesEventIds;
+    expect(res.body.schedule).toEqual([
+      expect.objectContaining({
+        recurrenceGroupId: out.raids.seriesGroupId,
+        eventId: firstNight,
+        frequency: 'weekly',
+        isNext: true,
+      }),
+    ]);
+    expect(res.body.upcoming[0]).toMatchObject({
+      id: firstNight,
+      viewerStatus: 'signed_up',
+      signupCount: 3,
+      needed: 20,
+    });
+    expect(res.body.composition.roles).toEqual([
+      { role: 'tank', filled: 1, needed: 2 },
+      { role: 'healer', filled: 1, needed: 4 },
+      { role: 'dps', filled: 0, needed: 14 },
+    ]);
+    expect(res.body.composition.benched).toEqual([
+      { characterId: out.users.member.characterId, name: 'Dainel' },
+    ]);
+    expect(res.body.recent).toEqual([
+      expect.objectContaining({
+        id: out.raids.pastEventId,
+        signedUp: 2,
+        attended: 1,
+      }),
+    ]);
+    const att = res.body.attendance.rows as {
+      userId: number;
+      attended: number;
+      of: number;
+    }[];
+    expect(att.map((r) => [r.userId, r.attended, r.of])).toEqual([
+      [out.users.member.userId, 1, 1],
+      [out.users.gm.userId, 0, 1],
+      [out.users.officer.userId, 0, 1],
+    ]);
+  });
+
+  it('is idempotent: a re-call returns the same raid ids', async () => {
+    const first = await seedGuild('Raid Twice Keepers');
+    const second = await seedGuild('Raid Twice Keepers');
+    expect(second.raids).toEqual(first.raids);
+  });
+});
