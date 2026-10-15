@@ -16,6 +16,7 @@ import {
   type ServerPresenceMemberInfo,
   type SteamUpsertOutcome,
 } from './ad-hoc-steam-participant.helpers';
+import { withParticipantLock } from './ad-hoc-participant-lock';
 
 export type { ServerPresenceMemberInfo, SteamUpsertOutcome };
 
@@ -94,8 +95,19 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<boolean> {
-    if (await this.mergeIntoServerRow(eventId, member)) return false;
-    const [row] = await this.db
+    return withParticipantLock(this.db, eventId, member.userId, (db) =>
+      this.upsertParticipantOn(db, eventId, member),
+    );
+  }
+
+  /** The upsert itself, on the (possibly locked) handle. */
+  private async upsertParticipantOn(
+    db: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<boolean> {
+    if (await this.mergeIntoServerRow(db, eventId, member)) return false;
+    const [row] = await db
       .insert(schema.adHocParticipants)
       .values({
         eventId,
@@ -125,12 +137,13 @@ export class AdHocParticipantService {
    * participant — the voice identity joins their Steam row.
    */
   private async mergeIntoServerRow(
+    db: PostgresJsDatabase<typeof schema>,
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<boolean> {
     const { userId } = member;
     if (userId === null) return false;
-    return attachDiscordToUserRow(this.db, eventId, { ...member, userId });
+    return attachDiscordToUserRow(db, eventId, { ...member, userId });
   }
 
   /**
@@ -191,7 +204,12 @@ export class AdHocParticipantService {
     eventId: number,
     member: ServerPresenceMemberInfo,
   ): Promise<SteamUpsertOutcome> {
-    const outcome = await upsertSteamParticipant(this.db, eventId, member);
+    const outcome = await withParticipantLock(
+      this.db,
+      eventId,
+      member.userId,
+      (db) => upsertSteamParticipant(db, eventId, member),
+    );
     if (outcome === 'inserted') {
       this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
         eventId,
@@ -202,8 +220,16 @@ export class AdHocParticipantService {
   }
 
   /** ROK-1800: close a Steam-only row when the player leaves the server. */
-  markServerLeave(eventId: number, steamId: string): Promise<boolean> {
-    return markSteamLeave(this.db, eventId, steamId);
+  async markServerLeave(eventId: number, steamId: string): Promise<boolean> {
+    const closed = await markSteamLeave(this.db, eventId, steamId);
+    if (closed) {
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
+        eventId,
+        discordUserId: null,
+        steamId,
+      } satisfies AdHocParticipantLeftPayload);
+    }
+    return closed;
   }
 
   /**
