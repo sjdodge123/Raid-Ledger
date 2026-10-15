@@ -39,12 +39,17 @@ export function useGuildPage(guildId: number): UseQueryResult<GuildPage, Error> 
     });
 }
 
-/** ROK-1787: Raids tab + Overview widgets + hero chip. Membership-gated, so viewer-scoped like the page. */
+/**
+ * ROK-1787: Raids tab + Overview widgets + hero chip. Membership-gated, so viewer-scoped like the page.
+ * Signup/roster/event mutations are core and never invalidate this plugin key, so it is always stale:
+ * every guild-page mount refetches instead of serving the app-wide 5-minute cache.
+ */
 export function useGuildRaids(guildId: number): UseQueryResult<GuildRaidsDto, Error> {
     const viewer = useViewerCacheScope();
     return useQuery({
         queryKey: [...guildPageKey(guildId), 'raids', viewer],
         queryFn: () => fetchGuildRaids(guildId),
+        staleTime: 0,
         enabled: guildId > 0,
         retry: retryUnlessClientError,
     });
