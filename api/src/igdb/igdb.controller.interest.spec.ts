@@ -9,7 +9,7 @@
  * The GameInterestResponseSchema source field is also validated.
  *
  * Query chain analysis for removeWantToPlay:
- *   1. Check existing: db.select({source}).from(gameInterests).where(and(...)).limit(1) → terminates at .limit(1)
+ *   1. All sources: db.select({source}).from(gameInterests).where(and(...)) → terminates at .where() (ROK-1796)
  *   2. Insert suppression (if discord): db.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
  *   3. Delete: db.delete(gameInterests).where(and(...)) → terminates at .where()
  *   4. Count: db.select({count}).from(gameInterests).where(eq(...)) → terminates at .where() (no limit)
@@ -18,6 +18,7 @@
  * Query chain analysis for addWantToPlay:
  *   1. Game exists: db.select({id}).from(games).where(eq(...)).limit(1) → terminates at .limit(1)
  *   2. Insert: db.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
+ *   2b. Clear suppression: db.delete(suppressions).where(and(...)) → terminates at .where() (ROK-1796)
  *   3. Count: db.select({count}).from(gameInterests).where(eq(...)) → terminates at .where() (no limit)
  *   4. getInterestedPlayers: ...innerJoin(...).where(...).orderBy(...).limit(8) → terminates at .limit(8)
  *
@@ -364,6 +365,10 @@ function describeIgdbControllerAddWantToPlaySourceManual() {
         return db;
       }
       if (whereCallCount === 2) {
+        // clear suppression delete (ROK-1796) — terminal
+        return Promise.resolve(undefined);
+      }
+      if (whereCallCount === 3) {
         // count query — terminal
         return Promise.resolve([{ count: 1 }]);
       }
@@ -429,7 +434,7 @@ describe('IgdbController.addWantToPlay — source: manual (ROK-444)', () =>
 function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   /**
    * removeWantToPlay query sequence:
-   *   1. db.select({source}).from(gameInterests).where(and(...)).limit(1)  ← .limit(1) terminal
+   *   1. db.select({source}).from(gameInterests).where(and(...))  ← .where() terminal (ROK-1796)
    *   2. db.insert(suppressions).values({userId, gameId}).onConflictDoNothing()  ← if discord
    *   3. db.delete(gameInterests).where(and(...))  ← .where() terminal
    *   4. db.select({count}).from(gameInterests).where(eq(...))  ← .where() terminal (2nd where after delete chain)
@@ -456,19 +461,8 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
       db[m] = jest.fn().mockReturnThis();
     }
 
-    // .limit() calls:
-    //   1st: existing interest check → returns [{source}] or []
-    //   2nd+: getInterestedPlayers → returns []
-    let limitCallCount = 0;
-    db.limit = jest.fn().mockImplementation(() => {
-      limitCallCount++;
-      if (limitCallCount === 1) {
-        return Promise.resolve(
-          existingSource ? [{ source: existingSource }] : [],
-        );
-      }
-      return Promise.resolve([]);
-    });
+    // .limit() calls: getInterestedPlayers → returns []
+    db.limit = jest.fn().mockResolvedValue([]);
 
     // .where() calls:
     //   1st call chains (part of existing interest query — continues to .limit)
@@ -478,8 +472,10 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
       if (whereCallCount === 1) {
-        // existing interest query: .where(and(...)) → chain continues to .limit(1)
-        return db;
+        // all-sources query (ROK-1796): .where(and(...)) → terminal
+        return Promise.resolve(
+          existingSource ? [{ source: existingSource }] : [],
+        );
       }
       if (whereCallCount === 2) {
         // delete .where(and(...)) → terminal

@@ -394,23 +394,20 @@ describe('removeInterest — poll-source suppression', () => {
     db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
     db.delete = jest.fn().mockReturnThis();
 
-    // getUserInterestSource: select().from().where().limit() → source
+    // all-sources query (ROK-1796): select().from().where() → [{ source }]
     // removeInterest delete: delete().where() → void
     // getInterestCount: select().from().where() → [{ count }]
     // getInterestedPlayers: selectDistinctOn().from().innerJoin().where().orderBy().limit() → []
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1) return db; // getUserInterestSource chain → .limit()
+      if (whereCallCount === 1)
+        return Promise.resolve(source ? [{ source }] : []); // all-sources query
       if (whereCallCount === 2) return Promise.resolve(undefined); // delete
       if (whereCallCount === 3) return Promise.resolve([{ count: 0 }]); // getInterestCount
       return db; // getInterestedPlayers chain
     });
-    db.limit = jest.fn().mockImplementation(() => {
-      // First limit: getUserInterestSource → returns source row
-      // Subsequent limits: getInterestedPlayers → returns []
-      return Promise.resolve(source ? [{ source }] : []);
-    });
+    db.limit = jest.fn().mockResolvedValue([]); // getInterestedPlayers
 
     return db;
   }
@@ -429,6 +426,26 @@ describe('removeInterest — poll-source suppression', () => {
     await removeInterest(db as never, 42, 7);
 
     expect(db.insert).toHaveBeenCalled();
+  });
+
+  it.each(['steam_library', 'steam_wishlist'])(
+    'creates suppression row when source is "%s" (ROK-1796)',
+    async (steamSource) => {
+      const db = buildRemoveInterestDb(steamSource);
+
+      await removeInterest(db as never, 42, 7);
+
+      expect(db.insert).toHaveBeenCalled();
+      expect(db.values).toHaveBeenCalledWith({ userId: 7, gameId: 42 });
+    },
+  );
+
+  it('does not create suppression row when there is no interest row', async () => {
+    const db = buildRemoveInterestDb(null);
+
+    await removeInterest(db as never, 42, 7);
+
+    expect(db.insert).not.toHaveBeenCalled();
   });
 
   it('does not create suppression row when source is "manual"', async () => {
