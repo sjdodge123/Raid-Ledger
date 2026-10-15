@@ -3,13 +3,13 @@ import type { PelicanConfig } from '@raid-ledger/contract';
 import { buildUpdateBody, draftFromConfig, isApplicationKey, isDirty, isPelicanConfigured } from './pelican-form.helpers';
 
 const SAVED: PelicanConfig = {
-    panelUrl: 'https://panel.example.test', apiKeySet: true, defaultTimezone: 'Europe/London', timezoneInherited: false,
+    panelUrl: 'https://panel.example.test', apiKeySet: true,
 };
 
 describe('pelican-form.helpers', () => {
     it('never prefills the key from the server', () => {
         expect(draftFromConfig(SAVED)).toEqual({
-            panelUrl: 'https://panel.example.test', apiKey: '', removeKey: false, defaultTimezone: 'Europe/London',
+            panelUrl: 'https://panel.example.test', apiKey: '', removeKey: false,
         });
     });
 
@@ -29,9 +29,9 @@ describe('pelican-form.helpers', () => {
         expect(buildUpdateBody(draft, SAVED)).toEqual({ apiKey: '' });
     });
 
-    it('emptying the URL sends panelUrl "" (clear); a new tz is sent', () => {
-        const draft = { ...draftFromConfig(SAVED), panelUrl: '', defaultTimezone: 'Asia/Tokyo' };
-        expect(buildUpdateBody(draft, SAVED)).toEqual({ panelUrl: '', defaultTimezone: 'Asia/Tokyo' });
+    it('emptying the URL sends panelUrl "" (clear)', () => {
+        const draft = { ...draftFromConfig(SAVED), panelUrl: '' };
+        expect(buildUpdateBody(draft, SAVED)).toEqual({ panelUrl: '' });
     });
 
     it('configured needs both a URL and a key (AC2)', () => {

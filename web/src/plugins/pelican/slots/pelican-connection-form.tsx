@@ -9,7 +9,6 @@ import { Field } from '../../../components/ui/field';
 import { FormTextField, PasswordInput, TestResultBanner } from '../../../components/admin/admin-form-helpers';
 import { IntegrationFormActions } from '../../../components/admin/integration-form-actions';
 import { SavedSecretStatus } from '../../../components/admin/saved-secret-status';
-import { PelicanTimezoneField } from './pelican-timezone-field';
 import { isApplicationKey, isPelicanConfigured, type PelicanDraft } from './pelican-form.helpers';
 import { usePelicanConnectionForm } from './use-pelican-connection-form';
 
@@ -40,7 +39,6 @@ function ApiKeyField({ draft, apiKeySet, set }: {
 
 export function PelicanConnectionForm({ config }: { config: PelicanConfig }) {
     const f = usePelicanConnectionForm(config);
-    const inherited = config.timezoneInherited && f.draft.defaultTimezone === config.defaultTimezone;
     return (
         <form onSubmit={f.handleSave} className="space-y-4" aria-label="Pelican connection settings">
             {/* min-w-0: a fieldset's default min-content width would push the fields off a phone. */}
@@ -48,8 +46,6 @@ export function PelicanConnectionForm({ config }: { config: PelicanConfig }) {
                 <FormTextField id="pelicanPanelUrl" label="Panel URL" value={f.draft.panelUrl}
                     onChange={(v) => f.set({ panelUrl: v })} placeholder="https://panel.example.com" />
                 <ApiKeyField draft={f.draft} apiKeySet={config.apiKeySet} set={f.set} />
-                <PelicanTimezoneField key={config.defaultTimezone} value={f.draft.defaultTimezone}
-                    onChange={(tz) => f.set({ defaultTimezone: tz })} inherited={inherited} />
                 {f.dirty && (
                     <p data-testid="pelican-unsaved" className="text-xs text-warning">
                         Not saved yet — press Save Configuration to apply.
