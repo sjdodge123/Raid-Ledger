@@ -166,7 +166,9 @@ describe('settingsFields (D6)', () => {
     ]);
   });
 
-  it('gives a Quick Play Announcements bind no voice fields (ROK-1766)', () => {
+  // ROK-1766: no voice fields. ROK-1768: the game moved into the title
+  // (`bindingTitle`), so it is not repeated as a field.
+  it('gives a Quick Play Announcements bind no voice or Game fields', () => {
     expect(
       settingsFields({
         channelName: 'valheim',
@@ -174,7 +176,7 @@ describe('settingsFields (D6)', () => {
         config: { minPlayers: 9, gracePeriod: 9 },
         gameName: 'Valheim',
       }),
-    ).toEqual([{ name: 'Game', value: 'Valheim', inline: true }]);
+    ).toEqual([]);
   });
 
   it('omits Series and Game when they are not set', () => {
@@ -278,6 +280,21 @@ describe('shared copy is the contract constant, not a copy (AC5)', () => {
 });
 
 describe('bindingTitle (AC2)', () => {
+  it('names the game after a Quick Play purpose (ROK-1768)', () => {
+    expect(
+      bindingTitle('valheim-qp', 'quick-play-announcements', 'Valheim'),
+    ).toBe('#valheim-qp → Quick Play Announcements · Valheim');
+  });
+
+  it('never appends a game to any other purpose (ROK-1768)', () => {
+    expect(bindingTitle('news', 'game-announcements', 'Valheim')).toBe(
+      '#news → Announcements',
+    );
+    expect(bindingTitle('valheim-qp', 'quick-play-announcements')).toBe(
+      '#valheim-qp → Quick Play Announcements',
+    );
+  });
+
   it('draws #channel → Purpose in the words the admin form uses', () => {
     expect(bindingTitle('general', 'general-lobby')).toBe(
       '#general → General Lobby',
