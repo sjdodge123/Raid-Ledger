@@ -74,6 +74,8 @@ vi.mock('../hooks/use-auth', () => ({
     // ROK-1453: the LFG hooks call getAuthToken() to gate their jwt-only
     // reads, so a partial use-auth mock has to expose it too.
     getAuthToken: () => null,
+    // ROK-1797: the bell and useWantToPlay scope their cache keys to the viewer.
+    useViewerCacheScope: () => 'anon',
 }));
 
 vi.mock('../hooks/use-want-to-play', () => ({
