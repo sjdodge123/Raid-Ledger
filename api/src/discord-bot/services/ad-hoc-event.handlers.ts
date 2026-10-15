@@ -219,7 +219,10 @@ export async function notifyCompleted(
 
 /** Start the grace period when all members leave. */
 export async function startGracePeriod(
-  deps: AdHocHandlerDeps,
+  deps: Pick<
+    AdHocHandlerDeps,
+    'db' | 'channelBindingsService' | 'gracePeriodQueue' | 'gateway'
+  >,
   eventId: number,
   channelBindingId: string | null,
 ): Promise<void> {

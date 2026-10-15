@@ -31,6 +31,7 @@ import { RelayModule } from './relay/relay.module';
 import { FeedbackModule } from './feedback/feedback.module';
 import { VersionModule } from './version/version.module';
 import { DiscordBotModule } from './discord-bot/discord-bot.module';
+import { AdHocServerPresenceModule } from './discord-bot/ad-hoc-server-presence.module';
 import { AiChatModule } from './discord-bot/ai-chat/ai-chat.module';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { SentryEnvModule } from './sentry/sentry-env.module';
@@ -89,6 +90,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     FeedbackModule,
     VersionModule,
     DiscordBotModule,
+    AdHocServerPresenceModule,
     AiChatModule,
     SentryModule.forRoot(),
     SentryEnvModule,

@@ -31,6 +31,7 @@ import { GameActivityService } from './services/game-activity.service';
 import { AdHocEventService } from './services/ad-hoc-event.service';
 import { QuickPlayHealthService } from './services/quick-play-health.service';
 import { AdHocParticipantService } from './services/ad-hoc-participant.service';
+import { AdHocServerPresenceService } from './services/ad-hoc-server-presence.service';
 import { AdHocNotificationService } from './services/ad-hoc-notification.service';
 import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
 import { DiscordEventListener } from './listeners/event.listener';
@@ -162,6 +163,9 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     ChannelBindingsService,
     PugInviteService,
     AdHocEventService,
+    // ROK-1800: the Pelican presence sink (exposed globally by
+    // AdHocServerPresenceModule under SERVER_PRESENCE_SINK).
+    AdHocServerPresenceService,
     QuickPlayHealthService,
     AdHocParticipantService,
     AdHocNotificationService,
@@ -240,6 +244,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     ChannelResolverService,
     PugInviteService,
     AdHocEventService,
+    AdHocServerPresenceService,
     VoiceAttendanceService,
     // ROK-1446: the voice listeners and the ad-hoc suppression gate both
     // inject the channel presence service (D6/D9).
