@@ -106,6 +106,37 @@ function describeGameNotificationMute() {
     await mute(ids.E, gameH);
   });
 
+  it('baseline: with no mutes on G, every affinity half qualifies', async () => {
+    // Proves the fixture: without this, the mute asserts below stay green if
+    // C's past signup (or B's steam row) never qualified in the first place.
+    await testApp.db
+      .delete(schema.gameNotificationMutes)
+      .where(eq(schema.gameNotificationMutes.gameId, gameG));
+    const all = sorted([ids.A, ids.B, ids.C, ids.D, ids.E]);
+    const affinity = await findGameAffinityRecipients(testApp.db, gameG, {
+      excludeUserId: creatorId,
+    });
+    expect(sorted(affinity)).toEqual(all);
+    const lfg = await findGameAffinityRecipients(testApp.db, gameG, {
+      excludeUserId: creatorId,
+      interestsOnly: true,
+    });
+    expect(sorted(lfg)).toEqual(sorted([ids.A, ids.B, ids.D, ids.E]));
+    const reminder = await findReminderRecipients(
+      testApp.db,
+      gameG,
+      creatorId,
+      -1,
+    );
+    expect(sorted(reminder)).toEqual(all);
+    const poll = await findStandalonePollRecipients(
+      testApp.db,
+      gameG,
+      creatorId,
+    );
+    expect(sorted(poll)).toEqual(all);
+  });
+
   it('game-alert recipients drop muted users on both affinity halves', async () => {
     const got = await findGameAffinityRecipients(testApp.db, gameG, {
       excludeUserId: creatorId,
