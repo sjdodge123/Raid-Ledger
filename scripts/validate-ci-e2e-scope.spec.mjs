@@ -238,3 +238,159 @@ test('--no-e2e skips the scope resolution entirely', () => {
 
   assert.equal(specs, '');
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1792 — E2E_SPECS, an explicit spec list. The fleet gate rule is
+// "--static + only the branch's new/changed specs", which E2E_SCOPE (an enum)
+// cannot express. Pinned: parsing + validation (a bad path is exit 2, never a
+// silent different selection), the explicit list winning over scope-specs.sh,
+// the sentinel-compatible row label, and the exact `npx playwright test` argv
+// (spec paths only — never a --project narrowing).
+// ---------------------------------------------------------------------------
+// The repo root (validate-ci.sh's own REPO_ROOT). The const above named
+// REPO_ROOT is scripts/, the cwd scope-specs.sh needs.
+const CHECKOUT = dirname(dirname(SCRIPT));
+const REAL_SPECS = ['scripts/smoke/activity-timeline.smoke.spec.ts', 'scripts/smoke/add-character-dirty-close.smoke.spec.ts'];
+
+/** Run _parse_e2e_specs against the real checkout. Returns { code, list, stderr }. */
+function parseSpecs(value) {
+  const script = [
+    'set -uo pipefail',
+    `REPO_ROOT=${JSON.stringify(CHECKOUT)}`,
+    'RED=""; NC=""',
+    `export E2E_SPECS=${JSON.stringify(value)}`,
+    'E2E_SPECS_LIST=""',
+    extractFunction('_parse_e2e_specs'),
+    '_parse_e2e_specs; rc=$?',
+    'echo "LIST=$E2E_SPECS_LIST"',
+    'exit $rc',
+  ].join('\n');
+  const res = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+  return { code: res.status, list: (/^LIST=(.*)$/m.exec(res.stdout)?.[1] ?? '').trim(), stderr: res.stderr };
+}
+
+test('E2E_SPECS: space- and comma-separated lists parse, de-duplicated, in order', () => {
+  const [a, b] = REAL_SPECS;
+  assert.deepEqual(parseSpecs(`${a} ${b}`), { code: 0, list: `${a} ${b}`, stderr: '' });
+  assert.equal(parseSpecs(`${a},${b}`).list, `${a} ${b}`);
+  assert.equal(parseSpecs(` ${b}, ${a} ,${b} `).list, `${b} ${a}`);
+});
+
+test('E2E_SPECS: empty or unset leaves the list empty (scope-specs.sh decides)', () => {
+  assert.deepEqual(parseSpecs(''), { code: 0, list: '', stderr: '' });
+});
+
+test('E2E_SPECS: every invalid path is rejected with exit 2 and named', () => {
+  for (const bad of [
+    'web/src/App.tsx',
+    'scripts/smoke/../../api/x.spec.ts',
+    'scripts/smoke/helpers.ts',
+    '/abs/scripts/smoke/x.spec.ts',
+    'scripts/smoke/x.spec.ts;rm',
+  ]) {
+    const res = parseSpecs(bad);
+    assert.equal(res.code, 2, `${bad} must be an invocation error, got ${res.code}`);
+    assert.equal(res.list, '', `${bad} must not leave a partial list`);
+    assert.match(res.stderr, /not a scripts\/smoke\/<name>\.spec\.ts path/);
+  }
+});
+
+test('E2E_SPECS: a well-formed but missing spec is exit 2, even beside a good one', () => {
+  const res = parseSpecs(`${REAL_SPECS[0]} scripts/smoke/does-not-exist.smoke.spec.ts`);
+  assert.equal(res.code, 2);
+  assert.equal(res.list, '');
+  assert.match(res.stderr, /does-not-exist\.smoke\.spec\.ts' does not exist/);
+});
+
+/** _prepare_playwright_scope with a pre-validated explicit list. */
+function prepareExplicit(list, { stubOut = 'ALL', scope } = {}) {
+  const root = mkdtempSync(join(tmpdir(), 'validate-ci-specs-'));
+  try {
+    mkdirSync(join(root, 'scripts', 'smoke'), { recursive: true });
+    writeFileSync(join(root, 'scripts', 'smoke', 'scope-specs.sh'), `#!/usr/bin/env bash\necho ${stubOut}\n`);
+    const script = [
+      'set -uo pipefail',
+      `REPO_ROOT=${JSON.stringify(root)}`,
+      'YELLOW=""; NC=""; e2e_mode=auto',
+      scope === undefined ? 'unset E2E_SCOPE || true' : `export E2E_SCOPE=${JSON.stringify(scope)}`,
+      `E2E_SPECS_LIST=${JSON.stringify(list)}`,
+      'PLAYWRIGHT_STEP_LABEL=""; PLAYWRIGHT_SCOPED_SPECS=""; E2E_SCOPE_RESOLVED=""',
+      extractFunction('_resolve_e2e_scope'),
+      extractFunction('_scoped_playwright_specs'),
+      extractFunction('_prepare_playwright_scope'),
+      '_prepare_playwright_scope >/dev/null 2>&1',
+      'echo "LABEL=$PLAYWRIGHT_STEP_LABEL"',
+      'echo "SPECS=$PLAYWRIGHT_SCOPED_SPECS"',
+    ].join('\n');
+    const out = execFileSync('bash', ['-c', script], { encoding: 'utf8' });
+    return { label: /^LABEL=(.*)$/m.exec(out)?.[1] ?? '', specs: /^SPECS=(.*)$/m.exec(out)?.[1] ?? '' };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('E2E_SPECS wins over an ALL from scope-specs.sh and labels the row for the sentinel', () => {
+  const { label, specs } = prepareExplicit(REAL_SPECS.join(' '));
+  assert.equal(label, 'Playwright (desktop + mobile, explicit: 2 specs)');
+  // Mirrors tools/mcp-rl-fleet/src/gate-summary.ts PLAYWRIGHT_ROW — a PASS on
+  // this row is what writes the playwright-tier pre-push sentinel.
+  assert.match(label, /^Playwright \(desktop \+ mobile[^)]*\)$/);
+  assert.equal(specs, REAL_SPECS.join(' '));
+});
+
+/** The argv run_playwright_e2e hands to `npx`, with the env up or down. */
+function playwrightCommand(list, { envUp = true, relevant = false } = {}) {
+  const script = [
+    'set -uo pipefail',
+    'YELLOW=""; RED=""; NC=""; e2e_mode=auto; e2e_explicit=false',
+    `playwright_relevant=${relevant}`,
+    `E2E_SPECS_LIST=${JSON.stringify(list)}`,
+    `PLAYWRIGHT_SCOPED_SPECS=${JSON.stringify(list)}`,
+    'E2E_SCOPE_RESOLVED=auto',
+    `check_env_up() { return ${envUp ? 0 : 1}; }`,
+    '_resolve_health_url() { echo http://stub/health; }',
+    '_export_e2e_target() { :; }',
+    'skip_step() { echo SKIPPED; }',
+    'npx() { echo "NPX $*"; }',
+    extractFunction('_resolve_e2e_scope'),
+    extractFunction('run_playwright_e2e'),
+    'run_playwright_e2e; echo "RC=$?"',
+  ].join('\n');
+  return execFileSync('bash', ['-c', script], { encoding: 'utf8' });
+}
+
+test('E2E_SPECS runs exactly those specs on every project, even with no web diff', () => {
+  const out = playwrightCommand(REAL_SPECS.join(' '));
+  assert.match(out, new RegExp(`^NPX playwright test ${REAL_SPECS.join(' ')}$`, 'm'));
+  assert.doesNotMatch(out, /--project/, 'the tier must never narrow projects');
+  assert.doesNotMatch(out, /SKIPPED/, 'an explicit list bypasses the changed-files gate');
+  assert.match(out, /^RC=0$/m);
+});
+
+test('E2E_SPECS against a down env FAILs instead of skipping', () => {
+  const out = playwrightCommand(REAL_SPECS[0], { envUp: false });
+  assert.doesNotMatch(out, /NPX|SKIPPED/);
+  assert.match(out, /^RC=1$/m);
+});
+
+test('validate-ci.sh exits 2 before any step on a bad list or a conflicting mode', () => {
+  const run = (env, args) =>
+    spawnSync('bash', [SCRIPT, ...args], {
+      encoding: 'utf8',
+      cwd: CHECKOUT,
+      timeout: 30_000,
+      env: { ...process.env, ...env },
+    });
+  const good = REAL_SPECS.join(',');
+  const cases = [
+    [{ E2E_SPECS: 'scripts/smoke/nope.spec.ts' }, ['--only-e2e'], /does not exist/],
+    [{ E2E_SPECS: good }, ['--static'], /E2E_SPECS and --static are mutually exclusive/],
+    [{ E2E_SPECS: good }, ['--no-e2e'], /E2E_SPECS and --no-e2e are mutually exclusive/],
+    [{ E2E_SPECS: good, E2E_SCOPE: 'none' }, ['--only-e2e'], /E2E_SPECS and E2E_SCOPE=none/],
+  ];
+  for (const [env, args, msg] of cases) {
+    const res = run(env, args);
+    assert.equal(res.status, 2, `${JSON.stringify(env)} ${args} → ${res.status}: ${res.stderr.slice(-300)}`);
+    assert.match(res.stderr, msg);
+  }
+});
