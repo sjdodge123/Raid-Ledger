@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { FeedbackScreenshot } from './feedback-screenshot';
 
-const read = vi.hoisted(() => ({ resolve: (_s: FeedbackScreenshot) => {} }));
+const read = vi.hoisted(() => ({ resolve: (() => undefined) as (s: FeedbackScreenshot) => void }));
 
 vi.mock('./feedback-screenshot', () => ({
     SCREENSHOT_ERROR: 'error',

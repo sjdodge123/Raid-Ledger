@@ -49,7 +49,9 @@ export function useFeedbackScreenshot(): FeedbackScreenshotState {
         pick.current += 1; replace(null); setError(null); setReading(false);
     }, [replace]);
 
-    useEffect(() => () => { if (current.current) URL.revokeObjectURL(current.current.previewUrl); }, []);
+    // Unmount: revoke the preview and invalidate any pending read, so a read
+    // that completes later takes the stale-read branch and revokes its own URL.
+    useEffect(() => () => { pick.current += 1; if (current.current) URL.revokeObjectURL(current.current.previewUrl); }, []);
 
     return { screenshot, screenshotError, isReadingScreenshot, attachScreenshot, clearScreenshot };
 }
