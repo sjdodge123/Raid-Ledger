@@ -100,25 +100,23 @@ async function assertOwnOutcomeOk(
   seId: string,
 ): Promise<void> {
   const own = result.outcomes?.find((o) => o.eventId === eventId);
-  if (!own) {
-    const status = await fetchScheduledEventStatus(seId);
-    if (status === null || status === GuildScheduledEventStatus.Completed) {
-      return;
-    }
-    throw new Error(
-      `ROK-944: completion pass did not reach event ${eventId} and SE ${seId} ` +
-        `is ${GuildScheduledEventStatus[status]}, not Completed ` +
-        `(reason=${result.reason ?? 'none'}, success=${result.success}, ` +
-        `outcomes=${JSON.stringify(result.outcomes ?? [])})`,
-    );
+  if (own?.ok) return;
+  // The 5-minute background completion pass can finish this event before or
+  // during the trigger (missing outcome, or ok:false no-discord-event-id), so
+  // Discord's own status decides: Completed or gone (10070) is success.
+  const status = await fetchScheduledEventStatus(seId);
+  if (status === null || status === GuildScheduledEventStatus.Completed) {
+    return;
   }
-  if (!own.ok) {
-    throw new Error(
-      `ROK-944: completing event ${eventId} (SE ${own.discordEventId ?? 'none'}) ` +
-        `failed ${own.from ?? '?'} -> ${own.to ?? '?'}: ` +
-        `code=${own.errorCode ?? 'none'} message=${own.errorMessage ?? 'none'}`,
-    );
-  }
+  const detail = own
+    ? `failed ${own.from ?? '?'} -> ${own.to ?? '?'}: ` +
+      `code=${own.errorCode ?? 'none'} message=${own.errorMessage ?? 'none'}`
+    : `was not reached by the completion pass (reason=${result.reason ?? 'none'}, ` +
+      `success=${result.success}, outcomes=${JSON.stringify(result.outcomes ?? [])})`;
+  throw new Error(
+    `ROK-944: completing event ${eventId} (SE ${seId}) ${detail}; ` +
+      `SE is ${GuildScheduledEventStatus[status]}, not Completed`,
+  );
 }
 
 /**
