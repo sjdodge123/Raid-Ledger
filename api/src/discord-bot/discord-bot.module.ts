@@ -109,6 +109,7 @@ import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
 import { GameRolesSettingsController } from './game-roles/game-roles-settings.controller';
 import { GameRoleReconcileService } from './game-roles/game-role-reconcile.service';
+import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-delete.listener';
 
 @Module({
   imports: [
@@ -186,6 +187,7 @@ import { GameRoleReconcileService } from './game-roles/game-role-reconcile.servi
     GameActivityService,
     // ROK-1767: auto-maintained per-game Discord roles.
     GameRoleReconcileService,
+    GameRoleAccountDeleteListener,
     PresenceGameDetectorService,
     VoiceAttendanceService,
     EventAutoExtendService,
