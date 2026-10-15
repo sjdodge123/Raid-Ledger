@@ -50,12 +50,36 @@ export async function withDisplayTalents(
   }
 }
 
-/** All display overrides: equipment, then talents (each isolated). */
+/**
+ * ROK-1743: let the variant's plugin add displayed saved instances.
+ * `undefined` leaves the DTO without a `lockouts` key; a failure warns and
+ * keeps the DTO (the character page never 500s on it).
+ */
+export async function withDisplayLockouts(
+  dto: CharacterDto,
+  adapter: CharacterSyncAdapter | undefined,
+  logger: Pick<Logger, 'warn'>,
+): Promise<CharacterDto> {
+  try {
+    const lockouts = await adapter?.resolveDisplayLockouts?.({
+      id: dto.id,
+      gameVariant: dto.gameVariant ?? null,
+    });
+    return lockouts === undefined ? dto : { ...dto, lockouts };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    logger.warn(`Display lockouts for character ${dto.id} failed: ${msg}`);
+    return dto;
+  }
+}
+
+/** All display overrides: equipment, talents, lockouts (each isolated). */
 export async function withDisplayOverrides(
   dto: CharacterDto,
   adapter: CharacterSyncAdapter | undefined,
   logger: Pick<Logger, 'warn'>,
 ): Promise<CharacterDto> {
   const withGear = await withDisplayEquipment(dto, adapter, logger);
-  return withDisplayTalents(withGear, adapter, logger);
+  const withTalents = await withDisplayTalents(withGear, adapter, logger);
+  return withDisplayLockouts(withTalents, adapter, logger);
 }
