@@ -16,6 +16,9 @@ import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
+import type { LayerDayEntry, LayerDayMap } from './layers/calendar-layer-days';
+import { mergeScheduleRows } from './layers/schedule-layer-rows';
+import { ScheduleLayerRow } from './layers/ScheduleLayerRow';
 
 interface ScheduleViewProps {
     events: CalendarEvent[];
@@ -25,6 +28,8 @@ interface ScheduleViewProps {
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
     /** When true, a background fetch is in progress — suppresses the empty state */
     isFetching?: boolean;
+    /** ROK-1775 — plugin layer entries per local day, interleaved with that day's events. */
+    layerDays?: LayerDayMap;
 }
 
 /** Horizontal line with dot indicating current time, rendered among today's events. */
@@ -125,20 +130,22 @@ function DayLabel({ day, isToday, stickyTop }: { day: Date; isToday: boolean; st
     );
 }
 
-function DayEvents({ dayEvents, isToday, nowLineIndex, onSelectEvent }: {
-    dayEvents: CalendarEvent[]; isToday: boolean; nowLineIndex: number; onSelectEvent: (e: CalendarEvent) => void;
+/** Events and layer rows by time; today gets the now-line before the first row still ahead. */
+function DayEvents({ dayEvents, entries, isToday, now, onSelectEvent }: {
+    dayEvents: CalendarEvent[]; entries: readonly LayerDayEntry[] | undefined; isToday: boolean; now: Date; onSelectEvent: (e: CalendarEvent) => void;
 }) {
+    const rows = mergeScheduleRows(dayEvents, entries);
+    const ahead = rows.findIndex((r) => r.at > now.getTime());
+    const nowLineIndex = !isToday ? -1 : ahead === -1 ? rows.length : ahead;
     return (
         <div className="flex-1 min-w-0 py-2 pr-2 space-y-2">
-            {isToday && dayEvents.length === 0 ? <NowLine /> : (
-                dayEvents.map((event, eventIdx) => (
-                    <Fragment key={event.id}>
-                        {isToday && eventIdx === nowLineIndex && <NowLine />}
-                        <ScheduleEventCard event={event} onSelect={onSelectEvent} />
-                    </Fragment>
-                ))
-            )}
-            {isToday && dayEvents.length > 0 && nowLineIndex === dayEvents.length && <NowLine />}
+            {rows.map((row, idx) => (
+                <Fragment key={row.key}>
+                    {idx === nowLineIndex && <NowLine />}
+                    {row.kind === 'event' ? <ScheduleEventCard event={row.event} onSelect={onSelectEvent} /> : <ScheduleLayerRow entry={row.entry} />}
+                </Fragment>
+            ))}
+            {nowLineIndex === rows.length && <NowLine />}
         </div>
     );
 }
@@ -197,8 +204,8 @@ function useScheduleData(events: CalendarEvent[]) {
     return { eventsByDate, daysWithEvents };
 }
 
-function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, now, stickyTop, todayRef, onSelectEvent }: {
-    day: Date; idx: number; daysWithEvents: Date[]; eventsByDate: Map<string, CalendarEvent[]>;
+function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, layerDays, now, stickyTop, todayRef, onSelectEvent }: {
+    day: Date; idx: number; daysWithEvents: Date[]; eventsByDate: Map<string, CalendarEvent[]>; layerDays: LayerDayMap | undefined;
     now: Date; stickyTop: string; todayRef: React.RefObject<HTMLDivElement | null>; onSelectEvent: (e: CalendarEvent) => void;
 }) {
     const key = format(day, 'yyyy-MM-dd');
@@ -206,20 +213,18 @@ function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, now, stickyTop
     const isDayToday = isSameDay(day, now);
     const prevDay = idx > 0 ? daysWithEvents[idx - 1] : null;
     const isNewWeek = !prevDay || !isSameWeek(day, prevDay, { weekStartsOn: 0 });
-    let nowLineIndex = -1;
-    if (isDayToday) { nowLineIndex = dayEvents.findIndex((e) => e.start > now); if (nowLineIndex === -1) nowLineIndex = dayEvents.length; }
     return (
         <Fragment key={key}>
             {isNewWeek && <div className="week-separator pl-1 pr-2 py-2 text-xs font-medium text-muted tracking-wide">{formatWeekRange(day)}</div>}
             <div ref={isDayToday ? todayRef : undefined} className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isDayToday ? 'scroll-mt-36' : ''}`}>
                 <DayLabel day={day} isToday={isDayToday} stickyTop={stickyTop} />
-                <DayEvents dayEvents={dayEvents} isToday={isDayToday} nowLineIndex={nowLineIndex} onSelectEvent={onSelectEvent} />
+                <DayEvents dayEvents={dayEvents} entries={layerDays?.get(key)} isToday={isDayToday} now={now} onSelectEvent={onSelectEvent} />
             </div>
         </Fragment>
     );
 }
 
-export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent, isFetching }: ScheduleViewProps) {
+export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent, isFetching, layerDays }: ScheduleViewProps) {
     const todayRef = useRef<HTMLDivElement>(null);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
@@ -241,7 +246,7 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
 
     return (
         <div className="schedule-view min-w-0" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            {daysWithEvents.map((day, idx) => <ScheduleDayRow key={format(day, 'yyyy-MM-dd')} day={day} idx={idx} daysWithEvents={daysWithEvents} eventsByDate={eventsByDate} now={now} stickyTop={stickyTop} todayRef={todayRef} onSelectEvent={onSelectEvent} />)}
+            {daysWithEvents.map((day, idx) => <ScheduleDayRow key={format(day, 'yyyy-MM-dd')} day={day} idx={idx} daysWithEvents={daysWithEvents} eventsByDate={eventsByDate} layerDays={layerDays} now={now} stickyTop={stickyTop} todayRef={todayRef} onSelectEvent={onSelectEvent} />)}
         </div>
     );
 }
