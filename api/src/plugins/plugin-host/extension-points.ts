@@ -43,13 +43,13 @@ export interface DisplayTalentsRow {
   lastSyncedAt: string | null;
 }
 
-/** Provides character data fetch + sync capabilities for a game */
 /** The character fields a display-lockouts resolver may read (ROK-1743). */
 export interface DisplayLockoutsRow {
   id: string;
   gameVariant: string | null;
 }
 
+/** Provides character data fetch + sync capabilities for a game */
 export interface CharacterSyncAdapter {
   readonly gameSlugs: string[];
   resolveGameSlugs(gameVariant?: string): string[];
