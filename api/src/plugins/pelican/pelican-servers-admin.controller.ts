@@ -9,6 +9,7 @@ import {
   Patch,
   UseGuards,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AuthGuard } from '@nestjs/passport';
 import {
   PelicanServerListResponseSchema,
@@ -26,7 +27,10 @@ import {
 } from '../plugin-host/plugin-active.guard';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from './pelican.constants';
+import {
+  PELICAN_PLUGIN_ID,
+  PELICAN_PRESENCE_CONFIG_CHANGED,
+} from './pelican.constants';
 import {
   PelicanServersAdminRepository,
   type PelicanAdminServerRow,
@@ -45,6 +49,7 @@ export class PelicanServersAdminController {
   constructor(
     private readonly servers: PelicanServersAdminRepository,
     private readonly registry: PluginRegistryService,
+    private readonly events: EventEmitter2,
   ) {}
 
   /** GET /admin/plugins/pelican/servers — every row, missing included. */
@@ -67,12 +72,23 @@ export class PelicanServersAdminController {
     if (!parsed.success) {
       throw new BadRequestException(parsed.error.issues.map((i) => i.message));
     }
-    const result = await this.servers.updateMapping(id, parsed.data);
+    const patch = parsed.data;
+    const result = await this.servers.updateMapping(id, patch, (slug) =>
+      this.presenceSupported(slug),
+    );
     if (result.kind === 'not_found') {
       throw new NotFoundException('Server not found');
     }
     if (result.kind === 'unknown_game') {
       throw new BadRequestException('Unknown game');
+    }
+    if (result.kind === 'presence_unsupported') {
+      throw new BadRequestException(
+        "Quick Play detection isn't supported for this server's game",
+      );
+    }
+    if (patch.presenceTracking !== undefined || patch.gameId !== undefined) {
+      this.events.emit(PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: id });
     }
     return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
   }
@@ -83,12 +99,14 @@ export class PelicanServersAdminController {
    * (inactive-plugin) adapter is not returned, so it reads as unsupported.
    */
   private toDto(row: PelicanAdminServerRow, now: Date): PelicanServerRowDto {
-    const supported =
-      row.gameSlug !== null &&
-      this.registry.getAdapter(
-        EXTENSION_POINTS.GAME_LOG_PARSER,
-        row.gameSlug,
-      ) !== undefined;
-    return toAdminServerRowDto(row, now, supported);
+    return toAdminServerRowDto(row, now, this.presenceSupported(row.gameSlug));
+  }
+
+  private presenceSupported(gameSlug: string | null): boolean {
+    return (
+      gameSlug !== null &&
+      this.registry.getAdapter(EXTENSION_POINTS.GAME_LOG_PARSER, gameSlug) !==
+        undefined
+    );
   }
 }

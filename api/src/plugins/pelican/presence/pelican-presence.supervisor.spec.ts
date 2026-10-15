@@ -3,6 +3,7 @@ import { EventEmitter2, EventEmitterModule } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { SettingsService as SettingsToken } from '../../../settings/settings.service';
 import { PLUGIN_EVENTS } from '../../plugin-host/plugin-manifest.interface';
+import { PELICAN_PRESENCE_CONFIG_CHANGED } from '../pelican.constants';
 import { PluginRegistryService as RegistryToken } from '../../plugin-host/plugin-registry.service';
 import { PelicanClientFactory as FactoryToken } from '../pelican-client.factory';
 import { PelicanPresenceRepository as RepoToken } from './pelican-presence.repository';
@@ -208,4 +209,43 @@ it('Pelican deactivation stops every session without emptying (FB1 #4)', async (
   expect(h.wings.sockets[0]?.close).toHaveBeenCalled();
   expect(h.sink.serverEmptied.mock.calls).toEqual([]);
   await app.close();
+});
+
+async function eventBus(h: ReturnType<typeof harness>) {
+  const app = await Test.createTestingModule({
+    imports: [EventEmitterModule.forRoot()],
+    providers: [{ provide: PelicanPresenceSupervisor, useValue: h.supervisor }],
+  }).compile();
+  await app.init();
+  return { app, events: app.get(EventEmitter2) };
+}
+
+it('an admin Quick Play toggle reconciles at once, not at the next status poll (ROK-1800 n4)', async () => {
+  const h = harness({ rows: [] });
+  const { app, events } = await eventBus(h);
+  await h.reconcile();
+  expect(h.supervisor.activeServerIds).toEqual([]);
+
+  h.state.rows = [row(1)]; // switched on
+  await events.emitAsync(PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: 1 });
+  await jest.advanceTimersByTimeAsync(PRESENCE_REPLAY_SETTLE_MS);
+  expect(h.supervisor.activeServerIds).toEqual([1]);
+
+  h.state.rows = []; // switched off
+  await events.emitAsync(PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: 1 });
+  expect(h.supervisor.activeServerIds).toEqual([]);
+  expect(h.wings.sockets[0]?.close).toHaveBeenCalled();
+  await app.close();
+});
+
+it('a reconcile asked for mid-run runs once more instead of being dropped (ROK-1800 n4)', async () => {
+  const h = harness({ rows: [] });
+  h.deps.repo.listTracked.mockImplementationOnce(() => {
+    h.state.rows = [row(1)]; // the toggle lands while this pass reads
+    void h.supervisor.reconcile();
+    return Promise.resolve([]);
+  });
+  await h.reconcile();
+  expect(h.supervisor.activeServerIds).toEqual([1]);
+  expect(h.deps.repo.listTracked).toHaveBeenCalledTimes(2);
 });

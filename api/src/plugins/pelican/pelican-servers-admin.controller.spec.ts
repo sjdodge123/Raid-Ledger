@@ -3,12 +3,15 @@ import {
   PelicanServerRowSchema,
   type PelicanServerUpdate,
 } from '@raid-ledger/contract';
+import type { EventEmitter2 } from '@nestjs/event-emitter';
+import { PELICAN_PRESENCE_CONFIG_CHANGED } from './pelican.constants';
 import { PelicanServersAdminController } from './pelican-servers-admin.controller';
 import {
   toMappingSet,
   type PelicanAdminServerRow,
   type PelicanMappingUpdateResult,
   type PelicanServersAdminRepository,
+  type PresenceSupportCheck,
 } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
@@ -40,7 +43,7 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
   const listForAdmin = jest.fn(() => Promise.resolve([makeRow()]));
   const updateMapping = jest.fn<
     Promise<PelicanMappingUpdateResult>,
-    [number, PelicanServerUpdate]
+    [number, PelicanServerUpdate, PresenceSupportCheck?]
   >(() => Promise.resolve(result));
   const repo = { listForAdmin, updateMapping };
   // Only `valheim` has a game-log-parser registered (ROK-1800).
@@ -49,11 +52,13 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
       ? {}
       : undefined,
   );
+  const emit = jest.fn();
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
     { getAdapter } as unknown as PluginRegistryService,
+    { emit } as unknown as EventEmitter2,
   );
-  return { controller, listForAdmin, updateMapping };
+  return { controller, listForAdmin, updateMapping, emit };
 }
 
 describe('toAdminServerRowDto (ROK-1094)', () => {
@@ -158,7 +163,11 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     const row = makeRow({ showOnCalendar: false });
     const { controller, updateMapping } = build({ kind: 'ok', row });
     const res = await controller.updateServer(4, { showOnCalendar: false });
-    expect(updateMapping).toHaveBeenCalledWith(4, { showOnCalendar: false });
+    expect(updateMapping).toHaveBeenCalledWith(
+      4,
+      { showOnCalendar: false },
+      expect.any(Function),
+    );
     expect(res.showOnCalendar).toBe(false);
   });
 
@@ -166,10 +175,50 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     const row = makeRow({ presenceTracking: true });
     const { controller, updateMapping } = build({ kind: 'ok', row });
     const res = await controller.updateServer(4, { presenceTracking: true });
-    expect(updateMapping).toHaveBeenCalledWith(4, { presenceTracking: true });
+    expect(updateMapping).toHaveBeenCalledWith(
+      4,
+      { presenceTracking: true },
+      expect.any(Function),
+    );
     expect(res.presenceTracking).toBe(true);
     expect(res.presenceSupported).toBe(true);
   });
+
+  it('rejects turning Quick Play on for a game without a log parser with 400 (ROK-1800 m1)', async () => {
+    const { controller, emit } = build({ kind: 'presence_unsupported' });
+    await expect(
+      controller.updateServer(4, { presenceTracking: true }),
+    ).rejects.toThrow(
+      "Quick Play detection isn't supported for this server's game",
+    );
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('hands the repository a parser check: only a slug with a log parser supports Quick Play (ROK-1800 m1)', async () => {
+    const { controller, updateMapping } = build({ kind: 'ok', row: makeRow() });
+    await controller.updateServer(4, { presenceTracking: true });
+    const check = updateMapping.mock.calls[0]?.[2];
+    expect([check?.('valheim'), check?.('palworld'), check?.(null)]).toEqual([
+      true,
+      false,
+      false,
+    ]);
+  });
+
+  it.each<[string, PelicanServerUpdate, boolean]>([
+    ['the Quick Play switch', { presenceTracking: false }, true],
+    ['the game', { gameId: 9 }, true],
+    ['calendar visibility only', { showOnCalendar: false }, false],
+  ])(
+    'nudges the presence supervisor when %s changes: %s (ROK-1800 n4)',
+    async (_l, patch, nudged) => {
+      const { controller, emit } = build({ kind: 'ok', row: makeRow() });
+      await controller.updateServer(4, patch);
+      expect(emit.mock.calls).toEqual(
+        nudged ? [[PELICAN_PRESENCE_CONFIG_CHANGED, { serverId: 4 }]] : [],
+      );
+    },
+  );
 
   it('rejects a non-boolean presenceTracking with 400 (ROK-1800)', async () => {
     const { controller, updateMapping } = build();

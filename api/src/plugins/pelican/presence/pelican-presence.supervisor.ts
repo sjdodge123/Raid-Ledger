@@ -14,7 +14,10 @@ import {
 } from '../../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../../plugin-host/plugin-manifest.interface';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
-import { PELICAN_PLUGIN_ID } from '../pelican.constants';
+import {
+  PELICAN_PLUGIN_ID,
+  PELICAN_PRESENCE_CONFIG_CHANGED,
+} from '../pelican.constants';
 import { PelicanClientFactory } from '../pelican-client.factory';
 import type { WingsSocketFactory } from '../pelican-console-socket.helpers';
 import { errName, PRESENCE_STOPPED_STATES } from './pelican-presence.helpers';
@@ -68,6 +71,8 @@ export class PelicanPresenceSupervisor
   /** Stopped servers already emptied this offline spell (once each). */
   private readonly emptiedStopped = new Set<number>();
   private reconciling = false;
+  /** A reconcile was asked for while one ran — run once more after it. */
+  private rerun = false;
   private warnedNoSink = false;
 
   constructor(
@@ -110,24 +115,49 @@ export class PelicanPresenceSupervisor
     await this.stopAll();
   }
 
+  /**
+   * An admin flipped a server's Quick Play switch or game (ROK-1800 n4):
+   * apply it now rather than at the next 2-minute status poll.
+   */
+  @OnEvent(PELICAN_PRESENCE_CONFIG_CHANGED)
+  async handlePresenceConfigChanged(): Promise<void> {
+    await this.reconcile();
+  }
+
   private async stopAll(): Promise<void> {
     const all = [...this.sessions.values()];
     this.sessions.clear();
     await Promise.all(all.map((r) => r.session.stop(false)));
   }
 
-  /** Start/stop sessions to match eligibility. Never throws; never overlaps. */
+  /**
+   * Start/stop sessions to match eligibility. Never throws; never overlaps —
+   * a call that lands mid-run is folded into one more pass, so a change
+   * made during a reconcile is never dropped until the next poll.
+   */
   async reconcile(): Promise<void> {
-    if (this.reconciling) return;
+    if (this.reconciling) {
+      this.rerun = true;
+      return;
+    }
     this.reconciling = true;
+    try {
+      do {
+        this.rerun = false;
+        await this.reconcileOnce();
+      } while (this.rerun);
+    } finally {
+      this.reconciling = false;
+    }
+  }
+
+  private async reconcileOnce(): Promise<void> {
     try {
       const plan = await this.desired();
       await this.apply(plan.targets);
       await this.emptyStopped(plan.stopped);
     } catch (err) {
       this.logger.error(`Presence reconcile failed: ${errName(err)}`);
-    } finally {
-      this.reconciling = false;
     }
   }
 
