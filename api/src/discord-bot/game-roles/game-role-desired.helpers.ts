@@ -58,8 +58,11 @@ export async function findDesiredMembers(
   return toDesiredMap(rows);
 }
 
-/** Every play of `gameId` since `since`: presence starts + event voice. */
-function playedCte(gameId: number, since: string, nowIso: string): SQL {
+/**
+ * Every play of `gameId` since `since`: presence starts + event voice. Shared
+ * with the removal-hint query so "idle since" uses the same plays.
+ */
+export function playedCte(gameId: number, since: string, nowIso: string): SQL {
   const playedAt = voicePlayedAt(nowIso);
   return sql`
     WITH played AS (

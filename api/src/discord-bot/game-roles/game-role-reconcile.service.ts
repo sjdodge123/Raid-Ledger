@@ -157,7 +157,7 @@ export class GameRoleReconcileService {
     );
     const grants = await loadGrants(this.db, row.id);
     const stale = [...grants.keys()].filter((id) => !desired.has(id));
-    const hints = await loadRemovalHints(this.db, row.gameId, stale);
+    const hints = await loadRemovalHints(this.db, row.gameId, stale, now);
     return diffGameRole({
       desired,
       holders: live.holders,

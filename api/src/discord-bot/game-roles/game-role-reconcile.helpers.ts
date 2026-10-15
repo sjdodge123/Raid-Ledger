@@ -7,6 +7,10 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { GAME_ROLES_OPT_OUT_PREF_KEY } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import type { GameRoleRemovalHint } from './game-role-diff.helpers';
+import { playedCte } from './game-role-desired.helpers';
+
+/** `since` for an all-time last-play lookup. */
+const ALL_TIME = '1970-01-01T00:00:00.000Z';
 
 export type GameRoleDb = PostgresJsDatabase<typeof schema>;
 export type GameRoleRow = schema.DiscordGameRoleSelect;
@@ -51,6 +55,7 @@ export async function loadRemovalHints(
   db: GameRoleDb,
   gameId: number,
   userIds: number[],
+  now: Date,
 ): Promise<Map<number, GameRoleRemovalHint>> {
   const out = new Map<number, GameRoleRemovalHint>();
   if (userIds.length === 0) return out;
@@ -58,13 +63,15 @@ export async function loadRemovalHints(
     userIds.map((id) => sql`${id}`),
     sql`, `,
   );
+  // Last play = presence OR event attendance, as eligibility counts it (D4).
   const rows = await db.execute<HintRow>(sql`
+    ${playedCte(gameId, ALL_TIME, now.toISOString())}
     SELECT u.id, u.deactivated_at IS NOT NULL AS deactivated,
       EXISTS (SELECT 1 FROM user_preferences up WHERE up.user_id = u.id
         AND up.key = ${GAME_ROLES_OPT_OUT_PREF_KEY}
         AND up.value = 'true'::jsonb) AS opted_out,
-      EXTRACT(EPOCH FROM (SELECT MAX(s.started_at) FROM game_activity_sessions s
-        WHERE s.user_id = u.id AND s.game_id = ${gameId}))::float8 AS last_epoch
+      EXTRACT(EPOCH FROM (SELECT MAX(p.played_at) FROM played p
+        WHERE p.user_id = u.id))::float8 AS last_epoch
     FROM users u WHERE u.id IN (${ids})`);
   for (const r of rows) out.set(Number(r.id), toHint(r));
   return out;
