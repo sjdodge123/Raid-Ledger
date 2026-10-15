@@ -29,6 +29,7 @@ function getEditModeState(editEvent: EventResponseDto, resolved: string): FormSt
         ephemeralVoiceEnabled: editEvent.ephemeralVoiceEnabled ?? null,
         privateVoice: editEvent.privateVoice ?? null,
         selectedInstances: (editEvent.contentInstances as Record<string, unknown>[]) ?? [],
+        guildId: editEvent.guildId ?? null,
         titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
     };
 }
@@ -45,7 +46,7 @@ function getDefaultState(): FormState {
         recurrenceFrequency: '', recurrenceUntil: '',
         reminder15min: true, reminder1hour: false, reminder24hour: false,
         ephemeralVoiceEnabled: null, privateVoice: null,
-        selectedInstances: [], titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
+        selectedInstances: [], guildId: null, titleIsAutoSuggested: false, descriptionIsAutoSuggested: false,
     };
 }
 
@@ -179,12 +180,27 @@ function gameIdForSubmit(
     return registryGameId ?? undefined; // selected but unresolved → preserve
 }
 
+/** ROK-1787: the guild tag to submit, as a spreadable fragment.
+ *  - Create: only when a guild is picked (CreateEventDto.guildId is optional, not nullable).
+ *  - Edit: only when it changed — `null` clears the tag. An unchanged tag is
+ *    omitted so an organizer who is no longer a guild editor can still save
+ *    the event (the server re-checks edit rights on every guildId it receives). */
+export function guildIdForSubmit(
+    guildId: number | null,
+    isEditMode: boolean,
+    originalGuildId: number | null,
+): { guildId?: number | null } {
+    if (!isEditMode) return guildId === null ? {} : { guildId };
+    return guildId === originalGuildId ? {} : { guildId };
+}
+
 export function buildSubmitDto(
     form: FormState,
     resolved: string,
     registryGameId: number | null | undefined,
     isEditMode: boolean,
     followupForEventId?: number | null,
+    originalGuildId: number | null = null,
 ): CreateEventDto | UpdateEventDto {
     const start = new TZDate(`${form.startDate}T${form.startTime}`, resolved);
     const end = new Date(start.getTime() + form.durationMinutes * 60 * 1000);
@@ -202,6 +218,7 @@ export function buildSubmitDto(
         reminder15min: form.reminder15min, reminder1hour: form.reminder1hour, reminder24hour: form.reminder24hour,
         ephemeralVoiceEnabled: form.ephemeralVoiceEnabled,
         privateVoice: form.privateVoice,
+        ...guildIdForSubmit(form.guildId, isEditMode, originalGuildId),
         // ROK-1371: create-only — links the new event to the ended event so the
         // server post-create hook fans out sign-up DMs. Omitted in edit mode.
         ...(!isEditMode && followupForEventId ? { followupForEventId } : {}),

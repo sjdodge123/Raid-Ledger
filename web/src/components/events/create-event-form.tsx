@@ -13,6 +13,7 @@ import '../../pages/event-detail-page.css';
 import { type SlotState } from './shared/event-form-constants';
 import { GameDetailsSection } from './shared/game-details-section';
 import { useRegistryGameId } from './shared/use-registry-game-id';
+import { PluginSlot } from '../../plugins';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';
@@ -104,7 +105,7 @@ function useTemplateActions(form: FormState) {
 function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispatch<React.SetStateAction<FormErrors>>,
     resolved: string, registryGameId: number | null | undefined,
     mutate: (dto: CreateEventDto | UpdateEventDto) => void, isEditMode: boolean,
-    followupForEventId?: number | null) {
+    followupForEventId?: number | null, originalGuildId: number | null = null) {
     const validationErrors = validateForm(form);
     setErrors(validationErrors);
     const [firstErrorKey] = Object.keys(validationErrors);
@@ -113,7 +114,7 @@ function submitForm(form: FormState, _errors: FormErrors, setErrors: React.Dispa
         if (fieldId) document.getElementById(fieldId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
         return;
     }
-    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId));
+    mutate(buildSubmitDto(form, resolved, registryGameId, isEditMode, followupForEventId, originalGuildId));
 }
 
 function useCreateEventFormState(
@@ -158,10 +159,10 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     const s = useCreateEventFormState(editEvent, seriesScope, initialGame, initialStartTime, schedulingMatchId, copyFromEvent);
 
     return (
-        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId); }} className="space-y-4 sm:space-y-8">
+        <form noValidate onSubmit={(e) => { e.preventDefault(); submitForm(s.form, s.errors, s.setErrors, s.resolved, s.registryGameId, s.mutation.mutate, isEditMode, followupForEventId, editEvent?.guildId ?? null); }} className="space-y-4 sm:space-y-8">
             <TemplatesBar templates={s.tpl.templates} onLoad={(c) => loadTemplateIntoForm(c, s.setForm)} onDelete={(id) => s.tpl.deleteTemplateMutation.mutate(id)} />
             <GameContentSection form={s.form} setForm={s.setForm} errors={s.errors} setErrors={s.setErrors}
-                isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />
+                registryGameId={s.registryGameId} isEditMode={isEditMode} interestCount={s.interestCount} interestLoading={s.interestLoading} />
             <div className="border-t border-edge-subtle" />
             <WhenSection form={s.form} errors={s.errors} isEditMode={isEditMode} tzAbbr={s.tzAbbr}
                 endTimePreview={s.endTimePreview} recurrenceCount={s.recurrenceCount} updateField={s.updateField} setErrors={s.setErrors} />
@@ -179,13 +180,15 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     );
 }
 
-function GameContentSection({ form, setForm, errors, setErrors, isEditMode, interestCount, interestLoading }: {
+function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading }: {
     form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
+    registryGameId: number | null | undefined;
     errors: FormErrors; setErrors: React.Dispatch<React.SetStateAction<FormErrors>>;
     isEditMode: boolean;
     interestCount: number; interestLoading: boolean;
 }) {
     const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
+    const onGuildChange = useCallback((guildId: number | null) => setForm((prev) => ({ ...prev, guildId })), [setForm]);
 
     return (
         <FormSection title="Game & Content">
@@ -195,7 +198,8 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                 descriptionIsAutoSuggested={form.descriptionIsAutoSuggested} titleError={errors.title}
                 titleInputId="title" eventTypeSelectId="eventType" showEventType={!isEditMode}
                 onGameChange={(game) => setForm((prev) => {
-                    const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested };
+                    // ROK-1787: a guild belongs to one game — a game change drops the tag.
+                    const updates: Partial<typeof prev> = { game, titleIsAutoSuggested: prev.titleIsAutoSuggested, guildId: null };
                     if (game?.playerCount?.max) {
                         updates.slotPlayer = game.playerCount.max;
                         if (!prev.maxAttendees) updates.maxAttendees = String(game.playerCount.max);
@@ -210,6 +214,7 @@ function GameContentSection({ form, setForm, errors, setErrors, isEditMode, inte
                 interestCount={interestCount} interestLoading={interestLoading}
                 slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
             />
+            <PluginSlot name="event-create:guild-field" context={{ gameId: registryGameId ?? null, guildId: form.guildId, onGuildChange }} />
         </FormSection>
     );
 }
