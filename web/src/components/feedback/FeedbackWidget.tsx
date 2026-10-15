@@ -7,6 +7,8 @@ import type {
     CreateFeedbackDto,
 } from '@raid-ledger/contract';
 import { getClientLogs } from './feedback-console-capture';
+import { buildClientContext, screenshotFilename, type FeedbackScreenshot } from './feedback-screenshot';
+import { useFeedbackScreenshot } from './use-feedback-screenshot';
 import { FeedbackDialog } from './FeedbackDialog';
 import { Button } from '../ui/button';
 
@@ -25,6 +27,8 @@ function useFeedbackState(submitFeedback: ReturnType<typeof useSubmitFeedback>) 
     const [showSuccess, setShowSuccess] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [sentryError, setSentryError] = useState(false);
+    const shot = useFeedbackScreenshot();
+    const { clearScreenshot } = shot;
 
     const resetRef = useRef(submitFeedback.reset);
     useEffect(() => { resetRef.current = submitFeedback.reset; }, [submitFeedback.reset]);
@@ -32,8 +36,8 @@ function useFeedbackState(submitFeedback: ReturnType<typeof useSubmitFeedback>) 
     const reset = useCallback(() => {
         setCategory('bug'); setMessage(''); setIncludeClientLogs(true);
         setShowSuccess(false); setIsSubmitting(false); setSentryError(false);
-        resetRef.current();
-    }, []);
+        clearScreenshot(); resetRef.current();
+    }, [clearScreenshot]);
 
     const handleOpen = useCallback(() => { reset(); setIsOpen(true); }, [reset]);
     const handleClose = useCallback(() => { setIsOpen(false); setTimeout(reset, 200); }, [reset]);
@@ -41,12 +45,17 @@ function useFeedbackState(submitFeedback: ReturnType<typeof useSubmitFeedback>) 
     return {
         isOpen, category, message, includeClientLogs, showSuccess, isSubmitting, sentryError,
         setCategory, setMessage, setIncludeClientLogs, setShowSuccess, setIsSubmitting, setSentryError,
-        handleOpen, handleClose,
+        handleOpen, handleClose, ...shot,
     };
 }
 
-function buildPayload(category: FeedbackCategory, message: string, includeClientLogs: boolean): CreateFeedbackDto {
-    const payload: CreateFeedbackDto = { category, message, pageUrl: window.location.href };
+function buildPayload(
+    category: FeedbackCategory, message: string, includeClientLogs: boolean, screenshot: FeedbackScreenshot | null,
+): CreateFeedbackDto {
+    const payload: CreateFeedbackDto = {
+        category, message, pageUrl: window.location.href, clientContext: buildClientContext(),
+    };
+    if (screenshot) payload.screenshotBase64 = screenshot.base64;
     if (category === 'bug' && includeClientLogs) {
         const logs = getClientLogs();
         if (logs) payload.clientLogs = logs;
@@ -58,13 +67,15 @@ function buildSentryOptions(
     category: FeedbackCategory,
     _message: string,
     feedbackId: number,
-    clientLogs?: string,
+    payload: Pick<CreateFeedbackDto, 'clientLogs' | 'clientContext'>,
 ) {
+    const { clientLogs, clientContext } = payload;
     const feedbackContext: Record<string, unknown> = {
         pageUrl: window.location.href,
         category,
         feedbackId,
     };
+    if (clientContext) feedbackContext.clientContext = clientContext;
     // Sentry truncates contexts at 8 KiB; keep the tail so the most recent
     // events survive. DB column has full 50 KiB as source of truth.
     if (clientLogs) feedbackContext.clientLogs = clientLogs.slice(-7000);
@@ -107,10 +118,15 @@ function useFeedbackSubmitHandler(
     return useCallback(() => {
         if (state.message.length < 10 || state.isSubmitting) return;
         state.setIsSubmitting(true); state.setSentryError(false);
-        const payload = buildPayload(state.category, state.message, state.includeClientLogs);
+        const { screenshot } = state;
+        const payload = buildPayload(state.category, state.message, state.includeClientLogs, screenshot);
+        const attachments = screenshot
+            ? [{ filename: screenshotFilename(screenshot), data: screenshot.bytes, contentType: screenshot.mime }]
+            : undefined;
         submitFeedback.mutate(payload, {
             onSuccess: async (data) => {
-                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`, buildSentryOptions(state.category, state.message, data.id, payload.clientLogs));
+                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`,
+                    buildSentryOptions(state.category, state.message, data.id, payload), attachments);
                 if (ok) state.setShowSuccess(true); else state.setSentryError(true);
                 state.setIsSubmitting(false);
             },
@@ -146,6 +162,8 @@ function FeedbackDialogWrapper({ state, submitFeedback, handleSubmit }: {
             includeClientLogs={state.includeClientLogs} isSubmitting={state.isSubmitting} sentryError={state.sentryError}
             submitError={submitFeedback.error} isError={submitFeedback.isError}
             onCategoryChange={state.setCategory} onMessageChange={state.setMessage}
-            onIncludeLogsChange={state.setIncludeClientLogs} onSubmit={handleSubmit} onClose={state.handleClose} />
+            onIncludeLogsChange={state.setIncludeClientLogs} screenshot={state.screenshot}
+            screenshotError={state.screenshotError} onScreenshotFile={state.attachScreenshot}
+            onScreenshotRemove={state.clearScreenshot} onSubmit={handleSubmit} onClose={state.handleClose} />
     );
 }

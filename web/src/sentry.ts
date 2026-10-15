@@ -128,18 +128,31 @@ if (!telemetryDisabled) {
     }
 }
 
+/** A file sent with a Sentry event (e.g. a feedback screenshot, ROK-1313). */
+export type SentryAttachment = Parameters<Sentry.Scope['addAttachment']>[0];
+
 /**
  * Send a Sentry message and verify delivery succeeded.
  * Returns true if the event was accepted, false if delivery failed or telemetry is disabled.
+ * Attachments go on an isolated `withScope` scope, so they ride this one event
+ * and never leak onto later events from the current scope.
  */
 export async function captureMessageVerified(
     message: string,
     context: Sentry.CaptureContext,
+    attachments?: readonly SentryAttachment[],
 ): Promise<boolean> {
     if (telemetryDisabled) return false;
 
     _lastTransportFailed = false;
-    Sentry.captureMessage(message, context);
+    if (attachments && attachments.length > 0) {
+        Sentry.withScope((scope) => {
+            attachments.forEach((a) => scope.addAttachment(a));
+            Sentry.captureMessage(message, context);
+        });
+    } else {
+        Sentry.captureMessage(message, context);
+    }
     await Sentry.flush(3000);
     return !_lastTransportFailed;
 }
