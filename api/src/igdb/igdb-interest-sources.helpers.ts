@@ -1,3 +1,6 @@
+import { sql } from 'drizzle-orm';
+import * as schema from '../drizzle/schema';
+
 /**
  * Per-user interest source rules (ROK-1796).
  *
@@ -44,10 +47,13 @@ export function toDtoSource(
 }
 
 /**
- * Whether an un-heart must write a suppression row: any source other than a
- * manual heart is re-created automatically (Discord activity, poll votes,
- * the daily Steam syncs), so it must be told to stay away.
+ * SQL condition on a `game_interests` row: the user has NOT un-hearted the
+ * game. Un-heart keeps Steam library/wishlist rows (ownership + playtime are
+ * facts other features read) and records a suppression instead, so every
+ * "is this user interested" read must honour it (ROK-1796).
  */
-export function needsSuppression(sources: readonly string[]): boolean {
-  return sources.some((s) => s !== 'manual');
-}
+export const NOT_SUPPRESSED = sql`not exists (
+  select 1 from ${schema.gameInterestSuppressions} s
+  where s.user_id = ${schema.gameInterests.userId}
+    and s.game_id = ${schema.gameInterests.gameId}
+)`;

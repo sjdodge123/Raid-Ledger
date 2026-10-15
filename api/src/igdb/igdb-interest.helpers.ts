@@ -10,9 +10,9 @@ import {
   getSteamWishlisters,
 } from './igdb-steam-interest.helpers';
 import {
+  NOT_SUPPRESSED,
   STEAM_SYNC_SOURCES,
   USER_HEART_SOURCES,
-  needsSuppression,
   toDtoSource,
 } from './igdb-interest-sources.helpers';
 
@@ -54,7 +54,8 @@ export async function getInterestCount(
 /**
  * Get the current user's interest source for a game (ROK-1796: Steam
  * library/wishlist rows count for the per-user heart; a real heart source is
- * preferred over a Steam row when both exist).
+ * preferred over a Steam row when both exist; an un-heart suppression means
+ * "not interested" even while Steam rows remain).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -73,6 +74,7 @@ export async function getUserInterestSource(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
         inArray(schema.gameInterests.source, USER_HEART_SOURCES),
+        NOT_SUPPRESSED,
       ),
     )
     .orderBy(STEAM_SOURCE_LAST)
@@ -144,6 +146,7 @@ async function fetchBatchData(
           gameIdFilter,
           eq(schema.gameInterests.userId, userId),
           inArray(schema.gameInterests.source, USER_HEART_SOURCES),
+          NOT_SUPPRESSED,
         ),
       ),
   ]);
@@ -208,28 +211,15 @@ export async function addInterest(
   return { wantToPlay: true, count, players, source: 'manual' as const };
 }
 
-/** Every stored interest source the user has for a game (all sources). */
-async function getAllUserSources(
-  db: Db,
-  gameId: number,
-  userId: number,
-): Promise<string[]> {
-  const rows = await db
-    .select({ source: schema.gameInterests.source })
-    .from(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.userId, userId),
-      ),
-    );
-  return rows.map((r) => r.source);
-}
-
 /**
- * Remove want-to-play interest. Writes a suppression when ANY auto source
- * (Discord, poll, Steam library/wishlist) backed it, so the auto-heart and the
- * daily Steam syncs do not re-create it (ROK-444, ROK-1031, ROK-1796).
+ * Remove want-to-play interest (ROK-444, ROK-1031, ROK-1796).
+ *
+ * Deletes only the HEART-source rows; Steam library/wishlist rows stay, since
+ * ownership and playtime are facts ~20 other features read. ALWAYS records a
+ * suppression — whatever backed the heart — so the per-user heart, the
+ * interest-driven DMs and every auto-heart path (Discord activity, poll
+ * votes) treat the pair as "not interested" until a manual re-heart. Both
+ * writes share one transaction so neither can land without the other.
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -240,23 +230,21 @@ export async function removeInterest(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  const sources = await getAllUserSources(db, gameId, userId);
-
-  if (needsSuppression(sources)) {
-    await db
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(schema.gameInterests)
+      .where(
+        and(
+          eq(schema.gameInterests.gameId, gameId),
+          eq(schema.gameInterests.userId, userId),
+          inArray(schema.gameInterests.source, HEART_SOURCES),
+        ),
+      );
+    await tx
       .insert(schema.gameInterestSuppressions)
       .values({ userId, gameId })
       .onConflictDoNothing();
-  }
-
-  await db
-    .delete(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.userId, userId),
-      ),
-    );
+  });
 
   const [count, players] = await Promise.all([
     getInterestCount(db, gameId),

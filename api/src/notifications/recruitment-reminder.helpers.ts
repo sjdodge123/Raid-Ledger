@@ -121,7 +121,9 @@ export async function findRecipients(
   const rows = await db.execute<{ id: number }>(sql`
     SELECT DISTINCT u.id FROM users u
     WHERE u.id != ${creatorId}
-      AND (u.id IN (SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId})
+      AND (u.id IN (SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
+          -- an un-heart suppression cancels any remaining (Steam) row (ROK-1796)
+          AND NOT EXISTS (SELECT 1 FROM game_interest_suppressions s WHERE s.user_id = gi.user_id AND s.game_id = gi.game_id))
         OR u.id IN (SELECT es.user_id FROM event_signups es INNER JOIN events e ON e.id = es.event_id
           WHERE e.game_id = ${gameId} AND upper(e.duration) < ${NOW_UTC} AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
       AND u.id NOT IN (SELECT es.user_id FROM event_signups es WHERE es.event_id = ${eventId} AND es.user_id IS NOT NULL)

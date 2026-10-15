@@ -3,7 +3,6 @@
  */
 import {
   USER_HEART_SOURCES,
-  needsSuppression,
   toDtoSource,
 } from './igdb-interest-sources.helpers';
 import { HEART_SOURCES } from './igdb-interest.helpers';
@@ -24,20 +23,6 @@ describe('toDtoSource', () => {
     expect(toDtoSource(null)).toBeUndefined();
     expect(toDtoSource('mystery')).toBeUndefined();
   });
-});
-
-describe('needsSuppression', () => {
-  it('is false for no rows or a manual-only heart', () => {
-    expect(needsSuppression([])).toBe(false);
-    expect(needsSuppression(['manual'])).toBe(false);
-  });
-
-  it.each(['discord', 'poll', 'steam_library', 'steam_wishlist'])(
-    'is true when an auto source (%s) backs the heart',
-    (auto) => {
-      expect(needsSuppression(['manual', auto])).toBe(true);
-    },
-  );
 });
 
 describe('USER_HEART_SOURCES', () => {

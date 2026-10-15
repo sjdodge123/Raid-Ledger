@@ -35,10 +35,21 @@ export interface AffinityRecipientOptions {
   interestsOnly?: boolean;
 }
 
-/** SQL predicate: holds an explicit subscription (heart) for the game. */
+/**
+ * SQL predicate: holds an explicit subscription (heart) for the game.
+ *
+ * A `game_interest_suppressions` row means the user un-hearted the game, so
+ * any `game_interests` row they still have (e.g. Steam library/wishlist
+ * ownership, which un-heart deliberately keeps) is NOT a subscription
+ * (ROK-1796).
+ */
 function subscribedPredicate(gameId: number): SQL {
   return sql`u.id IN (
       SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
+        AND NOT EXISTS (
+          SELECT 1 FROM game_interest_suppressions s
+          WHERE s.user_id = gi.user_id AND s.game_id = gi.game_id
+        )
     )`;
 }
 
