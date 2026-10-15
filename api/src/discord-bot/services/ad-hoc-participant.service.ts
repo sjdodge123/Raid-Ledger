@@ -19,6 +19,18 @@ import {
 
 export type { ServerPresenceMemberInfo, SteamUpsertOutcome };
 
+/**
+ * ROK-1800: the Discord unique index is partial — Postgres only infers it for
+ * ON CONFLICT when the predicate is restated.
+ */
+const DISCORD_CONFLICT = {
+  target: [
+    schema.adHocParticipants.eventId,
+    schema.adHocParticipants.discordUserId,
+  ],
+  targetWhere: sql`${schema.adHocParticipants.discordUserId} IS NOT NULL`,
+};
+
 /** Narrow the stored `source` column to the contract enum (ROK-1800). */
 function toParticipantSource(value: string): 'discord' | 'steam' {
   return value === 'steam' ? 'steam' : 'discord';
@@ -82,13 +94,7 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<boolean> {
-    // ROK-1800: a linked user already on the event via the game server is ONE
-    // participant — the voice identity joins their Steam row.
-    if (member.userId !== null) {
-      const { userId } = member;
-      if (await attachDiscordToUserRow(this.db, eventId, { ...member, userId }))
-        return false;
-    }
+    if (await this.mergeIntoServerRow(eventId, member)) return false;
     const [row] = await this.db
       .insert(schema.adHocParticipants)
       .values({
@@ -101,13 +107,7 @@ export class AdHocParticipantService {
         sessionCount: 1,
       })
       .onConflictDoUpdate({
-        target: [
-          schema.adHocParticipants.eventId,
-          schema.adHocParticipants.discordUserId,
-        ],
-        // ROK-1800: the unique index is partial — the predicate is required
-        // for Postgres to infer it.
-        targetWhere: sql`${schema.adHocParticipants.discordUserId} IS NOT NULL`,
+        ...DISCORD_CONFLICT,
         set: {
           leftAt: null,
           discordUsername: member.discordUsername,
@@ -118,6 +118,19 @@ export class AdHocParticipantService {
       })
       .returning({ sessionCount: schema.adHocParticipants.sessionCount });
     return row?.sessionCount === 1;
+  }
+
+  /**
+   * ROK-1800: a linked user already on the event via the game server is ONE
+   * participant — the voice identity joins their Steam row.
+   */
+  private async mergeIntoServerRow(
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<boolean> {
+    const { userId } = member;
+    if (userId === null) return false;
+    return attachDiscordToUserRow(this.db, eventId, { ...member, userId });
   }
 
   /**

@@ -121,14 +121,12 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
     expect(await rowsOf(eventId)).toHaveLength(4);
 
     await expect(
-      testApp.db
-        .insert(t)
-        .values({
-          eventId,
-          steamId: STEAM_A,
-          source: 'steam',
-          discordUsername: 'Dup',
-        }),
+      testApp.db.insert(t).values({
+        eventId,
+        steamId: STEAM_A,
+        source: 'steam',
+        discordUsername: 'Dup',
+      }),
     ).rejects.toMatchObject(
       pgError('23505', 'ad_hoc_participants_event_steam_unique'),
     );
@@ -140,7 +138,9 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
       pgError('23505', 'ad_hoc_participants_event_discord_user_unique'),
     );
   });
+});
 
+describe('AdHocParticipantService — Discord path on the partial index (real DB)', () => {
   it('a voice rejoin still upserts on the partial Discord index', async () => {
     const eventId = await insertEvent();
     await service.addParticipant(eventId, voiceMember(false));
@@ -151,7 +151,9 @@ describe('AdHocParticipantService — Steam participants (real DB)', () => {
       rows.map((r) => [r.discordUserId, r.sessionCount, r.leftAt]),
     ).toEqual([[DISCORD_A, 2, null]]);
   });
+});
 
+describe('AdHocParticipantService — one participant per linked user (real DB)', () => {
   it('voice first, then the same user on the server → ONE row carrying both ids', async () => {
     const eventId = await insertEvent();
     await service.addParticipant(eventId, voiceMember(true));

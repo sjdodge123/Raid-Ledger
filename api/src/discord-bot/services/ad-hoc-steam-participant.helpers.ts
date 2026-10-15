@@ -106,6 +106,16 @@ export async function upsertSteamParticipant(
   return insertOrRejoinSteamRow(db, eventId, member);
 }
 
+/** On a SteamID conflict: re-open, refresh the name (Steam-only rows), keep the user. */
+const STEAM_CONFLICT_SET = {
+  leftAt: null,
+  // A merged row keeps its Discord name; a Steam-only row takes the
+  // latest character name.
+  discordUsername: sql`CASE WHEN ${t.discordUserId} IS NULL THEN excluded.discord_username ELSE ${t.discordUsername} END`,
+  userId: sql`COALESCE(excluded.user_id, ${t.userId})`,
+  sessionCount: sql`${t.sessionCount} + 1`,
+};
+
 /** Insert the Steam row, or refresh it on `(event_id, steam_id)` conflict. */
 async function insertOrRejoinSteamRow(
   db: Db,
@@ -128,17 +138,44 @@ async function insertOrRejoinSteamRow(
     .onConflictDoUpdate({
       target: [t.eventId, t.steamId],
       targetWhere: sql`${t.steamId} IS NOT NULL`,
-      set: {
-        leftAt: null,
-        // A merged row keeps its Discord name; a Steam-only row takes the
-        // latest character name.
-        discordUsername: sql`CASE WHEN ${t.discordUserId} IS NULL THEN excluded.discord_username ELSE ${t.discordUsername} END`,
-        userId: sql`COALESCE(excluded.user_id, ${t.userId})`,
-        sessionCount: sql`${t.sessionCount} + 1`,
-      },
+      set: STEAM_CONFLICT_SET,
     })
     .returning({ sessionCount: t.sessionCount });
   return row?.sessionCount === 1 ? 'inserted' : 'rejoined';
+}
+
+/** The user's row that has no Discord identity yet (server-born). */
+async function findSteamOnlyRowForUser(
+  db: Db,
+  eventId: number,
+  userId: number,
+): Promise<AdHocParticipantRow | undefined> {
+  const rows = await db
+    .select()
+    .from(t)
+    .where(
+      and(
+        eq(t.eventId, eventId),
+        eq(t.userId, userId),
+        isNull(t.discordUserId),
+      ),
+    )
+    .limit(1);
+  return rows[0];
+}
+
+/** Whether another row on the event already holds this Discord id. */
+async function discordIdTaken(
+  db: Db,
+  eventId: number,
+  discordUserId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: t.id })
+    .from(t)
+    .where(and(eq(t.eventId, eventId), eq(t.discordUserId, discordUserId)))
+    .limit(1);
+  return rows[0] !== undefined;
 }
 
 /**
@@ -155,27 +192,9 @@ export async function attachDiscordToUserRow(
   eventId: number,
   member: DiscordIdentity & { userId: number },
 ): Promise<boolean> {
-  const steamRows = await db
-    .select()
-    .from(t)
-    .where(
-      and(
-        eq(t.eventId, eventId),
-        eq(t.userId, member.userId),
-        isNull(t.discordUserId),
-      ),
-    )
-    .limit(1);
-  const row = steamRows[0];
+  const row = await findSteamOnlyRowForUser(db, eventId, member.userId);
   if (!row) return false;
-  const taken = await db
-    .select({ id: t.id })
-    .from(t)
-    .where(
-      and(eq(t.eventId, eventId), eq(t.discordUserId, member.discordUserId)),
-    )
-    .limit(1);
-  if (taken[0]) return false;
+  if (await discordIdTaken(db, eventId, member.discordUserId)) return false;
   await db
     .update(t)
     .set({
