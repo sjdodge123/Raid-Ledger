@@ -3,6 +3,7 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CreateEventDto,
+  SeriesScope,
   UpdateEventDto,
   UserRole,
 } from '@raid-ledger/contract';
@@ -15,6 +16,7 @@ import {
   type EventGuildTagger,
 } from '../plugins/plugin-host/extension-points';
 import { isOperatorOrAdmin } from './controller.helpers';
+import { resolveTargetEvents } from './event-series.helpers';
 
 type Actor = { id: number; role: UserRole };
 
@@ -60,6 +62,52 @@ export class EventGuildTagService {
     if (dto.guildId !== undefined) {
       await this.assertCanTag(actor, dto.guildId, gameId);
     } else if (existing.guildId !== null && gameId !== existing.gameId) {
+      throw new BadRequestException(GUILD_GAME_MISMATCH);
+    }
+  }
+
+  /**
+   * Series update: `all` / `this_and_following` apply the DTO to every
+   * occurrence, so each target's resulting game is checked — not just the
+   * anchor's (a tagged non-anchor occurrence would otherwise be stranded on
+   * another game by an edit made through an untagged anchor).
+   */
+  async assertSeriesUpdate(
+    actor: Actor,
+    eventId: number,
+    scope: SeriesScope,
+    dto: UpdateEventDto,
+  ): Promise<void> {
+    if (scope === 'this') return this.assertUpdate(actor, eventId, dto);
+    if (dto.guildId === null) return;
+    if (dto.guildId === undefined && dto.gameId === undefined) return;
+    const [anchor] = await this.db
+      .select()
+      .from(schema.events)
+      .where(eq(schema.events.id, eventId))
+      .limit(1);
+    if (!anchor) return; // the series service answers 404
+    if (!this.mayEdit(actor, anchor.creatorId)) return; // owner 403 there
+    const targets = await resolveTargetEvents(this.db, anchor, scope);
+    await this.assertTargets(actor, targets, dto);
+  }
+
+  private async assertTargets(
+    actor: Actor,
+    targets: ReadonlyArray<{ gameId: number | null; guildId: number | null }>,
+    dto: UpdateEventDto,
+  ): Promise<void> {
+    const resultingGame = (t: { gameId: number | null }) =>
+      dto.gameId !== undefined ? dto.gameId : t.gameId;
+    if (dto.guildId !== undefined && dto.guildId !== null) {
+      for (const gameId of new Set(targets.map(resultingGame))) {
+        await this.assertCanTag(actor, dto.guildId, gameId);
+      }
+      return;
+    }
+    if (
+      targets.some((t) => t.guildId !== null && resultingGame(t) !== t.gameId)
+    ) {
       throw new BadRequestException(GUILD_GAME_MISMATCH);
     }
   }

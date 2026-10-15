@@ -41,7 +41,7 @@ export class EventsSeriesController {
   ): Promise<{ message: string }> {
     try {
       const dto = UpdateSeriesSchema.parse(body);
-      await this.guildTag.assertUpdate(req.user, id, dto.data);
+      await this.guildTag.assertSeriesUpdate(req.user, id, dto.scope, dto.data);
       await this.seriesService.update(
         id,
         req.user.id,
