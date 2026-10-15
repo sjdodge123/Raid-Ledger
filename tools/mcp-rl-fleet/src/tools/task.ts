@@ -22,6 +22,7 @@ import {
   synthesizeEmptyStderrDiagnostic,
 } from '../exec.js';
 import { annotatePlaywrightSentinel } from '../playwright-sentinel.js';
+import { backfillStepDurations } from '../step-durations.js';
 import {
   applyStatusProjection,
   redactCmd,
@@ -160,7 +161,9 @@ export async function executeStatus(params: ExecuteStatusParams): Promise<Execut
     // The STEP, not the script exit code — validate-ci.sh stops at the first
     // failing tier, so a later one (e.g. Discord smoke without a bot env)
     // fails the task while Playwright itself passed for this sha.
-    const annotated = annotatePlaywrightSentinel({ ...parsed, steps: parsed.steps ?? [] });
+    // ROK-1793 S0: fill null steps[].duration_s from `[step-time]` log lines.
+    const steps = backfillStepDurations(parsed.steps ?? [], parsed.log_tail);
+    const annotated = annotatePlaywrightSentinel({ ...parsed, steps });
     // ROK-1567: redact the env credential out of cmd/args_summary/env in every
     // mode, then drop the heavy forensic keys unless this is a terminal read.
     return applyStatusProjection(annotated, params.brief, params.include_credentials);

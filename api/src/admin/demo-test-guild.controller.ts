@@ -13,6 +13,9 @@
  *   - a `guild_editors` rank grant for rank 1, granted by the GM;
  *   - (ROK-1787) guild-tagged raids: a weekly series + one past raid with
  *     attendance recorded — see `demo-test-guild-raids.helpers.ts`.
+ *   - with `withContent: true` (ROK-1786), the guild page content too: GM
+ *     post, rules, links and two recommended addons (see
+ *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -55,6 +58,10 @@ import {
   raiderOf,
   type SeededGuildRaids,
 } from './demo-test-guild-raids.helpers';
+import {
+  seedGuildContent,
+  type SeedGuildContent,
+} from './demo-test-guild-content.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -87,6 +94,8 @@ export interface SeedGuildResponse {
   unlinkedMemberIds: number[];
   /** ROK-1787 — guild-tagged events for the Raids tab. */
   raids: SeededGuildRaids;
+  /** Present only when the body sent `withContent: true`. */
+  content?: SeedGuildContent;
 }
 
 interface SeededRoster {
@@ -109,8 +118,7 @@ export class DemoTestGuildController {
   async seedGuild(@Body() body?: unknown): Promise<SeedGuildResponse> {
     const input = parseSeedGuildBody(body);
     const gameId = await findWowGameId(this.db, input.gameSlug);
-    await this.plugins.ensureInstalled(WOW_COMMON_MANIFEST.id);
-    await this.plugins.activate(WOW_COMMON_MANIFEST.id);
+    await this.ensurePluginActive();
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input.name, now);
     const hash = guildKeyHash(input.name.toLowerCase());
@@ -122,6 +130,9 @@ export class DemoTestGuildController {
     });
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
     const raids = await this.seedRaids({ guildId, gameId, hash, now }, users);
+    const content = input.withContent
+      ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
+      : null;
     return {
       guildId,
       gameId,
@@ -131,6 +142,7 @@ export class DemoTestGuildController {
       users,
       unlinkedMemberIds: unlinked,
       raids,
+      ...(content ? { content } : {}),
     };
   }
 
@@ -147,6 +159,12 @@ export class DemoTestGuildController {
       officer: raiderOf(users.officer),
       member: raiderOf(users.member),
     });
+  }
+
+  /** Every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`. */
+  private async ensurePluginActive(): Promise<void> {
+    await this.plugins.ensureInstalled(WOW_COMMON_MANIFEST.id);
+    await this.plugins.activate(WOW_COMMON_MANIFEST.id);
   }
 
   /** Roster rows + their owners; `unlinked` collects owner-less member ids. */

@@ -1,9 +1,10 @@
 /**
  * ROK-1785 — the Overview tab: the prototype's bento widget grid
  * (`layout/OverviewTab.tsx`) — 3 columns at ≥1024px, 2 at ≥768px, 1 on phone.
- * S1 ships the Members summary (+ the GM's "Page editors" card); S3 (ROK-1787)
- * adds the raid schedule, events, role composition and attendance widgets in
- * the prototype's order. Raid widgets wait for their payload (no layout jump).
+ * S1 ships the Members summary (+ the GM's "Page editors" card); S2 (ROK-1786)
+ * the GM post (span 2, top); S3 (ROK-1787) the raid schedule, events, role
+ * composition and attendance widgets in the prototype's order. Raid widgets
+ * wait for their payload (no layout jump).
  */
 import type { JSX } from 'react';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
@@ -14,6 +15,7 @@ import { GuildEditorsCard } from './guild-editors-panel';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
 import { GuildRoleComposition } from './guild-role-composition';
+import { GmPostCard } from './gm-post-card';
 import { rankLabel } from './guild-roster.helpers';
 import { RoleSummary } from './role-bits';
 
@@ -57,6 +59,7 @@ const OVERVIEW_ATTENDANCE_TOP = 5;
 export function GuildOverview({ page, raids }: { page: GuildPage; raids: GuildRaidsDto | undefined }): JSX.Element {
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
+            <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} />
             {raids && <GuildRaidSchedule schedule={raids.schedule} />}
             {raids && <div className={SPAN_2}><GuildEvents raids={raids} compact /></div>}
             {raids && <GuildRoleComposition composition={raids.composition} />}

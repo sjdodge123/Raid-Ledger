@@ -17,6 +17,7 @@ import type {
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type {
   CharacterEquipmentDto,
+  CharacterLockoutsDto,
   CreateCharacterDto,
   ForeverTalentsDto,
   GameServerCalendarItemDto,
@@ -41,6 +42,12 @@ export interface DisplayTalentsRow {
   /** The stored (Armory) talents jsonb. */
   talents: unknown;
   lastSyncedAt: string | null;
+}
+
+/** The character fields a display-lockouts resolver may read (ROK-1743). */
+export interface DisplayLockoutsRow {
+  id: string;
+  gameVariant: string | null;
 }
 
 /** Provides character data fetch + sync capabilities for a game */
@@ -84,6 +91,10 @@ export interface CharacterSyncAdapter {
   resolveDisplayTalents?(
     row: DisplayTalentsRow,
   ): Promise<ForeverTalentsDto | null | undefined>;
+  /** ROK-1743: saved instances to display; undefined = no lockouts key. */
+  resolveDisplayLockouts?(
+    row: DisplayLockoutsRow,
+  ): Promise<CharacterLockoutsDto | undefined>;
 }
 
 /** Provides game content data (realms, instances) */

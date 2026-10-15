@@ -16,6 +16,11 @@ import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import { nonEmpty } from '../common/testing/narrow';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
+import {
+  SEED_GUILD_GM_POST,
+  SEED_GUILD_LINKS,
+  SEED_GUILD_RULES,
+} from './demo-test-guild-content.helpers';
 
 const ORIGINAL_DEMO_MODE = process.env.DEMO_MODE;
 const ROUTE = '/admin/test/wow/seed-guild';
@@ -59,8 +64,11 @@ async function seedWowGame(): Promise<void> {
 }
 
 /** Seed against the suite's WoW game. */
-async function seedGuild(name: string): Promise<SeedGuildResponse> {
-  const res = await seed({ name, gameSlug: WOW_FOREVER_GAME_SLUG });
+async function seedGuild(
+  name: string,
+  extra: Record<string, unknown> = {},
+): Promise<SeedGuildResponse> {
+  const res = await seed({ name, gameSlug: WOW_FOREVER_GAME_SLUG, ...extra });
   expect(res.status).toBe(200);
   return res.body as SeedGuildResponse;
 }
@@ -226,5 +234,90 @@ describe('POST /admin/test/wow/seed-guild — guild raids (ROK-1787)', () => {
     const first = await seedGuild('Raid Twice Keepers');
     const second = await seedGuild('Raid Twice Keepers');
     expect(second.raids).toEqual(first.raids);
+  });
+});
+
+function guildGet(guildId: number, path: string, token: string) {
+  return testApp.request
+    .get(`/plugins/wow/guilds/${guildId}/${path}`)
+    .set('Authorization', `Bearer ${token}`);
+}
+
+interface AddonBody {
+  id: number;
+  source: string;
+  slugOrUrl: string;
+  requirement: string;
+  sortOrder: number;
+}
+
+describe('POST /admin/test/wow/seed-guild — withContent (ROK-1786)', () => {
+  it('without the flag: no content key, empty profile and no addons', async () => {
+    const out = await seedGuild('Bare Keepers');
+    expect(out).not.toHaveProperty('content');
+    const token = tokenFor(out.users.member);
+    const profile = await guildGet(out.guildId, 'profile', token);
+    expect(profile.body).toEqual({
+      guildId: out.guildId,
+      gmPost: null,
+      rules: [],
+      links: [],
+    });
+    const addons = await guildGet(out.guildId, 'addons', token);
+    expect(addons.body.addons).toEqual([]);
+  });
+
+  it('seeds the GM post, rules, links and two addons a plain member can read', async () => {
+    const out = await seedGuild('Content Keepers', { withContent: true });
+    const token = tokenFor(out.users.member);
+    const profile = await guildGet(out.guildId, 'profile', token);
+    expect(profile.status).toBe(200);
+    expect(profile.body.gmPost).toEqual(
+      expect.objectContaining({ body: SEED_GUILD_GM_POST }),
+    );
+    expect(profile.body.rules).toEqual(SEED_GUILD_RULES);
+    expect(profile.body.links).toEqual(SEED_GUILD_LINKS);
+    const addons = await guildGet(out.guildId, 'addons', token);
+    const rows = addons.body.addons as AddonBody[];
+    expect(rows.map((a) => [a.source, a.requirement, a.sortOrder])).toEqual([
+      ['curseforge', 'required', 0],
+      ['github', 'optional', 1],
+    ]);
+    expect(rows.map((a) => a.id)).toEqual(out.content?.addonIds);
+    expect(addons.body.pinned[0]).toEqual(
+      expect.objectContaining({ name: 'LedgerLink' }),
+    );
+  });
+});
+
+describe('POST /admin/test/wow/seed-guild — withContent re-seed (ROK-1786)', () => {
+  it('a re-call restores edited content with the same addon ids', async () => {
+    const first = await seedGuild('Restore Keepers', { withContent: true });
+    const officer = tokenFor(first.users.officer);
+    const base = `/plugins/wow/guilds/${first.guildId}`;
+    const patched = await testApp.request
+      .patch(`${base}/profile`)
+      .set('Authorization', `Bearer ${officer}`)
+      .send({ gmPost: 'Changed by the smoke' });
+    expect(patched.status).toBe(200);
+    const added = await testApp.request
+      .post(`${base}/addons`)
+      .set('Authorization', `Bearer ${officer}`)
+      .send({ url: 'https://github.com/stanzilla/advancedinterfaceoptions' });
+    expect(added.status).toBe(201);
+    const second = await seedGuild('Restore Keepers', { withContent: true });
+    expect(second.content?.addonIds).toEqual(first.content?.addonIds);
+    const token = tokenFor(first.users.member);
+    const profile = await guildGet(first.guildId, 'profile', token);
+    expect(profile.body.gmPost.body).toBe(SEED_GUILD_GM_POST);
+    const addons = await guildGet(first.guildId, 'addons', token);
+    expect((addons.body.addons as AddonBody[]).map((a) => a.id)).toEqual(
+      first.content?.addonIds,
+    );
+  });
+
+  it('is 400 for a non-boolean withContent', async () => {
+    const res = await seed({ name: 'Flag Keepers', withContent: 'yes' });
+    expect(res.status).toBe(400);
   });
 });

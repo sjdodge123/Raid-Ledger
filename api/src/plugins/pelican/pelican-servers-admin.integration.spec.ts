@@ -222,6 +222,8 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
     const kept = await insertServer(1, { gameId });
     const hidden = await insertServer(2, { gameId });
     const unmapped = await insertServer(3, { gameId });
+    // A configured plugin — unconfigured returns no statuses (ROK-1776).
+    stubPanel(testApp, createFakePanel([]));
     const token = await memberToken(testApp, 'pelicanvisibilitymember');
     expect(await memberStatusKeys(token)).toEqual(
       [kept.id, hidden.id, unmapped.id].map(String).sort(),

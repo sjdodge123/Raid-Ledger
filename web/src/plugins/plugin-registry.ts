@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { CharacterIdentityProvider } from './character-identity';
 import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer';
+import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
 
 /** All plugin slot names — each corresponds to a page location */
 export type PluginSlotName =
@@ -64,6 +65,8 @@ export interface PluginHandle {
     registerCharacterIdentity<V>(provider: CharacterIdentityProvider<V>): void;
     /** Register a calendar layer (windows + markers) drawn only while this plugin is active (ROK-1774). */
     registerCalendarLayer(layer: CalendarLayer): void;
+    /** Declare that this plugin feeds `GET /game-servers/status` — core asks for statuses only while it is active (ROK-1776). */
+    registerGameServerProvider(): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -133,6 +136,9 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerCalendarLayer(layer) {
             addCalendarLayer({ pluginSlug: slug, layer });
         },
+        registerGameServerProvider() {
+            addGameServerProvider(slug);
+        },
     };
 }
 
@@ -183,6 +189,7 @@ export function clearRegistry(): void {
     identityRegistry.clear();
     layerRegistry.clear();
     layersFrozen = false;
+    clearGameServerProviders();
 }
 
 /** Returns true if the icon string represents an image URL (starts with "/" or "http") */

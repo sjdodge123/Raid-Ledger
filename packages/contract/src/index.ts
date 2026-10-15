@@ -22,6 +22,9 @@ export * from './signups.schema.js';
 // Characters
 export * from './characters.schema.js';
 
+// Character saved instances (ROK-1743)
+export * from './character-lockouts.schema.js';
+
 // Availability
 export * from './availability.schema.js';
 
@@ -215,3 +218,5 @@ export * from './ledgerlink-json-schema.js';
 export * from './guilds.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
+// Guild page content — GM post, rules, links, recommended addons (ROK-1786).
+export * from './guild-content.schema.js';

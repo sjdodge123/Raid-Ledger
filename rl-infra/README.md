@@ -324,14 +324,16 @@ subtree.
   "finished_at": null,
   "cancel_reason": null,
   "steps": [
-    {"name": "Build (all workspaces)", "status": "PASS", "duration_s": null}
+    {"name": "Build (all workspaces)", "status": "PASS", "duration_s": 45.2}
   ]
 }
 ```
 
 **Step parsing** — `task-start` tails the wrapped command's log and regex-matches
 validate-ci's `<name>: PASS|FAIL|SKIPPED` lines (ANSI-colored or plain) into
-`steps[]`. The regex is the single source of truth in
+`steps[]`. `duration_s` comes from the `[step-time] <name> <seconds>` line
+validate-ci's `run_step` prints just before each row (ROK-1793; `null` when
+none preceded it), and the MCP backfills any null from the log tail. The regex is the single source of truth in
 `orchestrator/bin/_parser.sh`; M2 documentation references this file rather than
 copying the pattern.
 
