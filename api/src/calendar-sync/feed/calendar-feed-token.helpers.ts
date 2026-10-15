@@ -79,7 +79,10 @@ export async function loadFeedToken(
 
 /**
  * The feed owner's user id, or null for a malformed / unknown / revoked
- * token. A malformed token never reaches the database.
+ * token, or when the owner is banned or deactivated — a ban blocks every
+ * auth path, and this bearer link is one (the row survives a ban without a
+ * data wipe, so an unban restores the same link). A malformed token never
+ * reaches the database.
  */
 export async function findFeedUserByToken(
   db: Db,
@@ -91,10 +94,14 @@ export async function findFeedUserByToken(
     .select({
       userId: schema.calendarFeeds.userId,
       tokenHash: schema.calendarFeeds.tokenHash,
+      bannedAt: schema.users.bannedAt,
+      deactivatedAt: schema.users.deactivatedAt,
     })
     .from(schema.calendarFeeds)
+    .innerJoin(schema.users, eq(schema.users.id, schema.calendarFeeds.userId))
     .where(eq(schema.calendarFeeds.tokenHash, hash))
     .limit(1);
   if (!row || !hashesEqual(row.tokenHash, hash)) return null;
+  if (row.bannedAt !== null || row.deactivatedAt !== null) return null;
   return row.userId;
 }

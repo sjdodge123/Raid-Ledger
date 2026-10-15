@@ -139,6 +139,10 @@ function toIcsEvent(
     stamp: opts.now,
     description: `${url}\n\n${COPY_FOOTER}`,
     url,
+    // §6.3/§4: STATUS follows the sign-up — a tentative one (benched or not)
+    // is TENTATIVE, everything else CONFIRMED. The (Bench) prefix and Free
+    // come from the shared copy helpers above.
+    status: entry.tentative ? 'TENTATIVE' : 'CONFIRMED',
     transparency: copyIsBusy(entry) ? 'OPAQUE' : 'TRANSPARENT',
   };
 }

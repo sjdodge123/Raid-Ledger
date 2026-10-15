@@ -71,10 +71,36 @@ describe('findFeedUserByToken', () => {
     const token = generateFeedToken();
     const db = createDrizzleMock();
     db.limit.mockResolvedValue([
-      { userId: 7, tokenHash: hashFeedToken(token) },
+      {
+        userId: 7,
+        tokenHash: hashFeedToken(token),
+        bannedAt: null,
+        deactivatedAt: null,
+      },
     ]);
     expect(await findFeedUserByToken(db as unknown as Db, token)).toBe(7);
   });
+
+  it.each([
+    [
+      'banned',
+      { bannedAt: new Date('2026-10-01T00:00:00Z'), deactivatedAt: null },
+    ],
+    [
+      'deactivated',
+      { bannedAt: null, deactivatedAt: new Date('2026-10-01T00:00:00Z') },
+    ],
+  ])(
+    'returns null when the owner is %s (the link stops serving)',
+    async (_, owner) => {
+      const token = generateFeedToken();
+      const db = createDrizzleMock();
+      db.limit.mockResolvedValue([
+        { userId: 7, tokenHash: hashFeedToken(token), ...owner },
+      ]);
+      expect(await findFeedUserByToken(db as unknown as Db, token)).toBeNull();
+    },
+  );
 
   it('returns null for an unknown token', async () => {
     const db = createDrizzleMock();

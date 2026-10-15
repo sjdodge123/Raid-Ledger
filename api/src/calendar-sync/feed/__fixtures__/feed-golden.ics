@@ -15,6 +15,7 @@ SUMMARY:Molten Core\; full clear\, then Onyxia \\ loot council — bring fi
  re resist 🔥 and consumables
 DESCRIPTION:https://raid.example.test/events/101\n\nAdded by Raid Ledger
 URL:https://raid.example.test/events/101
+STATUS:CONFIRMED
 TRANSP:OPAQUE
 END:VEVENT
 BEGIN:VEVENT
@@ -25,6 +26,7 @@ DTEND:20261018T200000Z
 SUMMARY:(Tentative) Zul'Gurub\, alt run
 DESCRIPTION:https://raid.example.test/events/102\n\nAdded by Raid Ledger
 URL:https://raid.example.test/events/102
+STATUS:TENTATIVE
 TRANSP:TRANSPARENT
 END:VEVENT
 BEGIN:VEVENT
@@ -35,6 +37,7 @@ DTEND:20261020T230000Z
 SUMMARY:(Bench) Blackwing Lair
 DESCRIPTION:https://raid.example.test/events/103\n\nAdded by Raid Ledger
 URL:https://raid.example.test/events/103
+STATUS:TENTATIVE
 TRANSP:TRANSPARENT
 END:VEVENT
 END:VCALENDAR

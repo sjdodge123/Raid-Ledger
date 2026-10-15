@@ -2,7 +2,8 @@
  * ROK-1599: the owner's subscribe-link routes (epic ROK-669 §10 Story 9).
  * All behind the kill switch (off → 404) like the other user routes.
  *
- * - `GET    /users/me/calendars/feed` → `{ url }`, or null with no feed.
+ * - `GET    /users/me/calendars/feed` → `{ feed: { url } | null }` — wrapped,
+ *   because Nest sends a bare `null` as an empty body, not JSON.
  * - `POST   /users/me/calendars/feed` → create, or reset (rotate) → `{ url }`.
  *   A reset kills the old link at once.
  * - `DELETE /users/me/calendars/feed` → 204; the link stops resolving.
@@ -50,8 +51,10 @@ export class CalendarFeedController {
   ) {}
 
   @Get()
-  get(@Request() req: AuthenticatedRequest): Promise<CalendarFeed | null> {
-    return loadFeedView(this.db, this.settings, req.user.id);
+  async get(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<{ feed: CalendarFeed | null }> {
+    return { feed: await loadFeedView(this.db, this.settings, req.user.id) };
   }
 
   @Post()

@@ -105,6 +105,7 @@ describe('ICS subscribe feed — content', () => {
     const block = await veventOf(res.text, eventId);
     expect(block).toContain('\r\nSUMMARY:Raid Night\r\n');
     expect(block).toContain('\r\nTRANSP:OPAQUE\r\n');
+    expect(block).toContain('\r\nSTATUS:CONFIRMED\r\n');
   });
 
   it('serves a tentative sign-up as "(Tentative) " + Free', async () => {
@@ -113,6 +114,7 @@ describe('ICS subscribe feed — content', () => {
     const block = await veventOf(res.text, eventId);
     expect(block).toContain('\r\nSUMMARY:(Tentative) Maybe Raid\r\n');
     expect(block).toContain('\r\nTRANSP:TRANSPARENT\r\n');
+    expect(block).toContain('\r\nSTATUS:TENTATIVE\r\n');
   });
 
   it('keeps the past 7 days, drops events outside the window', async () => {
@@ -162,14 +164,40 @@ describe('ICS subscribe feed — content', () => {
 });
 
 describe('ICS subscribe feed — link lifecycle', () => {
-  it('GET returns the same url the POST issued; null before', async () => {
+  it('GET returns the same url the POST issued; { feed: null } before', async () => {
     const none = await authed(testApp.request.get(FEED));
     expect(none.status).toBe(200);
-    expect(none.body?.url).toBeUndefined();
+    expect(none.body).toEqual({ feed: null });
     const feedToken = await issueFeed();
     const res = await authed(testApp.request.get(FEED));
-    expect(res.body.url).toMatch(new RegExp(`/api/cal/u/${feedToken}\\.ics$`));
+    expect(res.body).toEqual({
+      feed: {
+        url: expect.stringMatching(
+          new RegExp(`/api/cal/u/${feedToken}\\.ics$`),
+        ),
+      },
+    });
   });
+
+  it.each([
+    ['banned', { bannedAt: new Date() }],
+    ['deactivated', { deactivatedAt: new Date() }],
+  ])(
+    "a %s owner's link 404s; lifting it restores the same link",
+    async (_, set) => {
+      const feedToken = await issueFeed();
+      await testApp.db
+        .update(schema.users)
+        .set(set)
+        .where(eq(schema.users.id, userId));
+      expect((await fetchFeed(feedToken)).status).toBe(404);
+      await testApp.db
+        .update(schema.users)
+        .set({ bannedAt: null, deactivatedAt: null })
+        .where(eq(schema.users.id, userId));
+      expect((await fetchFeed(feedToken)).status).toBe(200);
+    },
+  );
 
   it('reset kills the old link at once; the new one serves', async () => {
     const oldToken = await issueFeed();
