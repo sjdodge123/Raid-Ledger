@@ -28,7 +28,7 @@ export function GameNotifyPanelBody({ gameName, muted, disabled, onMutedChange }
                 <Switch checked={!muted} onChange={(on) => onMutedChange(!on)} label={label}
                     disabled={disabled} testId="game-notify-switch" aria-describedby={helpId} />
             </div>
-            <p id={helpId} className="text-sm text-muted">Muting keeps {gameName} on your list.</p>
+            <p id={helpId} className="text-sm text-muted">Muting only silences notifications. Your heart stays as it is.</p>
             <Link to={NOTIFICATION_SETTINGS_HREF} className="text-sm font-medium text-success hover:underline">
                 All notification settings →
             </Link>

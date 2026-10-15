@@ -83,7 +83,7 @@ describe('GameNotifyBell — desktop popover', () => {
         await user.click(bell);
         const dialog = await screen.findByRole('dialog', { name: 'Notifications for Valheim' });
         expect(bell).toHaveAttribute('aria-expanded', 'true');
-        expect(within(dialog).getByText('Muting keeps Valheim on your list.')).toBeInTheDocument();
+        expect(within(dialog).getByText('Muting only silences notifications. Your heart stays as it is.')).toBeInTheDocument();
         expect(within(dialog).getByRole('link', { name: 'All notification settings →' }))
             .toHaveAttribute('href', '/profile/notifications#notif-subscribed_game');
 
