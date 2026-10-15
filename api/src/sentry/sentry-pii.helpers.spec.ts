@@ -144,7 +144,7 @@ describe('scrubPii strings — identity and cycles (ROK-1779)', () => {
     extra['self'] = extra;
     const event: PiiScrubbableEvent = { extra };
     expect(() => scrubPii(event)).not.toThrow();
-    expect(extra['email']).toBe(PII_REDACTED);
+    expect(event.extra).toEqual({ email: PII_REDACTED, self: '[circular]' });
   });
 
   it('returns the same event object (beforeSend identity)', () => {
@@ -182,5 +182,57 @@ describe('scrubPiiString — percent-encoded e-mails (ROK-1779 Codex P2)', () =>
     });
     expect(event.request).toEqual({ url: 'https://x.io/u?e=[email]' });
     expect(event.breadcrumbs).toEqual([{ data: { url: '/api?e=[email]' } }]);
+  });
+});
+
+describe('caller-owned objects are never mutated (ROK-1779 Codex P2 round 3)', () => {
+  const deepChain = (levels: number): Record<string, unknown> => {
+    let node: Record<string, unknown> = { note: 'deep carol@x.io' };
+    for (let i = 0; i < levels; i += 1) node = { child: node };
+    return node;
+  };
+
+  it('scrubs an event without touching the objects its extras reference', () => {
+    const owned = { username: 'bob', profile: { email: 'bob@x.io' } };
+    const event: PiiScrubbableEvent = {
+      extra: { owned },
+      contexts: { app: owned },
+    };
+    scrubPii(event);
+    expect(owned).toEqual({ username: 'bob', profile: { email: 'bob@x.io' } });
+    expect(event.extra).toEqual({
+      owned: { username: PII_REDACTED, profile: { email: PII_REDACTED } },
+    });
+    expect(event.contexts).toEqual({
+      app: { username: PII_REDACTED, profile: { email: PII_REDACTED } },
+    });
+  });
+
+  it('scrubs frozen extras and a frozen user without throwing', () => {
+    const frozen = Object.freeze({ username: 'bob', note: 'ping bob@x.io' });
+    const user = Object.freeze({ id: 3, email: 'u@x.io' });
+    const event: PiiScrubbableEvent = { extra: { frozen }, user };
+    expect(() => scrubPii(event)).not.toThrow();
+    expect(event.extra).toEqual({
+      frozen: { username: PII_REDACTED, note: 'ping [email]' },
+    });
+    expect(event.user).toEqual({ id: 3 });
+    expect(user).toEqual({ id: 3, email: 'u@x.io' });
+  });
+
+  it('copes with a cyclic extra and leaves it intact', () => {
+    const node: Record<string, unknown> = { email: 'b@x.io' };
+    node['self'] = node;
+    const event: PiiScrubbableEvent = { extra: node };
+    scrubPii(event);
+    expect(node['email']).toBe('b@x.io');
+    expect(event.extra).toEqual({ email: PII_REDACTED, self: '[circular]' });
+  });
+
+  it('never ships a value deeper than the depth bound unscrubbed', () => {
+    const event: PiiScrubbableEvent = { extra: deepChain(30) };
+    scrubPii(event);
+    expect(JSON.stringify(event.extra)).not.toContain('carol@x.io');
+    expect(JSON.stringify(event.extra)).toContain('[truncated]');
   });
 });

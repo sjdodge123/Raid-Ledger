@@ -3,7 +3,8 @@
  *
  * `instrument.ts` must load first in main.ts, so this file imports nothing
  * (the depth/WeakSet walk mirrors `sentry-scrub.helpers.ts` on purpose — the
- * two key sets evolve separately). Mutates in place and returns the event.
+ * two key sets evolve separately). Never writes to the objects it is handed:
+ * each scrubbed field is replaced by a scrubbed copy; returns the event.
  *
  * - `event.user` keeps only its internal `id` (triage needs it).
  * - Any username / display name / email / IP / community-name key, at any
@@ -64,46 +65,90 @@ export function scrubPiiString(value: string): string {
     .replace(IPV4, '[ip]');
 }
 
+const CIRCULAR = '[circular]';
+const TRUNCATED = '[truncated]';
+type ScrubField =
+  'request' | 'spans' | 'extra' | 'contexts' | 'breadcrumbs' | 'tags';
+const EVENT_FIELDS: readonly ScrubField[] = [
+  'request',
+  'spans',
+  'extra',
+  'contexts',
+  'breadcrumbs',
+  'tags',
+];
+
+/** Copy an object's own keys (plus an Error's message/stack), scrubbing each. */
+function copyEntries(
+  obj: object,
+  ancestors: Set<object>,
+  depth: number,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (obj instanceof Error) {
+    out['name'] = obj.name;
+    out['message'] = scrubPiiString(obj.message);
+    if (typeof obj.stack === 'string') out['stack'] = scrubPiiString(obj.stack);
+  }
+  for (const key of Object.keys(obj)) {
+    const raw: unknown = Reflect.get(obj, key);
+    if (VERSION_KEY.test(key) && typeof raw === 'string') out[key] = raw;
+    else
+      out[key] = isPiiKey(key)
+        ? PII_REDACTED
+        : scrubPiiValue(raw, ancestors, depth + 1);
+  }
+  return out;
+}
+
+/**
+ * Return a scrubbed COPY: extras/contexts can hold objects the app still
+ * owns, so they are never written to — a frozen one would throw. Cycles and
+ * depth are bounded.
+ */
 function scrubPiiValue(
   value: unknown,
-  seen: WeakSet<object>,
+  ancestors: Set<object>,
   depth: number,
 ): unknown {
   if (typeof value === 'string') return scrubPiiString(value);
-  if (!value || typeof value !== 'object' || depth > MAX_DEPTH) return value;
-  if (seen.has(value)) return value;
-  seen.add(value);
-  if (Array.isArray(value)) {
-    value.forEach((v: unknown, i) => {
-      value[i] = scrubPiiValue(v, seen, depth + 1);
-    });
+  if (!value || typeof value !== 'object' || value instanceof Date) {
     return value;
   }
-  const obj = value as Record<string, unknown>;
-  for (const key of Object.keys(obj)) {
-    if (VERSION_KEY.test(key) && typeof obj[key] === 'string') continue;
-    obj[key] = isPiiKey(key)
-      ? PII_REDACTED
-      : scrubPiiValue(obj[key], seen, depth + 1);
+  if (ancestors.has(value)) return CIRCULAR;
+  if (depth > MAX_DEPTH) return TRUNCATED;
+  ancestors.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((v: unknown) => scrubPiiValue(v, ancestors, depth + 1));
+    }
+    return copyEntries(value, ancestors, depth);
+  } finally {
+    ancestors.delete(value);
   }
-  return obj;
+}
+
+/** Replace `target[key]` with its scrubbed copy; drop the field if that throws. */
+function replaceField(target: PiiScrubbableEvent, key: ScrubField): void {
+  const value = target[key];
+  if (value === undefined) return;
+  try {
+    target[key] = scrubPiiValue(value, new Set<object>(), 0);
+  } catch {
+    Reflect.deleteProperty(target, key);
+  }
 }
 
 /** Keep only `id` on the user object (internal numeric id, no PII). */
-function reduceUser(user: object | undefined): void {
-  if (!user) return;
-  for (const key of Object.keys(user)) {
-    if (key !== 'id') Reflect.deleteProperty(user, key);
-  }
+function reduceUser(user: object): object {
+  const id: unknown = Reflect.get(user, 'id');
+  return id === undefined ? {} : { id };
 }
 
 export function scrubPii<T extends PiiScrubbableEvent>(event: T): T {
-  reduceUser(event.user);
-  const seen = new WeakSet<object>();
-  const parts = [event.request, event.spans, event.extra, event.contexts];
-  for (const part of [...parts, event.breadcrumbs, event.tags]) {
-    scrubPiiValue(part, seen, 0);
-  }
+  const target: PiiScrubbableEvent = event;
+  if (target.user) target.user = reduceUser(target.user);
+  for (const field of EVENT_FIELDS) replaceField(target, field);
   for (const ex of event.exception?.values ?? []) {
     if (typeof ex.value === 'string') ex.value = scrubPiiString(ex.value);
   }
