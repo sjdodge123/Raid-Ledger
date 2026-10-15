@@ -87,6 +87,18 @@ export type WingsSocketFactory = (
 ) => WingsSocket;
 
 /**
+ * undici's `WebSocket` accepts a non-standard `{ headers }` init (Node ≥22),
+ * but the DOM-typed constructor only declares `protocols`. Construct it
+ * reflectively and narrow the result instead of casting.
+ */
+function openUndiciSocket(url: string, origin: string): WebSocket {
+  const init = { headers: { Origin: origin } };
+  const ws: unknown = Reflect.construct(WebSocket, [url, init]);
+  if (!(ws instanceof WebSocket)) throw new Error('WebSocket unavailable');
+  return ws;
+}
+
+/**
  * Default factory: Node's global (undici) `WebSocket`. Its non-standard
  * `headers` init sets `Origin` explicitly — Wings refuses the upgrade
  * without it (spike Q2). No extra dependency needed.
@@ -96,7 +108,7 @@ export const nodeWingsSocketFactory: WingsSocketFactory = (
   origin,
   handlers,
 ) => {
-  const ws = new WebSocket(url, { headers: { Origin: origin } });
+  const ws = openUndiciSocket(url, origin);
   let closed = false;
   const closeOnce = () => {
     if (closed) return;
