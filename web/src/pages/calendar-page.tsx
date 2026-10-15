@@ -13,6 +13,7 @@ import { useMediaQuery } from '../hooks/use-media-query';
 import { DESKTOP_MQ } from '../lib/breakpoints';
 import { CalendarFilterEntry, CalendarFilterTrigger } from './calendar/CalendarFilterEntry';
 import { useCalendarGameFilter, type CalendarGameFilter } from './calendar/use-calendar-game-filter';
+import { useCalendarLayerToggles, type CalendarLayerToggles } from './calendar/use-calendar-layer-toggles';
 import '../components/calendar/calendar-styles.css';
 
 /**
@@ -96,9 +97,10 @@ export function CalendarPage(): JSX.Element {
     useSyncGameRegistry();
     useSaveOnFilterChange();
     const filter = useCalendarGameFilter();
+    const layers = useCalendarLayerToggles();
     const isDesktop = useMediaQuery(DESKTOP_MQ);
 
-    return <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} filter={filter} isDesktop={isDesktop} />;
+    return <CalendarPageLayout state={state} gameTimeSlots={gameTimeSlots} filter={filter} layers={layers} isDesktop={isDesktop} />;
 }
 
 type CalendarState = ReturnType<typeof useCalendarState>;
@@ -108,12 +110,13 @@ type CalendarState = ReturnType<typeof useCalendarState>;
  * end of the calendar toolbar and the panel opens under it; below 1024px the
  * same entry is the Filters FAB + BottomSheet (bottom padding clears the FAB).
  */
-function CalendarPageLayout({ state, gameTimeSlots, filter, isDesktop }: {
+function CalendarPageLayout({ state, gameTimeSlots, filter, layers, isDesktop }: {
     state: CalendarState; gameTimeSlots: Set<string> | undefined;
-    filter: CalendarGameFilter; isDesktop: boolean;
+    filter: CalendarGameFilter; layers: CalendarLayerToggles; isDesktop: boolean;
 }): JSX.Element {
-    const entry = <CalendarFilterEntry filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
-    const trigger = <CalendarFilterTrigger filter={filter} isOpen={state.filtersOpen} onOpenChange={state.setFiltersOpen} />;
+    const open = { isOpen: state.filtersOpen, onOpenChange: state.setFiltersOpen };
+    const entry = <CalendarFilterEntry filter={filter} layers={layers} {...open} />;
+    const trigger = <CalendarFilterTrigger filter={filter} layers={layers} {...open} />;
     return (
         <div className="pb-20 md:pb-40 lg:pb-0" style={{ overflowX: 'clip' }}>
             <CalendarMobileToolbar activeView={state.calendarView} onViewChange={state.setCalendarView} />
