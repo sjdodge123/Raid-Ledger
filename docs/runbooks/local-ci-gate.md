@@ -70,6 +70,8 @@ The `git push` hook in `.claude/settings.json` runs `scripts/smoke/push-gate.sh`
 
 `scope-specs.sh` maps `git diff --name-only origin/main...HEAD` to the matching `scripts/smoke/*.smoke.spec.ts` files (by page / component / route token) and prints them. It prints `ALL` — run the full suite — when the diff touches a shared surface: `web/src/components/layout/**`, `web/src/components/ui/**`, `web/src/index.css`, `web/src/App.tsx`, `web/src/routes*`, `playwright.config.*`, `scripts/smoke/base.ts`, `scripts/smoke/*helpers*`, or when it cannot map a changed file to any spec.
 
+It prints `NONE` (ROK-1792) when every changed web file is known to be covered by no smoke spec — a `/dev/**` (DEMO_MODE wireframe) route, or a new `components/ui/**` file nothing imports yet. `validate-ci.sh` then **SKIPS** the tier with the row `Playwright (desktop + mobile, no specs in scope)  SKIPPED`; it never runs `npx playwright test NONE`. A SKIPPED row writes no `gate_tier: playwright` sentinel (only a PASS does); a green static run still writes the static one. An explicit `E2E_SPECS` list still runs that list, and `E2E_SCOPE=all` still runs the full suite. A failing or empty `scope-specs.sh`, and a mixed specs-plus-`ALL` output, still fall back to the full suite.
+
 A scoped PASS is a valid pre-push result for the mapped surfaces; GitHub still blocks the merge on the full suite. Measured 2026-09-14, running the tier on a 5-line web fix cost 15–25 min queued behind two branches and found nothing GitHub's full suite would not have found ~45 min later — hence the "only when `scope-specs.sh` prints `ALL`, or the operator asks" rule in CLAUDE.md.
 
 ## If you DO run Playwright locally

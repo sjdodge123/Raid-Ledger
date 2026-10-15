@@ -394,3 +394,84 @@ test('validate-ci.sh exits 2 before any step on a bad list or a conflicting mode
     assert.match(res.stderr, msg);
   }
 });
+
+// ---------------------------------------------------------------------------
+// ROK-1792 — scope-specs.sh prints NONE when the diff maps to zero smoke specs
+// (only a /dev/** wireframe route, or a new ui file nothing imports yet). The
+// tier must SKIP — never run `npx playwright test NONE`, which fails — unless
+// an explicit E2E_SPECS list or E2E_SCOPE=all says otherwise. A SKIPPED row is
+// what keeps the playwright-tier sentinel unwritten (only a PASS writes it).
+// ---------------------------------------------------------------------------
+
+/** _prepare_playwright_scope THEN run_playwright_e2e, as main runs them. */
+function prepareAndRun({ stubOut, scope, list = '' }) {
+  const root = mkdtempSync(join(tmpdir(), 'validate-ci-none-'));
+  try {
+    mkdirSync(join(root, 'scripts', 'smoke'), { recursive: true });
+    const stub = join(root, 'scripts', 'smoke', 'scope-specs.sh');
+    writeFileSync(stub, `#!/usr/bin/env bash\ncat <<'SPECS'\n${stubOut}\nSPECS\n`);
+    chmodSync(stub, 0o755);
+    const script = [
+      'set -uo pipefail',
+      `REPO_ROOT=${JSON.stringify(root)}`,
+      'YELLOW=""; RED=""; NC=""; e2e_mode=auto; e2e_explicit=false',
+      'playwright_relevant=true',
+      scope === undefined ? 'unset E2E_SCOPE || true' : `export E2E_SCOPE=${JSON.stringify(scope)}`,
+      `E2E_SPECS_LIST=${JSON.stringify(list)}`,
+      'PLAYWRIGHT_STEP_LABEL=""; PLAYWRIGHT_SCOPED_SPECS=""; PLAYWRIGHT_SCOPE_NONE=false; E2E_SCOPE_RESOLVED=""',
+      'check_env_up() { return 0; }',
+      '_resolve_health_url() { echo http://stub/health; }',
+      '_export_e2e_target() { :; }',
+      'skip_step() { echo SKIPPED; }',
+      'npx() { echo "NPX $*"; }',
+      extractFunction('_resolve_e2e_scope'),
+      extractFunction('_scoped_playwright_specs'),
+      extractFunction('_prepare_playwright_scope'),
+      extractFunction('run_playwright_e2e'),
+      '_prepare_playwright_scope >/dev/null 2>&1',
+      'echo "LABEL=$PLAYWRIGHT_STEP_LABEL"',
+      'run_playwright_e2e; echo "RC=$?"',
+    ].join('\n');
+    const out = execFileSync('bash', ['-c', script], { encoding: 'utf8' });
+    return { label: /^LABEL=(.*)$/m.exec(out)?.[1] ?? '', out };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+test('NONE from scope-specs.sh SKIPS the tier — no playwright invocation', () => {
+  const { label, out } = prepareAndRun({ stubOut: 'NONE' });
+
+  assert.equal(label, 'Playwright (desktop + mobile, no specs in scope)');
+  // Mirrors tools/mcp-rl-fleet/src/gate-summary.ts PLAYWRIGHT_ROW: the parser
+  // must still find the row, so its SKIPPED status is what it reads.
+  assert.match(label, /^Playwright \(desktop \+ mobile[^)]*\)$/);
+  assert.match(out, /^SKIPPED$/m);
+  assert.doesNotMatch(out, /NPX/, `NONE must never reach npx; got ${out}`);
+  assert.match(out, /maps this diff to no smoke spec/);
+  assert.match(out, /^RC=0$/m);
+});
+
+test('NONE + E2E_SCOPE=all runs the FULL suite', () => {
+  const { label, out } = prepareAndRun({ stubOut: 'NONE', scope: 'all' });
+
+  assert.equal(label, 'Playwright (desktop + mobile)');
+  assert.match(out, /^NPX playwright test$/m);
+  assert.doesNotMatch(out, /SKIPPED/);
+});
+
+test('NONE + E2E_SPECS runs exactly the explicit list', () => {
+  const list = REAL_SPECS.join(' ');
+  const { label, out } = prepareAndRun({ stubOut: 'NONE', list });
+
+  assert.equal(label, 'Playwright (desktop + mobile, explicit: 2 specs)');
+  assert.match(out, new RegExp(`^NPX playwright test ${list}$`, 'm'));
+  assert.doesNotMatch(out, /SKIPPED|NONE/);
+});
+
+test('specs + ALL is unchanged by the NONE handling — full suite', () => {
+  const { label, out } = prepareAndRun({ stubOut: 'scripts/smoke/games.smoke.spec.ts\nALL' });
+
+  assert.equal(label, 'Playwright (desktop + mobile)');
+  assert.match(out, /^NPX playwright test$/m);
+});

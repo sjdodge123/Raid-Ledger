@@ -237,6 +237,9 @@ GATE_DEFERRED_FAIL=0
 # _prepare_playwright_scope into these two globals.
 PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
 PLAYWRIGHT_SCOPED_SPECS=""
+# ROK-1792 — true when scope-specs.sh printed exactly NONE (the diff maps to no
+# smoke spec): the tier is SKIPPED, never run as `npx playwright test NONE`.
+PLAYWRIGHT_SCOPE_NONE=false
 # ROK-1792 — the validated E2E_SPECS list (space-separated), set by
 # _parse_e2e_specs in main. Non-empty overrides the scope-specs.sh mapping.
 E2E_SPECS_LIST=""
@@ -1760,7 +1763,9 @@ _resolve_e2e_scope() {
 }
 
 # Echo the specs scope-specs.sh maps the branch diff to, one per line — or
-# NOTHING, which every caller reads as "run the full suite".
+# NOTHING, which every caller reads as "run the full suite" — or exactly NONE
+# when the script says no spec covers the diff (ROK-1792), which the caller
+# reads as "skip the tier".
 _scoped_playwright_specs() {
   local script="$REPO_ROOT/scripts/smoke/scope-specs.sh" out
   if [ ! -f "$script" ]; then
@@ -1774,6 +1779,12 @@ _scoped_playwright_specs() {
   # missed that, and `npx playwright test <spec> ALL` NARROWS the run (ALL names
   # no file) exactly when the script asked to widen it.
   if [ -z "$out" ] || printf '%s\n' "$out" | grep -qx ALL; then
+    return 0
+  fi
+  # Exactly NONE, alone. NONE beside a spec path is not a shape the script
+  # emits; it is passed through as a list and would fail loudly, not skip.
+  if [ "$out" = NONE ]; then
+    echo NONE
     return 0
   fi
   printf '%s\n' "$out"
@@ -1817,6 +1828,7 @@ _parse_e2e_specs() {
 _prepare_playwright_scope() {
   PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
   PLAYWRIGHT_SCOPED_SPECS=""
+  PLAYWRIGHT_SCOPE_NONE=false
   _resolve_e2e_scope >/dev/null
   if [ "$E2E_SCOPE_RESOLVED" != "auto" ] || [ "$e2e_mode" = "off" ]; then
     return 0
@@ -1833,6 +1845,14 @@ _prepare_playwright_scope() {
   fi
   specs=$(_scoped_playwright_specs)
   if [ -z "$specs" ]; then
+    return 0
+  fi
+  if [ "$specs" = NONE ]; then
+    # Same `Playwright (desktop + mobile` prefix as every other label, so the
+    # sentinel parser still finds the row — and reads its SKIPPED as "no
+    # playwright-tier sentinel" (only a PASS writes one).
+    PLAYWRIGHT_SCOPE_NONE=true
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, no specs in scope)"
     return 0
   fi
   count=$(printf '%s\n' "$specs" | grep -c .)
@@ -1858,6 +1878,15 @@ run_playwright_e2e() {
       skip_step
       return 0
     fi
+  fi
+  # ROK-1792: scope-specs.sh mapped the diff to zero smoke specs (a /dev/**
+  # wireframe route, a new ui file nothing imports yet). E2E_SPECS and
+  # E2E_SCOPE=all never reach here — _prepare_playwright_scope leaves the flag
+  # false for both.
+  if [ "${PLAYWRIGHT_SCOPE_NONE:-false}" = true ]; then
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec — skipping Playwright (E2E_SCOPE=all forces the full suite; GitHub CI still runs it)${NC}"
+    skip_step
+    return 0
   fi
   # ROK-1792: an explicit E2E_SPECS list is a request, not a diff inference —
   # it bypasses the changed-files gate and FAILs (never skips) on a down env.

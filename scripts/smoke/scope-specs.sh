@@ -2,7 +2,10 @@
 # Map the branch diff to the Playwright smoke specs that cover it (CLAUDE.md
 # "Scope it by the pages you touched", 2026-09-14). Prints one spec path per
 # line, or the single word ALL when the diff touches a shared surface or a
-# changed web file maps to nothing (then the full suite is the only safe answer).
+# changed web file maps to nothing (then the full suite is the only safe answer),
+# or the single word NONE when every changed web file is KNOWN to be covered by
+# no spec (see below) — validate-ci.sh then SKIPS the Playwright tier rather
+# than run `npx playwright test NONE`; E2E_SPECS / E2E_SCOPE=all override it.
 #
 #   npx playwright test $(scripts/smoke/scope-specs.sh)
 #   SCOPE_FILES="web/src/pages/lfg/lfg-group-page.tsx" scripts/smoke/scope-specs.sh   # dry run
