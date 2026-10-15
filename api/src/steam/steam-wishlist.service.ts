@@ -14,7 +14,6 @@ import {
 import { eq, inArray, and, isNotNull } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
-import { dropSuppressedRows } from './steam-interest-suppression.helpers';
 import { SETTING_KEYS } from '../drizzle/schema/app-settings';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { SettingsService } from '../settings/settings.service';
@@ -223,11 +222,10 @@ export class SteamWishlistService {
       lastSyncedAt: Date;
     }[],
   ): Promise<number> {
-    const allowed = await dropSuppressedRows(this.db, toInsert);
-    if (allowed.length === 0) return 0;
+    if (toInsert.length === 0) return 0;
     const inserted = await this.db
       .insert(schema.gameInterests)
-      .values(allowed)
+      .values(toInsert)
       .onConflictDoNothing()
       .returning({ id: schema.gameInterests.id });
     return inserted.length;

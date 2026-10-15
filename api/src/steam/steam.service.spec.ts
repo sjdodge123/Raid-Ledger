@@ -75,8 +75,6 @@ describe('SteamService', () => {
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
       // fetchExistingSteamInterests
       mockDb.where.mockResolvedValueOnce([]);
-      // dropSuppressedRows — no suppressions (ROK-1796)
-      mockDb.where.mockResolvedValueOnce([]);
       // insert interests returns
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
 
@@ -98,8 +96,6 @@ describe('SteamService', () => {
       // All matched
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
       // fetchExistingSteamInterests
-      mockDb.where.mockResolvedValueOnce([]);
-      // dropSuppressedRows — no suppressions (ROK-1796)
       mockDb.where.mockResolvedValueOnce([]);
       // insert returns
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
@@ -127,8 +123,6 @@ describe('SteamService', () => {
       // Only appid 100 matched — appid 200 triggers ITAD discovery
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
       // fetchExistingSteamInterests
-      mockDb.where.mockResolvedValueOnce([]);
-      // dropSuppressedRows — no suppressions (ROK-1796)
       mockDb.where.mockResolvedValueOnce([]);
       // insert interests returns
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);
@@ -193,8 +187,6 @@ describe('SteamService', () => {
       // Only appid 100 matched
       mockDb.where.mockResolvedValueOnce([{ id: 1, steamAppId: 100 }]);
       // fetchExistingSteamInterests
-      mockDb.where.mockResolvedValueOnce([]);
-      // dropSuppressedRows — no suppressions (ROK-1796)
       mockDb.where.mockResolvedValueOnce([]);
       // insert interests returns
       mockDb.returning.mockResolvedValueOnce([{ id: 10 }]);

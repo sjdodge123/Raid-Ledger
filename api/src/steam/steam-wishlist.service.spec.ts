@@ -87,8 +87,6 @@ describe('SteamWishlistService', () => {
           { id: 2, steamAppId: 200 },
         ])
         // fetchExistingWishlistIds
-        .mockResolvedValueOnce([])
-        // dropSuppressedRows — no suppressions (ROK-1796)
         .mockResolvedValueOnce([]);
 
       // insert
@@ -253,9 +251,7 @@ describe('SteamWishlistService', () => {
       mockDb.where
         .mockResolvedValueOnce([{ id: 2, steamAppId: 200 }])
         // fetchExistingWishlistIds — game 1 was previously tracked
-        .mockResolvedValueOnce([{ gameId: 1 }])
-        // dropSuppressedRows — no suppressions (ROK-1796)
-        .mockResolvedValueOnce([]);
+        .mockResolvedValueOnce([{ gameId: 1 }]);
 
       // insertWishlistEntries: insert game 2
       mockDb.returning
