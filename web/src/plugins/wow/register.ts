@@ -4,6 +4,7 @@ import { CharacterDetailHeaderBadges } from './slots/character-detail-header-bad
 import { CharacterCreateImportForm } from './slots/character-create-import-form';
 import { CharacterCreateInlineImport } from './slots/character-create-inline-import';
 import { EventCreateContentBrowser } from './slots/event-create-content-browser';
+import { EventCreateGuildField } from './slots/event-create-guild-field';
 import { EventDetailContentSections } from './slots/event-detail-content-sections';
 import { EventDetailSignupWarnings } from './slots/event-detail-signup-warnings';
 import { BlizzardIntegrationSlot } from './slots/admin-settings-integration-cards';
@@ -36,6 +37,7 @@ blizzard.registerSlot('character-create:header-actions', CharacterCreateHeaderAc
 blizzard.registerSlot('character-create:import-form', CharacterCreateImportForm);
 blizzard.registerSlot('character-create:inline-import', CharacterCreateInlineImport);
 blizzard.registerSlot('event-create:content-browser', EventCreateContentBrowser);
+blizzard.registerSlot('event-create:guild-field', EventCreateGuildField);
 blizzard.registerSlot('event-detail:content-sections', EventDetailContentSections);
 blizzard.registerSlot('event-detail:content-sections', BossLootPanel, 5);
 blizzard.registerSlot('event-detail:content-sections', QuestPrepPanel, 10);

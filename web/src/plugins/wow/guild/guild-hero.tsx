@@ -1,11 +1,15 @@
 /**
  * ROK-1785 — the guild hero (prototype `layout/GuildHero.tsx`): crest
- * placeholder, name, realm + region + faction, member count. The progression
- * badge and "Next raid" chip land with the stories that own that data (S3/S5).
+ * placeholder, name, realm + region + faction, member count, and (ROK-1787)
+ * the "Next raid" chip that jumps to the Raids tab. The progression badge
+ * lands with S5.
  */
 import type { JSX } from 'react';
-import type { GuildPage } from '@raid-ledger/contract';
+import { CalendarDaysIcon } from '@heroicons/react/24/outline';
+import type { GuildEventCardDto, GuildPage } from '@raid-ledger/contract';
+import { NAV_CHIP_CLASS } from '../../../components/ui/nav-chip';
 import { Pill } from './guild-bits';
+import { signedShort, whenLabel } from './guild-raids.helpers';
 import { crestInitials, guildRealm } from './guild-roster.helpers';
 
 function Crest({ name }: { name: string }): JSX.Element {
@@ -36,7 +40,21 @@ function importLine(page: GuildPage): string | null {
     return page.importedBy ? `Last imported from LedgerLink ${when} by ${page.importedBy}` : `Last imported from LedgerLink ${when}`;
 }
 
-export function GuildHero({ page }: { page: GuildPage }): JSX.Element {
+/** Plain `<a href>`, not `NavChip`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
+function NextRaidChip({ raid }: { raid: GuildEventCardDto }): JSX.Element {
+    return (
+        <a href="#raids" className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
+            <CalendarDaysIcon className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+            {/* One inline text run, so a narrow screen wraps it as a sentence instead of splitting the count into its own flex column. */}
+            <span className="min-w-0">
+                <span className="text-foreground">Next raid: {whenLabel(raid.startTime)}</span>{' '}
+                <span className="whitespace-nowrap text-muted">· {signedShort(raid)}</span>
+            </span>
+        </a>
+    );
+}
+
+export function GuildHero({ page, nextRaid }: { page: GuildPage; nextRaid: GuildEventCardDto | null }): JSX.Element {
     const line = importLine(page);
     return (
         <header data-testid="guild-hero"
@@ -48,7 +66,12 @@ export function GuildHero({ page }: { page: GuildPage }): JSX.Element {
                     <HeroFacts page={page} />
                 </div>
             </div>
-            {line && <p className="text-xs text-dim">{line}</p>}
+            {(nextRaid || line) && (
+                <div className="flex flex-col items-start gap-1 lg:items-end">
+                    {nextRaid && <NextRaidChip raid={nextRaid} />}
+                    {line && <p className="text-xs text-dim">{line}</p>}
+                </div>
+            )}
         </header>
     );
 }

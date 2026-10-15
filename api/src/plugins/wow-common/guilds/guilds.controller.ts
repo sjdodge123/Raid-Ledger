@@ -21,6 +21,7 @@ import {
   type GuildEditor,
   type GuildEditorList,
   type GuildPage,
+  type GuildRaidsDto,
   type MyGuilds,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../../../auth/types';
@@ -31,6 +32,7 @@ import {
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import { GuildEditorsService } from './guild-editors.service';
 import { GuildPageService } from './guild-page.service';
+import { GuildRaidsService } from './guild-raids.service';
 
 const jwt = AuthGuard('jwt');
 
@@ -47,6 +49,7 @@ export class GuildsController {
   constructor(
     private readonly pages: GuildPageService,
     private readonly editors: GuildEditorsService,
+    private readonly raidsSvc: GuildRaidsService,
   ) {}
 
   @Get()
@@ -84,6 +87,16 @@ export class GuildsController {
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildPage> {
     return this.pages.page(req.user, id);
+  }
+
+  /** ROK-1787 — Raids tab + Overview widgets (members + staff). */
+  @Get(':id/raids')
+  @UseGuards(jwt)
+  raids(
+    @Request() req: AuthenticatedRequest,
+    @Param('id', ParseIntPipe) id: number,
+  ): Promise<GuildRaidsDto> {
+    return this.raidsSvc.raids(req.user, id);
   }
 
   @Get(':id/editors')

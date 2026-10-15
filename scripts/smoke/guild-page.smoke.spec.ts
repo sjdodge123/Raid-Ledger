@@ -169,3 +169,38 @@ test('entry points: header text link / user menu item / drawer "Your guild" reac
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
     });
 });
+
+/*
+ * ROK-1787 (S3) — the seed-guild fixture also tags a weekly "Molten Core Night"
+ * series (3 nights from next week) and a past "Onyxia Clear" with attendance.
+ */
+test('#raids: schedule, composition, attendance and guild events', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'member', '#raids');
+        const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
+        await expect(tabs.locator('a[href="#raids"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        const tab = page.getByTestId('guild-raids-tab');
+        await expect(tab).toBeVisible({ timeout: 15_000 });
+        const night = tab.getByTestId('guild-schedule-night');
+        await expect(night, 'one row per tagged recurring series').toHaveCount(1);
+        await expect(night).toContainText('Molten Core Night');
+        await expect(tab.getByText('Shown in your local time')).toBeVisible();
+        await expect(tab.getByTestId('guild-composition-tank')).toBeVisible();
+        await expect(tab.getByTestId('guild-attendance-row').first()).toBeVisible();
+        await expect(tab.getByTestId('guild-upcoming-event'), 'the three seeded series nights').toHaveCount(3);
+        await expect(tab.getByTestId('guild-recent-event').filter({ hasText: 'Onyxia Clear' })).toBeVisible();
+    });
+});
+
+test('hero "Next raid" chip jumps from Overview to the Raids tab', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'gm');
+        await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('guild-overview').getByTestId('guild-schedule-night')).toBeVisible({ timeout: 15_000 });
+        const chip = page.getByTestId('guild-next-raid');
+        await expect(chip).toHaveAttribute('href', '#raids', { timeout: 15_000 });
+        await chip.click();
+        await expect(page).toHaveURL(/#raids$/);
+        await expect(page.getByTestId('guild-raids-tab'), 'a plain anchor fires hashchange, so the tab switches').toBeVisible({ timeout: 15_000 });
+    });
+});

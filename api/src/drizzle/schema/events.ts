@@ -16,6 +16,7 @@ import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { games } from './games';
 import { channelBindings } from './channel-bindings';
+import { guilds } from './guilds';
 
 // Define custom tsrange type
 export const tsrange = customType<{
@@ -132,6 +133,11 @@ export const events = pgTable(
      *  link writes only this column — a pug_slots row is materialised when the
      *  link is claimed, so copying a link never creates a roster occupant. */
     inviteCode: varchar('invite_code', { length: 8 }),
+    /** ROK-1787: guild this event is tagged to (set by a guild editor).
+     *  Recurring instances each carry it; deleting the guild untags. */
+    guildId: integer('guild_id').references(() => guilds.id, {
+      onDelete: 'set null',
+    }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -139,6 +145,8 @@ export const events = pgTable(
     // Performance indexes for common query patterns
     index('idx_events_creator_id').on(table.creatorId),
     index('idx_events_game_id').on(table.gameId),
+    // ROK-1787: guild page Raids tab reads events by guild.
+    index('idx_events_guild_id').on(table.guildId),
     // ROK-293: Supports ad-hoc event lookup by binding + status
     index('idx_events_ad_hoc_binding').on(
       table.channelBindingId,
