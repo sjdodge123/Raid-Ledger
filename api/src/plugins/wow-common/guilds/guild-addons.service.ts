@@ -37,6 +37,7 @@ import {
   listAddonRows,
   toGuildAddon,
   updateAddonRow,
+  withGuildAddonsLock,
   writeAddonOrder,
 } from './guild-addons.helpers';
 import { isUniqueViolation } from './guild-editors.helpers';
@@ -75,13 +76,20 @@ export class GuildAddonsService {
     const input = parse(CreateGuildAddonSchema, body);
     const link = toLink(input.url);
     await this.assertGuild(guildId);
-    const { count, nextSort } = await addonStats(this.db, guildId);
-    if (count >= GUILD_ADDONS_MAX) {
-      throw new BadRequestException(`At most ${GUILD_ADDONS_MAX} addons`);
-    }
-    await this.assertNoCollision(guildId, link);
+    // Count + collision check + insert under one guild lock: two concurrent
+    // adds at 49 cannot both pass the cap.
     const row = await this.guardUnique(() =>
-      insertAddon(this.db, newRow(guildId, input, link, actor.id, nextSort)),
+      withGuildAddonsLock(this.db, guildId, async (tx) => {
+        const { count, nextSort } = await addonStats(tx, guildId);
+        if (count >= GUILD_ADDONS_MAX) {
+          throw new BadRequestException(`At most ${GUILD_ADDONS_MAX} addons`);
+        }
+        await this.assertNoCollision(tx, guildId, link);
+        return insertAddon(
+          tx,
+          newRow(guildId, input, link, actor.id, nextSort),
+        );
+      }),
     );
     if (!row) throw new NotFoundException('Addon not found');
     return toGuildAddon(row);
@@ -98,7 +106,7 @@ export class GuildAddonsService {
     if (!(await findAddonRow(this.db, guildId, addonId))) {
       throw new NotFoundException('Addon not found');
     }
-    if (link) await this.assertNoCollision(guildId, link, addonId);
+    if (link) await this.assertNoCollision(this.db, guildId, link, addonId);
     const set = buildAddonUpdate(input, link, actor.id, new Date());
     const row = await this.guardUnique(() =>
       updateAddonRow(this.db, guildId, addonId, set),
@@ -108,20 +116,25 @@ export class GuildAddonsService {
   }
 
   async remove(guildId: number, addonId: number): Promise<void> {
-    if (!(await deleteAddonRow(this.db, guildId, addonId))) {
-      throw new NotFoundException('Addon not found');
-    }
+    const deleted = await withGuildAddonsLock(this.db, guildId, (tx) =>
+      deleteAddonRow(tx, guildId, addonId),
+    );
+    if (!deleted) throw new NotFoundException('Addon not found');
   }
 
   /** `ids` must be exactly the guild's own addon ids, in the new order. */
   async reorder(guildId: number, body: unknown): Promise<GuildAddonList> {
     const { ids } = parse(ReorderGuildAddonsSchema, body);
     await this.assertGuild(guildId);
-    const stored = (await listAddonRows(this.db, guildId)).map((r) => r.id);
-    if (!isSameIdSet(stored, ids)) {
-      throw new BadRequestException('ids must list every addon of the guild');
-    }
-    await writeAddonOrder(this.db, guildId, ids);
+    // The set-check and the write share one guild lock, so a concurrent
+    // add/remove cannot slip between them.
+    await withGuildAddonsLock(this.db, guildId, async (tx) => {
+      const stored = (await listAddonRows(tx, guildId)).map((r) => r.id);
+      if (!isSameIdSet(stored, ids)) {
+        throw new BadRequestException('ids must list every addon of the guild');
+      }
+      await writeAddonOrder(tx, guildId, ids);
+    });
     return this.load(guildId);
   }
 
@@ -140,11 +153,12 @@ export class GuildAddonsService {
   }
 
   private async assertNoCollision(
+    db: PostgresJsDatabase<typeof schema>,
     guildId: number,
     link: ParsedAddonLink,
     exceptId?: number,
   ): Promise<void> {
-    if (await hasAddonCollision(this.db, guildId, link, exceptId)) {
+    if (await hasAddonCollision(db, guildId, link, exceptId)) {
       throw new ConflictException(DUPLICATE);
     }
   }

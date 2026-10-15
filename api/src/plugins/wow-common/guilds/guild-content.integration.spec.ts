@@ -313,3 +313,25 @@ describe('addons — list, scope, delete', () => {
     expect((await call('delete', path, 'deleg')).status).toBe(404);
   });
 });
+
+describe('addons — concurrency', () => {
+  it('two concurrent adds at 49 addons: exactly one passes the 50 cap', async () => {
+    const capGuild = await insertGuild('Content Cap');
+    await testApp.db.insert(schema.guildRecommendedAddons).values(
+      Array.from({ length: 49 }, (_, i) => ({
+        guildId: capGuild,
+        source: 'curseforge' as const,
+        slugOrUrl: `cap-${i}`,
+        displayName: `Cap ${i}`,
+        sortOrder: i,
+      })),
+    );
+    const results = await Promise.all([
+      call('post', `/${capGuild}/addons`, 'admin', { url: `${CF}-a` }),
+      call('post', `/${capGuild}/addons`, 'admin', { url: `${CF}-b` }),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([201, 400]);
+    const list = await call('get', `/${capGuild}/addons`, 'admin');
+    expect(list.body.addons).toHaveLength(50);
+  });
+});

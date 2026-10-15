@@ -19,6 +19,27 @@ import { addonLinkUrl, type ParsedAddonLink } from './guild-addon-url.helpers';
  * by guild id, so an addon id from another guild never matches (no IDOR).
  */
 
+/** Advisory-lock class for a guild's addon list (two-int form; see ROK-1438). */
+export const GUILD_ADDONS_LOCK_CLASS = 1786;
+
+/**
+ * Run `fn` in a transaction holding a lock on the guild's addon list, so the
+ * 50-addon cap and the reorder set-check see no concurrent write. Use the `tx`
+ * it hands you; a throw inside rolls the whole write back.
+ */
+export function withGuildAddonsLock<T>(
+  db: Db,
+  guildId: number,
+  fn: (tx: Db) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${GUILD_ADDONS_LOCK_CLASS}::int4, ${guildId}::int4)`,
+    );
+    return fn(tx);
+  });
+}
+
 type Db = PostgresJsDatabase<typeof schema>;
 type AddonRow = GuildRecommendedAddonSelect;
 type AddonUpdate = Partial<GuildRecommendedAddonInsert>;
