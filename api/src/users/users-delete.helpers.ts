@@ -139,6 +139,8 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.calendarIgnoredDays,
     column: schema.calendarIgnoredDays.userId,
   },
+  // ROK-1599: the private ICS subscribe link (CASCADE) — a bearer secret.
+  { table: schema.calendarFeeds, column: schema.calendarFeeds.userId },
   {
     table: schema.calendarConnections,
     column: schema.calendarConnections.userId,

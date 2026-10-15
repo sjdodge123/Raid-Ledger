@@ -73,5 +73,6 @@ export * from './schema/guild-editors';
 export * from './schema/calendar-connections';
 export * from './schema/calendar-busy-blocks';
 export * from './schema/calendar-ignored-days';
+export * from './schema/calendar-feeds';
 export * from './schema/pelican-servers';
 export * from './schema/pelican-schedules';
