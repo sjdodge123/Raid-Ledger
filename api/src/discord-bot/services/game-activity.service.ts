@@ -3,6 +3,7 @@ import {
   Injectable,
   Logger,
   OnApplicationShutdown,
+  Optional,
   OnModuleInit,
 } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
@@ -13,6 +14,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { CronJobService } from '../../cron-jobs/cron-job.service';
 import { GameTasteService } from '../../game-taste/game-taste.service';
+import { GameRoleReconcileService } from '../game-roles/game-role-reconcile.service';
 import {
   FLUSH_INTERVAL_MS,
   MAX_SESSION_DURATION_SECONDS,
@@ -56,6 +58,7 @@ export class GameActivityService
     private db: PostgresJsDatabase<typeof schema>,
     private readonly cronJobService: CronJobService,
     private readonly gameTasteService: GameTasteService,
+    @Optional() private readonly gameRoles?: GameRoleReconcileService,
   ) {}
 
   /** Fire-and-forget batch enqueue for game-taste recomputes (ROK-1082). */
@@ -192,6 +195,8 @@ export class GameActivityService
     );
 
     await processOpenEvents(this.db, opens, this.gameNameCache, this.logger);
+    // ROK-1767: near-real-time game-role add (fire-and-forget, never awaited).
+    this.gameRoles?.grantForOpens(opens, this.gameNameCache);
     await processCloseEvents(this.db, closes, this.logger);
 
     if (opens.length > 0 || closes.length > 0) {
