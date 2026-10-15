@@ -43,16 +43,18 @@ function fakeChannel(opts: {
 }): JoinPostChannel {
   // Untyped mock: one implementation serves both `fetch` overloads.
   const fetch = jest.fn();
-  fetch.mockImplementation((arg: string | { limit: number }) => {
-    if (typeof arg !== 'string') {
-      return Promise.resolve(
-        new Map((opts.recent ?? []).map((m) => [m.id, m])),
-      );
-    }
-    return opts.byId
-      ? opts.byId()
-      : Promise.reject(new Error('unexpected fetch by id'));
-  });
+  fetch.mockImplementation(
+    (arg: string | { limit: number } | { message: string }) => {
+      if (typeof arg !== 'string' && !('message' in arg)) {
+        return Promise.resolve(
+          new Map((opts.recent ?? []).map((m) => [m.id, m])),
+        );
+      }
+      return opts.byId
+        ? opts.byId()
+        : Promise.reject(new Error('unexpected fetch by id'));
+    },
+  );
   return {
     id: 'chan-1',
     send: jest.fn(),
@@ -75,6 +77,16 @@ describe('readStored', () => {
     const msg = fakeMessage('m1');
     const channel = fakeChannel({ byId: () => Promise.resolve(msg) });
     await expect(readStored(channel, 'm1')).resolves.toBe(msg);
+  });
+
+  it('bypasses the discord.js cache, so a deleted post is not served stale', async () => {
+    const msg = fakeMessage('m1');
+    const channel = fakeChannel({ byId: () => Promise.resolve(msg) });
+    await readStored(channel, 'm1');
+    expect(channel.messages.fetch).toHaveBeenCalledWith({
+      message: 'm1',
+      force: true,
+    });
   });
 
   it('answers null only for Unknown Message (10008)', async () => {
@@ -145,8 +157,8 @@ describe('tryPin', () => {
   });
 
   it.each([
-    [50013, 'Manage Messages'],
-    [50001, 'Manage Messages'],
+    [50013, 'Pin Messages'],
+    [50001, 'Pin Messages'],
     [30003, 'maximum of 50 pinned messages'],
     [0, 'boom'],
   ])('warns (never throws) when the pin fails with %i', async (code, says) => {

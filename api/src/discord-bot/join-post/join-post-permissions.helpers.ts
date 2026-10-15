@@ -19,7 +19,8 @@ const REQUIRED: ReadonlyArray<{
     name: 'Read Message History',
     flag: PermissionFlagsBits.ReadMessageHistory,
   },
-  { name: 'Manage Messages', flag: PermissionFlagsBits.ManageMessages },
+  // Discord split pinning out of Manage Messages (enforced 2026-02-23).
+  { name: 'Pin Messages', flag: PermissionFlagsBits.PinMessages },
 ];
 
 /**

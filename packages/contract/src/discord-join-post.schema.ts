@@ -4,14 +4,15 @@ import { z } from 'zod';
  * ROK-1740: the pinned "Join Raid Ledger" Discord post — admin wire shapes.
  *
  * The permissions the bot needs in the target channel, by their Discord UI
- * names. The admin page lists the missing ones verbatim (AC4).
+ * names. The admin page lists the missing ones verbatim (AC4). Pinning needs
+ * Pin Messages: since 2026-02-23 Manage Messages no longer grants it.
  */
 export const JOIN_POST_PERMISSION_NAMES = [
   'View Channel',
   'Send Messages',
   'Embed Links',
   'Read Message History',
-  'Manage Messages',
+  'Pin Messages',
 ] as const;
 
 export type JoinPostPermissionName =

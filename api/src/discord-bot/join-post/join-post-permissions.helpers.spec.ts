@@ -7,7 +7,7 @@ const ALL = [
   PermissionFlagsBits.SendMessages,
   PermissionFlagsBits.EmbedLinks,
   PermissionFlagsBits.ReadMessageHistory,
-  PermissionFlagsBits.ManageMessages,
+  PermissionFlagsBits.PinMessages,
 ];
 
 describe('missingJoinPostPermissions', () => {
@@ -28,7 +28,7 @@ describe('missingJoinPostPermissions', () => {
     [PermissionFlagsBits.SendMessages, 'Send Messages'],
     [PermissionFlagsBits.EmbedLinks, 'Embed Links'],
     [PermissionFlagsBits.ReadMessageHistory, 'Read Message History'],
-    [PermissionFlagsBits.ManageMessages, 'Manage Messages'],
+    [PermissionFlagsBits.PinMessages, 'Pin Messages'],
   ])('names exactly the one missing flag %s as "%s"', (flag, name) => {
     const perms = new PermissionsBitField(ALL.filter((f) => f !== flag));
     expect(missingJoinPostPermissions(perms)).toEqual([name]);

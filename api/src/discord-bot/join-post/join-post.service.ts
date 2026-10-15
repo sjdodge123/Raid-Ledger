@@ -55,6 +55,11 @@ type Located =
   | { message: JoinPostMessage; outcome: 'edited' | 'adopted' }
   | { message: null; outcome: 'created' | 'recreated' };
 
+interface Written {
+  message: JoinPostMessage;
+  outcome: DiscordJoinPostResult['outcome'];
+}
+
 @Injectable()
 export class JoinPostService {
   private readonly logger = new Logger(JoinPostService.name);
@@ -82,11 +87,11 @@ export class JoinPostService {
     const storedId = stored.channelId === channelId ? stored.messageId : null;
     const located = await this.locate(channel, storedId, ctx.botUserId);
     const payload = await this.buildPayload();
-    const message = await this.write(channel, located, payload);
+    const { message, outcome } = await this.write(channel, located, payload);
     await setJoinPost(this.settings, channelId, message.id);
     const pin = await tryPin(message, (line) => this.logger.warn(line));
     return {
-      outcome: located.outcome,
+      outcome,
       channelId,
       messageId: message.id,
       ...pin,
@@ -154,8 +159,11 @@ export class JoinPostService {
       const message = await readStored(channel, storedId).catch((err) => {
         throw this.unavailable('fetch', err);
       });
-      return message
-        ? { message, outcome: 'edited' }
+      if (message) return { message, outcome: 'edited' };
+      // Gone — but a send whose reply was lost may have left an orphan.
+      const orphan = await findOwnJoinPost(channel, botUserId);
+      return orphan
+        ? { message: orphan, outcome: 'adopted' }
         : { message: null, outcome: 'recreated' };
     }
     const found = await findOwnJoinPost(channel, botUserId);
@@ -164,18 +172,38 @@ export class JoinPostService {
       : { message: null, outcome: 'created' };
   }
 
-  /** Edit the located post, or send a new one. */
+  /**
+   * Edit the located post, or send a new one. An edit answering 10008 means
+   * the post vanished after it was read — re-create it rather than 503.
+   */
   private async write(
     channel: JoinPostChannel,
     located: Located,
     payload: JoinPostPayload,
-  ): Promise<JoinPostMessage> {
+  ): Promise<Written> {
+    if (located.message) {
+      const edited = await this.tryEdit(located.message, payload);
+      if (edited) return { message: edited, outcome: located.outcome };
+    }
+    const outcome = located.message ? 'recreated' : located.outcome;
     try {
-      if (!located.message) return await channel.send(payload);
-      await located.message.edit(payload);
-      return located.message;
+      return { message: await channel.send(payload), outcome };
     } catch (err) {
-      throw this.unavailable(located.message ? 'edit' : 'send', err);
+      throw this.unavailable('send', err);
+    }
+  }
+
+  /** Edit in place; null when Discord says the message is gone. */
+  private async tryEdit(
+    message: JoinPostMessage,
+    payload: JoinPostPayload,
+  ): Promise<JoinPostMessage | null> {
+    try {
+      await message.edit(payload);
+      return message;
+    } catch (err) {
+      if (isUnknownMessage(err)) return null;
+      throw this.unavailable('edit', err);
     }
   }
 

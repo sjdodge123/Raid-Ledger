@@ -45,7 +45,10 @@ export interface JoinPostChannel {
   id: string;
   send(payload: JoinPostPayload): Promise<JoinPostMessage>;
   messages: {
-    fetch(id: string): Promise<JoinPostMessage>;
+    fetch(options: {
+      message: string;
+      force: boolean;
+    }): Promise<JoinPostMessage>;
     fetch(options: {
       limit: number;
     }): Promise<{ values(): Iterable<JoinPostMessage> }>;
@@ -79,7 +82,8 @@ export async function readStored(
   messageId: string,
 ): Promise<JoinPostMessage | null> {
   try {
-    return await channel.messages.fetch(messageId);
+    // force: a cached copy can outlive a delete the gateway never reported.
+    return await channel.messages.fetch({ message: messageId, force: true });
   } catch (err) {
     if (isUnknownMessage(err)) return null;
     throw err;
@@ -133,7 +137,7 @@ function pinWarning(err: unknown): string {
     return "Posted, but couldn't pin it: this channel already has Discord's maximum of 50 pinned messages.";
   }
   if (code !== null && PIN_PERMISSION_CODES.has(code)) {
-    return "Posted, but couldn't pin it: the bot is missing Manage Messages in this channel.";
+    return "Posted, but couldn't pin it: the bot is missing Pin Messages in this channel.";
   }
   const why = err instanceof Error ? err.message : String(err);
   return `Posted, but couldn't pin it: ${why}`;

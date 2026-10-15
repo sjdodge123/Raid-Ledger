@@ -68,7 +68,7 @@ beforeEach(async () => {
   chan = fakeTextChannel('c-main');
   noManage = fakeTextChannel(
     'c-nomanage',
-    FULL_PERMS.filter((p) => p !== PermissionFlagsBits.ManageMessages),
+    FULL_PERMS.filter((p) => p !== PermissionFlagsBits.PinMessages),
   );
   stubDiscord([chan, noManage]);
   await clearJoinPost(settings);
@@ -137,10 +137,10 @@ describe('POST join-post (failures)', () => {
     });
   });
 
-  it('missing Manage Messages → 422 naming it, nothing sent', async () => {
+  it('missing Pin Messages → 422 naming it, nothing sent', async () => {
     const res = await post(noManage.id);
     expect(res.status).toBe(422);
-    expect(res.body.missing).toEqual(['Manage Messages']);
+    expect(res.body.missing).toEqual(['Pin Messages']);
     expect(noManage.send).not.toHaveBeenCalled();
     expect(await getJoinPost(settings)).toEqual({
       channelId: null,

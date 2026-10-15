@@ -18,7 +18,7 @@ export const FULL_PERMS = [
   PermissionFlagsBits.SendMessages,
   PermissionFlagsBits.EmbedLinks,
   PermissionFlagsBits.ReadMessageHistory,
-  PermissionFlagsBits.ManageMessages,
+  PermissionFlagsBits.PinMessages,
 ];
 
 /** A `DiscordAPIError` carrying `code`, without a REST round trip. */
@@ -74,11 +74,15 @@ function fakeMessage(id: string, payload: unknown): FakeMessage {
 export function fakeTextChannel(id: string, perms = FULL_PERMS) {
   const store = new Map<string, FakeMessage>();
   let seq = 0;
-  const fetch = jest.fn((arg: string | { limit: number }) => {
-    if (typeof arg !== 'string') return Promise.resolve(new Map(store));
-    const hit = store.get(arg);
-    return hit ? Promise.resolve(hit) : Promise.reject(discordError(10008));
-  });
+  const fetch = jest.fn(
+    (arg: string | { limit: number } | { message: string }) => {
+      if (typeof arg !== 'string' && !('message' in arg)) {
+        return Promise.resolve(new Map(store));
+      }
+      const hit = store.get(typeof arg === 'string' ? arg : arg.message);
+      return hit ? Promise.resolve(hit) : Promise.reject(discordError(10008));
+    },
+  );
   return {
     id,
     name: `join-${id}`,
