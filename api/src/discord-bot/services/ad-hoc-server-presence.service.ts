@@ -170,7 +170,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const players = this.pending.get(source.pelicanServerId) ?? new Map();
+    const players =
+      this.pending.get(source.pelicanServerId) ??
+      new Map<string, ServerPresencePlayer>();
     players.set(player.steamId, player);
     this.pending.set(source.pelicanServerId, players);
     const binding = await findGameVoiceBinding(this.db, source.gameId);
