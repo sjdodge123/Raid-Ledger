@@ -124,6 +124,17 @@ export function installCspReportBodyParser(app: NestExpressApplication): void {
 export const FEEDBACK_JSON_BODY_LIMIT = '8mb';
 
 /**
+ * POST /feedback (Express also routes `/feedback/`) carrying a bearer token.
+ * Without one AuthGuard rejects the request anyway, so an anonymous client
+ * never gets to make the API buffer 8 MB — it stays on the 2 MB parser.
+ */
+function isFeedbackSubmit(req: Request): boolean {
+  if (req.method !== 'POST') return false;
+  if (req.path !== '/feedback' && req.path !== '/feedback/') return false;
+  return /^Bearer \S/i.test(req.headers.authorization ?? '');
+}
+
+/**
  * Install a larger JSON body parser for POST /feedback only, BEFORE the
  * global 2 MB parser: that one would answer every real screenshot with its
  * own 413. body-parser skips a body already parsed here. The controller still
@@ -134,7 +145,7 @@ export function installFeedbackBodyParser(app: {
 }): void {
   const parse = bodyParser.json({ limit: FEEDBACK_JSON_BODY_LIMIT });
   app.use((req: Request, res: Response, next: NextFunction) => {
-    if (req.method === 'POST' && req.path === '/feedback') {
+    if (isFeedbackSubmit(req)) {
       parse(req, res, next);
       return;
     }

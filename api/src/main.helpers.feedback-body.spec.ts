@@ -17,22 +17,39 @@ function buildApp(): express.Express {
 }
 
 const big = { screenshotBase64: 'A'.repeat(5_000_000) };
+const AUTH = { Authorization: 'Bearer test-token' };
 
 describe('installFeedbackBodyParser', () => {
   it('parses a 5 MB JSON body on POST /feedback', async () => {
-    const res = await request(buildApp()).post('/feedback').send(big);
+    const res = await request(buildApp()).post('/feedback').set(AUTH).send(big);
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ length: 5_000_000 });
   });
 
   it('leaves every other route on the 2 MB parser', async () => {
-    const res = await request(buildApp()).post('/other').send(big);
+    const res = await request(buildApp()).post('/other').set(AUTH).send(big);
     expect(res.status).toBe(413);
   });
 
   it('still rejects a body over 8 MB on POST /feedback', async () => {
     const huge = { screenshotBase64: 'A'.repeat(9_000_000) };
-    const res = await request(buildApp()).post('/feedback').send(huge);
+    const res = await request(buildApp())
+      .post('/feedback')
+      .set(AUTH)
+      .send(huge);
+    expect(res.status).toBe(413);
+  });
+
+  it('parses a 5 MB body on POST /feedback/ (trailing slash) too', async () => {
+    const res = await request(buildApp())
+      .post('/feedback/')
+      .set(AUTH)
+      .send(big);
+    expect(res.status).toBe(200);
+  });
+
+  it('keeps a POST /feedback without a bearer token on the 2 MB parser', async () => {
+    const res = await request(buildApp()).post('/feedback').send(big);
     expect(res.status).toBe(413);
   });
 });
