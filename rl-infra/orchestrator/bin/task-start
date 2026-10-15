@@ -336,16 +336,24 @@ fi
 # Background parser. tail -F survives potential log rotation. Lines that match
 # PATTERN_STEP_RESULT get appended to steps[] under flock via state::mutate.
 (
+    # ROK-1793 S0: a `[step-time]` line is held until the matching result row.
+    pending_name="" pending_dur=""
     tail -F -n 0 "$LOG_PATH" 2>/dev/null | while IFS= read -r line; do
         if [[ -e "$PARSE_DONE" ]]; then
             break
         fi
-        if [[ "$line" =~ $PATTERN_STEP_RESULT ]]; then
+        if [[ "$line" =~ $PATTERN_STEP_TIME ]]; then
+            pending_name="${BASH_REMATCH[1]}"
+            pending_dur="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ $PATTERN_STEP_RESULT ]]; then
             step_name="${BASH_REMATCH[2]}"
             step_status="${BASH_REMATCH[3]}"
+            step_dur=null
+            [[ "$step_name" == "$pending_name" ]] && step_dur="$pending_dur"
+            pending_name="" pending_dur=""
             state::mutate "$JSON_PATH" \
-                --arg n "$step_name" --arg s "$step_status" \
-                ".steps += [{name: \$n, status: \$s, duration_s: null}]" \
+                --arg n "$step_name" --arg s "$step_status" --argjson d "$step_dur" \
+                ".steps += [{name: \$n, status: \$s, duration_s: \$d}]" \
                 2>/dev/null || true
         fi
     done
