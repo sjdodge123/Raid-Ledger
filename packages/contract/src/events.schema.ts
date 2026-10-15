@@ -67,6 +67,10 @@ export const CreateEventSchema = z
      *  converts the group's live intents to this event and signs its members
      *  up. Never persisted. */
     lfgGameId: z.number().int().positive().optional(),
+    /** ROK-1787: tag the event (and every recurring instance) to a guild.
+     *  Only an editor of that guild (or an admin) may set it; the guild must
+     *  belong to the event's game, so a gameId is required. */
+    guildId: z.number().int().positive().optional(),
   })
   .refine((data) => new Date(data.startTime) < new Date(data.endTime), {
     message: "Start time must be before end time",
@@ -75,6 +79,10 @@ export const CreateEventSchema = z
   .refine((d) => d.lfgGameId === undefined || d.gameId === d.lfgGameId, {
     message: "lfgGameId must match gameId",
     path: ["lfgGameId"],
+  })
+  .refine((d) => d.guildId === undefined || d.gameId !== undefined, {
+    message: "guildId requires gameId",
+    path: ["guildId"],
   });
 
 export type CreateEventDto = z.infer<typeof CreateEventSchema>;
@@ -105,6 +113,9 @@ export const UpdateEventSchema = z
     ephemeralVoiceEnabled: z.boolean().nullable().optional(),
     /** ROK-1386: Lock the ephemeral voice channel to rostered members only. */
     privateVoice: z.boolean().nullable().optional(),
+    /** ROK-1787: guild tag. A number re-checks guild editor rights against
+     *  the resulting game; null clears the tag. */
+    guildId: z.number().int().positive().optional().nullable(),
   })
   .refine(
     (data) => {
@@ -212,6 +223,8 @@ export const EventResponseSchema = z.object({
   ephemeralVoiceChannelId: z.string().nullable().optional(),
   /** ROK-1386: Lock ephemeral voice to rostered members only (null = off). */
   privateVoice: z.boolean().nullable().optional(),
+  /** ROK-1787: guild this event is tagged to (null = untagged). */
+  guildId: z.number().int().nullable().optional(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });

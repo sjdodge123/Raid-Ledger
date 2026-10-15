@@ -11,6 +11,8 @@
  *     whose `addon_guid` is its roster GUID — and `outsider` (no character);
  *   - two roster rows with no RL character (ranks 2 and 4);
  *   - a `guild_editors` rank grant for rank 1, granted by the GM;
+ *   - (ROK-1787) guild-tagged raids: a weekly series + one past raid with
+ *     attendance recorded — see `demo-test-guild-raids.helpers.ts`.
  *   - with `withContent: true` (ROK-1786), the guild page content too: GM
  *     post, rules, links and two recommended addons (see
  *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
@@ -52,6 +54,11 @@ import {
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
 import {
+  ensureGuildRaids,
+  raiderOf,
+  type SeededGuildRaids,
+} from './demo-test-guild-raids.helpers';
+import {
   seedGuildContent,
   type SeedGuildContent,
 } from './demo-test-guild-content.helpers';
@@ -85,6 +92,8 @@ export interface SeedGuildResponse {
   users: Record<SeedGuildRole, SeedGuildUser>;
   /** Roster rows with no RL character (ranks 2 and 4). */
   unlinkedMemberIds: number[];
+  /** ROK-1787 — guild-tagged events for the Raids tab. */
+  raids: SeededGuildRaids;
   /** Present only when the body sent `withContent: true`. */
   content?: SeedGuildContent;
 }
@@ -113,13 +122,10 @@ export class DemoTestGuildController {
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input.name, now);
     const hash = guildKeyHash(input.name.toLowerCase());
-    const { users, unlinked } = await this.seedRoster({
-      guildId,
-      gameId,
-      hash,
-      now,
-    });
+    const ctx: RosterCtx = { guildId, gameId, hash, now };
+    const { users, unlinked } = await this.seedRoster(ctx);
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
+    const raids = await this.seedRaids(ctx, users);
     const content = input.withContent
       ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
       : null;
@@ -131,8 +137,24 @@ export class DemoTestGuildController {
       editorRankIndex: SEED_GUILD_EDITOR_RANK,
       users,
       unlinkedMemberIds: unlinked,
+      raids,
       ...(content ? { content } : {}),
     };
+  }
+
+  /** ROK-1787 — the guild-tagged raids, cast from the seeded users. */
+  private seedRaids(
+    ctx: RosterCtx,
+    users: Record<SeedGuildRole, SeedGuildUser>,
+  ): Promise<SeededGuildRaids> {
+    return ensureGuildRaids(this.db, {
+      guildId: ctx.guildId,
+      gameId: ctx.gameId,
+      now: ctx.now,
+      gm: raiderOf(users.gm),
+      officer: raiderOf(users.officer),
+      member: raiderOf(users.member),
+    });
   }
 
   /** Every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`. */

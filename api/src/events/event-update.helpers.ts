@@ -49,6 +49,8 @@ export function buildUpdateData(
   if (dto.title !== undefined) updateData.title = dto.title;
   if (dto.description !== undefined) updateData.description = dto.description;
   if (dto.gameId !== undefined) updateData.gameId = dto.gameId ?? null;
+  // ROK-1787: null clears the guild tag (rights checked in the controller).
+  if (dto.guildId !== undefined) updateData.guildId = dto.guildId;
   if (dto.slotConfig !== undefined) updateData.slotConfig = dto.slotConfig;
   if (dto.maxAttendees !== undefined)
     updateData.maxAttendees = dto.maxAttendees;

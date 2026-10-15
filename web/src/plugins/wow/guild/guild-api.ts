@@ -2,8 +2,8 @@
  * ROK-1785 (S1 of ROK-1781): guild page API calls — `/plugins/wow/guilds`.
  * WoW-plugin owned (spec D1); every response is parsed by its contract schema.
  */
-import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage } from '@raid-ledger/contract';
-import { GuildEditorListSchema, GuildEditorSchema, GuildPageSchema } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import { GuildEditorListSchema, GuildEditorSchema, GuildPageSchema, GuildRaidsSchema } from '@raid-ledger/contract';
 import { fetchApi } from '../../../lib/api-client';
 
 const BASE = '/plugins/wow/guilds';
@@ -23,4 +23,9 @@ export function createGuildEditor(guildId: number, input: CreateGuildEditorInput
 
 export function deleteGuildEditor(guildId: number, editorId: number): Promise<void> {
     return fetchApi<void>(`${BASE}/${guildId}/editors/${editorId}`, { method: 'DELETE' });
+}
+
+/** ROK-1787: the guild's tagged events, raid schedule, composition and attendance. 403 for non-members. */
+export function fetchGuildRaids(guildId: number): Promise<GuildRaidsDto> {
+    return fetchApi(`${BASE}/${guildId}/raids`, {}, GuildRaidsSchema);
 }
