@@ -41,7 +41,7 @@ export class PelicanAdminController {
     private readonly status: PelicanStatusService,
   ) {}
 
-  /** GET /admin/plugins/pelican/config — URL, `apiKeySet`, timezone. */
+  /** GET /admin/plugins/pelican/config — URL and `apiKeySet`. */
   @Get('config')
   getConfig(): Promise<PelicanConfig> {
     return this.config.getConfig();

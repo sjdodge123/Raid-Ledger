@@ -34,6 +34,7 @@ export const pelicanServers = pgTable(
     }),
     showOnCalendar: boolean('show_on_calendar').notNull().default(true),
     /** Per-server IANA tz override (validated at the API). */
+    // ROK-1795: unread since Pelican crons are always UTC; dropped in a follow-up
     timezone: text('timezone'),
     /** Raw Pelican `stats.current_state`, ≤32 chars. */
     currentState: text('current_state'),

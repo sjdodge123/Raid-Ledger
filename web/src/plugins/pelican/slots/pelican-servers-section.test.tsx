@@ -16,7 +16,6 @@ import {
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { toast } from '../../../lib/toast';
 import { PelicanServersSection } from './pelican-servers-section';
-import { TZ_MISMATCH_WARNING } from './pelican-server-row';
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -36,7 +35,7 @@ function setViewport(desktop: boolean): void {
 
 const suspended: PelicanServerRowDto = {
     ...pelicanServerFixture, id: 2, name: 'Rust — Old', state: 'offline', isSuspended: true,
-    gameId: null, gameName: null, showOnCalendar: false, timezone: 'Europe/Berlin', lastSyncedAt: null, missing: true,
+    gameId: null, gameName: null, showOnCalendar: false, lastSyncedAt: null, missing: true,
 };
 
 interface ServeOpts { failPatch?: boolean; hold?: Promise<void>; registry?: { id: number; name: string; coverUrl: null }[] }
@@ -61,7 +60,7 @@ function serveServers(rows: PelicanServerRowDto[], { failPatch = false, hold, re
 
 async function renderSection(rows: PelicanServerRowDto[], opts: ServeOpts = {}) {
     const patches = serveServers(rows, opts);
-    renderWithProviders(<PelicanServersSection defaultTimezone="America/New_York" />);
+    renderWithProviders(<PelicanServersSection />);
     const [first] = rows;
     if (first) await screen.findByText(first.name);
     return patches;
@@ -95,13 +94,21 @@ describe('PelicanServersSection — layout', () => {
         expect(screen.queryByTestId('pelican-servers-table')).toBeNull();
     });
 
-    it('≥1024px: the column header is the label — per-row Game/Timezone labels are sr-only, controls stay named', async () => {
+    it('≥1024px: the column header is the label — the per-row Game label is sr-only, the control stays named', async () => {
         await renderSection([pelicanServerFixture]);
         const row = within(screen.getByTestId('pelican-server-row-1'));
-        for (const name of ['Game', 'Timezone']) {
-            expect(row.getByText(name, { selector: 'label' })).toHaveClass('sr-only');
-            expect(row.getByRole('combobox', { name })).toBeInTheDocument();
-        }
+        expect(row.getByText('Game', { selector: 'label' })).toHaveClass('sr-only');
+        expect(row.getByRole('combobox', { name: 'Game' })).toBeInTheDocument();
+    });
+
+    it.each([true, false])('no timezone control, column or panel-default hint (ROK-1795; desktop: %s)', async (desktop) => {
+        setViewport(desktop);
+        await renderSection([pelicanServerFixture]);
+        expect(screen.getAllByRole('combobox')).toHaveLength(1);
+        expect(screen.getByRole('combobox', { name: 'Game' })).toBeInTheDocument();
+        expect(screen.queryByText(/timezone/i)).toBeNull();
+        expect(screen.queryByText(/panel default/i)).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Use default' })).toBeNull();
     });
 
     it('≥1024px: a mapped row shows its game name once (in the picker, no repeat under it)', async () => {
@@ -111,39 +118,11 @@ describe('PelicanServersSection — layout', () => {
         expect(row.queryAllByText('Valheim')).toHaveLength(0);
     });
 
-    it('<1024px: cards keep the visible Game/Timezone labels', async () => {
+    it('<1024px: cards keep the visible Game label', async () => {
         setViewport(false);
         await renderSection([pelicanServerFixture]);
         const card = within(screen.getByTestId('pelican-server-card-1'));
-        for (const name of ['Game', 'Timezone']) {
-            expect(card.getByText(name, { selector: 'label' })).not.toHaveClass('sr-only');
-        }
-    });
-});
-
-describe('PelicanServersSection — timezone mismatch warning (ROK-1096)', () => {
-    const mismatched: PelicanServerRowDto = { ...pelicanServerFixture, timezone: 'America/New_York', tzMismatch: true };
-
-    it('≥1024px: the row shows the warning in text-warning and the Timezone control is described by it', async () => {
-        await renderSection([mismatched]);
-        const row = within(screen.getByTestId('pelican-server-row-1'));
-        expect(row.getByText(TZ_MISMATCH_WARNING)).toHaveClass('text-warning');
-        expect(row.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription(expect.stringContaining(TZ_MISMATCH_WARNING));
-    });
-
-    it('<1024px: the card shows the warning and the Timezone control is described by it', async () => {
-        setViewport(false);
-        await renderSection([mismatched]);
-        const card = within(screen.getByTestId('pelican-server-card-1'));
-        expect(card.getByText(TZ_MISMATCH_WARNING)).toHaveClass('text-warning');
-        expect(card.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription(expect.stringContaining(TZ_MISMATCH_WARNING));
-    });
-
-    it.each([true, false])('no warning when tzMismatch is false (desktop: %s)', async (desktop) => {
-        setViewport(desktop);
-        await renderSection([{ ...pelicanServerFixture, tzMismatch: false }]);
-        expect(screen.getByRole('combobox', { name: 'Timezone' })).toHaveAccessibleDescription('Uses the panel default (America/New_York).');
-        expect(screen.queryByText(TZ_MISMATCH_WARNING)).toBeNull();
+        expect(card.getByText('Game', { selector: 'label' })).not.toHaveClass('sr-only');
     });
 });
 
@@ -166,12 +145,6 @@ describe('PelicanServersSection — row edits', () => {
         fireEvent.click(sw);
         await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Panel said no'));
         expect(sw).toHaveAttribute('aria-checked', 'true');
-    });
-
-    it("Use default PATCHes only timezone: ''", async () => {
-        const patches = await renderSection([suspended]);
-        fireEvent.click(screen.getByRole('button', { name: 'Use default' }));
-        await waitFor(() => expect(patches).toEqual([{ timezone: '' }]));
     });
 
     it('clearing the game PATCHes only gameId: null', async () => {
