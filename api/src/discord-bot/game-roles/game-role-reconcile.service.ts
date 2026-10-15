@@ -50,7 +50,7 @@ export const GAME_ROLE_MUTATION_CAP = 200;
 
 interface RunState {
   budget: number;
-  /** ONE full member fetch (gateway op 8) per run, shared by every game. */
+  /** ONE paged REST member list per run, shared by every game. */
   members?: Promise<GuildMembers | undefined>;
   result: GameRoleRunResultDto;
 }

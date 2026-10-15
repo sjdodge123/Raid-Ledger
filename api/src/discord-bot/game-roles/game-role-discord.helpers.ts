@@ -4,8 +4,8 @@
  * the caller already resolved, `null` meaning the bot is disconnected.
  */
 import {
+  Collection,
   PermissionFlagsBits,
-  type Collection,
   type Guild,
   type GuildMember,
   type Role,
@@ -105,9 +105,75 @@ export async function deleteCreatedRole(
 
 export type GuildMembers = Collection<string, GuildMember>;
 
-/** The full member list; a run fetches it once and shares it across games. */
-export function fetchGuildMembers(guild: Guild): Promise<GuildMembers> {
-  return guild.members.fetch();
+/** Discord's max page size for `GET /guilds/{id}/members`. */
+export const MEMBER_PAGE_SIZE = 1000;
+/** Page bound: 250k members, far past any guild this app serves. */
+const MAX_MEMBER_PAGES = 250;
+/** Longest rate-limit wait honoured before the single retry. */
+const MAX_RATE_LIMIT_WAIT_MS = 60_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Wait (ms) a rate-limit error asks for, or null when `err` is not one.
+ * Gateway op-8 limits carry `data.retry_after` in seconds; REST
+ * `RateLimitError` carries `retryAfter` in ms.
+ */
+function rateLimitDelayMs(err: unknown): number | null {
+  if (typeof err !== 'object' || err === null || !('name' in err)) return null;
+  if (err.name === 'GatewayRateLimitError' && 'data' in err) {
+    const data = err.data as { retry_after?: unknown } | null;
+    const secs = typeof data?.retry_after === 'number' ? data.retry_after : 1;
+    return Math.ceil(secs * 1000);
+  }
+  if (err.name === 'RateLimitError' && 'retryAfter' in err) {
+    return typeof err.retryAfter === 'number' ? err.retryAfter : 1000;
+  }
+  return null;
+}
+
+/** Run `op`; on a rate limit wait it out (capped) and retry exactly once. */
+export async function withRateLimitRetry<T>(
+  op: () => Promise<T>,
+  wait: (ms: number) => Promise<void> = sleep,
+): Promise<T> {
+  try {
+    return await op();
+  } catch (err) {
+    const delay = rateLimitDelayMs(err);
+    if (delay === null) throw err;
+    await wait(Math.min(delay, MAX_RATE_LIMIT_WAIT_MS));
+    return op();
+  }
+}
+
+async function listAllMembers(guild: Guild): Promise<GuildMembers> {
+  const all: GuildMembers = new Collection();
+  let after: string | undefined;
+  for (let i = 0; i < MAX_MEMBER_PAGES; i++) {
+    const page = await guild.members.list({
+      limit: MEMBER_PAGE_SIZE,
+      ...(after !== undefined ? { after } : {}),
+    });
+    for (const [id, m] of page) all.set(id, m);
+    after = page.lastKey();
+    if (page.size < MEMBER_PAGE_SIZE || after === undefined) break;
+  }
+  return all;
+}
+
+/**
+ * The full member list; a run fetches it once and shares it across games.
+ * Pages the REST list endpoint, NOT `members.fetch()`: that is a gateway
+ * op-8 request, rate limited per shard and shared with every member search
+ * the bot makes, so a busy shard failed the whole reconcile.
+ */
+export function fetchGuildMembers(
+  guild: Guild,
+  wait?: (ms: number) => Promise<void>,
+): Promise<GuildMembers> {
+  return withRateLimitRetry(() => listAllMembers(guild), wait);
 }
 
 /** Holders + member ids from ONE member fetch; null when the role is gone. */
@@ -119,7 +185,7 @@ export async function fetchRoleState(
   if (!guild) return null;
   const role = await fetchRole(guild, roleId);
   if (!role) return null;
-  const members = prefetched ?? (await guild.members.fetch());
+  const members = prefetched ?? (await fetchGuildMembers(guild));
   const holders = new Set<string>();
   for (const [id, m] of members) if (m.roles.cache.has(roleId)) holders.add(id);
   return { holders, memberIds: new Set(members.keys()) };

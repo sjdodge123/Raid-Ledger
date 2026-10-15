@@ -277,6 +277,30 @@ describe('GameRoleReconcileService (ROK-1767)', () => {
     expect(await grantsOf(fineRowId)).toEqual([u.id]);
   });
 
+  it('reports every game failed when the member list stays rate limited', async () => {
+    const gameId = await makeGame('Throttled');
+    await link(gameId, 'role-throttled');
+    // fetchGuildMembers already waited and retried once; this is the 2nd 429.
+    const limited = Object.assign(new Error('opcode 8 was rate limited'), {
+      name: 'GatewayRateLimitError',
+    });
+    mocked.fetchGuildMembers.mockRejectedValue(limited);
+
+    const result = await service.runReconciliation();
+
+    expect(result).toEqual({
+      added: 0,
+      removed: 0,
+      skippedOverCap: 0,
+      failedGames: [gameId],
+    });
+    expect(captureException).toHaveBeenCalledWith(limited, {
+      tags: { gameId: String(gameId) },
+    });
+    expect(mocked.fetchRoleState).not.toHaveBeenCalled();
+    expect(mocked.addMemberRole).not.toHaveBeenCalled();
+  });
+
   it('grantNow adds a new player but skips one who opted out', async () => {
     const gameId = await makeGame('Live');
     const roleRowId = await link(gameId, 'role-live');
