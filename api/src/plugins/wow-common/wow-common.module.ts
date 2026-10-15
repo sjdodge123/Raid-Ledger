@@ -6,6 +6,7 @@ import { GuildAccessService } from './guilds/guild-access.service';
 import { GuildEditorGuard } from './guilds/guild-editor.guard';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
+import { GuildRaidsService } from './guilds/guild-raids.service';
 import { GuildEditorsService } from './guilds/guild-editors.service';
 import { GuildEventTagger } from './guilds/guild-event-tagger';
 import { BlizzardAuthService } from './blizzard-auth.service';
@@ -93,6 +94,7 @@ import { CharacterQuestsService } from './character-quests.service';
     GuildAccessService,
     GuildEditorGuard,
     GuildPageService,
+    GuildRaidsService,
     GuildEditorsService,
     GuildEventTagger,
   ],

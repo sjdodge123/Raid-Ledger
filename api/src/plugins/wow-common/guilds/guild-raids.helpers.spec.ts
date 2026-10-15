@@ -94,7 +94,14 @@ describe('toComposition', () => {
 
   it('reports filled vs needed per role and passes the bench through', () => {
     const benched = [{ characterId: null, name: 'Benchy' }];
-    const out = toComposition(event, new Map([['tank', 1], ['dps', 3]]), benched);
+    const out = toComposition(
+      event,
+      new Map([
+        ['tank', 1],
+        ['dps', 3],
+      ]),
+      benched,
+    );
     expect(out?.roles).toEqual([
       { role: 'tank', filled: 1, needed: 2 },
       { role: 'healer', filled: 0, needed: 4 },
@@ -114,13 +121,27 @@ describe('toAttendanceRows', () => {
   const members = [
     member({ memberId: 1, name: 'Zed', userId: 10, characterId: 'c-10' }),
     member({ memberId: 2, name: 'Alt', userId: 11, characterId: 'c-11a' }),
-    member({ memberId: 3, name: 'Main', userId: 11, characterId: 'c-11', isMain: true }),
+    member({
+      memberId: 3,
+      name: 'Main',
+      userId: 11,
+      characterId: 'c-11',
+      isMain: true,
+    }),
     member({ memberId: 4, name: 'Amy', userId: 12, characterId: 'c-12' }),
     member({ memberId: 5, name: 'Unlinked', userId: null }),
   ];
 
   it('sorts by attended desc then name, one row per linked member (main char)', () => {
-    const out = toAttendanceRows(members, new Map([[10, 2], [11, 3], [99, 4]]), 4);
+    const out = toAttendanceRows(
+      members,
+      new Map([
+        [10, 2],
+        [11, 3],
+        [99, 4],
+      ]),
+      4,
+    );
     expect(out.map((r) => [r.userId, r.name, r.attended, r.of])).toEqual([
       [11, 'Main', 3, 4],
       [10, 'Zed', 2, 4],
