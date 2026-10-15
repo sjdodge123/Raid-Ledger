@@ -258,14 +258,15 @@ function parseSpecs(value) {
     'set -uo pipefail',
     `REPO_ROOT=${JSON.stringify(CHECKOUT)}`,
     'RED=""; NC=""',
-    `export E2E_SPECS=${JSON.stringify(value)}`,
     'E2E_SPECS_LIST=""',
     extractFunction('_parse_e2e_specs'),
     '_parse_e2e_specs; rc=$?',
     'echo "LIST=$E2E_SPECS_LIST"',
     'exit $rc',
   ].join('\n');
-  const res = spawnSync('bash', ['-c', script], { encoding: 'utf8' });
+  // Pass E2E_SPECS through the environment, not an inline quoted string, so real
+  // newlines/CRs reach the script exactly as a multi-line env value would.
+  const res = spawnSync('bash', ['-c', script], { encoding: 'utf8', env: { ...process.env, E2E_SPECS: value } });
   return { code: res.status, list: (/^LIST=(.*)$/m.exec(res.stdout)?.[1] ?? '').trim(), stderr: res.stderr };
 }
 
@@ -274,6 +275,13 @@ test('E2E_SPECS: space- and comma-separated lists parse, de-duplicated, in order
   assert.deepEqual(parseSpecs(`${a} ${b}`), { code: 0, list: `${a} ${b}`, stderr: '' });
   assert.equal(parseSpecs(`${a},${b}`).list, `${a} ${b}`);
   assert.equal(parseSpecs(` ${b}, ${a} ,${b} `).list, `${b} ${a}`);
+});
+
+test('E2E_SPECS: a multi-line list keeps every line, and a bad path on line 2 still fails (Codex P2)', () => {
+  const [a, b] = REAL_SPECS;
+  assert.equal(parseSpecs(`${a}\n${b}`).list, `${a} ${b}`);
+  assert.equal(parseSpecs(`\n${a}\r\n${b}\n`).list, `${a} ${b}`);
+  assert.equal(parseSpecs(`${a}\nscripts/smoke/nope.smoke.spec.ts`).code, 2);
 });
 
 test('E2E_SPECS: empty or unset leaves the list empty (scope-specs.sh decides)', () => {

@@ -1798,6 +1798,10 @@ _parse_e2e_specs() {
   E2E_SPECS_LIST=""
   local raw="${E2E_SPECS:-}" spec bad=0 out="" specs=()
   raw="${raw//,/ }"
+  # `read -a` stops at the first newline, so fold newlines/CRs into spaces first:
+  # a multi-line E2E_SPECS must not silently drop every spec after line one.
+  raw="${raw//$'\n'/ }"
+  raw="${raw//$'\r'/ }"
   # Split with `read -a`, NOT an unquoted `for spec in $raw`: that would
   # pathname-expand `scripts/smoke/*.smoke.spec.ts` into real files before the
   # check below ever saw the wildcard (Codex P2, ROK-1792).
