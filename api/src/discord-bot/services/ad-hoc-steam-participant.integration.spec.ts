@@ -12,6 +12,7 @@ import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
+import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
 
 const t = schema.adHocParticipants;
 const STEAM_A = '76561198000000001';
@@ -197,5 +198,101 @@ describe('AdHocParticipantService — one participant per linked user (real DB)'
     ).rejects.toMatchObject(
       pgError('23514', 'ad_hoc_participants_identity_check'),
     );
+  });
+});
+
+/** Move every open row's session start `seconds` into the past. */
+async function backdate(eventId: number, seconds: number): Promise<void> {
+  await testApp.db
+    .update(t)
+    .set({ joinedAt: new Date(Date.now() - seconds * 1000) })
+    .where(eq(t.eventId, eventId));
+}
+
+async function onlyRow(eventId: number) {
+  const [row] = nonEmpty(await rowsOf(eventId), 'participant row');
+  return row;
+}
+
+const linkedServer = () => ({
+  steamId: STEAM_A,
+  displayName: 'Ragnhild',
+  userId: userId(),
+});
+
+describe('AdHocParticipantService — per-source presence on a shared row (B1)', () => {
+  it('a voice leave while still on the server keeps the row open and on the server', async () => {
+    const eventId = await insertEvent();
+    await service.addParticipant(eventId, voiceMember(true));
+    await service.addServerParticipant(eventId, linkedServer());
+    await service.markLeave(eventId, DISCORD_A);
+
+    expect(await onlyRow(eventId)).toMatchObject({
+      leftAt: null,
+      inVoice: false,
+      onServer: true,
+    });
+    expect(await hasOpenServerPlayers(testApp.db, eventId)).toBe(true);
+  });
+
+  it('a server leave while still in voice keeps the row open; the voice leave then closes it', async () => {
+    const eventId = await insertEvent();
+    await service.addServerParticipant(eventId, linkedServer());
+    await service.addParticipant(eventId, voiceMember(true));
+
+    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(false);
+    expect(await onlyRow(eventId)).toMatchObject({ leftAt: null });
+    expect(await hasOpenServerPlayers(testApp.db, eventId)).toBe(false);
+
+    await service.markLeave(eventId, DISCORD_A);
+    expect((await onlyRow(eventId)).leftAt).toBeInstanceOf(Date);
+  });
+
+  it('after the voice leave, the server leave closes the merged row', async () => {
+    const eventId = await insertEvent();
+    await service.addParticipant(eventId, voiceMember(true));
+    await service.addServerParticipant(eventId, linkedServer());
+    await service.markLeave(eventId, DISCORD_A);
+
+    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(true);
+    expect((await onlyRow(eventId)).leftAt).toBeInstanceOf(Date);
+  });
+});
+
+describe('AdHocParticipantService — a re-opened row restarts its session (m10)', () => {
+  it('a Steam rejoin does not re-add the earlier span', async () => {
+    const eventId = await insertEvent();
+    const member = { steamId: STEAM_A, displayName: 'Ragnhild', userId: null };
+    await service.addServerParticipant(eventId, member);
+    await backdate(eventId, 100);
+    await service.markServerLeave(eventId, STEAM_A);
+    await service.addServerParticipant(eventId, member);
+    await service.markServerLeave(eventId, STEAM_A);
+
+    expect((await onlyRow(eventId)).totalDurationSeconds).toBeLessThan(150);
+  });
+
+  it('a voice rejoin does not re-add the earlier span', async () => {
+    const eventId = await insertEvent();
+    await service.addParticipant(eventId, voiceMember(false));
+    await backdate(eventId, 100);
+    await service.markLeave(eventId, DISCORD_A);
+    await service.addParticipant(eventId, voiceMember(false));
+    await service.markLeave(eventId, DISCORD_A);
+
+    expect((await onlyRow(eventId)).totalDurationSeconds).toBeLessThan(150);
+  });
+
+  it('markSteamLeave closes a row merged after a voice session, counting once', async () => {
+    const eventId = await insertEvent();
+    await service.addParticipant(eventId, voiceMember(true));
+    await backdate(eventId, 100);
+    await service.markLeave(eventId, DISCORD_A);
+    expect(await service.addServerParticipant(eventId, linkedServer())).toBe(
+      'merged',
+    );
+
+    expect(await service.markServerLeave(eventId, STEAM_A)).toBe(true);
+    expect((await onlyRow(eventId)).totalDurationSeconds).toBeLessThan(150);
   });
 });
