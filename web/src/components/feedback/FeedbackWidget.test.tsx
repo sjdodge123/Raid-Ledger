@@ -54,3 +54,13 @@ describe('FeedbackWidget — mobile open path', () => {
         expect(await screen.findAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
     });
 });
+
+describe('FeedbackWidget — console capture starts eagerly (ROK-1313)', () => {
+    it('captures console output logged before the dialog is ever opened', async () => {
+        vi.resetModules();
+        await import('./FeedbackWidget');
+        console.info('pre-open-marker-1313');
+        const { getClientLogs } = await import('./feedback-console-capture');
+        expect(getClientLogs()).toContain('pre-open-marker-1313');
+    });
+});

@@ -98,6 +98,17 @@ describe('storeScreenshot when the path is not recorded', () => {
     );
   });
 
+  it('removes the written file when dropping the stale sibling fails', async () => {
+    await mkdir(path.join(dir, '11.jpg', 'blocker'), { recursive: true });
+    const db = dbWhoseUpdateReturns(Promise.resolve([{ id: 11 }]));
+    const logger = new Logger('spec');
+    jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    await storeScreenshot(db, 11, { buf: PNG, ext: 'png' }, logger);
+    expect({ orphanOnDisk: await fileExists('11.png') }).toEqual({
+      orphanOnDisk: false,
+    });
+  });
+
   it('keeps the file when the row records its path', async () => {
     const db = dbWhoseUpdateReturns(Promise.resolve([{ id: 10 }]));
     await storeScreenshot(db, 10, { buf: PNG, ext: 'png' }, new Logger('spec'));

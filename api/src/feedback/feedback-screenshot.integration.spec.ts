@@ -7,10 +7,10 @@
  * parser beats the global 2 MB one; account delete and ban + wipe remove
  * the files.
  */
-import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { FEEDBACK_SCREENSHOT_MAX_BASE64_CHARS } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
@@ -175,6 +175,51 @@ describe('account delete → feedback screenshot cleanup', () => {
       .set('Authorization', `Bearer ${adminToken}`);
     expect(del.status).toBe(204);
     expect(await readdir(dir)).toEqual([`${theirs.body.id as number}.jpg`]);
+  });
+});
+
+/** Poll until some query in this database is waiting on a row lock. */
+async function untilAQueryWaitsOnALock(): Promise<void> {
+  for (let i = 0; i < 200; i += 1) {
+    const rows = await testApp.db.execute(
+      sql`select 1 from pg_stat_activity where wait_event_type = 'Lock' and datname = current_database()`,
+    );
+    if (rows.length > 0) return;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  throw new Error('the account delete never waited on the screenshot update');
+}
+
+describe('account delete racing an in-flight screenshot store', () => {
+  it('removes a screenshot whose path commits while the delete is in flight', async () => {
+    const member = await createMemberAndLogin(
+      testApp,
+      'fb-shot-race',
+      'fb-shot-race@example.test',
+    );
+    const res = await post({}, member.token);
+    expect(res.status).toBe(201);
+    const id = res.body.id as number;
+    // storeScreenshot mid-flight: file written, path update not yet committed.
+    await writeFile(path.join(dir, `${id}.png`), Buffer.from(PNG_1X1_B64, 'base64'));
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const store = testApp.db.transaction(async (tx) => {
+      await tx
+        .update(schema.feedback)
+        .set({ screenshotPath: `feedback/${id}.png` })
+        .where(eq(schema.feedback.id, id));
+      await gate;
+    });
+    const del = testApp.request
+      .delete(`/users/${member.userId}`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .then((r) => r.status);
+    await untilAQueryWaitsOnALock();
+    release();
+    await store;
+    expect(await del).toBe(204);
+    expect({ leftOnDisk: await readdir(dir) }).toEqual({ leftOnDisk: [] });
   });
 });
 
