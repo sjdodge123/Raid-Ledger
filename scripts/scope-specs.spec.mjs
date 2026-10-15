@@ -19,13 +19,15 @@ import { fileURLToPath } from 'node:url';
 const SCOPE_SPECS = join(dirname(fileURLToPath(import.meta.url)), 'smoke', 'scope-specs.sh');
 const REPO_ROOT = dirname(dirname(dirname(SCOPE_SPECS)));
 
-/** Real scope-specs.sh output lines for a synthetic changed-file list. */
-function scopeSpecs(files) {
-  return execFileSync('bash', [SCOPE_SPECS], {
-    encoding: 'utf8',
-    cwd: REPO_ROOT,
-    env: { ...process.env, SCOPE_FILES: files.join('\n'), SCOPE_BASE: 'origin/main' },
-  })
+/**
+ * Real scope-specs.sh output lines for a synthetic changed-file list. `diff`
+ * (ROK-1792) is the route-file diff text, fed through the SCOPE_DIFF hook.
+ */
+function scopeSpecs(files, diff) {
+  const env = { ...process.env, SCOPE_FILES: files.join('\n'), SCOPE_BASE: 'origin/main' };
+  delete env.SCOPE_DIFF;
+  if (diff !== undefined) env.SCOPE_DIFF = diff;
+  return execFileSync('bash', [SCOPE_SPECS], { encoding: 'utf8', cwd: REPO_ROOT, env })
     .trim()
     .split('\n')
     .filter(Boolean);
@@ -67,6 +69,7 @@ test('web/src/index.css is a shared surface -> ALL', () => {
 test('the other documented shared surfaces still escalate to ALL', () => {
   for (const f of [
     'web/src/components/layout/Header.tsx',
+    'web/src/components/layout/Layout.tsx',
     'web/src/components/ui/button.tsx',
     'web/src/App.tsx',
     'playwright.config.ts',
@@ -115,4 +118,123 @@ test('an api file that maps to no spec does not escalate a scoped web diff', () 
 
   assert.ok(!out.includes('ALL'), JSON.stringify(out));
   assert.ok(out.length > 0);
+});
+
+// ---- ROK-1792: route files and new components/ui files ----------------------
+
+const ROUTES = 'web/src/app-routes.tsx';
+const LAZY = 'web/src/lazy-routes.ts';
+
+/** A minimal unified diff for one file from `-`/`+` lines. */
+function diffFor(file, lines) {
+  return [`diff --git a/${file} b/${file}`, `--- a/${file}`, `+++ b/${file}`, '@@ -1 +1 @@', ...lines].join('\n');
+}
+
+test('an added /dev/wireframes route maps to NO specs (NONE), not ALL', () => {
+  const diff = diffFor(ROUTES, [
+    '-  SchedulingWireframesPage, ViewportProbePage,',
+    '+  SchedulingWireframesPage, XWireframesPage, ViewportProbePage,',
+    '+      <Route path="/dev/wireframes/x" element={<XWireframesPage />} />',
+  ]);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['NONE']);
+});
+
+test('a lazy export rendered only on a /dev route maps to NONE (ROK-1774 shape)', () => {
+  const diff = [
+    diffFor(ROUTES, ['+      <Route path="/dev/wireframes/server-schedule" element={<ServerScheduleWireframesPage />} />']),
+    diffFor(LAZY, [
+      '+export const ServerScheduleWireframesPage = lazyWithRetry(() =>',
+      "+    import('./dev/server-schedule-wireframes/ServerScheduleWireframesPage').then((m) => ({ default: m.ServerScheduleWireframesPage })),",
+      '+);',
+    ]),
+  ].join('\n');
+
+  assert.deepEqual(scopeSpecs([ROUTES, LAZY], diff), ['NONE']);
+});
+
+test('an added /guilds/:id route + lazy page map to the guild spec (ROK-1785 shape)', () => {
+  const diff = [
+    diffFor(ROUTES, [
+      '-  GamesPage, CharacterDetailPage,',
+      '+  GamesPage, CharacterDetailPage, GuildPage,',
+      '+        <Route path="/guilds/:id" element={<GuildPage />} />',
+    ]),
+    diffFor(LAZY, [
+      '+/** ROK-1785: WoW-plugin-owned guild page. */',
+      '+export const GuildPage = lazyWithRetry(() =>',
+      "+    import('./plugins/wow/guild/guild-page').then((m) => ({ default: m.GuildPage })),",
+      '+);',
+    ]),
+  ].join('\n');
+
+  assert.deepEqual(scopeSpecs([ROUTES, LAZY], diff), ['scripts/smoke/guild-page.smoke.spec.ts']);
+});
+
+test('a changed nested (relative) route resolves through its parent path', () => {
+  const diff = diffFor(ROUTES, [
+    '-      <Route path="gaming/game-time" element={<ProfileGameTimePanel />} />',
+    '+      <Route path="gaming/game-time" element={<ProfileGameTimePanel compact />} />',
+  ]);
+  const out = scopeSpecs([ROUTES], diff);
+
+  assert.ok(!out.includes('ALL') && !out.includes('NONE'), JSON.stringify(out));
+  assert.ok(out.includes('scripts/smoke/profile-gaming.smoke.spec.ts'), JSON.stringify(out));
+});
+
+test('a removed route escalates to ALL', () => {
+  const diff = diffFor(ROUTES, ['-        <Route path="/players" element={<PlayersPage />} />']);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['ALL']);
+});
+
+test('a renamed route escalates to ALL', () => {
+  const diff = diffFor(ROUTES, [
+    '-        <Route path="/players" element={<PlayersPage />} />',
+    '+        <Route path="/members" element={<PlayersPage />} />',
+  ]);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['ALL']);
+});
+
+test('an AuthGuard change escalates to ALL', () => {
+  const diff = diffFor(ROUTES, [
+    '-      <Route element={<AuthGuard />}>',
+    '+      <Route element={<AuthGuard requireOnboarding />}>',
+  ]);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['ALL']);
+});
+
+test('a pathless layout route or other route-file code escalates to ALL', () => {
+  assert.deepEqual(scopeSpecs([ROUTES], diffFor(ROUTES, ['+      <Route element={<Shell />}>'])), ['ALL']);
+  assert.deepEqual(scopeSpecs([LAZY], diffFor(LAZY, ['+            window.location.reload();'])), ['ALL']);
+});
+
+test('an added route that no spec visits escalates to ALL', () => {
+  const diff = diffFor(ROUTES, ['+        <Route path="/zqxwv/:id" element={<ZqxwvPage />} />']);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['ALL']);
+});
+
+test('a route file with no diff escalates to ALL', () => {
+  assert.deepEqual(scopeSpecs([ROUTES], ''), ['ALL']);
+});
+
+test('a /dev route beside a mapped page lists only the mapped specs', () => {
+  const diff = diffFor(ROUTES, ['+      <Route path="/dev/wireframes/x" element={<XWireframesPage />} />']);
+  const out = scopeSpecs([ROUTES, 'web/src/pages/lfg/lfg-copy.ts'], diff);
+
+  assert.ok(!out.includes('ALL') && !out.includes('NONE'), JSON.stringify(out));
+  for (const spec of out) assert.match(spec, /^scripts\/smoke\/lfg-/);
+});
+
+test('a NEW components/ui file that nothing imports yet maps to NONE', () => {
+  assert.deepEqual(scopeSpecs(['web/src/components/ui/zqxwv-thing.tsx']), ['NONE']);
+});
+
+test('a changed EXISTING components/ui primitive stays ALL', () => {
+  for (const f of ['web/src/components/ui/button.tsx', 'web/src/components/ui/modal.tsx']) {
+    assert.deepEqual(scopeSpecs([f]), ['ALL'], f);
+  }
 });
