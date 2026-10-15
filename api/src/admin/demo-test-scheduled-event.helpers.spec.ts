@@ -141,17 +141,75 @@ describe('cleanupScheduledEventsForTest (ROK-1623) - failed delete and no guild'
   });
 });
 
-describe('triggerScheduledEventCompletionForTest (ROK-944)', () => {
-  it('runs completeExpiredEvents once on the non-strict ScheduledEventService', async () => {
-    const completeExpiredEvents = jest.fn().mockResolvedValue(undefined);
-    const get = jest.fn().mockReturnValue({ completeExpiredEvents });
+const ok = {
+  eventId: 1,
+  discordEventId: 'se-1',
+  from: 'Scheduled',
+  to: 'Completed',
+  ok: true,
+};
+const failed = {
+  eventId: 2,
+  discordEventId: 'se-2',
+  from: 'Scheduled',
+  to: null,
+  ok: false,
+  errorCode: 50013,
+  errorMessage: 'Missing Permissions',
+};
 
-    const result = await triggerScheduledEventCompletionForTest({
-      get,
-    } as unknown as ModuleRef);
+function moduleRefFor(run: unknown) {
+  const completeExpiredEventsDetailed = jest.fn().mockResolvedValue(run);
+  const get = jest.fn().mockReturnValue({ completeExpiredEventsDetailed });
+  return {
+    moduleRef: { get } as unknown as ModuleRef,
+    get,
+    completeExpiredEventsDetailed,
+  };
+}
 
-    expect(result).toEqual({ success: true });
+describe('triggerScheduledEventCompletionForTest outcomes (ROK-944)', () => {
+  it('runs one completion pass on the non-strict ScheduledEventService', async () => {
+    const { moduleRef, get, completeExpiredEventsDetailed } = moduleRefFor({
+      outcomes: [ok],
+    });
+    const result = await triggerScheduledEventCompletionForTest(moduleRef);
+    expect(result).toEqual({ success: true, outcomes: [ok] });
     expect(get).toHaveBeenCalledWith(ScheduledEventService, { strict: false });
-    expect(completeExpiredEvents).toHaveBeenCalledTimes(1);
+    expect(completeExpiredEventsDetailed).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports success:false and the failed outcome when a Discord call failed', async () => {
+    const { moduleRef } = moduleRefFor({ outcomes: [ok, failed] });
+    const result = await triggerScheduledEventCompletionForTest(moduleRef);
+    expect(result).toEqual({ success: false, outcomes: [ok, failed] });
+  });
+});
+
+describe('triggerScheduledEventCompletionForTest skip reasons (ROK-944)', () => {
+  it('stays successful with a named reason when there were no candidates', async () => {
+    const { moduleRef } = moduleRefFor({
+      outcomes: [],
+      reason: 'no-candidates',
+    });
+    const result = await triggerScheduledEventCompletionForTest(moduleRef);
+    expect(result).toEqual({
+      success: true,
+      outcomes: [],
+      reason: 'no-candidates',
+    });
+  });
+
+  it('reports success:false when the bot is not connected', async () => {
+    const { moduleRef } = moduleRefFor({
+      outcomes: [],
+      reason: 'bot-not-connected',
+    });
+    const result = await triggerScheduledEventCompletionForTest(moduleRef);
+    expect(result).toEqual({
+      success: false,
+      outcomes: [],
+      reason: 'bot-not-connected',
+    });
   });
 });
