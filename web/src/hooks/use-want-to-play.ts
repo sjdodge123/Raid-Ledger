@@ -41,20 +41,28 @@ export function useWantToPlay(gameId: number | undefined) {
     return individual;
 }
 
+interface InterestToggleContext {
+    previous: GameInterestResponseDto | undefined;
+    queryKey: ReturnType<typeof gameInterestQueryKey>;
+}
+
 /**
  * Individual (non-batch) want-to-play hook. Always called to satisfy
  * React hook rules, but disabled when `enabled` is false.
  */
 function useInterestToggleMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
-    const queryKey = gameInterestQueryKey(gameId, useViewerCacheScope());
+    const viewer = useViewerCacheScope();
 
-    return useMutation<GameInterestResponseDto, Error, boolean>({
+    // ROK-1797: the key is pinned at onMutate and carried in the context, so a
+    // viewer switch mid-flight cannot roll one viewer's snapshot into another's.
+    return useMutation<GameInterestResponseDto, Error, boolean, InterestToggleContext>({
         mutationFn: (wantToPlay: boolean) =>
             fetchApi<GameInterestResponseDto>(`/games/${gameId}/want-to-play`, {
                 method: wantToPlay ? 'POST' : 'DELETE',
             }),
         onMutate: async (wantToPlay) => {
+            const queryKey = gameInterestQueryKey(gameId, viewer);
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<GameInterestResponseDto>(queryKey);
             // ROK-1797: keep the bell's mute through the optimistic write, or a
@@ -63,21 +71,20 @@ function useInterestToggleMutation(gameId: number | undefined) {
                 wantToPlay, count: (old?.count ?? 0) + (wantToPlay ? 1 : -1),
                 ...(old?.notificationsMuted !== undefined && { notificationsMuted: old.notificationsMuted }),
             }));
-            return { previous };
+            return { previous, queryKey };
         },
         onError: (_err, _vars, context) => {
-            const prev = (context as { previous?: GameInterestResponseDto })?.previous;
-            if (prev) queryClient.setQueryData(queryKey, prev);
+            if (context?.previous) queryClient.setQueryData(context.queryKey, context.previous);
             toast.error('Failed to update game interest');
         },
-        onSettled: () => {
-            queryClient.invalidateQueries({ queryKey });
-            queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
+        onSettled: (_data, _err, _vars, context) => {
+            if (context) void queryClient.invalidateQueries({ queryKey: context.queryKey });
+            void queryClient.invalidateQueries({ queryKey: ['userHeartedGames'] });
             // ROK-1311: also invalidate the batch cache consumed by /games card lists.
             // Prefix match invalidates every ['games', 'interest', 'batch', sortedIds] entry.
-            queryClient.invalidateQueries({ queryKey: ['games', 'interest', 'batch'] });
+            void queryClient.invalidateQueries({ queryKey: ['games', 'interest', 'batch'] });
             // ROK-1453: keep the LFG cold-start prompt and the chips honest.
-            queryClient.invalidateQueries({ queryKey: ['lfg'] });
+            void queryClient.invalidateQueries({ queryKey: ['lfg'] });
         },
     });
 }

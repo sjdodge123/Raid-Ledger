@@ -17,7 +17,16 @@ import { toast } from '../lib/toast';
 import { getAuthToken, useViewerCacheScope } from './use-auth';
 import { gameInterestQueryKey, gameMutesQueryKey } from './game-interest-query-key';
 
-interface MuteContext { previous: GameInterestResponseDto | undefined }
+/**
+ * The keys are pinned at `onMutate` and carried in the context, so a viewer
+ * switch (admin impersonation) while the request is in flight cannot make the
+ * rollback write one viewer's snapshot into another viewer's cache.
+ */
+interface MuteContext {
+    previous: GameInterestResponseDto | undefined;
+    interestKey: ReturnType<typeof gameInterestQueryKey>;
+    mutesKey: ReturnType<typeof gameMutesQueryKey>;
+}
 
 /**
  * The write half alone, for surfaces that already know the state (the
@@ -27,29 +36,31 @@ interface MuteContext { previous: GameInterestResponseDto | undefined }
 export function useGameNotificationMuteMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
     const viewer = useViewerCacheScope();
-    const queryKey = gameInterestQueryKey(gameId, viewer);
     return useMutation<GameNotificationMuteResponseDto, Error, boolean, MuteContext>({
         mutationFn: (muted) =>
             fetchApi<GameNotificationMuteResponseDto>(`/games/${gameId}/notification-mute`, {
                 method: muted ? 'POST' : 'DELETE',
             }),
         onMutate: async (muted) => {
-            await queryClient.cancelQueries({ queryKey });
-            const previous = queryClient.getQueryData<GameInterestResponseDto>(queryKey);
+            const interestKey = gameInterestQueryKey(gameId, viewer);
+            const mutesKey = gameMutesQueryKey(viewer);
+            await queryClient.cancelQueries({ queryKey: interestKey });
+            const previous = queryClient.getQueryData<GameInterestResponseDto>(interestKey);
             if (previous) {
-                queryClient.setQueryData<GameInterestResponseDto>(queryKey, {
+                queryClient.setQueryData<GameInterestResponseDto>(interestKey, {
                     ...previous, notificationsMuted: muted,
                 });
             }
-            return { previous };
+            return { previous, interestKey, mutesKey };
         },
         onError: (_err, _muted, context) => {
-            if (context?.previous) queryClient.setQueryData(queryKey, context.previous);
+            if (context?.previous) queryClient.setQueryData(context.interestKey, context.previous);
             toast.error('Failed to update notifications for this game');
         },
-        onSettled: () => {
-            void queryClient.invalidateQueries({ queryKey });
-            void queryClient.invalidateQueries({ queryKey: gameMutesQueryKey(viewer) });
+        onSettled: (_data, _err, _muted, context) => {
+            if (!context) return;
+            void queryClient.invalidateQueries({ queryKey: context.interestKey });
+            void queryClient.invalidateQueries({ queryKey: context.mutesKey });
         },
     });
 }
