@@ -9,7 +9,7 @@
 import type { ReactNode } from 'react';
 import { ExtLink, Lead } from './privacy-copy-parts';
 
-export const PRIVACY_LAST_UPDATED = '13 October 2026';
+export const PRIVACY_LAST_UPDATED = '15 October 2026';
 export const COMMUNITY_FALLBACK = 'this community';
 export const GOOGLE_USER_DATA_POLICY_URL = 'https://developers.google.com/terms/api-services-user-data-policy';
 
@@ -64,6 +64,7 @@ function whatWeKeepSection(): PrivacySection {
             { key: 'added', content: 'What you add: your display name, characters, game time and away days, event sign-ups, game interests and preferences.' },
             { key: 'activity', content: 'Activity the community uses to plan: voice-channel attendance at events, and which games members play together.' },
             { key: 'sessions', content: 'Sign-in sessions, so you stay logged in.' },
+            { key: 'feedback', content: 'Feedback you send: your message and, if you add one, a screenshot, plus the page address, your screen size, browser and app version (and, for bug reports, recent browser console logs).' },
         ],
     };
 }
@@ -100,7 +101,7 @@ function whoElseSection(): PrivacySection {
         bullets: [
             { key: 'discord', content: <><Lead>Discord</Lead> shows event posts and messages that mention members.</> },
             { key: 'google', requires: 'calendar', content: <><Lead>Google</Lead>: calendar sync, as above.</> },
-            { key: 'errors', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with on-screen text masked) is sent to the Raid Ledger project&apos;s error tracker, Sentry, so the developers can fix it. Passwords, tokens and calendar ids are removed first.</> },
+            { key: 'errors', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with on-screen text masked) is sent to the Raid Ledger project&apos;s error tracker, Sentry, so the developers can fix it. Passwords, tokens and calendar ids are removed first. Feedback you send, including any screenshot you attach, also goes to Sentry.</> },
             { key: 'ai', requires: 'ai', content: <><Lead>AI suggestions.</Lead> If the admins turn on AI features, members&apos; usernames and gaming stats (not calendar data) are sent to the AI provider they chose to suggest games.</> },
             { key: 'games', content: 'Game databases (IGDB, Steam, IsThereAnyDeal, Blizzard) are asked about games and characters. If you link Steam, your Steam id is used to read your game library.' },
         ],
