@@ -4,7 +4,8 @@
  *
  * Proves: bytes land at `<dir>/<id>.<ext>` with `screenshot_path`
  * `feedback/<id>.<ext>`; a 400/413 writes no row and no file; the 8 MB route
- * parser beats the global 2 MB one; account delete removes the files.
+ * parser beats the global 2 MB one; account delete and ban + wipe remove
+ * the files.
  */
 import { mkdtemp, readdir, readFile, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -173,6 +174,25 @@ describe('account delete → feedback screenshot cleanup', () => {
       .delete(`/users/${member.userId}`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect(del.status).toBe(204);
+    expect(await readdir(dir)).toEqual([`${theirs.body.id as number}.jpg`]);
+  });
+});
+
+describe('ban with wipeData → feedback screenshot cleanup', () => {
+  it("removes the banned user's screenshot files and keeps others'", async () => {
+    const member = await createMemberAndLogin(
+      testApp,
+      'fb-shot-banned',
+      'fb-shot-banned@example.test',
+    );
+    const mine = await post({ screenshotBase64: PNG_1X1_B64 }, member.token);
+    const theirs = await post({ screenshotBase64: JPEG_B64 });
+    expect([mine.status, theirs.status]).toEqual([201, 201]);
+    await testApp.request
+      .post(`/users/${member.userId}/ban`)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ reason: 'abuse', wipeData: true })
+      .expect(201);
     expect(await readdir(dir)).toEqual([`${theirs.body.id as number}.jpg`]);
   });
 });
