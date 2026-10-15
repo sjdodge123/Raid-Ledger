@@ -53,6 +53,7 @@ describe('PrivacyPage', () => {
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
         expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
+        expect(page).toHaveTextContent("Error reports are off unless this site's admins turn them on");
     });
 
     it('discloses error reports when the instance reports telemetry on (ROK-1779)', () => {
@@ -60,7 +61,7 @@ describe('PrivacyPage', () => {
         expect(renderPage()).toHaveTextContent('Error reports.');
     });
 
-    it('omits error reports when the instance opted out of telemetry (ROK-1779)', () => {
+    it('omits error reports when the instance has not opted in to telemetry (ROK-1779)', () => {
         status.current = { telemetryEnabled: false };
         const page = renderPage();
         expect(page).not.toHaveTextContent('Error reports');
