@@ -112,8 +112,11 @@ it('opens a session only for tracked, running, unsuspended servers with a parser
   await h.reconcile();
   expect(h.supervisor.activeServerIds).toEqual([1]);
   expect(h.wings.sockets).toHaveLength(1);
+  // Server 1 rehydrates its session; offline server 2 is only probed for
+  // stale presence to empty (FB1 #3) — no socket.
   expect(h.sink.openPresence.mock.calls).toEqual([
     [{ pelicanServerId: 1, gameId: 42 }],
+    [{ pelicanServerId: 2, gameId: 42 }],
   ]);
 });
 
