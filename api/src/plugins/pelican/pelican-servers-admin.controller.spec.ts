@@ -11,6 +11,8 @@ import {
   type PelicanServersAdminRepository,
 } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
+import { EXTENSION_POINTS } from '../plugin-host/extension-points';
+import type { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
 const FRESH = new Date('2026-10-13T11:59:00.000Z');
@@ -21,6 +23,7 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
     name: 'Valheim',
     gameId: 9,
     gameName: 'Valheim',
+    gameSlug: 'valheim',
     showOnCalendar: true,
     presenceTracking: false,
     currentState: 'running',
@@ -40,15 +43,22 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
     [number, PelicanServerUpdate]
   >(() => Promise.resolve(result));
   const repo = { listForAdmin, updateMapping };
+  // Only `valheim` has a game-log-parser registered (ROK-1800).
+  const getAdapter = jest.fn((point: string, slug: string) =>
+    point === EXTENSION_POINTS.GAME_LOG_PARSER && slug === 'valheim'
+      ? {}
+      : undefined,
+  );
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
+    { getAdapter } as unknown as PluginRegistryService,
   );
   return { controller, listForAdmin, updateMapping };
 }
 
 describe('toAdminServerRowDto (ROK-1094)', () => {
   it('maps a fresh running row to the contract shape', () => {
-    const dto = toAdminServerRowDto(makeRow(), NOW);
+    const dto = toAdminServerRowDto(makeRow(), NOW, true);
     expect(dto).toEqual({
       id: 4,
       name: 'Valheim',
@@ -57,6 +67,8 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
       gameId: 9,
       gameName: 'Valheim',
       showOnCalendar: true,
+      presenceTracking: false,
+      presenceSupported: true,
       lastSyncedAt: FRESH.toISOString(),
       statusCheckedAt: FRESH.toISOString(),
       missing: false,
@@ -80,13 +92,13 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
     ],
   ];
   it.each(cases)('%s', (_label, over, state, suspended) => {
-    const dto = toAdminServerRowDto(makeRow(over), NOW);
+    const dto = toAdminServerRowDto(makeRow(over), NOW, false);
     expect(dto.state).toBe(state);
     expect(dto.isSuspended).toBe(suspended);
   });
 
   it('flags a row with missing_since as missing', () => {
-    const dto = toAdminServerRowDto(makeRow({ missingSince: FRESH }), NOW);
+    const dto = toAdminServerRowDto(makeRow({ missingSince: FRESH }), NOW, false);
     expect(dto.missing).toBe(true);
   });
 });
@@ -97,6 +109,9 @@ describe('toMappingSet (ROK-1094)', () => {
     expect(toMappingSet({ gameId: null, showOnCalendar: false })).toEqual({
       gameId: null,
       showOnCalendar: false,
+    });
+    expect(toMappingSet({ presenceTracking: true })).toEqual({
+      presenceTracking: true,
     });
   });
 });
@@ -141,5 +156,33 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     const res = await controller.updateServer(4, { showOnCalendar: false });
     expect(updateMapping).toHaveBeenCalledWith(4, { showOnCalendar: false });
     expect(res.showOnCalendar).toBe(false);
+  });
+
+  it('PATCH { presenceTracking } passes through and echoes the saved flag (ROK-1800)', async () => {
+    const row = makeRow({ presenceTracking: true });
+    const { controller, updateMapping } = build({ kind: 'ok', row });
+    const res = await controller.updateServer(4, { presenceTracking: true });
+    expect(updateMapping).toHaveBeenCalledWith(4, { presenceTracking: true });
+    expect(res.presenceTracking).toBe(true);
+    expect(res.presenceSupported).toBe(true);
+  });
+
+  it('rejects a non-boolean presenceTracking with 400 (ROK-1800)', async () => {
+    const { controller, updateMapping } = build();
+    await expect(
+      controller.updateServer(4, { presenceTracking: 'yes' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(updateMapping).not.toHaveBeenCalled();
+  });
+
+  it.each<[string, string | null, boolean]>([
+    ['a game with a registered log parser', 'valheim', true],
+    ['a game without one', 'palworld', false],
+    ['no mapped game', null, false],
+  ])('presenceSupported for %s is %s', async (_label, gameSlug, expected) => {
+    const { controller, listForAdmin } = build();
+    listForAdmin.mockResolvedValueOnce([makeRow({ gameSlug })]);
+    const res = await controller.listServers();
+    expect(res.data[0]?.presenceSupported).toBe(expected);
   });
 });

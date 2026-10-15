@@ -22,7 +22,7 @@ type Db = PostgresJsDatabase<typeof schema>;
 export type PelicanAdminServerRow = Omit<
   PelicanServerRow,
   'panelUuid' | 'identifier' | 'timezone'
-> & { gameName: string | null };
+> & { gameName: string | null; gameSlug: string | null };
 
 /** Outcome of an admin mapping edit; never a caught FK violation. */
 export type PelicanMappingUpdateResult =
@@ -30,7 +30,10 @@ export type PelicanMappingUpdateResult =
   | { kind: 'not_found' }
   | { kind: 'unknown_game' };
 
-type MappingSet = Pick<NewPelicanServer, 'gameId' | 'showOnCalendar'>;
+type MappingSet = Pick<
+  NewPelicanServer,
+  'gameId' | 'showOnCalendar' | 'presenceTracking'
+>;
 
 /** Only the keys the admin sent. */
 export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
@@ -38,6 +41,9 @@ export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
     ...(patch.gameId !== undefined ? { gameId: patch.gameId } : {}),
     ...(patch.showOnCalendar !== undefined
       ? { showOnCalendar: patch.showOnCalendar }
+      : {}),
+    ...(patch.presenceTracking !== undefined
+      ? { presenceTracking: patch.presenceTracking }
       : {}),
   };
 }
@@ -82,7 +88,11 @@ export class PelicanServersAdminRepository {
 
   private selectJoined(executor: Db | PelicanTx) {
     return executor
-      .select({ ...getServerColumns(), gameName: games.name })
+      .select({
+        ...getServerColumns(),
+        gameName: games.name,
+        gameSlug: games.slug,
+      })
       .from(pelicanServers)
       .leftJoin(games, eq(games.id, pelicanServers.gameId))
       .$dynamic();

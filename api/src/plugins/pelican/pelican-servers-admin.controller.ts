@@ -24,8 +24,13 @@ import {
   PluginActiveGuard,
   RequirePlugin,
 } from '../plugin-host/plugin-active.guard';
+import { EXTENSION_POINTS } from '../plugin-host/extension-points';
+import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID } from './pelican.constants';
-import { PelicanServersAdminRepository } from './pelican-servers-admin.repository';
+import {
+  PelicanServersAdminRepository,
+  type PelicanAdminServerRow,
+} from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
 
 /**
@@ -37,7 +42,10 @@ import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
 @UseGuards(AuthGuard('jwt'), AdminGuard, PluginActiveGuard)
 @RequirePlugin(PELICAN_PLUGIN_ID)
 export class PelicanServersAdminController {
-  constructor(private readonly servers: PelicanServersAdminRepository) {}
+  constructor(
+    private readonly servers: PelicanServersAdminRepository,
+    private readonly registry: PluginRegistryService,
+  ) {}
 
   /** GET /admin/plugins/pelican/servers — every row, missing included. */
   @Get('servers')
@@ -45,11 +53,11 @@ export class PelicanServersAdminController {
     const rows = await this.servers.listForAdmin();
     const now = new Date();
     return PelicanServerListResponseSchema.parse({
-      data: rows.map((row) => toAdminServerRowDto(row, now)),
+      data: rows.map((row) => this.toDto(row, now)),
     });
   }
 
-  /** PATCH /admin/plugins/pelican/servers/:id — game, calendar visibility. */
+  /** PATCH /admin/plugins/pelican/servers/:id — game, calendar visibility, Quick Play detection. */
   @Patch('servers/:id')
   async updateServer(
     @Param('id', ParseIntPipe) id: number,
@@ -66,8 +74,21 @@ export class PelicanServersAdminController {
     if (result.kind === 'unknown_game') {
       throw new BadRequestException('Unknown game');
     }
-    return PelicanServerRowSchema.parse(
-      toAdminServerRowDto(result.row, new Date()),
-    );
+    return PelicanServerRowSchema.parse(this.toDto(result.row, new Date()));
+  }
+
+  /**
+   * Quick Play detection (ROK-1800) is supported when the mapped game's slug
+   * has an active `game-log-parser` adapter — today only Valheim. A suspended
+   * (inactive-plugin) adapter is not returned, so it reads as unsupported.
+   */
+  private toDto(row: PelicanAdminServerRow, now: Date): PelicanServerRowDto {
+    const supported =
+      row.gameSlug !== null &&
+      this.registry.getAdapter(
+        EXTENSION_POINTS.GAME_LOG_PARSER,
+        row.gameSlug,
+      ) !== undefined;
+    return toAdminServerRowDto(row, now, supported);
   }
 }

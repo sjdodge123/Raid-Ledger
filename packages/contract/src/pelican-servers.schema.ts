@@ -69,6 +69,10 @@ export const PelicanServerRowSchema = z
     gameId: z.number().int().positive().nullable(),
     gameName: z.string().nullable(),
     showOnCalendar: z.boolean(),
+    /** "Detect Quick Play from server logs" is on (ROK-1800). */
+    presenceTracking: z.boolean(),
+    /** The mapped game has an active `game-log-parser` adapter — the switch can be turned on. */
+    presenceSupported: z.boolean(),
     lastSyncedAt: isoOrNull,
     statusCheckedAt: isoOrNull,
     /** The last complete listing did not include this server. */
@@ -92,6 +96,7 @@ export const PelicanServerUpdateSchema = z
   .object({
     gameId: z.number().int().positive().nullable(),
     showOnCalendar: z.boolean(),
+    presenceTracking: z.boolean(),
   })
   .partial()
   .strict()
