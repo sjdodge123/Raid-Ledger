@@ -56,8 +56,11 @@ function useInterestToggleMutation(gameId: number | undefined) {
         onMutate: async (wantToPlay) => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<GameInterestResponseDto>(queryKey);
+            // ROK-1797: keep the bell's mute through the optimistic write, or a
+            // muted game's bell flashes "on" while the heart toggle is in flight.
             queryClient.setQueryData<GameInterestResponseDto>(queryKey, (old) => ({
                 wantToPlay, count: (old?.count ?? 0) + (wantToPlay ? 1 : -1),
+                ...(old?.notificationsMuted !== undefined && { notificationsMuted: old.notificationsMuted }),
             }));
             return { previous };
         },
