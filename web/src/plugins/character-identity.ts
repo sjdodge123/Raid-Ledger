@@ -62,6 +62,8 @@ export interface CharacterPortraitSubject {
     name: string;
     avatarUrl?: string | null | undefined;
     race?: string | null | undefined;
+    /** Plain character attribute; a plugin may use it to pick a portrait. */
+    gender?: string | null | undefined;
     class?: string | null | undefined;
     gameVariant?: string | null | undefined;
     ruleset?: string | null | undefined;
