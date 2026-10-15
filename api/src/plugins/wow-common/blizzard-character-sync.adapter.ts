@@ -3,14 +3,17 @@ import { BlizzardService } from './blizzard.service';
 import type {
   CharacterSyncAdapter,
   DisplayEquipmentRow,
+  DisplayLockoutsRow,
   DisplayTalentsRow,
 } from '../plugin-host/extension-points';
 import type {
   CharacterEquipmentDto,
+  CharacterLockoutsDto,
   ForeverTalentsDto,
 } from '@raid-ledger/contract';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
+import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import type {
   ExternalCharacterProfile,
   ExternalInferredSpecialization,
@@ -32,6 +35,7 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     private readonly blizzardService: BlizzardService,
     private readonly foreverEquipment: ForeverDisplayEquipmentService,
     private readonly foreverTalents: ForeverDisplayTalentsService,
+    private readonly foreverLockouts: ForeverDisplayLockoutsService,
   ) {}
 
   /** ROK-1727: Forever characters display their addon snapshot gear. */
@@ -46,6 +50,13 @@ export class BlizzardCharacterSyncAdapter implements CharacterSyncAdapter {
     row: DisplayTalentsRow,
   ): Promise<ForeverTalentsDto | undefined> {
     return this.foreverTalents.resolve(row);
+  }
+
+  /** ROK-1743: Forever saved instances from the LedgerLink snapshot. */
+  resolveDisplayLockouts(
+    row: DisplayLockoutsRow,
+  ): Promise<CharacterLockoutsDto | undefined> {
+    return this.foreverLockouts.resolve(row);
   }
 
   /** @deprecated Game ID is now the lookup key; kept for interface compat. */
