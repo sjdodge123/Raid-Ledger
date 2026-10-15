@@ -39,7 +39,7 @@ async function openDialog() {
     const user = userEvent.setup({ applyAccept: false });
     render(<FeedbackWidget />);
     await user.click(screen.getByRole('button', { name: 'Send Feedback' }));
-    const dialog = screen.getByRole('dialog', { name: 'Send Feedback' });
+    const dialog = await screen.findByRole('dialog', { name: 'Send Feedback' });
     await user.type(within(dialog).getByRole('textbox', { name: 'Message' }), 'The roster page is broken');
     return { user, dialog };
 }

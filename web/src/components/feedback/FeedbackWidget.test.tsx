@@ -39,18 +39,18 @@ describe('FeedbackWidget — floating trigger', () => {
         render(<FeedbackWidget />);
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         await userEvent.click(screen.getByRole('button', { name: 'Send Feedback' }));
-        expect(screen.queryAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
+        expect(await screen.findAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
     });
 });
 
 describe('FeedbackWidget — mobile open path', () => {
-    it('hands onRegisterOpen a function that opens the dialog', () => {
+    it('hands onRegisterOpen a function that opens the dialog', async () => {
         const onRegisterOpen = vi.fn();
         render(<FeedbackWidget onRegisterOpen={onRegisterOpen} />);
         expect(onRegisterOpen).toHaveBeenCalledWith(expect.any(Function));
         const openFn = onRegisterOpen.mock.calls.at(-1)?.[0] as () => void;
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
         act(() => openFn());
-        expect(screen.queryAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
+        expect(await screen.findAllByRole('dialog', { name: 'Send Feedback' })).toHaveLength(1);
     });
 });

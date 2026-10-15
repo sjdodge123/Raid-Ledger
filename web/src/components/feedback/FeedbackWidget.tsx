@@ -1,90 +1,13 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSubmitFeedback } from '../../hooks/use-feedback';
-import { captureMessageVerified } from '../../sentry';
-import type {
-    FeedbackCategory,
-    CreateFeedbackDto,
-} from '@raid-ledger/contract';
-import { getClientLogs } from './feedback-console-capture';
-import { buildClientContext, screenshotFilename, type FeedbackScreenshot } from './feedback-screenshot';
-import { useFeedbackScreenshot } from './use-feedback-screenshot';
-import { FeedbackDialog } from './FeedbackDialog';
 import { Button } from '../ui/button';
 
 /**
- * Floating feedback widget — available to all authenticated users.
- * ROK-186: User Feedback Widget.
- *
- * On mobile the floating trigger is hidden; the MoreDrawer
- * opens the dialog via the onRegisterOpen callback instead.
+ * The dialog, its form state, the screenshot field and the submit flow load
+ * only when the widget first opens (ROK-1313: kept out of the entry chunk).
  */
-function useFeedbackState(submitFeedback: ReturnType<typeof useSubmitFeedback>) {
-    const [isOpen, setIsOpen] = useState(false);
-    const [category, setCategory] = useState<FeedbackCategory>('bug');
-    const [message, setMessage] = useState('');
-    const [includeClientLogs, setIncludeClientLogs] = useState(true);
-    const [showSuccess, setShowSuccess] = useState(false);
-    const [isSubmitting, setIsSubmitting] = useState(false);
-    const [sentryError, setSentryError] = useState(false);
-    const shot = useFeedbackScreenshot();
-    const { clearScreenshot } = shot;
-
-    const resetRef = useRef(submitFeedback.reset);
-    useEffect(() => { resetRef.current = submitFeedback.reset; }, [submitFeedback.reset]);
-
-    const reset = useCallback(() => {
-        setCategory('bug'); setMessage(''); setIncludeClientLogs(true);
-        setShowSuccess(false); setIsSubmitting(false); setSentryError(false);
-        clearScreenshot(); resetRef.current();
-    }, [clearScreenshot]);
-
-    const handleOpen = useCallback(() => { reset(); setIsOpen(true); }, [reset]);
-    const handleClose = useCallback(() => { setIsOpen(false); setTimeout(reset, 200); }, [reset]);
-
-    return {
-        isOpen, category, message, includeClientLogs, showSuccess, isSubmitting, sentryError,
-        setCategory, setMessage, setIncludeClientLogs, setShowSuccess, setIsSubmitting, setSentryError,
-        handleOpen, handleClose, ...shot,
-    };
-}
-
-function buildPayload(
-    category: FeedbackCategory, message: string, includeClientLogs: boolean, screenshot: FeedbackScreenshot | null,
-): CreateFeedbackDto {
-    const payload: CreateFeedbackDto = {
-        category, message, pageUrl: window.location.href, clientContext: buildClientContext(),
-    };
-    if (screenshot) payload.screenshotBase64 = screenshot.base64;
-    if (category === 'bug' && includeClientLogs) {
-        const logs = getClientLogs();
-        if (logs) payload.clientLogs = logs;
-    }
-    return payload;
-}
-
-function buildSentryOptions(
-    category: FeedbackCategory,
-    _message: string,
-    feedbackId: number,
-    payload: Pick<CreateFeedbackDto, 'clientLogs' | 'clientContext'>,
-) {
-    const { clientLogs, clientContext } = payload;
-    const feedbackContext: Record<string, unknown> = {
-        pageUrl: window.location.href,
-        category,
-        feedbackId,
-    };
-    if (clientContext) feedbackContext.clientContext = clientContext;
-    // Sentry truncates contexts at 8 KiB; keep the tail so the most recent
-    // events survive. DB column has full 50 KiB as source of truth.
-    if (clientLogs) feedbackContext.clientLogs = clientLogs.slice(-7000);
-    return {
-        level: (category === 'bug' ? 'error' : 'info') as 'error' | 'info',
-        tags: { feedback_category: category, feedback_id: String(feedbackId), source: 'feedback_widget' },
-        contexts: { feedback: feedbackContext },
-    };
-}
+const FeedbackPanel = lazy(() => import('./FeedbackPanel').then((m) => ({ default: m.FeedbackPanel })));
 
 const FeedbackIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="h-6 w-6" aria-hidden>
@@ -111,60 +34,34 @@ const FeedbackButton = ({ onClick }: { onClick: () => void }) => (
     </div>
 );
 
-function useFeedbackSubmitHandler(
-    state: ReturnType<typeof useFeedbackState>,
-    submitFeedback: ReturnType<typeof useSubmitFeedback>,
-) {
-    return useCallback(() => {
-        if (state.message.length < 10 || state.isSubmitting || state.isReadingScreenshot) return;
-        state.setIsSubmitting(true); state.setSentryError(false);
-        const { screenshot } = state;
-        const payload = buildPayload(state.category, state.message, state.includeClientLogs, screenshot);
-        const attachments = screenshot
-            ? [{ filename: screenshotFilename(screenshot), data: screenshot.bytes, contentType: screenshot.mime }]
-            : undefined;
-        submitFeedback.mutate(payload, {
-            onSuccess: async (data) => {
-                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`,
-                    buildSentryOptions(state.category, state.message, data.id, payload), attachments);
-                if (ok) state.setShowSuccess(true); else state.setSentryError(true);
-                state.setIsSubmitting(false);
-            },
-            onError: () => { state.setIsSubmitting(false); },
-        });
-    }, [state, submitFeedback]);
-}
-
+/**
+ * Floating feedback widget — available to all authenticated users.
+ * ROK-186: User Feedback Widget.
+ *
+ * On mobile the floating trigger is hidden; the MoreDrawer
+ * opens the dialog via the onRegisterOpen callback instead.
+ */
 export function FeedbackWidget({ onRegisterOpen }: { onRegisterOpen?: (openFn: () => void) => void }) {
     const { isAuthenticated } = useAuth();
+    // Owned here, not by the lazy panel: the widget stays mounted, so a
+    // submit's onSuccess (the Sentry notify) still runs if the dialog closes.
     const submitFeedback = useSubmitFeedback();
-    const state = useFeedbackState(submitFeedback);
-    const handleSubmit = useFeedbackSubmitHandler(state, submitFeedback);
+    const [isOpen, setIsOpen] = useState(false);
+    const handleOpen = useCallback(() => setIsOpen(true), []);
+    const handleClose = useCallback(() => setIsOpen(false), []);
 
-    useEffect(() => { onRegisterOpen?.(state.handleOpen); }, [state.handleOpen, onRegisterOpen]);
+    useEffect(() => { onRegisterOpen?.(handleOpen); }, [handleOpen, onRegisterOpen]);
 
     if (!isAuthenticated) return null;
 
     return (
         <div data-feedback-widget>
-            <FeedbackButton onClick={state.handleOpen} />
-            <FeedbackDialogWrapper state={state} submitFeedback={submitFeedback} handleSubmit={handleSubmit} />
+            <FeedbackButton onClick={handleOpen} />
+            {isOpen && (
+                <Suspense fallback={null}>
+                    <FeedbackPanel submitFeedback={submitFeedback} onClose={handleClose} />
+                </Suspense>
+            )}
         </div>
-    );
-}
-
-function FeedbackDialogWrapper({ state, submitFeedback, handleSubmit }: {
-    state: ReturnType<typeof useFeedbackState>; submitFeedback: ReturnType<typeof useSubmitFeedback>; handleSubmit: () => void;
-}) {
-    if (!state.isOpen) return null;
-    return (
-        <FeedbackDialog showSuccess={state.showSuccess} category={state.category} message={state.message}
-            includeClientLogs={state.includeClientLogs} isSubmitting={state.isSubmitting}
-            isReadingScreenshot={state.isReadingScreenshot} sentryError={state.sentryError}
-            submitError={submitFeedback.error} isError={submitFeedback.isError}
-            onCategoryChange={state.setCategory} onMessageChange={state.setMessage}
-            onIncludeLogsChange={state.setIncludeClientLogs} screenshot={state.screenshot}
-            screenshotError={state.screenshotError} onScreenshotFile={state.attachScreenshot}
-            onScreenshotRemove={state.clearScreenshot} onSubmit={handleSubmit} onClose={state.handleClose} />
     );
 }
