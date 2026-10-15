@@ -97,7 +97,7 @@ export class ServerPresenceTracker {
     if (owner) owner.lastSeen = now;
     // A death (`0:0`) or a known name's respawn is never a new player.
     if (owner || zdoidZero) return [];
-    const pendingId = this.pending.keys().next().value;
+    const pendingId = firstKey(this.pending);
     if (pendingId !== undefined) {
       this.pending.delete(pendingId);
       this.present.set(pendingId, { name, lastSeen: now });
@@ -180,4 +180,9 @@ export class ServerPresenceTracker {
     this.unnamed.length = 0;
     this.excess = false;
   }
+}
+
+function firstKey(map: Map<string, unknown>): string | undefined {
+  for (const key of map.keys()) return key;
+  return undefined;
 }
