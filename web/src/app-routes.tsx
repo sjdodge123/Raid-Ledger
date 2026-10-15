@@ -5,6 +5,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthGuard } from './components/auth';
 import { RootRedirect } from './components/RootRedirect';
+import { RedirectKeepingLocation } from './components/routing/redirect-keeping-location';
 import { LegacyCalendarsRedirect, LegacySendEventsRedirect } from './components/features/calendar-sync/calendar-legacy-redirects';
 import { EventsPage } from './pages/events-page';
 import { EventDetailPage } from './pages/event-detail-page';
@@ -54,7 +55,7 @@ function ProfileRoutes() {
       <Route path="identity/avatar" element={<Navigate to="/profile/avatar" replace />} />
       <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
       <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
-      <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
+      <Route path="preferences/notifications" element={<RedirectKeepingLocation to="/profile/notifications" />} />
       <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
       {/* ROK-1780: Calendars moved inline onto My Integrations; the query string carries OAuth feedback */}
       <Route path="gaming/calendars" element={<LegacyCalendarsRedirect />} />

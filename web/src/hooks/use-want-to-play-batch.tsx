@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { API_BASE_URL } from '../lib/config';
 import { toast } from '../lib/toast';
-import { getAuthToken } from './use-auth';
+import { getAuthToken, useViewerCacheScope } from './use-auth';
+import { gameInterestQueryKey, type ViewerScope } from './game-interest-query-key';
 import {
     WantToPlayContext,
     defaultEntry,
@@ -35,6 +36,7 @@ function optimisticBatchUpdate(
     queryKey: unknown[],
     gameId: number,
     wantToPlay: boolean,
+    viewer: ViewerScope,
 ) {
     queryClient.setQueryData<BatchInterestData>(queryKey, (old) => {
         if (!old) return old;
@@ -42,9 +44,11 @@ function optimisticBatchUpdate(
         const existing = old.data[key] ?? defaultEntry;
         return { data: { ...old.data, [key]: { wantToPlay, count: Math.max(0, existing.count + (wantToPlay ? 1 : -1)) } } };
     });
-    queryClient.setQueryData<GameInterestResponseDto>(['games', 'interest', gameId], (old) => ({
+    // ROK-1797: viewer-scoped key, and keep the bell's mute through the write.
+    queryClient.setQueryData<GameInterestResponseDto>(gameInterestQueryKey(gameId, viewer), (old) => ({
         wantToPlay,
         count: Math.max(0, (old?.count ?? 0) + (wantToPlay ? 1 : -1)),
+        ...(old?.notificationsMuted !== undefined && { notificationsMuted: old.notificationsMuted }),
     }));
 }
 
@@ -76,6 +80,7 @@ function useToggleInterestMutation(
     setTogglingIds: React.Dispatch<React.SetStateAction<Set<number>>>,
 ) {
     const queryClient = useQueryClient();
+    const viewer = useViewerCacheScope();
 
     return useMutation<GameInterestResponseDto, Error, { gameId: number; wantToPlay: boolean }>({
         mutationFn: toggleInterestFn,
@@ -83,7 +88,7 @@ function useToggleInterestMutation(
             setTogglingIds((prev) => new Set(prev).add(gameId));
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<BatchInterestData>(queryKey);
-            optimisticBatchUpdate(queryClient, queryKey, gameId, wantToPlay);
+            optimisticBatchUpdate(queryClient, queryKey, gameId, wantToPlay, viewer);
             return { previous };
         },
         onError: (_err, vars, context) => {

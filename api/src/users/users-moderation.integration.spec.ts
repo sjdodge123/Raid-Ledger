@@ -295,6 +295,9 @@ async function seedFullWipeManifest(
     .insert(schema.gameInterestSuppressions)
     .values({ userId, gameId });
   await testApp.db
+    .insert(schema.gameNotificationMutes)
+    .values({ userId, gameId });
+  await testApp.db
     .insert(schema.feedback)
     .values({ userId, category: 'bug', message: 'x' });
   await testApp.db

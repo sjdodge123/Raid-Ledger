@@ -9,6 +9,7 @@ import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ProfileLayout } from './profile-layout';
 import { Navigate } from 'react-router-dom';
+import { RedirectKeepingLocation } from '../routing/redirect-keeping-location';
 
 vi.mock('./integration-hub.css', () => ({}));
 
@@ -70,7 +71,7 @@ function renderProfileRoutes(initialPath: string) {
                         <Route path="identity/avatar" element={<Navigate to="/profile/avatar" replace />} />
                         <Route path="preferences/appearance" element={<Navigate to="/profile/preferences" replace />} />
                         <Route path="preferences/timezone" element={<Navigate to="/profile/preferences" replace />} />
-                        <Route path="preferences/notifications" element={<Navigate to="/profile/notifications" replace />} />
+                        <Route path="preferences/notifications" element={<RedirectKeepingLocation to="/profile/notifications" />} />
                         <Route path="gaming" element={<Navigate to="/profile/gaming/game-time" replace />} />
                         <Route path="danger/delete-account" element={<Navigate to="/profile/account" replace />} />
                     </Route>
