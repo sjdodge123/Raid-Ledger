@@ -1,6 +1,8 @@
 /**
- * ROK-1796 — un-hearting a game must stick across the daily Steam syncs, and a
- * Steam-only tie to a game must show as the user's own heart.
+ * ROK-1796 — un-hearting a game must stick (heart off, no interest DMs) across
+ * the daily Steam syncs WITHOUT erasing Steam ownership/playtime: un-heart
+ * deletes only heart-source rows and records a suppression that every
+ * "is this user interested" read honours.
  *
  * The Steam HTTP boundary is patched with `jest.spyOn` on the live module
  * namespace (see steam-auth.integration.spec.ts for why `jest.mock` does not
@@ -15,6 +17,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { findGameAffinityRecipients } from '../notifications/game-affinity-recipients.helpers';
+import { findRecipients as findReminderRecipients } from '../notifications/recruitment-reminder.helpers';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import * as steamHttp from './steam-http.util';
@@ -84,6 +87,41 @@ function describeUnheartSuppression() {
       .get(`/games/${gameId}/interest`)
       .set('Authorization', `Bearer ${token}`);
 
+  const batchWantToPlay = async (): Promise<unknown> => {
+    const res = await testApp.request
+      .get(`/games/interest/batch?ids=${gameId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    return res.body.data[String(gameId)];
+  };
+
+  const unheart = async (): Promise<void> => {
+    const del = await testApp.request
+      .delete(`/games/${gameId}/want-to-play`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(del.status).toBe(200);
+    expect(del.body.wantToPlay).toBe(false);
+  };
+
+  const reheart = async (): Promise<void> => {
+    const post = await testApp.request
+      .post(`/games/${gameId}/want-to-play`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(post.status).toBe(200);
+  };
+
+  /** Interest-half recipients: game-alert/LFG predicate + recruitment reminder. */
+  const isRecipient = async (): Promise<{
+    lfg: boolean;
+    reminder: boolean;
+  }> => {
+    const lfg = await findGameAffinityRecipients(testApp.db, gameId, {
+      interestsOnly: true,
+    });
+    const reminder = await findReminderRecipients(testApp.db, gameId, -1, -1);
+    return { lfg: lfg.includes(userId), reminder: reminder.includes(userId) };
+  };
+
   beforeAll(async () => {
     testApp = await getTestApp();
   });
@@ -115,7 +153,7 @@ function describeUnheartSuppression() {
     jest.restoreAllMocks();
   });
 
-  it('Steam-only tie reports wantToPlay: true without changing public counts', async () => {
+  it('(a) Steam-only owner has a lit heart and is an interest recipient', async () => {
     await syncBoth();
     expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
 
@@ -127,48 +165,70 @@ function describeUnheartSuppression() {
       source: 'steam',
       count: 0,
     });
-    expect(res.body.ownerCount).toBe(1);
-    expect(res.body.wishlistedCount).toBe(1);
+    expect(await batchWantToPlay()).toEqual({ wantToPlay: true, count: 0 });
+    expect(await isRecipient()).toEqual({ lfg: true, reminder: true });
   });
 
-  it('un-heart survives a library + wishlist re-sync and drops the user from interest recipients', async () => {
+  it('(b) un-heart keeps Steam ownership but turns the heart and interest DMs off', async () => {
     await syncBoth();
-    const del = await testApp.request
-      .delete(`/games/${gameId}/want-to-play`)
-      .set('Authorization', `Bearer ${token}`);
-    expect(del.status).toBe(200);
-    expect(del.body.wantToPlay).toBe(false);
+    await unheart();
+
     expect(await suppressionCount()).toBe(1);
-
-    await syncBoth();
-
-    expect(await sourcesFor()).toEqual([]);
-    const recipients = await findGameAffinityRecipients(testApp.db, gameId, {
-      interestsOnly: true,
+    expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
+    const res = await getInterest();
+    expect(res.body).toMatchObject({
+      wantToPlay: false,
+      ownerCount: 1,
+      wishlistedCount: 1,
     });
-    expect(recipients).not.toContain(userId);
-    expect((await getInterest()).body.wantToPlay).toBe(false);
+    expect(await batchWantToPlay()).toEqual({ wantToPlay: false, count: 0 });
+    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
   });
 
-  it('a manual re-heart clears the suppression so Steam rows sync again', async () => {
+  it('(c) the un-heart survives a library + wishlist re-sync', async () => {
     await syncBoth();
-    await testApp.request
-      .delete(`/games/${gameId}/want-to-play`)
-      .set('Authorization', `Bearer ${token}`);
-    expect(await suppressionCount()).toBe(1);
+    await unheart();
 
-    const post = await testApp.request
-      .post(`/games/${gameId}/want-to-play`)
-      .set('Authorization', `Bearer ${token}`);
-    expect(post.status).toBe(200);
+    await syncBoth();
+
+    expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
+    expect((await getInterest()).body.wantToPlay).toBe(false);
+    expect(await batchWantToPlay()).toEqual({ wantToPlay: false, count: 0 });
+    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
+  });
+
+  it('(d) un-heart → manual re-heart → un-heart with no sync between stays suppressed', async () => {
+    await syncBoth();
+    await unheart();
+    await reheart();
     expect(await suppressionCount()).toBe(0);
 
+    await unheart();
+
+    expect(await suppressionCount()).toBe(1);
+    expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
+    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
+  });
+
+  it('(e) a manual re-heart makes the user a recipient again', async () => {
     await syncBoth();
+    await unheart();
+
+    await reheart();
+    await syncBoth();
+
+    expect(await suppressionCount()).toBe(0);
     expect(await sourcesFor()).toEqual([
       'manual',
       'steam_library',
       'steam_wishlist',
     ]);
+    expect((await getInterest()).body).toMatchObject({
+      wantToPlay: true,
+      source: 'manual',
+      count: 1,
+    });
+    expect(await isRecipient()).toEqual({ lfg: true, reminder: true });
   });
 }
 
