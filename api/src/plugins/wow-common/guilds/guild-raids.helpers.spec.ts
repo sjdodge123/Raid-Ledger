@@ -81,7 +81,13 @@ describe('neededFor', () => {
 
   it('falls back to maxAttendees, then null', () => {
     expect(neededFor(null, 12)).toBe(12);
-    expect(neededFor({ type: 'generic' }, null)).toBeNull();
+    expect(neededFor(null, null)).toBeNull();
+  });
+
+  it('fills omitted roles with the event-roster defaults (slotConfigFromEvent)', () => {
+    // mmo: healer 4 + dps 14 default; generic: player 10 default.
+    expect(neededFor({ type: 'mmo', tank: 2 }, null)).toBe(20);
+    expect(neededFor({ type: 'generic' }, null)).toBe(10);
   });
 });
 
@@ -110,6 +116,15 @@ describe('toComposition', () => {
     ]);
     expect(out?.benched).toEqual(benched);
     expect(out?.event.startTime).toBe('2026-10-16T19:00:00.000Z');
+  });
+
+  it('fills omitted role counts with the event-roster defaults', () => {
+    const partial = { ...event, slotConfig: { type: 'mmo', tank: 2 } };
+    expect(toComposition(partial, new Map(), [])?.roles).toEqual([
+      { role: 'tank', filled: 0, needed: 2 },
+      { role: 'healer', filled: 0, needed: 4 },
+      { role: 'dps', filled: 0, needed: 14 },
+    ]);
   });
 
   it('is null when the event is not MMO-slotted', () => {

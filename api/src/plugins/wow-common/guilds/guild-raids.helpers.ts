@@ -5,6 +5,7 @@ import {
   type GuildCompositionDto,
   type GuildScheduleNightDto,
 } from '@raid-ledger/contract';
+import { slotConfigFromEvent } from '../../../events/signup-roster.helpers';
 import type { RawRosterRow } from './guild-roster.helpers';
 
 /**
@@ -59,14 +60,25 @@ export function toSchedule(rows: ScheduleSourceRow[]): GuildScheduleNightDto[] {
   }));
 }
 
+/**
+ * A valid slotConfig with omitted counts filled by the event roster's own
+ * defaults (`slotConfigFromEvent`), so the guild page matches the roster.
+ */
+function rosterSlots(slotConfig: unknown) {
+  const parsed = SlotConfigSchema.safeParse(slotConfig);
+  if (!parsed.success) return null;
+  const slots = slotConfigFromEvent(parsed.data);
+  return slots ? { type: parsed.data.type, slots } : null;
+}
+
 /** Sum of the slotConfig's playing slots, else maxAttendees; null = uncapped. */
 export function neededFor(
   slotConfig: unknown,
   maxAttendees: number | null,
 ): number | null {
-  const parsed = SlotConfigSchema.safeParse(slotConfig);
-  if (parsed.success) {
-    const c = parsed.data;
+  const normalized = rosterSlots(slotConfig);
+  if (normalized) {
+    const c = normalized.slots;
     const sum =
       (c.tank ?? 0) +
       (c.healer ?? 0) +
@@ -91,9 +103,9 @@ export function toComposition(
   filledByRole: Map<string, number>,
   benched: GuildCompositionDto['benched'],
 ): GuildCompositionDto | null {
-  const parsed = SlotConfigSchema.safeParse(event.slotConfig);
-  if (!parsed.success || parsed.data.type !== 'mmo') return null;
-  const config = parsed.data;
+  const normalized = rosterSlots(event.slotConfig);
+  if (!normalized || normalized.type !== 'mmo') return null;
+  const config = normalized.slots;
   return {
     event: {
       id: event.id,
