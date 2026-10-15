@@ -1,7 +1,7 @@
 /**
  * ROK-1767: queries behind the game-roles admin controller.
  */
-import { and, count, desc, eq, sql } from 'drizzle-orm';
+import { and, count, desc, eq, ne, sql } from 'drizzle-orm';
 import type { Guild } from 'discord.js';
 import type {
   GameRoleAuditEntryDto,
@@ -74,6 +74,25 @@ export async function findGameRoleLink(
     .where(eq(r.gameId, gameId))
     .limit(1);
   return row ?? null;
+}
+
+/**
+ * The OTHER game already linked to `roleId`, if any. Reconciliation runs per
+ * game, so two games sharing one role would remove members the other game
+ * still wants — the controller refuses the second link instead.
+ */
+export async function findOtherGameUsingRole(
+  db: GameRoleDb,
+  roleId: string,
+  gameId: number,
+): Promise<number | null> {
+  const r = schema.discordGameRoles;
+  const [row] = await db
+    .select({ gameId: r.gameId })
+    .from(r)
+    .where(and(eq(r.roleId, roleId), ne(r.gameId, gameId)))
+    .limit(1);
+  return row?.gameId ?? null;
 }
 
 /**

@@ -45,6 +45,7 @@ import {
   deleteGameRole,
   findGameName,
   findGameRoleLink,
+  findOtherGameUsingRole,
   listGameRoleAudit,
   listGameRoleSummaries,
   saveGameRole,
@@ -119,7 +120,7 @@ export class GameRolesSettingsController {
     const existing = await findGameRoleLink(this.db, gameId);
     const { roleId, botCreated } = existing
       ? await this.keepRole(existing, dto.roleId, enabled)
-      : await this.resolveRole(dto, gameName);
+      : await this.resolveRole(dto, gameId, gameName);
     await saveGameRole(this.db, {
       gameId,
       roleId,
@@ -162,11 +163,21 @@ export class GameRolesSettingsController {
 
   private async resolveRole(
     dto: UpsertGameRoleDto,
+    gameId: number,
     gameName: string,
   ): Promise<{ roleId: string; botCreated: boolean }> {
     const guild = this.botClient.getGuild();
     assertPreflight(await preflightGameRole(guild, null));
     if (dto.roleId !== null) {
+      // Reconcile runs per game: a shared role would have one game remove
+      // members another game still wants.
+      if (
+        (await findOtherGameUsingRole(this.db, dto.roleId, gameId)) !== null
+      ) {
+        throw new ConflictException(
+          'That role is already linked to another game. Pick a different role.',
+        );
+      }
       assertPreflight(await preflightGameRole(guild, dto.roleId));
       return { roleId: dto.roleId, botCreated: false };
     }

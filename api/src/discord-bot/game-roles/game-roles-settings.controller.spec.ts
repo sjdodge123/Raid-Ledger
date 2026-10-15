@@ -65,6 +65,7 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
     jest.clearAllMocks();
     s.findGameName.mockResolvedValue('Valheim');
     s.findGameRoleLink.mockResolvedValue(null);
+    s.findOtherGameUsingRole.mockResolvedValue(null);
     s.saveGameRole.mockResolvedValue(undefined);
     s.listGameRoleSummaries.mockResolvedValue([SUMMARY]);
   });
@@ -107,6 +108,17 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
         enabled: true,
       },
     );
+  });
+
+  it('refuses with 409 a role another game is already linked to', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    s.findOtherGameUsingRole.mockResolvedValue(3);
+
+    const res = await put({ roleId: 'shared-role', windowDays: 14 });
+
+    expect(res.status).toBe(409);
+    expect(s.findOtherGameUsingRole).toHaveBeenCalledWith({}, 'shared-role', 7);
+    expect(s.saveGameRole).not.toHaveBeenCalled();
   });
 
   describe('editing an existing link', () => {
