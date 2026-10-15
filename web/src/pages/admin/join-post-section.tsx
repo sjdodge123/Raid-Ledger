@@ -1,7 +1,8 @@
 /**
  * ROK-1740: admin card for the pinned "Join Raid Ledger" Discord post. Pick a
  * channel, then Post (or Re-post: the bot edits its existing message, or
- * recreates it if a mod deleted it) and Remove behind a confirm.
+ * recreates it if a mod deleted it) and, once a post exists, Remove behind a
+ * confirm (not rendered while nothing is posted).
  *
  * Server state only (TanStack Query). The last publish result lives in local
  * state because GET carries no pin state: it drives the "pinned" line and the
@@ -89,10 +90,12 @@ function Actions({ card, onRemove }: { card: Card; onRemove: () => void }) {
                 loading={card.publishing} loadingLabel="Posting..." className="w-full sm:w-auto">
                 {hasPost ? 'Re-post' : 'Post'}
             </Button>
-            <Button variant="destructive-soft" onClick={onRemove} disabled={!hasPost || card.publishing || card.removing}
-                className="w-full sm:w-auto">
-                Remove
-            </Button>
+            {hasPost && (
+                <Button variant="destructive-soft" onClick={onRemove} disabled={card.publishing || card.removing}
+                    className="w-full sm:w-auto">
+                    Remove
+                </Button>
+            )}
         </div>
     );
 }

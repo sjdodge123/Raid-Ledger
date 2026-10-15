@@ -44,13 +44,13 @@ async function renderCard() {
 beforeEach(() => { vi.clearAllMocks(); localStorage.clear(); });
 
 describe('JoinPostSection (ROK-1740) — states', () => {
-    it('nothing posted: Post label, Remove disabled, Post disabled until a channel is picked', async () => {
+    it('nothing posted: Post label, no Remove button, Post disabled until a channel is picked', async () => {
         serve(NONE);
         await renderCard();
         await waitFor(() => expect(channel()).toBeEnabled());
         expect(status()).toHaveTextContent('Not posted yet.');
         expect(button('Post')).toBeDisabled();
-        expect(button('Remove')).toBeDisabled();
+        expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
         fireEvent.change(channel(), { target: { value: 'c2' } });
         await waitFor(() => expect(button('Post')).toBeEnabled());
     });
@@ -77,6 +77,7 @@ describe('JoinPostSection (ROK-1740) — states', () => {
         await waitFor(() => expect(status()).toHaveTextContent('Posted in #general · pinned'));
         expect(body).toEqual({ channelId: 'c2' });
         expect(button('Re-post')).toBeEnabled();
+        expect(button('Remove')).toBeEnabled();
         expect(screen.queryByTestId('join-post-pin-warning')).not.toBeInTheDocument();
         expect(toastSuccess).toHaveBeenCalledWith('Join post created in #general');
     });
@@ -131,5 +132,6 @@ describe('JoinPostSection (ROK-1740) — errors', () => {
         await waitFor(() => expect(status()).toHaveTextContent('Not posted yet.'));
         expect(del).toHaveBeenCalledTimes(1);
         expect(button('Post')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Remove' })).toBeNull();
     });
 });
