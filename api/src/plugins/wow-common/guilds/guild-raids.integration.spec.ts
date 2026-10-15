@@ -136,6 +136,9 @@ async function signup(
   return row.id;
 }
 
+/** Next free slot per (event, role): `unique_slot_per_event` forbids reuse. */
+const nextSlot = new Map<string, number>();
+
 async function rosterOn(
   eventId: number,
   who: Who,
@@ -143,9 +146,12 @@ async function rosterOn(
   extra: { status?: string } = {},
 ) {
   const signupId = await signup(eventId, who, extra);
+  const key = `${eventId}:${role}`;
+  const position = (nextSlot.get(key) ?? 0) + 1;
+  nextSlot.set(key, position);
   await testApp.db
     .insert(schema.rosterAssignments)
-    .values({ eventId, signupId, role, position: 1 });
+    .values({ eventId, signupId, role, position });
 }
 
 async function seedEvents(): Promise<void> {
