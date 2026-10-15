@@ -415,13 +415,16 @@ _fleet_skips() {
 _fleet_test_scope_for() {
   local files="$1"
   if [ -z "$(printf '%s' "$files" | tr -d '[:space:]')" ]; then echo all; return 0; fi
-  if printf '%s\n' "$files" | grep -v '^$' | grep -qvE '^(api|web)/'; then echo all; return 0; fi
+  # Here-strings, never `printf | grep -q`: grep -q exits on its first match,
+  # the writer takes SIGPIPE, and under pipefail the pipeline reads as NO match
+  # (Codex: 1 api path + 2000 web paths classified as web).
+  if grep -qvE -e '^$|^(api|web)/' <<<"$files"; then echo all; return 0; fi
   local api=false web=false
-  printf '%s\n' "$files" | grep -qE '^api/' && api=true
-  printf '%s\n' "$files" | grep -qE '^web/' && web=true
+  grep -qE -e '^api/' <<<"$files" && api=true
+  grep -qE -e '^web/' <<<"$files" && web=true
   if $api && $web; then echo all
   elif $api; then echo api
-  elif printf '%s\n' "$files" | grep -qE '^web/src/(components|pages)/admin/'; then echo all
+  elif grep -qE -e '^web/src/(components|pages)/admin/' <<<"$files"; then echo all
   else echo web
   fi
 }

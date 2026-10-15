@@ -203,6 +203,23 @@ CURRENT_TEST_NAME="M1-U: an untracked api file counts as changed"
 UNTRACKED="api/src/events/new.spec.ts" invoke "web/src/pages/foo.tsx" --fleet --no-e2e
 assert_runs_all "committed web + untracked api"
 
+# Codex P2: `printf | grep -q` under pipefail. grep -q exits on its first match,
+# the writer takes SIGPIPE, and the pipeline reads as no-match, so a wide diff
+# whose first path decides the scope was narrowed wrongly. 3000 trailing paths
+# (~140 KB) overflow any pipe buffer. Each marker path sorts first in the diff.
+wide_paths() { local i; for ((i = 1; i <= 3000; i++)); do echo "web/src/components/feature-area/Component$i.tsx"; done; }
+CURRENT_TEST_NAME="P2-API: 1 api path + 3000 web paths runs every suite"
+invoke "api/src/events/foo.service.ts"$'\n'"$(wide_paths)" --fleet --no-e2e
+assert_runs_all "1 api + 3000 web diff"
+
+CURRENT_TEST_NAME="P2-OUT: package-lock.json + 3000 web paths runs every suite"
+invoke "package-lock.json"$'\n'"$(wide_paths)" --fleet --no-e2e
+assert_runs_all "deps + 3000 web diff"
+
+CURRENT_TEST_NAME="P2-AD: a web admin path + 3000 web paths runs every suite"
+invoke "web/src/components/admin/bot-panel.tsx"$'\n'"$(wide_paths)" --fleet --no-e2e
+assert_runs_all "web admin + 3000 web diff"
+
 CURRENT_TEST_NAME="E: --fleet on an empty diff runs every suite"
 invoke "" --fleet --no-e2e
 assert_runs_all "empty diff"
