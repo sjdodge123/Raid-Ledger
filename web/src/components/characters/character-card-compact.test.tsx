@@ -143,6 +143,12 @@ describe('CharacterCardCompact — ROK-1751 Forever badge from the game slug', (
         renderWithProviders(<CharacterCardCompact character={makeCharacter({ gameId: 7, gameVariant: null, ruleset: null })} />);
         expect(screen.getByText('Forever')).toBeInTheDocument();
     });
+
+    it('ROK-1747: a Forever DTO with race+gender and no avatar draws the race portrait, as CharacterCard does', () => {
+        activateWowPlugin();
+        renderWithProviders(<CharacterCardCompact character={makeCharacter({ gameId: 7, gameVariant: null, ruleset: null, avatarUrl: null, race: 'Night Elf', gender: 'female', class: 'Druid' })} />);
+        expect(screen.getByTestId('forever-portrait'), 'gender reaches the portrait subject').toHaveAttribute('data-portrait', 'race');
+    });
 });
 
 /** ROK-1761: event attendees pass flat props (no variant/ruleset) plus the event's game id. */
