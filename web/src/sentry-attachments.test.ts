@@ -23,6 +23,7 @@ vi.mock('@sentry/react', () => ({
 const ATTACHMENT = { filename: 'screenshot.png', data: new Uint8Array([0x89, 0x50]), contentType: 'image/png' };
 
 beforeEach(() => {
+    vi.resetModules();
     vi.clearAllMocks();
     order.length = 0;
     scope.addAttachment.mockImplementation(() => { order.push('attach'); });
@@ -31,7 +32,8 @@ beforeEach(() => {
 describe('captureMessageVerified attachments (ROK-1313)', () => {
     it('adds each attachment on a withScope scope before capturing the message inside it', async () => {
         const Sentry = await import('@sentry/react');
-        const { captureMessageVerified } = await import('./sentry');
+        const { captureMessageVerified, initSentry } = await import('./sentry');
+        initSentry(true);
         const ok = await captureMessageVerified('[BUG] broken', { level: 'error' }, [ATTACHMENT]);
         expect(ok).toBe(true);
         expect(Sentry.withScope).toHaveBeenCalledTimes(1);
@@ -42,9 +44,20 @@ describe('captureMessageVerified attachments (ROK-1313)', () => {
 
     it('captures without a scope when there is nothing to attach', async () => {
         const Sentry = await import('@sentry/react');
-        const { captureMessageVerified } = await import('./sentry');
+        const { captureMessageVerified, initSentry } = await import('./sentry');
+        initSentry(true);
         await captureMessageVerified('[IDEA] nice', { level: 'info' });
         expect(Sentry.withScope).not.toHaveBeenCalled();
         expect(Sentry.captureMessage).toHaveBeenCalledWith('[IDEA] nice', { level: 'info' });
+    });
+
+    it('sends no attachment when telemetry is off (ROK-1779 opt-in)', async () => {
+        const Sentry = await import('@sentry/react');
+        const { captureMessageVerified, initSentry } = await import('./sentry');
+        initSentry(false);
+        await captureMessageVerified('[BUG] broken', { level: 'error' }, [ATTACHMENT]);
+        expect(Sentry.withScope, 'opted-out instance must not open a scope').not.toHaveBeenCalled();
+        expect(scope.addAttachment, 'opted-out instance must not attach the screenshot').not.toHaveBeenCalled();
+        expect(Sentry.captureMessage).not.toHaveBeenCalled();
     });
 });

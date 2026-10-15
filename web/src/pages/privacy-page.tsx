@@ -19,7 +19,16 @@ import {
  * system status, so a logged-out visitor cannot tell whether they are on.
  * Their disclosures therefore always render (over-disclosing is the safe side).
  */
-const PUBLIC_FEATURES: PrivacyFeatures = { calendar: true, ai: true };
+const PUBLIC_FEATURES: Omit<PrivacyFeatures, 'telemetry'> = { calendar: true, ai: true };
+
+/**
+ * ROK-1779: error reports are opt-in. They are disclosed unless the served
+ * status says this instance has not turned them on — an unknown flag (status
+ * still loading, older api) discloses, the same safe side as above.
+ */
+function privacyFeatures(telemetryEnabled: boolean | undefined): PrivacyFeatures {
+    return { ...PUBLIC_FEATURES, telemetry: telemetryEnabled !== false };
+}
 
 function SectionView({ section }: { section: PrivacySection }): JSX.Element {
     const headingId = `privacy-${section.id}`;
@@ -43,7 +52,7 @@ export function PrivacyPage(): JSX.Element {
     const name = status?.communityName?.trim();
     const community = name ? name : COMMUNITY_FALLBACK;
     const contactEmail = status?.privacyContactEmail ?? null;
-    const sections = buildPrivacySections({ community, contactEmail }, PUBLIC_FEATURES);
+    const sections = buildPrivacySections({ community, contactEmail }, privacyFeatures(status?.telemetryEnabled));
     return (
         <div className="px-4 py-8 sm:py-12">
             <article className="max-w-prose mx-auto bg-surface border border-edge rounded-lg p-5 sm:p-8 text-sm sm:text-base text-secondary leading-relaxed break-words"

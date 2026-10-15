@@ -315,6 +315,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `new-badge.tsx` → `NewBadge` | "New" marker | Freshly added items | `visible` |
 | `plugin-badge.tsx` → `PluginBadge` | Image-only plugin attribution badge | Marking plugin-contributed UI | `icon`, `iconSmall`, `label`, `size` |
 | `role-badge.tsx` → `RoleBadge` | Admin (amber) / Operator (emerald); member renders nothing | Showing a user's role | `role`, `className` |
+| `status-chip.tsx` → `StatusChip`, `StatusChipTone` (ROK-1776) | The read-only §4.21 status chip: `rounded-full border text-xs font-mono` with the token tone map (success / warning / danger on their `/10` fill + `/30` border, neutral `bg-panel border-edge text-muted`), `data-tone` on the span. Extracted from the Pelican admin state chip so admin and member surfaces share one copy of the classes. Not interactive. | Showing a live or checked state — the Pelican servers table, the event page's `GameServerStatusChip`. A tappable chip is §4.20; a filter toggle §4.3 | `tone`, `title` (required — colour is never the only signal), `children`, `className` |
 | `loading-spinner.tsx` → `LoadingSpinner` | Full-page spinner | `Suspense` fallback for lazy routes | — |
 | `infinite-scroll-sentinel.tsx` → `InfiniteScrollSentinel` | IntersectionObserver "load more" sentinel | Paginated grids | see file |
 | `pull-to-refresh.tsx` → `PullToRefresh` | Mobile pull-to-refresh wrapper | Mobile list pages | `onRefresh`, `children` |
@@ -1027,6 +1028,14 @@ keep the same box/header/divider idiom at ≥1024px and switch to one stacked ca
 the status chip in each row stays read-only. In table mode the column header is the label: pass
 `inline` to `GameSearchInput` (label goes `sr-only`, no selected-game line under the box) and `hideLabel`
 to a `Field`-based control, so each cell doesn't repeat it; card mode keeps the visible labels.
+
+**Member-facing live status (ROK-1776).** One chip per subject instead of a grid: the event page's
+`web/src/components/events/GameServerStatusChip.tsx` renders a `StatusChip` (`components/ui/status-chip.tsx`) for the
+event's game, followed by a `text-xs text-muted` "checked N min ago" (the shared `lib/synced-ago.ts` wording). Several
+servers for one game collapse to the **worst** state plus a count ("1 of 3 servers offline"), with every server's
+name and state in the `title`; a check older than the contract's `GAME_SERVER_STATUS_STALE_MS` degrades to the neutral
+"Server status unknown". It renders nothing when no game-server provider plugin is active or the game has no mapped,
+visible server, and never shows an address, port or panel id.
 
 **DON'T** use this for anything clickable: these chips are read-only. A tappable chip is §4.20. A filter
 toggle is §4.3.

@@ -30,6 +30,7 @@ import {
   listGuildsOfGame,
   rankNamesByMemberId,
 } from './guild-queries.helpers';
+import { gmPostHeadlines } from './guild-profile.queries';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 
@@ -53,6 +54,10 @@ export class GuildPageService {
       this.db,
       rows.map((r) => r.memberId),
     );
+    const headlines = await gmPostHeadlines(
+      this.db,
+      summaries.map((g) => g.id),
+    );
     const guilds: MyGuild[] = [];
     for (const g of summaries) {
       const best = bestRow(rows.filter((r) => r.guildId === g.id));
@@ -61,6 +66,7 @@ export class GuildPageService {
         rankIndex: best?.rankIndex ?? null,
         rankName: best ? (names.get(best.memberId) ?? null) : null,
         canEdit: await this.access.canEdit(actor, g.id),
+        gmPostHeadline: headlines.get(g.id) ?? null,
       });
     }
     return { guilds };
@@ -107,6 +113,10 @@ export class GuildPageService {
     }
     const own = new Map(mine.guilds.map((g) => [g.id, g]));
     const all = await listGuildsOfGame(this.db, gameId);
+    const headlines = await gmPostHeadlines(
+      this.db,
+      all.map((g) => g.id),
+    );
     const guilds = all.map(
       (g) =>
         own.get(g.id) ?? {
@@ -114,6 +124,7 @@ export class GuildPageService {
           rankIndex: null,
           rankName: null,
           canEdit: true,
+          gmPostHeadline: headlines.get(g.id) ?? null,
         },
     );
     return { guilds };

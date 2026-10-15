@@ -14,6 +14,7 @@ import {
   triggerScheduledEventCompletionForTest as triggerSECompletion,
   setEventTimesForTest as setTimes,
   type CleanupSEResult,
+  type SECompletionTriggerResult,
 } from './demo-test-scheduled-event.helpers';
 import {
   injectVoiceSessionForTest as injectVoice,
@@ -163,9 +164,7 @@ export class DemoTestService {
   }
 
   /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
-  async triggerScheduledEventCompletionForTest(): Promise<{
-    success: boolean;
-  }> {
+  async triggerScheduledEventCompletionForTest(): Promise<SECompletionTriggerResult> {
     await this.assertDemoMode();
     return triggerSECompletion(this.moduleRef);
   }

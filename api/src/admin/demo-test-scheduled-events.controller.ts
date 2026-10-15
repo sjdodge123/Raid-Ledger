@@ -28,6 +28,7 @@ import { resetEventsForTest as resetEventsHelper } from './demo-test-rok1070.hel
 import {
   triggerPostEventFollowupForTest as triggerFollowup,
   recordFollowupSentinelForTest as recordFollowupSentinel,
+  type SECompletionTriggerResult,
 } from './demo-test-scheduled-event.helpers';
 
 /**
@@ -58,9 +59,7 @@ export class DemoTestScheduledEventsController {
   /** Trigger scheduled event completion cron — DEMO_MODE only (ROK-944). */
   @Post('trigger-scheduled-event-completion')
   @HttpCode(HttpStatus.OK)
-  async triggerScheduledEventCompletionForTest(): Promise<{
-    success: boolean;
-  }> {
+  async triggerScheduledEventCompletionForTest(): Promise<SECompletionTriggerResult> {
     return this.demoTestService.triggerScheduledEventCompletionForTest();
   }
 

@@ -23,7 +23,6 @@ interface EnvironmentSnapshot {
     demoMode: boolean;
     onboardingCompleted: boolean;
     defaultTimezone: string | null;
-    communityName: string | null;
     relayEnabled: boolean;
     igdbFilterAdult: boolean;
     discordBotEnabled: boolean;
@@ -186,7 +185,6 @@ export class EnvironmentSnapshotService implements OnModuleInit {
     SETTING_KEYS.DEMO_MODE,
     SETTING_KEYS.ONBOARDING_COMPLETED,
     SETTING_KEYS.DEFAULT_TIMEZONE,
-    SETTING_KEYS.COMMUNITY_NAME,
     SETTING_KEYS.RELAY_ENABLED,
     SETTING_KEYS.IGDB_FILTER_ADULT,
     SETTING_KEYS.DISCORD_BOT_ENABLED,
@@ -199,7 +197,7 @@ export class EnvironmentSnapshotService implements OnModuleInit {
         this.settingsService.get(k),
       ),
     );
-    const [demoMode, onboarding, tz, name, relay, igdb, botEnabled, botSetup] =
+    const [demoMode, onboarding, tz, relay, igdb, botEnabled, botSetup] =
       values;
     return {
       demoMode: demoMode === 'true',
@@ -207,7 +205,6 @@ export class EnvironmentSnapshotService implements OnModuleInit {
       // settingsService.get never yields undefined (it maps a miss to null)
       // and Promise.all returns one value per key, so `?? null` is a no-op.
       defaultTimezone: tz ?? null,
-      communityName: name ?? null,
       relayEnabled: relay === 'true',
       igdbFilterAdult: igdb === 'true',
       discordBotEnabled: botEnabled === 'true',

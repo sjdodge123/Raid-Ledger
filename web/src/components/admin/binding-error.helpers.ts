@@ -1,3 +1,4 @@
+import { quickPlayGameTakenMessage } from '@raid-ledger/contract';
 import { errorBodyOf } from '../../lib/api/api-error';
 import type { BindingChannelOption } from './BindingCreateForm';
 
@@ -15,5 +16,5 @@ export function bindingErrorMessage(
     if (body?.code !== 'BINDING_QP_GAME_TAKEN') return error.message;
     const channel = channels.find((c) => c.id === body.channelId);
     if (!channel) return error.message;
-    return `This game already posts Quick Play to #${channel.name}. Remove or edit that binding first.`;
+    return quickPlayGameTakenMessage(`#${channel.name}`);
 }

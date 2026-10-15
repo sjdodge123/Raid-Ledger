@@ -17,7 +17,6 @@ import {
 } from './scheduled-event.helpers';
 import {
   findStartCandidates,
-  findCompletionCandidates,
   getScheduledEventId,
   getEventWithOverride,
   clearScheduledEventId,
@@ -27,7 +26,6 @@ import {
   isUnknownEventError,
   tryStartEvent,
   tryDeleteEvent,
-  tryCompleteEvent,
   tryEditEndTime,
   tryEditDescription,
   tryEditFullEvent,
@@ -38,6 +36,12 @@ import {
   createScheduledEventIdempotent,
   type GuildSECache,
 } from './scheduled-event.create';
+import {
+  completeScheduledEventWithOutcome,
+  runCompletionPass,
+  type SECompletionOutcome,
+  type SECompletionRun,
+} from './scheduled-event.completion';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -113,21 +117,26 @@ export class ScheduledEventService {
 
   /** Find and complete events past their effective end time (ROK-717, ROK-944). */
   async completeExpiredEvents(): Promise<void | false> {
-    if (!this.clientService.isConnected()) return false;
-    const guild = this.clientService.getGuild();
-    if (!guild) return false;
-    const candidates = await findCompletionCandidates(this.db);
-    if (candidates.length === 0) return false;
-    for (const c of candidates) {
-      await this.completeScheduledEvent(c.id);
-      await this.embedSyncQueue
-        ?.enqueue(c.id, 'cron-complete')
-        .catch((err) =>
-          this.logger.warn(
-            `Embed-sync enqueue failed for event ${c.id}: ${err instanceof Error ? err.message : 'unknown'}`,
-          ),
-        );
-    }
+    const run = await this.completeExpiredEventsDetailed();
+    if (run.reason) return false;
+  }
+
+  /** One completion pass with a per-event outcome — the smoke trigger reads it (ROK-944). */
+  async completeExpiredEventsDetailed(): Promise<SECompletionRun> {
+    return runCompletionPass({
+      db: this.db,
+      client: this.clientService,
+      completeOne: (id) => this.completeScheduledEvent(id),
+      afterEach: async (id) => {
+        await this.embedSyncQueue
+          ?.enqueue(id, 'cron-complete')
+          .catch((err) =>
+            this.logger.warn(
+              `Embed-sync enqueue failed for event ${id}: ${err instanceof Error ? err.message : 'unknown'}`,
+            ),
+          );
+      },
+    });
   }
 
   /** Create a Discord Scheduled Event. `cache` (ROK-1347) is an optional
@@ -246,21 +255,14 @@ export class ScheduledEventService {
     }
   }
 
-  /** Complete a Discord Scheduled Event (ROK-577). */
-  async completeScheduledEvent(eventId: number): Promise<void> {
-    try {
-      if (!this.clientService.isConnected()) return;
-      const guild = this.clientService.getGuild();
-      if (!guild) return;
-
-      const seId = await getScheduledEventId(this.db, eventId);
-      if (!seId) return;
-
-      await tryCompleteEvent(guild, eventId, seId);
-      await clearScheduledEventId(this.db, eventId);
-    } catch (error) {
-      this.logger.error(formatApiError('complete', eventId, error));
-    }
+  /** Complete a Discord Scheduled Event and report what happened (ROK-577, ROK-944). */
+  async completeScheduledEvent(eventId: number): Promise<SECompletionOutcome> {
+    return completeScheduledEventWithOutcome(
+      this.db,
+      this.clientService,
+      eventId,
+      (error) => this.logger.error(formatApiError('complete', eventId, error)),
+    );
   }
 
   /** Update only the end time of a scheduled event (ROK-576). */

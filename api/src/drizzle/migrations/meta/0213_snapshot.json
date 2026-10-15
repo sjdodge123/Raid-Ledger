@@ -1,5 +1,5 @@
 {
-  "id": "877e3050-9557-4d34-a7bd-40603224972d",
+  "id": "48b33cc1-dd91-46d4-878e-f580b2d2cad8",
   "prevId": "1885b6fd-be36-47d9-8790-ecb4106e1ba2",
   "version": "7",
   "dialect": "postgresql",
@@ -3144,18 +3144,6 @@
         "client_logs": {
           "name": "client_logs",
           "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "screenshot_path": {
-          "name": "screenshot_path",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "client_context": {
-          "name": "client_context",
-          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -11161,6 +11149,117 @@
         "guild_editors_kind_target": {
           "name": "guild_editors_kind_target",
           "value": "(\"guild_editors\".\"kind\" = 'rank' AND \"guild_editors\".\"rank_index\" IS NOT NULL AND \"guild_editors\".\"guild_member_id\" IS NULL) OR (\"guild_editors\".\"kind\" = 'member' AND \"guild_editors\".\"guild_member_id\" IS NOT NULL AND \"guild_editors\".\"rank_index\" IS NULL)"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.guild_profiles": {
+      "name": "guild_profiles",
+      "schema": "",
+      "columns": {
+        "guild_id": {
+          "name": "guild_id",
+          "type": "integer",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "gm_post": {
+          "name": "gm_post",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_at": {
+          "name": "gm_post_updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "gm_post_updated_by": {
+          "name": "gm_post_updated_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "rules": {
+          "name": "rules",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "links": {
+          "name": "links",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_guild_profiles_gm_post_updated_by": {
+          "name": "idx_guild_profiles_gm_post_updated_by",
+          "columns": [
+            {
+              "expression": "gm_post_updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "guild_profiles_guild_id_guilds_id_fk": {
+          "name": "guild_profiles_guild_id_guilds_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "guilds",
+          "columnsFrom": [
+            "guild_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "guild_profiles_gm_post_updated_by_users_id_fk": {
+          "name": "guild_profiles_gm_post_updated_by_users_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "gm_post_updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "guild_profiles_gm_post_length": {
+          "name": "guild_profiles_gm_post_length",
+          "value": "char_length(\"guild_profiles\".\"gm_post\") <= 4000"
         }
       },
       "isRLSEnabled": false

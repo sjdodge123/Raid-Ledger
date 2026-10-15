@@ -97,6 +97,8 @@ export const MyGuildSchema = GuildSummarySchema.extend({
   rankIndex: z.number().int().nullable(),
   rankName: z.string().nullable(),
   canEdit: z.boolean(),
+  /** ROK-1786 — first line of the GM post (≤120 chars), null when unset. */
+  gmPostHeadline: z.string().nullable(),
 }).strict();
 export type MyGuild = z.infer<typeof MyGuildSchema>;
 

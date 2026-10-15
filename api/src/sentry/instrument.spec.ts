@@ -13,7 +13,12 @@ async function loadInstrument(
 }> {
   // Save and restore env
   const saved: Record<string, string | undefined> = {};
-  for (const key of ['NODE_ENV', 'DISABLE_TELEMETRY', 'SENTRY_ENVIRONMENT']) {
+  for (const key of [
+    'NODE_ENV',
+    'DISABLE_TELEMETRY',
+    'ENABLE_TELEMETRY',
+    'SENTRY_ENVIRONMENT',
+  ]) {
     saved[key] = process.env[key];
     if (key in env) {
       if (env[key] === undefined) {
@@ -89,7 +94,7 @@ function describeSentryInstrumentTs() {
     beforeEach(async () => {
       ({ sentryInitMock } = await loadInstrument({
         NODE_ENV: 'production',
-        DISABLE_TELEMETRY: undefined,
+        ENABLE_TELEMETRY: 'true',
       }));
     });
 
@@ -123,7 +128,7 @@ function describeSentryInstrumentTs() {
       it('defaults environment to production when SENTRY_ENVIRONMENT is unset', async () => {
         const { sentryInitMock: mock } = await loadInstrument({
           NODE_ENV: 'production',
-          DISABLE_TELEMETRY: undefined,
+          ENABLE_TELEMETRY: 'true',
           SENTRY_ENVIRONMENT: undefined,
         });
         const config = initConfig(mock);
@@ -133,7 +138,7 @@ function describeSentryInstrumentTs() {
       it('uses SENTRY_ENVIRONMENT when set (fleet per-slot bucket)', async () => {
         const { sentryInitMock: mock } = await loadInstrument({
           NODE_ENV: 'production',
-          DISABLE_TELEMETRY: undefined,
+          ENABLE_TELEMETRY: 'true',
           SENTRY_ENVIRONMENT: 'fleet-slot-2',
         });
         const config = initConfig(mock);
@@ -894,36 +899,20 @@ function describeSentryInstrumentTs() {
     });
   });
 
-  describe('when DISABLE_TELEMETRY=true', () => {
-    let sentryInitMock: jest.MockedFunction<
-      (options?: Record<string, unknown>) => void
-    >;
-
-    beforeEach(async () => {
-      ({ sentryInitMock } = await loadInstrument({
-        DISABLE_TELEMETRY: 'true',
-      }));
+  it('DISABLE_TELEMETRY=true wins over ENABLE_TELEMETRY in production', async () => {
+    const { sentryInitMock } = await loadInstrument({
+      NODE_ENV: 'production',
+      ENABLE_TELEMETRY: 'true',
+      DISABLE_TELEMETRY: 'true',
     });
-
-    it('does NOT call Sentry.init', () => {
-      expect(sentryInitMock).not.toHaveBeenCalled();
-    });
+    expect(sentryInitMock).not.toHaveBeenCalled();
   });
 
-  describe('when DISABLE_TELEMETRY is not set (but not production)', () => {
-    let sentryInitMock: jest.MockedFunction<
-      (options?: Record<string, unknown>) => void
-    >;
-
-    beforeEach(async () => {
-      ({ sentryInitMock } = await loadInstrument({
-        DISABLE_TELEMETRY: undefined,
-      }));
+  it('ENABLE_TELEMETRY=true outside production does NOT init', async () => {
+    const { sentryInitMock } = await loadInstrument({
+      ENABLE_TELEMETRY: 'true',
     });
-
-    it('does NOT call Sentry.init (production-only)', () => {
-      expect(sentryInitMock).not.toHaveBeenCalled();
-    });
+    expect(sentryInitMock).not.toHaveBeenCalled();
   });
 }
 describe('Sentry instrument.ts', () => describeSentryInstrumentTs());
