@@ -40,11 +40,21 @@ export function useGuildAddons(guildId: number, enabled = true): UseQueryResult<
     });
 }
 
+/**
+ * Prefix of the Players page's "my guilds" query (`slots/guild-queries.ts`),
+ * without the viewer scope so every scope refreshes.
+ */
+export const MY_GUILDS_KEY_PREFIX = ['plugins', 'wow', 'guilds', 'mine'] as const;
+
+/** Saving also refreshes `mine`, whose `gmPostHeadline` the Players page shows. */
 export function useUpdateGuildProfile(guildId: number): UseMutationResult<GuildProfile, Error, UpdateGuildProfileInput> {
     const queryClient = useQueryClient();
     return useMutation<GuildProfile, Error, UpdateGuildProfileInput>({
         mutationFn: (input) => patchGuildProfile(guildId, input),
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: guildProfileKey(guildId) }),
+        onSuccess: () => Promise.all([
+            queryClient.invalidateQueries({ queryKey: guildProfileKey(guildId) }),
+            queryClient.invalidateQueries({ queryKey: MY_GUILDS_KEY_PREFIX }),
+        ]),
     });
 }
 
