@@ -84,8 +84,12 @@ describe('web Sentry beforeSend (ROK-1162)', () => {
     });
 });
 
-type ScrubCrumb = { category?: string; data?: Record<string, unknown> };
-type ScrubEvent = { request?: { url?: string } };
+type ScrubCrumb = { category?: string; message?: string; data?: Record<string, unknown> };
+type ScrubEvent = {
+    request?: { url?: string };
+    user?: Record<string, unknown>;
+    exception?: { values?: { type?: string; value?: string }[] };
+};
 interface ScrubConfig {
     beforeSend: (event: ScrubEvent) => ScrubEvent | null;
     beforeBreadcrumb?: (crumb: ScrubCrumb) => ScrubCrumb | null;
@@ -115,6 +119,27 @@ describe('web Sentry magic-link token scrubbing (ROK-1366)', () => {
     it('scrubs a fragment token from the event request url', () => {
         const event = config.beforeSend({ request: { url: 'https://rl.test/e#token=abc' } });
         expect(event?.request?.url).toBe('https://rl.test/e#token=[Filtered]');
+    });
+
+    it('drops user.username, email and ip_address, keeping the id (ROK-1779)', () => {
+        const event = config.beforeSend({
+            user: { id: 7, username: 'bob', email: 'b@x.io', ip_address: '10.0.0.1' },
+        });
+        expect(event?.user).toEqual({ id: 7 });
+    });
+
+    it('scrubs an email from the exception value (ROK-1779)', () => {
+        const event = config.beforeSend({
+            exception: { values: [{ type: 'Error', value: 'no invite for bob@guild.example' }] },
+        });
+        expect(event?.exception?.values?.[0]?.value).toBe('no invite for [email]');
+    });
+
+    it('scrubs an email from a breadcrumb (ROK-1779)', () => {
+        const scrub = config.beforeBreadcrumb;
+        if (!scrub) throw new Error('Sentry.init needs a beforeBreadcrumb scrubber');
+        const crumb = scrub({ category: 'console', message: 'signed in as bob@guild.example' });
+        expect(crumb?.message).toBe('signed in as [email]');
     });
 });
 
@@ -148,11 +173,16 @@ describe('web Sentry Replay is lazy-loaded (Sentry 11 upgrade)', () => {
         expect(config.replaysOnErrorSampleRate).toBe(1);
     });
 
-    it('adds Replay after init with the scrubbing beforeAddRecordingEvent', async () => {
+    it('adds Replay after init with explicit masking and the scrubbing beforeAddRecordingEvent', async () => {
         const { Sentry } = await loadSentry(true);
         await vi.dynamicImportSettled();
         const { scrubRecordingEvent } = await import('./lib/sentry-scrub-events');
-        expect(Sentry.replayIntegration).toHaveBeenCalledWith({ beforeAddRecordingEvent: scrubRecordingEvent });
+        expect(Sentry.replayIntegration).toHaveBeenCalledWith({
+            maskAllText: true,
+            maskAllInputs: true,
+            blockAllMedia: true,
+            beforeAddRecordingEvent: scrubRecordingEvent,
+        });
         expect(Sentry.addIntegration).toHaveBeenCalledWith('replayIntegration');
     });
 

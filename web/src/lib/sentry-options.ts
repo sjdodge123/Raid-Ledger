@@ -6,6 +6,7 @@
  */
 import * as Sentry from '@sentry/react';
 import { scrubBreadcrumb } from './sentry-scrub';
+import { scrubPiiBreadcrumb, scrubPiiEvent } from './sentry-scrub-pii';
 import {
     scrubErrorEvent,
     scrubReplayEventUrls,
@@ -55,11 +56,12 @@ function isAbortNoise(event: Sentry.ErrorEvent): boolean {
  * Drops abort noise, then (ROK-1366 backstop + ROK-1750) scrubs a `token=` /
  * poll share token from request.url, transaction name and trace data. The
  * join page's intent `?token=` stays in the address bar, so it still reaches
- * the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27).
+ * the Replay Meta href (TECH-DEBT-BACKLOG.md, 2026-09-27). ROK-1779: then
+ * strips usernames, emails and IPs (`sentry-scrub-pii.ts`).
  */
 export function beforeSendError(event: Sentry.ErrorEvent): Sentry.ErrorEvent | null {
     if (isAbortNoise(event)) return null;
-    return scrubErrorEvent(event);
+    return scrubPiiEvent(scrubErrorEvent(event));
 }
 
 /**
@@ -67,13 +69,13 @@ export function beforeSendError(event: Sentry.ErrorEvent): Sentry.ErrorEvent | n
  * (fragment included) — scrub it from spans, replay and replay urls.
  */
 export function beforeSendTransactionEvent(event: TransactionEvent): TransactionEvent | null {
-    return scrubTransactionEvent(event);
+    return scrubPiiEvent(scrubTransactionEvent(event));
 }
 
 export function beforeBreadcrumbScrub(
     breadcrumb: Sentry.Breadcrumb,
 ): Sentry.Breadcrumb | null {
-    return scrubBreadcrumb(breadcrumb);
+    return scrubPiiBreadcrumb(scrubBreadcrumb(breadcrumb));
 }
 
 /** Wraps the fetch transport so a 4xx/5xx send (e.g. 403 bad DSN) is reported. */
