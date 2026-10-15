@@ -32,21 +32,23 @@ interface Audit { action: string; reason: string; userId: number }
 /**
  * A game no channel-pool test is bound to, so no other run plays it, AND not
  * already linked to a role — this run must only ever unlink what it created.
- * `ctx.games` only holds the admin character's game and is empty on a seed
- * with no characters (the fleet env), so fall back to the games registry.
- * Null when every game is busy or linked (the caller skips).
+ * `ctx.games` only holds the admin character's game — empty on a seed with
+ * no characters (the fleet env), or just the busy `mmoGameId` — so when it has
+ * no eligible candidate fall back to the games registry. Null only when the
+ * registry has none either (the caller skips, loudly).
  */
 async function pickUnlinkedGame(ctx: TestContext): Promise<number | null> {
   const busy = new Set((ctx.channelPool ?? []).map((s) => s.gameId));
   if (ctx.mmoGameId !== undefined) busy.add(ctx.mmoGameId);
   for (const l of await ctx.api.get<Summary[]>(BASE)) busy.add(l.gameId);
-  const registry = ctx.games.length > 0
-    ? ctx.games
-    : (await ctx.api.get<{ data: { id: number; name: string }[] }>(
-        '/admin/settings/games?limit=100',
-      )).data ?? [];
-  const free = registry.filter((g) => !busy.has(g.id));
-  return free[free.length - 1]?.id ?? null;
+  const pick = (games: readonly { id: number }[]): number | null =>
+    games.filter((g) => !busy.has(g.id)).at(-1)?.id ?? null;
+  const fromCtx = pick(ctx.games);
+  if (fromCtx !== null) return fromCtx;
+  const registry = await ctx.api.get<{ data?: { id: number; name: string }[] }>(
+    '/admin/settings/games?limit=100',
+  );
+  return pick(registry.data ?? []);
 }
 
 async function memberRoles(api: ApiClient, discordUserId: string): Promise<string[]> {
@@ -121,7 +123,10 @@ async function gameRoleAddAndIdleRemove(ctx: TestContext): Promise<void> {
   await ctx.api.post(`${FIXTURES}/sweep`, {});
   const gameId = await pickUnlinkedGame(ctx);
   if (gameId === null) {
-    console.warn('  game-role smoke SKIPPED: every demo game is already linked or pool-bound');
+    console.warn(
+      '  game-role smoke SKIPPED: no eligible game in ctx.games or the games registry ' +
+        '(every game is linked, pool-bound or the MMO game) — NO ASSERTIONS RAN',
+    );
     return;
   }
   const name = `smoke-gr-${Date.now().toString(36)}`;
