@@ -96,7 +96,9 @@ test.describe("Admin Discord — Join post card (ROK-1740)", () => {
     await expect(
       card.getByRole("button", { name: "Post", exact: true }),
     ).toBeDisabled();
-    await expect(card.getByRole("button", { name: "Remove" })).toBeDisabled();
+    // Remove is not rendered until a post exists (fleet test plan
+    // 2026-10-15-0617-8adf step 1, commit 397ff075c) — absent, not disabled.
+    await expect(card.getByRole("button", { name: "Remove" })).toHaveCount(0);
   });
 
   test("a 422 lists the missing permissions inline", async ({ page }) => {
