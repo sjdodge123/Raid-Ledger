@@ -215,5 +215,3 @@ export * from './ledgerlink-json-schema.js';
 export * from './guilds.schema.js';
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
-// Addon link parser shared by the server and the web preview (ROK-1786).
-export * from './guild-addon-link.js';

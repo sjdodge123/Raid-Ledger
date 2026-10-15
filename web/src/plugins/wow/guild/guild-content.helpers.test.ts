@@ -29,9 +29,8 @@ describe('guild content helpers', () => {
         expect(parseAddonUrl('javascript:alert(1)')).toBeNull();
     });
 
-    // Same inputs as the server spec (`guild-addon-url.helpers.spec.ts`): both run the contract's
-    // `parseAddonLink`, so these are the cases the old client-only parser previewed but the server
-    // rejected (or named differently).
+    // Parity table — the SAME inputs as the server spec (`guild-addon-url.helpers.spec.ts`), since
+    // the preview mirrors the server parser; includes cases an earlier client parser got wrong.
     it.each([
         ['https://www.curseforge.com/wow/other/details', null],
         ['https://addons.wago.io/weakauras', null],

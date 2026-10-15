@@ -124,8 +124,9 @@ describe('addonLinkUrl / titleCaseSlug', () => {
   });
 });
 
-// Same table as the web preview test (`guild-content.helpers.test.ts`): both
-// sides run the contract's `parseAddonLink`, so preview and server agree.
+// Parity table — the SAME inputs as the web preview test
+// (`web/src/plugins/wow/guild/guild-content.helpers.test.ts`), whose
+// `addon-url.ts` mirrors this parser. Change both together.
 describe('parseAddonLink — web preview parity table', () => {
   it.each([
     ['https://www.curseforge.com/wow/other/details', null],
