@@ -220,4 +220,18 @@ describe('Resources: addon write failures', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
         await waitFor(() => expect(screen.getByTestId('guild-addons-error')).toHaveTextContent('Couldn’t move that addon. ids must list every addon of the guild'));
     });
+
+    it('a rejected add shows the server message, and a bad known-host link is caught before submit', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.post(`${BASE}/addons`, () => HttpResponse.json({ message: 'This addon is already on the guild list' }, { status: 409 })));
+        renderPage('#resources');
+        const input = await screen.findByLabelText('Addon link');
+        await userEvent.type(input, 'https://www.curseforge.com/wow/other/details');
+        expect(screen.getByRole('alert')).toHaveTextContent('CurseForge links must look like curseforge.com/wow/addons/<name>');
+        expect(screen.getByTestId('guild-addon-add')).toBeDisabled();
+        await userEvent.clear(input);
+        await userEvent.type(input, 'https://www.curseforge.com/wow/addons/dbm');
+        await userEvent.click(screen.getByTestId('guild-addon-add'));
+        expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t add that addon. This addon is already on the guild list');
+    });
 });

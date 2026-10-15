@@ -11,7 +11,7 @@ import { Field } from '../../../components/ui/field';
 import { Input } from '../../../components/ui/input';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { Select } from '../../../components/ui/select';
-import { parseAddonUrl } from './addon-url';
+import { previewAddonUrl } from './addon-url';
 import type { AddonDetails } from './addon-view';
 import { Pill } from './guild-bits';
 import { FLAVOR_LABEL, SOURCE_LABEL } from './guild-content.helpers';
@@ -48,17 +48,19 @@ const EMPTY: AddonDetails = { note: '', requirement: 'optional', flavor: null };
 
 export interface NewAddon extends AddonDetails { url: string }
 
-export function AddAddonForm({ onAdd, pending, failed }: {
-    onAdd: (addon: NewAddon, reset: () => void) => void; pending: boolean; failed: boolean;
+/** `failure` is the server's message for the last failed add (e.g. a 400 or 409). */
+export function AddAddonForm({ onAdd, pending, failure }: {
+    onAdd: (addon: NewAddon, reset: () => void) => void; pending: boolean; failure: string | null;
 }): JSX.Element {
     const [url, setUrl] = useState('');
     const [details, setDetails] = useState<AddonDetails>(EMPTY);
-    const parsed = url.trim() ? parseAddonUrl(url) : null;
-    const error = url.trim() && !parsed ? 'Paste a CurseForge, Wago or GitHub addon link.' : undefined;
+    const preview = url.trim() ? previewAddonUrl(url) : null;
+    const parsed = preview?.ok ? preview.addon : null;
+    const error = preview && !preview.ok ? preview.error : undefined;
     const reset = (): void => { setUrl(''); setDetails(EMPTY); };
     return (
         <div className="flex flex-col gap-3 rounded-lg border border-edge bg-panel p-3" data-testid="guild-addon-form">
-            <Field label="Addon link" error={error ?? (failed ? 'Couldn’t add that addon. Check the link and try again.' : undefined)}
+            <Field label="Addon link" error={error ?? (failure ? `Couldn’t add that addon. ${failure}` : undefined)}
                 hint="CurseForge, Wago or GitHub. The name comes from the link.">
                 <Input type="url" inputMode="url" value={url} maxLength={GUILD_URL_MAX} placeholder="https://www.curseforge.com/wow/addons/…"
                     onChange={(e) => setUrl(e.target.value)} />

@@ -1,40 +1,24 @@
 /**
- * ROK-1786 — client-side PREVIEW of a pasted addon link (name + source). The
- * server parses and validates for real (`guild-addon-url.helpers.ts`); this
- * only mirrors its recognised shapes so the form can show what it will add.
+ * ROK-1786 — client-side PREVIEW of a pasted addon link (name + source). It
+ * runs the contract's `parseAddonLink`, the same function the server stores
+ * with, so the preview and the server's 400 agree on every input.
  */
-import type { GuildAddonSource } from '@raid-ledger/contract';
+import { parseAddonLink, type GuildAddonSource } from '@raid-ledger/contract';
 
 export interface ParsedAddonUrl { name: string; source: GuildAddonSource }
 
-const PATTERNS: Array<{ source: GuildAddonSource; host: RegExp; slugAt: number; prefix?: string }> = [
-    { source: 'curseforge', host: /^(www\.)?curseforge\.com$/, slugAt: 2, prefix: 'wow' },
-    { source: 'wago', host: /^addons\.wago\.io$/, slugAt: 1 },
-    { source: 'github', host: /^(www\.)?github\.com$/, slugAt: 1 },
-];
+export type AddonUrlPreview = { ok: true; addon: ParsedAddonUrl } | { ok: false; error: string };
 
-export function titleCaseSlug(slug: string): string {
-    return slug.replace(/\.git$/, '').split(/[-_]+/).filter(Boolean)
-        .map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+/** The preview, or the server's own rejection message. */
+export function previewAddonUrl(raw: string): AddonUrlPreview {
+    const result = parseAddonLink(raw);
+    return result.ok
+        ? { ok: true, addon: { name: result.link.suggestedName, source: result.link.source } }
+        : { ok: false, error: result.error };
 }
 
-function toUrl(raw: string): URL | null {
-    try {
-        const u = new URL(raw.trim());
-        return u.protocol === 'http:' || u.protocol === 'https:' ? u : null;
-    } catch {
-        return null;
-    }
-}
-
-/** `null` for anything that isn't an http(s) link; other hosts preview as a plain website. */
+/** `null` for anything the server would reject. */
 export function parseAddonUrl(raw: string): ParsedAddonUrl | null {
-    const url = toUrl(raw);
-    if (!url) return null;
-    const match = PATTERNS.find((p) => p.host.test(url.hostname));
-    if (!match) return { name: url.hostname.replace(/^www\./, ''), source: 'url' };
-    const parts = url.pathname.split('/').filter(Boolean);
-    if (match.prefix && parts[0] !== match.prefix) return null;
-    const slug = parts[match.slugAt];
-    return slug ? { name: titleCaseSlug(slug), source: match.source } : null;
+    const preview = previewAddonUrl(raw);
+    return preview.ok ? preview.addon : null;
 }

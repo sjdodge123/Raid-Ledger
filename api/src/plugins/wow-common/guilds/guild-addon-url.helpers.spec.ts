@@ -123,3 +123,24 @@ describe('addonLinkUrl / titleCaseSlug', () => {
     );
   });
 });
+
+// Same table as the web preview test (`guild-content.helpers.test.ts`): both
+// sides run the contract's `parseAddonLink`, so preview and server agree.
+describe('parseAddonLink — web preview parity table', () => {
+  it.each([
+    ['https://www.curseforge.com/wow/other/details', null],
+    ['https://addons.wago.io/weakauras', null],
+    ['https://github.com/owner-only', null],
+    [
+      'https://example.com/addons/my-cool-addon',
+      { name: 'My Cool Addon', source: 'url' },
+    ],
+    ['https://GitHub.com/Owner/Repo.git', { name: 'Repo', source: 'github' }],
+  ] as const)('%s', (raw, expected) => {
+    const result = parseAddonLink(raw);
+    const preview = result.ok
+      ? { name: result.link.suggestedName, source: result.link.source }
+      : null;
+    expect(preview).toEqual(expected);
+  });
+});
