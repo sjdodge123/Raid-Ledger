@@ -1520,6 +1520,13 @@
       "when": 1792096254446,
       "tag": "0217_guild_events",
       "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1792101320942,
+      "tag": "0218_game_notification_mutes",
+      "breakpoints": true
     }
   ]
 }
