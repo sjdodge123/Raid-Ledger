@@ -114,6 +114,43 @@ async function attended(
   });
 }
 
+/** A Quick Play (ad-hoc) session of `gid` that `user` took part in. */
+async function quickPlayed(
+  user: { id: number; discordId: string },
+  o: {
+    gid?: number;
+    leftAt: Date | null;
+    seconds: number | null;
+    window: [Date, Date];
+    /** false = an unlinked participant row (user_id NULL). */
+    linked?: boolean;
+  },
+): Promise<void> {
+  const [ev] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: `GR Quick Play ${++seq}`,
+        creatorId: testApp.seed.adminUser.id,
+        gameId: o.gid ?? gameId,
+        duration: o.window,
+        isAdHoc: true,
+        adHocStatus: 'ended',
+      })
+      .returning(),
+    'quick play event',
+  );
+  await testApp.db.insert(schema.adHocParticipants).values({
+    eventId: ev.id,
+    userId: o.linked === false ? null : user.id,
+    discordUserId: user.discordId,
+    discordUsername: 'qp-user',
+    joinedAt: o.window[0],
+    leftAt: o.leftAt,
+    totalDurationSeconds: o.seconds,
+  });
+}
+
 const desired = () => findDesiredMembers(testApp.db, gameId, 14, NOW);
 
 describe('findDesiredMembers window and sources (ROK-1767)', () => {
@@ -247,5 +284,75 @@ describe('findDesiredMembers exclusions (ROK-1767)', () => {
     const map = await desired();
 
     expect(map.size).toBe(0);
+  });
+});
+
+describe('findDesiredMembers Quick Play participation (ROK-1767, ruling 2026-10-15)', () => {
+  const qpWindow = (d: number): [Date, Date] => [daysAgo(d + 0.1), daysAgo(d)];
+
+  it('counts a non-sharing member who played a Quick Play of the game for 20 minutes', async () => {
+    const linked = await makeUser();
+    const unlinked = await makeUser();
+    await quickPlayed(linked, {
+      leftAt: daysAgo(3),
+      seconds: 1200,
+      window: qpWindow(3),
+    });
+    await quickPlayed(unlinked, {
+      leftAt: daysAgo(2),
+      seconds: 1200,
+      window: qpWindow(2),
+      linked: false,
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()].sort((a, b) => a - b)).toEqual(
+      [linked.id, unlinked.id].sort((a, b) => a - b),
+    );
+    expect(map.get(linked.id)?.lastPlayedAt.toISOString()).toBe(
+      daysAgo(3).toISOString(),
+    );
+    expect(map.get(unlinked.id)?.discordUserId).toBe(unlinked.discordId);
+  });
+
+  it('ignores a zero-time participant, another game and a session older than the window', async () => {
+    const zero = await makeUser();
+    const otherGame = await makeUser();
+    const stale = await makeUser();
+    const other = await makeGame('Other QP Game');
+    await quickPlayed(zero, {
+      leftAt: daysAgo(1),
+      seconds: 0,
+      window: qpWindow(1),
+    });
+    await quickPlayed(otherGame, {
+      gid: other,
+      leftAt: daysAgo(1),
+      seconds: 1200,
+      window: qpWindow(1),
+    });
+    await quickPlayed(stale, {
+      leftAt: daysAgo(20),
+      seconds: 1200,
+      window: qpWindow(20),
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([]);
+  });
+
+  it('caps a never-closed participant row at the Quick Play end, not now', async () => {
+    const open = await makeUser();
+    await quickPlayed(open, {
+      leftAt: null,
+      seconds: null,
+      window: qpWindow(30),
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([]);
   });
 });

@@ -63,7 +63,8 @@ export async function loadRemovalHints(
     userIds.map((id) => sql`${id}`),
     sql`, `,
   );
-  // Last play = presence OR event attendance, as eligibility counts it (D4).
+  // Last play = presence, event attendance or Quick Play, as eligibility
+  // counts it (D4, D9).
   const rows = await db.execute<HintRow>(sql`
     ${playedCte(gameId, ALL_TIME, now.toISOString())}
     SELECT u.id, u.deactivated_at IS NOT NULL AS deactivated,
