@@ -73,7 +73,25 @@ if [[ -n "${STUB_SPEC_LIST:-}" ]]; then
 fi
 echo "$state" >"$STUB_STATE/ended.${shard}"
 echo "end ${shard}" >>"$ev"
-[[ "${STUB_NPX_FAIL_SHARD:-}" == "$shard" ]] && exit 1
+# done.<shard>: this stub's pid and its ancestors, written last and atomically.
+ancestors() { local p=$$; while [[ -n "$p" && "$p" -gt 1 ]]; do echo "$p"; p=$(ps -o ppid= -p "$p" | tr -d ' '); done; }
+ancestors >"$STUB_STATE/done.${shard}.tmp" && mv "$STUB_STATE/done.${shard}.tmp" "$STUB_STATE/done.${shard}"
+if [[ "${STUB_NPX_FAIL_SHARD:-}" == "$shard" ]]; then
+    # STUB_FAIL_AWAITS_PARTNER: fail only once the partner has written done.<partner>
+    # AND every process of its shard pipeline (the pids in done.<partner> that
+    # are not my own ancestors) has exited, so the partner PASSes before the
+    # failure can stop it. Condition-polled, bounded; never a timed sleep.
+    if [[ -n "${STUB_FAIL_AWAITS_PARTNER:-}" ]]; then
+        until_t=$(( $(date +%s) + ${STUB_PARTNER_WAIT_SECS:-30} ))
+        while [[ ! -e "$STUB_STATE/done.${partner}" ]] && (( $(date +%s) <= until_t )); do sleep 0.05; done
+        mine=$(ancestors)
+        for p in $(cat "$STUB_STATE/done.${partner}" 2>/dev/null); do
+            grep -q -x -e "$p" <<<"$mine" && continue
+            while kill -0 "$p" 2>/dev/null && (( $(date +%s) <= until_t )); do sleep 0.05; done
+        done
+    fi
+    exit 1
+fi
 exit 0
 EOF
 for tool in npm curl node; do printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_BIN/$tool"; done
@@ -139,7 +157,9 @@ if grep -q -e '^\[shard 2/4\]  PASS src/' <<<"$OUT"; then pass; else
 
 # ----- INTEGRATION_PARALLEL=2 with a failing shard -----
 CURRENT_TEST_NAME="INTEGRATION_PARALLEL=2: a failing shard fails the tier, stops, reports unrun specs"
-run_case INTEGRATION_PARALLEL=2 STUB_BARRIER_SECS=10 STUB_NPX_FAIL_SHARD=1
+# Shard 1 fails only after shard 2's whole pipeline has exited (PASS), so the
+# stop-the-partner path cannot turn this into FAIL STOPPED (Codex P2).
+run_case INTEGRATION_PARALLEL=2 STUB_BARRIER_SECS=10 STUB_NPX_FAIL_SHARD=1 STUB_FAIL_AWAITS_PARTNER=1
 if [[ $RC -ne 0 ]]; then pass; else fail "a failed parallel shard must fail the tier, got rc=0"; fi
 if [[ $(started 2) -eq 1 ]]; then pass; else fail "shard 2 is in shard 1's wave and must still run, events: $(tr '\n' ',' <<<"$EVENTS")"; fi
 if [[ $(started 3) -eq 0 && $(started 4) -eq 0 ]]; then pass; else
