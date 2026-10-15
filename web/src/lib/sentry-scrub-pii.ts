@@ -8,14 +8,21 @@
  * - Any username / display name / email / IP / community-name key, at any
  *   depth in request, extra, contexts, breadcrumbs, tags and spans, becomes
  *   `[redacted]`.
- * - Every string loses e-mail addresses (`[email]`) and IPv4/IPv6 literals
- *   (`[ip]`). Usernames inside free text cannot be matched generically.
+ * - Every string loses e-mail addresses, percent-encoded too (`[email]`),
+ *   and IPv4/IPv6 literals (`[ip]`). Usernames inside free text cannot be
+ *   matched generically.
  */
 export const PII_REDACTED = '[redacted]';
 
 const PII_KEY =
     /(?:^|[._])(?:user_?name|display_?name|e-?mail|ip_?address|community_?name)$/i;
 const EMAIL = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
+// Percent-encoded (`alice%40x.io`, double-encoded `%2540`, `+` as `%2B`) in
+// URLs and query strings. The local part starts at a token boundary or right
+// after a whole `%XX` escape, so `%3Dalice%40x.io` keeps its `%3D` and a
+// form-encoded space (`find+alice`) is not swallowed.
+const ENCODED_EMAIL =
+    /(?<=^|[^A-Z0-9._%-]|%[0-9A-F]{2})[A-Z0-9._-]+(?:%(?:25)*2B[A-Z0-9._-]+)*%(?:25)*40[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const IPV6 =
     /(?<![\w:.])(?:(?:[0-9a-f]{1,4}:){7}[0-9a-f]{1,4}|(?:[0-9a-f]{1,4}:){1,7}:(?:[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6})?|::(?:ffff:)?[0-9a-f]{1,4}(?::[0-9a-f]{1,4}){0,6}(?:\.\d{1,3}){0,3})(?![\w:])/gi;
 // Real octets only, and not a product-token version (`Chrome/141.0.0.0`,
@@ -56,6 +63,7 @@ export interface PiiScrubbableBreadcrumb {
 
 export function scrubPiiString(value: string): string {
     return value
+        .replace(ENCODED_EMAIL, '[email]')
         .replace(EMAIL, '[email]')
         .replace(IPV6, '[ip]')
         .replace(IPV4, '[ip]');

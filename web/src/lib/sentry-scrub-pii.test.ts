@@ -145,3 +145,33 @@ describe('scrubPiiBreadcrumb (ROK-1779)', () => {
         expect(scrubPiiBreadcrumb(crumb)).toEqual({ category: 'ui.click' });
     });
 });
+
+describe('scrubPiiString — percent-encoded e-mails (ROK-1779 Codex P2)', () => {
+    it.each([
+        ['/invite?to=alice%40example.com', '/invite?to=[email]'],
+        ['/invite?to=ALICE%40EXAMPLE.COM&x=1', '/invite?to=[email]&x=1'],
+        ['/r?next=%2Fu%3Fe%3Dalice%2540example.com', '/r?next=%2Fu%3Fe%3D[email]'],
+        ['q=find+alice%40example.com', 'q=find+[email]'],
+        ['q=find%20alice%40example.com', 'q=find%20[email]'],
+        ['q=alice%2Btag%40mail.example.org', 'q=[email]'],
+        ['GET https://x.io/a/bob.smith%40example.co.uk/b', 'GET https://x.io/a/[email]/b'],
+    ])('%s → %s', (input, expected) => {
+        expect(scrubPiiString(input)).toBe(expected);
+    });
+
+    it('leaves non-PII encoded text alone', () => {
+        const safe = '/search?q=hello%20world&pct=50%25&path=%2Fevents%2F12&t=a%2Bb';
+        expect(scrubPiiString(safe)).toBe(safe);
+    });
+
+    it('scrubs encoded e-mails in request urls and breadcrumb data', () => {
+        const event = scrubPiiEvent({
+            request: { url: 'https://x.io/u?e=alice%40example.com' },
+            breadcrumbs: [{ data: { url: '/api?e=bob%2540example.com' } }],
+        });
+        expect(event.request).toEqual({ url: 'https://x.io/u?e=[email]' });
+        expect(event.breadcrumbs).toEqual([{ data: { url: '/api?e=[email]' } }]);
+        const crumb = scrubPiiBreadcrumb({ message: 'GET /u?e=carol%40example.com' });
+        expect(crumb.message).toBe('GET /u?e=[email]');
+    });
+});
