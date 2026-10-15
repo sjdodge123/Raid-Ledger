@@ -30,12 +30,20 @@ function parseWindow(text: string): number | null {
 }
 
 function useLinkForm(isOpen: boolean, onClose: () => void) {
-    const { upsert } = useGameRoles();
+    const { upsert, list } = useGameRoles();
     const roles = useDiscordRoleOptions(isOpen);
-    const [game, setGame] = useState<IgdbGameDto | null>(null);
+    const [game, setGameState] = useState<IgdbGameDto | null>(null);
     const [roleChoice, setRoleChoice] = useState(CREATE_ROLE);
     const [windowText, setWindowText] = useState(DEFAULT_WINDOW);
-    const roleId = roleChoice === CREATE_ROLE ? null : roleChoice;
+    const linked = game ? list.data?.find((r) => r.gameId === game.id) ?? null : null;
+    /** Picking an already-linked game edits that link: its role is fixed, its window prefilled. */
+    const setGame = (next: IgdbGameDto | null) => {
+        setGameState(next);
+        const row = next ? list.data?.find((r) => r.gameId === next.id) : undefined;
+        setRoleChoice(row ? row.roleId : CREATE_ROLE);
+        setWindowText(row ? String(row.windowDays) : DEFAULT_WINDOW);
+    };
+    const roleId = linked ? linked.roleId : roleChoice === CREATE_ROLE ? null : roleChoice;
     const preflight = useGameRolePreflight(isOpen && game ? { gameId: game.id, roleId } : null);
     const windowDays = parseWindow(windowText);
     const dirty = game !== null || roleChoice !== CREATE_ROLE || windowText !== DEFAULT_WINDOW;
@@ -43,11 +51,11 @@ function useLinkForm(isOpen: boolean, onClose: () => void) {
     const canSave = !!game && windowDays !== null && preflight.data?.ok === true && !upsert.isPending;
     const save = () => {
         if (!game || windowDays === null) return;
-        upsert.mutate({ gameId: game.id, body: { roleId, windowDays } }, {
+        upsert.mutate({ gameId: game.id, body: { roleId, windowDays, ...(linked ? { enabled: linked.enabled } : {}) } }, {
             onSuccess: () => { toast.success(`${game.name} linked to a Discord role`); onClose(); },
         });
     };
-    return { game, setGame, roleChoice, setRoleChoice, windowText, setWindowText, windowDays, roles: roles.data ?? [],
+    return { game, setGame, linked, roleChoice, setRoleChoice, windowText, setWindowText, windowDays, roles: roles.data ?? [],
         problems, saveError: upsert.error?.message ?? null, canSave, save, dirty, saving: upsert.isPending };
 }
 type LinkForm = ReturnType<typeof useLinkForm>;
@@ -64,21 +72,35 @@ function ProblemBanner({ problems }: { problems: string[] }): JSX.Element | null
     );
 }
 
-function LinkFields({ form }: { form: LinkForm }): JSX.Element {
+function RoleField({ form }: { form: LinkForm }): JSX.Element {
     const createLabel = `Create @${form.game?.name ?? 'game'}`;
+    const roleHint = form.linked
+        ? 'This game is already linked. Unlink it to use a different role.'
+        : 'Pick an existing role, or let the bot create one named after the game.';
+    const linkedMissing = form.linked !== null && !form.roles.some((r) => r.id === form.linked?.roleId);
+    return (
+        <Field label="Discord role" hint={roleHint}>
+            <Select value={form.roleChoice} disabled={form.linked !== null} data-testid="game-role-role-select"
+                onChange={(e) => form.setRoleChoice(e.target.value)}>
+                {form.linked === null && <option value={CREATE_ROLE}>{createLabel}</option>}
+                {linkedMissing && form.linked && (
+                    <option value={form.linked.roleId}>@{form.linked.roleName ?? 'Role missing in Discord'}</option>
+                )}
+                {form.roles.map((r) => (
+                    <option key={r.id} value={r.id} disabled={!r.assignable}>
+                        @{r.name}{r.assignable ? '' : ' (above the bot)'}
+                    </option>
+                ))}
+            </Select>
+        </Field>
+    );
+}
+
+function LinkFields({ form }: { form: LinkForm }): JSX.Element {
     return (
         <div className="space-y-4">
             <GameSearchInput id="game-role-game" value={form.game} onChange={form.setGame} />
-            <Field label="Discord role" hint="Pick an existing role, or let the bot create one named after the game.">
-                <Select value={form.roleChoice} onChange={(e) => form.setRoleChoice(e.target.value)}>
-                    <option value={CREATE_ROLE}>{createLabel}</option>
-                    {form.roles.map((r) => (
-                        <option key={r.id} value={r.id} disabled={!r.assignable}>
-                            @{r.name}{r.assignable ? '' : ' (above the bot)'}
-                        </option>
-                    ))}
-                </Select>
-            </Field>
+            <RoleField form={form} />
             <Field label="Inactivity window (days)" hint="Members who haven't played for this long lose the role."
                 error={form.windowDays === null ? 'Enter a whole number from 1 to 365.' : undefined}>
                 <Input type="number" inputMode="numeric" min={1} max={365} value={form.windowText}

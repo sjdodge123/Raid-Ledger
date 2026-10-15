@@ -7,6 +7,7 @@
 import { useState, type JSX } from 'react';
 import type { GameRoleSummaryDto } from '@raid-ledger/contract';
 import { Button } from '../../components/ui/button';
+import { Modal } from '../../components/ui/modal';
 import { Switch } from '../../components/ui/switch';
 import { toast } from '../../lib/toast';
 import { useGameRoles } from '../../hooks/admin/use-game-roles';
@@ -47,15 +48,34 @@ function Header({ onLink, onRun, running }: { onLink: () => void; onRun: () => v
     );
 }
 
-function RowDetail({ row, roles }: { row: GameRoleSummaryDto; roles: Roles }): JSX.Element {
+function UnlinkConfirm({ row, roles, onClose }: { row: GameRoleSummaryDto; roles: Roles; onClose: () => void }): JSX.Element {
+    const pending = roles.remove.isPending;
     const unlink = () => roles.remove.mutate(row.gameId, {
-        onSuccess: () => toast.success(`${row.gameName} unlinked`),
+        onSuccess: () => { toast.success(`${row.gameName} unlinked`); onClose(); },
         onError: (err) => toast.error(err.message),
     });
+    const footer = (
+        <>
+            <Button variant="secondary" onClick={onClose} disabled={pending}>Cancel</Button>
+            <Button variant="destructive" onClick={unlink} disabled={pending}>{pending ? 'Unlinking…' : 'Unlink'}</Button>
+        </>
+    );
+    return (
+        <Modal isOpen onClose={pending ? () => undefined : onClose} title={`Unlink ${row.gameName}?`} footer={footer}>
+            <p className="text-sm text-secondary">
+                The bot stops managing this role. Members keep the role they have now, and this game&apos;s audit history is cleared.
+            </p>
+        </Modal>
+    );
+}
+
+function RowDetail({ row, roles }: { row: GameRoleSummaryDto; roles: Roles }): JSX.Element {
+    const [confirming, setConfirming] = useState(false);
     return (
         <div className="mt-3 space-y-3 bg-overlay/30 border border-edge rounded-lg p-3">
             <GameRoleAuditList gameId={row.gameId} />
-            <Button variant="destructive-soft" size="sm" onClick={unlink} disabled={roles.remove.isPending}>Unlink</Button>
+            <Button variant="destructive-soft" size="sm" onClick={() => setConfirming(true)}>Unlink</Button>
+            {confirming && <UnlinkConfirm row={row} roles={roles} onClose={() => setConfirming(false)} />}
         </div>
     );
 }

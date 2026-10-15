@@ -97,6 +97,28 @@ describe('GameRolesSection (ROK-1767 L3)', () => {
             { gameId: 7, body: { roleId: null, windowDays: 14 } }, expect.anything());
     });
 
+    it('picking an already-linked game edits it: the role is fixed, the window prefilled, no second role is created', () => {
+        const LINKED_HADES: GameRoleSummaryDto = { ...ROW, gameId: 7, gameName: 'Hades', roleId: 'r-9', roleName: 'Raiders', windowDays: 30, enabled: false };
+        state.list = { data: [ROW, LINKED_HADES], isError: false };
+        state.preflight = { data: { ok: true, problems: [] } };
+        const dialog = openDialog();
+        expect(within(dialog).queryByRole('option', { name: 'Create @Hades' })).not.toBeInTheDocument();
+        expect(within(dialog).getByTestId('game-role-role-select')).toBeDisabled();
+        expect(within(dialog).getByRole('spinbutton')).toHaveValue(30);
+        fireEvent.click(within(dialog).getByTestId('game-role-save'));
+        expect(state.upsert.mutate).toHaveBeenCalledWith(
+            { gameId: 7, body: { roleId: 'r-9', windowDays: 30, enabled: false } }, expect.anything());
+    });
+
+    it('Unlink asks for confirmation before removing the link', () => {
+        render(<GameRolesSection />);
+        fireEvent.click(screen.getByRole('button', { name: /Valheim/ }));
+        fireEvent.click(screen.getByRole('button', { name: 'Unlink' }));
+        expect(state.remove.mutate).not.toHaveBeenCalled();
+        fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Unlink' }));
+        expect(state.remove.mutate).toHaveBeenCalledWith(3, expect.anything());
+    });
+
     it('shows the empty state when no game is linked', () => {
         state.list = { data: [], isError: false };
         render(<GameRolesSection />);
