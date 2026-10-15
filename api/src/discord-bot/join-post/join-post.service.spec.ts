@@ -69,7 +69,7 @@ function fakeChannel(id: string, perms: PermissionsBitField = FULL) {
     send: jest.fn(() => Promise.resolve(fakeMessage(`${id}-new-${++next}`))),
     messages: {
       fetch: jest.fn(),
-      fetchPins: jest.fn().mockResolvedValue({ items: [] }),
+      fetchPins: jest.fn().mockResolvedValue({ items: [], hasMore: false }),
       delete: jest.fn().mockResolvedValue(undefined),
     },
   };
@@ -183,7 +183,10 @@ describe('JoinPostService.publish — idempotency', () => {
   it('adopts the bot’s own post when no id is stored', async () => {
     const chan = fakeChannel('c1');
     const own = fakeMessage('m-own');
-    chan.messages.fetchPins.mockResolvedValue({ items: [{ message: own }] });
+    chan.messages.fetchPins.mockResolvedValue({
+      items: [{ message: own, pinnedTimestamp: 1 }],
+      hasMore: false,
+    });
     const { service, store } = setup([chan]);
     const result = await service.publish('c1');
     expect(result.outcome).toBe('adopted');
@@ -215,7 +218,10 @@ describe('JoinPostService.publish — 10008 recovery', () => {
     const chan = fakeChannel('c1');
     const orphan = fakeMessage('m-orphan');
     chan.messages.fetch.mockRejectedValue(discordError(10008));
-    chan.messages.fetchPins.mockResolvedValue({ items: [{ message: orphan }] });
+    chan.messages.fetchPins.mockResolvedValue({
+      items: [{ message: orphan, pinnedTimestamp: 1 }],
+      hasMore: false,
+    });
     const { service, store } = setup([chan], {
       [CHAN_KEY]: 'c1',
       [MSG_KEY]: 'gone',
@@ -343,5 +349,62 @@ describe('JoinPostService.remove', () => {
     const { service, client } = setup([]);
     await expect(service.remove()).resolves.toEqual({ removed: false });
     expect(client.getGuild).not.toHaveBeenCalled();
+  });
+});
+
+/** Serve by-id fetches from what the fake channel has sent so far. */
+function rememberSends(chan: FakeChannel): FakeMessage[] {
+  const sent: FakeMessage[] = [];
+  chan.send.mockImplementation(() => {
+    const msg = fakeMessage(`m-${sent.length + 1}`);
+    sent.push(msg);
+    return Promise.resolve(msg);
+  });
+  chan.messages.fetch.mockImplementation(({ message }: { message: string }) => {
+    const hit = sent.find((m) => m.id === message);
+    return hit ? Promise.resolve(hit) : Promise.reject(discordError(10008));
+  });
+  return sent;
+}
+
+// Codex P2: publish and remove share one lock — two overlapping calls must
+// not both read "nothing stored" and leave a post the store forgot.
+describe('JoinPostService — concurrent publish/remove', () => {
+  it('two overlapping publishes send ONE post; the second edits it', async () => {
+    const chan = fakeChannel('c1');
+    const sent = rememberSends(chan);
+    const { service, store } = setup([chan]);
+    const [a, b] = await Promise.all([
+      service.publish('c1'),
+      service.publish('c1'),
+    ]);
+    expect(sent.map((m) => m.id)).toEqual(['m-1']);
+    expect([a.outcome, b.outcome]).toEqual(['created', 'edited']);
+    expect(store.get(MSG_KEY)).toBe('m-1');
+  });
+
+  it('a remove overlapping a publish deletes the post publish wrote', async () => {
+    const chan = fakeChannel('c1');
+    rememberSends(chan);
+    const { service, store } = setup([chan]);
+    const [, removed] = await Promise.all([
+      service.publish('c1'),
+      service.remove(),
+    ]);
+    expect(removed).toEqual({ removed: true });
+    expect(chan.messages.delete).toHaveBeenCalledWith('m-1');
+    expect(store.size).toBe(0);
+  });
+
+  it('a failed publish does not wedge the lock for the next call', async () => {
+    const chan = fakeChannel('c1');
+    const { service } = setup([chan]);
+    chan.send.mockRejectedValueOnce(discordError(0));
+    await expect(service.publish('c1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
+    await expect(service.publish('c1')).resolves.toMatchObject({
+      outcome: 'created',
+    });
   });
 });

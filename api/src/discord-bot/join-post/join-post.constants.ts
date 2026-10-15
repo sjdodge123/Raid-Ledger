@@ -17,5 +17,11 @@ export const JOIN_POST_PIN_REASON = 'Raid Ledger join post';
 /** How far back an unpinned post is looked for. Discord's fetch ceiling. */
 export const JOIN_POST_HISTORY_SCAN = 50;
 
+/**
+ * Most pin pages scanned on rediscovery. Discord pages pins 50 at a time; 5
+ * pages covers its 250-pin channel cap, and bounds a misbehaving cursor.
+ */
+export const JOIN_POST_PIN_PAGES = 5;
+
 /** Path the button opens, resolved against the instance's client URL (D7). */
 export const JOIN_POST_LOGIN_PATH = '/login';

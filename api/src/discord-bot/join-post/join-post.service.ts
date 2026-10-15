@@ -63,6 +63,13 @@ interface Written {
 @Injectable()
 export class JoinPostService {
   private readonly logger = new Logger(JoinPostService.name);
+  /**
+   * Tail of the in-flight publish/remove chain. Both read the stored ids,
+   * talk to Discord, then write the ids — two overlapping runs would each see
+   * "nothing stored" and the store would forget one post. One API process
+   * owns the bot, so an in-process queue is the whole lock.
+   */
+  private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
     private readonly settings: SettingsService,
@@ -79,7 +86,23 @@ export class JoinPostService {
    *
    * @param channelId - Target text channel.
    */
-  async publish(channelId: string): Promise<DiscordJoinPostResult> {
+  publish(channelId: string): Promise<DiscordJoinPostResult> {
+    return this.serialize(() => this.publishNow(channelId));
+  }
+
+  /** Delete the post and forget it. */
+  remove(): Promise<{ removed: boolean }> {
+    return this.serialize(() => this.removeNow());
+  }
+
+  /** Run `task` after every earlier publish/remove settles, pass or fail. */
+  private serialize<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.queue.then(task, task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  private async publishNow(channelId: string): Promise<DiscordJoinPostResult> {
     const ctx = requireBotContext(this.client);
     const channel: JoinPostChannel = resolvePostableChannel(ctx, channelId);
     const stored = await getJoinPost(this.settings);
@@ -98,8 +121,7 @@ export class JoinPostService {
     };
   }
 
-  /** Delete the post and forget it. */
-  async remove(): Promise<{ removed: boolean }> {
+  private async removeNow(): Promise<{ removed: boolean }> {
     const stored = await getJoinPost(this.settings);
     if (!stored.channelId || !stored.messageId) {
       await clearJoinPost(this.settings);

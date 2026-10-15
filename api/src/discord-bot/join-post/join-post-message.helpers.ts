@@ -16,6 +16,7 @@ import { isUnknownMessage } from '../discord-bot-client.messages.helpers';
 import {
   JOIN_POST_AUTHOR,
   JOIN_POST_HISTORY_SCAN,
+  JOIN_POST_PIN_PAGES,
   JOIN_POST_PIN_REASON,
 } from './join-post.constants';
 
@@ -52,8 +53,12 @@ export interface JoinPostChannel {
     fetch(options: {
       limit: number;
     }): Promise<{ values(): Iterable<JoinPostMessage> }>;
-    fetchPins(): Promise<{
-      items: ReadonlyArray<{ message: JoinPostMessage }>;
+    fetchPins(options?: { before?: number }): Promise<{
+      items: ReadonlyArray<{
+        message: JoinPostMessage;
+        pinnedTimestamp: number;
+      }>;
+      hasMore: boolean;
     }>;
     delete(id: string): Promise<unknown>;
   };
@@ -101,14 +106,33 @@ export function isOwnJoinPost(
   );
 }
 
+/**
+ * Walk the channel's pins page by page (Discord serves 50 per page), newest
+ * first, until the bot's own post turns up or the pins run out.
+ */
+async function scanPins(
+  channel: JoinPostChannel,
+  botUserId: string,
+): Promise<JoinPostMessage | null> {
+  let before: number | undefined;
+  for (let page = 0; page < JOIN_POST_PIN_PAGES; page += 1) {
+    const pins = await channel.messages.fetchPins(
+      before === undefined ? undefined : { before },
+    );
+    const own = pins.items.find((pin) => isOwnJoinPost(pin.message, botUserId));
+    if (own) return own.message;
+    const oldest = pins.items.at(-1);
+    if (!pins.hasMore || !oldest) return null;
+    before = oldest.pinnedTimestamp;
+  }
+  return null;
+}
+
 async function scanForJoinPost(
   channel: JoinPostChannel,
   botUserId: string,
 ): Promise<JoinPostMessage | null> {
-  const pins = await channel.messages.fetchPins();
-  const pinned = pins.items
-    .map((pin) => pin.message)
-    .find((m) => isOwnJoinPost(m, botUserId));
+  const pinned = await scanPins(channel, botUserId);
   if (pinned) return pinned;
   const recent = await channel.messages.fetch({
     limit: JOIN_POST_HISTORY_SCAN,

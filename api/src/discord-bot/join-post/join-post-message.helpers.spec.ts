@@ -35,12 +35,25 @@ function fakeMessage(
   };
 }
 
+/** One page of `fetchPins`, newest pin first, timestamps descending. */
+function pinPage(messages: JoinPostMessage[], newest: number) {
+  return messages.map((message, i) => ({
+    message,
+    pinnedTimestamp: newest - i,
+  }));
+}
+
 function fakeChannel(opts: {
   byId?: () => Promise<JoinPostMessage>;
   pins?: JoinPostMessage[];
+  /** Paged pins: page N is served when `before` is page N-1's oldest pin. */
+  pinPages?: JoinPostMessage[][];
   recent?: JoinPostMessage[];
   pinsError?: Error;
 }): JoinPostChannel {
+  const pages = (opts.pinPages ?? [opts.pins ?? []]).map((page, n) =>
+    pinPage(page, 1_000_000 - n * 1_000),
+  );
   // Untyped mock: one implementation serves both `fetch` overloads.
   const fetch = jest.fn();
   fetch.mockImplementation(
@@ -60,13 +73,20 @@ function fakeChannel(opts: {
     send: jest.fn(),
     messages: {
       fetch,
-      fetchPins: jest.fn(() =>
-        opts.pinsError
-          ? Promise.reject(opts.pinsError)
-          : Promise.resolve({
-              items: (opts.pins ?? []).map((message) => ({ message })),
-            }),
-      ),
+      fetchPins: jest.fn((options?: { before?: number }) => {
+        if (opts.pinsError) return Promise.reject(opts.pinsError);
+        const n = options?.before
+          ? pages.findIndex(
+              (p, i) =>
+                i > 0 &&
+                pages[i - 1]?.at(-1)?.pinnedTimestamp === options.before,
+            )
+          : 0;
+        return Promise.resolve({
+          items: pages[n] ?? [],
+          hasMore: n >= 0 && n < pages.length - 1,
+        });
+      }),
       delete: jest.fn(),
     },
   };
@@ -123,6 +143,17 @@ describe('findOwnJoinPost', () => {
       recent: [otherEmbed, noEmbed],
     });
     await expect(findOwnJoinPost(channel, BOT)).resolves.toBeNull();
+  });
+
+  // Codex P2: Discord pages pins 50 at a time; a post past the first page
+  // must still be found, or a lost-settings re-post duplicates it.
+  it('pages through pins until it finds the post', async () => {
+    const own = fakeMessage('own', { pinned: true });
+    const firstPage = Array.from({ length: 50 }, (_, i) =>
+      fakeMessage(`other-${i}`, { author: { id: 'someone' } }),
+    );
+    const channel = fakeChannel({ pinPages: [firstPage, [own]], recent: [] });
+    await expect(findOwnJoinPost(channel, BOT)).resolves.toBe(own);
   });
 
   it('falls back to recent history for an unpinned post', async () => {
