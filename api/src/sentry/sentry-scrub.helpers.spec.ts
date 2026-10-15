@@ -115,6 +115,13 @@ describe('scrubSecrets', () => {
     expect(extra.token).toBe(REDACTED);
   });
 
+  it('ROK-1599: redacts the ICS subscribe-link token in the path', () => {
+    const token = 'A'.repeat(21) + '_-' + 'b'.repeat(20);
+    expect(scrubString(`GET /api/cal/u/${token}.ics`)).toBe(
+      `GET /api/cal/u/${REDACTED}.ics`,
+    );
+  });
+
   it('scrubString leaves "error code=50007" prose alone', () => {
     expect(scrubString('Discord error code=50007')).toBe(
       'Discord error code=50007',

@@ -140,6 +140,22 @@ describe('PerfLoggingInterceptor', () => {
       );
     });
 
+    it('ROK-1599: never logs a subscribe-link token from the path', async () => {
+      const token = 'x'.repeat(43);
+      const url = `/api/cal/u/${token}.ics`;
+      const context = createMockExecutionContext('GET', url, 200);
+      const handler: CallHandler = { handle: () => of('BEGIN:VCALENDAR') };
+
+      await firstValueFrom(interceptor.intercept(context, handler));
+
+      expect(mockPerfLog).toHaveBeenCalledWith(
+        'HTTP',
+        'GET /api/cal/u/[redacted].ics',
+        expect.any(Number),
+        expect.objectContaining({ status: 200 }),
+      );
+    });
+
     it('logs without userId when no user is on the request', async () => {
       const context = createMockExecutionContext('GET', '/health', 200);
       const handler: CallHandler = { handle: () => of('ok') };

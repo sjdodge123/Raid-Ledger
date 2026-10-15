@@ -24,8 +24,9 @@ const QUERY_SECRET =
 const JSON_SECRET =
   /("(?:[a-z_]*token|code_verifier|client_secret|password|secret)"\s*:\s*")(?:[^"\\]|\\.)*"/gi;
 // ROK-1750: a private poll's share token rides the PATH, not the query.
+// ROK-1599: so does the ICS subscribe-link token (`/cal/u/<token>.ics`).
 const PATH_SECRET =
-  /(\/(?:scheduling-polls\/share|p\/poll)\/)[A-Za-z0-9_-]{16,}/g;
+  /(\/(?:scheduling-polls\/share|p\/poll|cal\/u)\/)[A-Za-z0-9_-]{16,}/g;
 // ROK-1593: a Google calendar id (often an e-mail address) rides the PATH of
 // every Calendar v3 call; `primary` names no one and stays for triage.
 const CALENDAR_PATH =
