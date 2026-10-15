@@ -1,5 +1,7 @@
 /**
  * ROK-1774 — the Pelican server-schedule layer on the Week/Day calendar grid.
+ * ROK-1775 — the Month glyph (desktop/tablet), the Schedule rows (phone) and the
+ * Filters "Server schedules" toggle (per-run member: it saves a preference).
  *
  * Seed: `POST /admin/test/pelican/seed-servers` (DEMO_MODE) activates Pelican and
  * maps "Demo Server — Running" to a game with daily schedules: start 18:00,
@@ -256,6 +258,27 @@ async function topmostPointOn(card: Locator): Promise<CardHit> {
     });
 }
 
+/** ROK-1775 — the Filters "Server schedules" checkbox (Layers group). */
+const LAYER_TOGGLE = { name: 'Server schedules' } as const;
+
+/** Click the layer checkbox and wait until the preference write has landed. */
+async function setLayerShown(page: Page, filters: Locator, shown: boolean): Promise<void> {
+    const box = filters.getByRole('checkbox', LAYER_TOGGLE);
+    await expect(box).toBeChecked({ checked: !shown, timeout: 15_000 });
+    const saved = page.waitForResponse((r) => r.request().method() === 'PATCH' && r.url().includes('/users/me/preferences'));
+    await box.click();
+    expect((await saved).ok(), 'calendarHiddenLayers preference saved').toBe(true);
+    await expect(box).toBeChecked({ checked: shown });
+}
+
+/** The layer's per-view marker: Month glyphs (desktop/tablet) or Schedule rows (phone). */
+function viewMarkers(page: Page, testInfo: TestInfo): Locator {
+    return page.getByTestId(isMobile(testInfo) ? 'schedule-layer-row' : 'layer-month-glyph');
+}
+
+/** One Month/Schedule day entry (row or tooltip line) of the running server. */
+const RUNNING_ENTRY = new RegExp(`^(Server up|Restart) · ${RUNNING} · `);
+
 test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
     // The seed activates Pelican (idempotent) and is NEVER undone: deactivating a
     // shared plugin mid-run is what raced the sibling projects. A Pelican layer
@@ -372,5 +395,90 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
         await expect(page.locator(BAND)).toHaveCount(0);
         await expect(page.getByTestId('layer-marker-tick')).toHaveCount(0);
         expect(requests.any(), 'an inactive plugin layer fires no /game-servers request').toBe(0);
+    });
+
+    test('Month: a seeded day shows one glyph; opening it lists the day\'s items (ROK-1775)', async ({ page }, testInfo) => {
+        test.skip(isMobile(testInfo), 'Phones open on Schedule; the Month glyph is covered on desktop + tablet');
+        await page.goto('/calendar'); // ≥768px opens on Month
+        await expect(page.locator('.rbc-month-view')).toBeVisible({ timeout: 15_000 });
+        // A day whose (hidden, pre-rendered) tooltip carries a restart of the running server.
+        const day = page.getByTestId('layer-month-day')
+            .filter({ has: page.getByTestId('layer-tip-entry').filter({ hasText: `Restart · ${RUNNING} · ` }) }).first();
+        await expect(day).toBeVisible({ timeout: 15_000 });
+        await expect(day.getByTestId('layer-month-glyph'), 'one glyph per month cell').toHaveCount(1);
+        await expect(page.locator(BAND), 'Month draws no bands').toHaveCount(0);
+        const glyph = day.getByTestId('layer-month-glyph');
+        await glyph.click();
+        await expect(glyph).toHaveAttribute('aria-expanded', 'true');
+        const tip = day.getByRole('tooltip');
+        await expect(tip).toBeVisible();
+        const entries = tip.getByTestId('layer-tip-entry');
+        await expect(entries.filter({ hasText: `Restart · ${RUNNING} · ` })).toHaveCount(1);
+        await expect(entries.filter({ hasText: `Server up · ${RUNNING} · ` }).first()).toBeVisible();
+        await expect(entries.filter({ hasText: HIDDEN })).toHaveCount(0);
+        await page.keyboard.press('Escape');
+        await expect(glyph).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    test('Schedule: a muted server row sits between the day\'s events by time (ROK-1775)', async ({ page, world }, testInfo) => {
+        test.skip(!isMobile(testInfo), 'The Schedule list is the phone view');
+        const token = await getAdminToken();
+        const now = Date.now();
+        const windows = (await runningWindows(token)).filter((w) => Date.parse(w.start) > now + 5 * 60_000);
+        expect(windows.length, 'a future window of the running server').toBeGreaterThan(0);
+        await page.goto('/calendar');
+        const title = world.uid('rok-1775-schedule-row');
+        const { id, slot } = await createInFreeSlot(token, page, windows, title, testInfo.project.name);
+        try {
+            await page.goto('/calendar'); // phones open on Schedule
+            const day = page.locator(`[data-testid="schedule-day"][data-date="${slot.date}"]`);
+            await expect(day.getByRole('button').filter({ hasText: title })).toBeVisible({ timeout: 15_000 });
+            await expect(day.getByTestId('schedule-layer-row').filter({ hasText: RUNNING_ENTRY }).first()).toBeAttached({ timeout: 15_000 });
+            // DOM order = time order. Our event sits INSIDE a running window, so that
+            // window's "Server up" row (its start, or 00:00 when carried over) precedes it.
+            const order = await day.evaluate((el, t) => [...el.querySelectorAll('[data-testid="schedule-layer-row"], button')]
+                .map((n) => (n.getAttribute('data-testid') === 'schedule-layer-row' ? `row:${n.textContent ?? ''}` : (n.textContent ?? '').includes(t) ? 'event' : 'other')), title);
+            const eventAt = order.indexOf('event');
+            const upBefore = order.slice(0, Math.max(eventAt, 0)).some((o) => o.startsWith(`row:Server up · ${RUNNING} · `));
+            expect({ eventAt, upBefore, order }, 'the window row comes before the event inside it').toMatchObject({ upBefore: true });
+            expect(eventAt, 'the event card is listed after a server row').toBeGreaterThan(0);
+            const row = day.getByTestId('schedule-layer-row').first();
+            await expect(row, 'server rows are muted (text-dim, no card chrome)').toHaveClass(/\btext-dim\b/);
+            await expect(row).not.toHaveClass(/\bborder\b|\bbg-surface\b/);
+        } finally {
+            await apiDelete(token, `/events/${id}`);
+        }
+    });
+
+    test('"Server schedules" OFF hides glyphs, rows and bands, survives reload, then back ON (ROK-1775)', async ({ page }, testInfo) => {
+        // The toggle SAVES a preference, so this runs as a fresh per-run member.
+        const admin = await getAdminToken();
+        const memberId = await seedMember(admin);
+        try {
+            await signInOnboardedMember(page, memberId);
+            await page.goto('/calendar');
+            await expect(viewMarkers(page, testInfo).first()).toBeAttached({ timeout: 15_000 });
+            await setLayerShown(page, await openFilters(page, testInfo), false);
+            await expect(viewMarkers(page, testInfo)).toHaveCount(0);
+
+            const events = page.waitForResponse((r) => /\/events(\?|$)/.test(r.url()));
+            await page.reload();
+            await events;
+            // Unchecked after reload = the saved preference was read back.
+            const reopened = await openFilters(page, testInfo);
+            await expect(reopened.getByRole('checkbox', LAYER_TOGGLE)).not.toBeChecked({ timeout: 15_000 });
+            await expect(viewMarkers(page, testInfo)).toHaveCount(0);
+            await page.keyboard.press('Escape');
+
+            // The grid (Week/Day): no band while OFF; turning it back ON brings the
+            // band in this same view, which proves the 0 above was not just "not loaded yet".
+            await openGrid(page, testInfo);
+            await expect(page.locator(BAND)).toHaveCount(0);
+            await expect(page.getByTestId('layer-marker-glyph')).toHaveCount(0);
+            await setLayerShown(page, await openFilters(page, testInfo), true);
+            await expect(page.locator(BAND).first()).toBeAttached({ timeout: 15_000 });
+        } finally {
+            await apiDelete(admin, `/users/${memberId}`).catch(() => undefined);
+        }
     });
 });
