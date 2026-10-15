@@ -1,3 +1,5 @@
+import { GAME_SERVER_STATUS_STALE_MS } from '@raid-ledger/contract';
+
 /** Plugin slug — the `plugins` row and manifest id (ROK-121). */
 export const PELICAN_PLUGIN_ID = 'pelican';
 /** Integration key on the manifest (admin panel route segment). */
@@ -14,8 +16,8 @@ export const PELICAN_STATUS_CRON = '0 */2 * * * *';
 export const PELICAN_STATUS_CONCURRENCY = 4;
 /** A server checked this recently is skipped — honours the panel's cache. */
 export const PELICAN_STATUS_FRESH_MS = 20_000;
-/** A status older than this reads `unknown` (3 missed ticks, ruling Q4). */
-export const PELICAN_STATUS_STALE_MS = 6 * 60_000;
+/** A status older than this reads `unknown` (3 missed ticks, ruling Q4) — the shared contract threshold (ROK-1776). */
+export const PELICAN_STATUS_STALE_MS = GAME_SERVER_STATUS_STALE_MS;
 /** Label the host stamps onto every Pelican status/item. */
 export const PELICAN_PROVIDER_LABEL = 'Pelican';
 /** At most this many `/schedules` calls in flight (ROK-1773 D3). */

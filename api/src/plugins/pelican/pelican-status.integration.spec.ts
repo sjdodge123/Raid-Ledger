@@ -13,6 +13,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
+import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
@@ -251,6 +252,28 @@ describe('GET /game-servers/status — Pelican provider (ROK-1772)', () => {
     expect((await reload(row.id)).statusCheckedAt).toBeInstanceOf(Date);
     await registry().deactivate(PELICAN_PLUGIN_ID);
     const token = await memberToken(testApp, 'pelicaninactivemember');
+    expect((await getStatus(token)).pelican).toEqual([]);
+  });
+});
+
+describe('GET /game-servers/status — unconfigured (ROK-1776)', () => {
+  it('returns nothing from Pelican while unconfigured (ROK-1776)', async () => {
+    const row = await insertServer(1);
+    livePanelFor([row]);
+    await poll();
+    expect((await reload(row.id)).statusCheckedAt).toBeInstanceOf(Date);
+    // Drop the fake panel so the factory reads the real stored settings.
+    jest.restoreAllMocks();
+    const settings = testApp.app.get(SettingsService);
+    await settings.set(SETTING_KEYS.PELICAN_PANEL_URL, 'https://panel.test');
+    await settings.set(SETTING_KEYS.PELICAN_CLIENT_API_KEY, 'ptlc_fake');
+    const token = await memberToken(testApp, 'pelicanunconfigured');
+    expect((await getStatus(token)).pelican.map((d) => d.serverKey)).toEqual([
+      String(row.id),
+    ]);
+    // Cleared panel URL: the poll stops, so the checked, mapped, visible row
+    // must not leak out as a stale `unknown` status.
+    await settings.delete(SETTING_KEYS.PELICAN_PANEL_URL);
     expect((await getStatus(token)).pelican).toEqual([]);
   });
 });
