@@ -1796,14 +1796,22 @@ _scoped_playwright_specs() {
 # worse, fall back to a different selection.
 _parse_e2e_specs() {
   E2E_SPECS_LIST=""
-  local raw="${E2E_SPECS:-}" spec bad=0 out=""
+  local raw="${E2E_SPECS:-}" spec bad=0 out="" specs=()
   raw="${raw//,/ }"
-  # Deliberate word splitting: the list is space/comma-separated and the
-  # pattern below admits no whitespace or glob characters.
-  # shellcheck disable=SC2086
-  for spec in $raw; do
-    if ! [[ "$spec" =~ ^scripts/smoke/[A-Za-z0-9_./-]+\.spec\.ts$ ]] || [[ "/$spec/" == */../* ]]; then
-      echo -e "${RED}E2E_SPECS: '${spec}' is not a scripts/smoke/<name>.spec.ts path${NC}" >&2
+  # Split with `read -a`, NOT an unquoted `for spec in $raw`: that would
+  # pathname-expand `scripts/smoke/*.smoke.spec.ts` into real files before the
+  # check below ever saw the wildcard (Codex P2, ROK-1792).
+  IFS=$' \t\n' read -r -a specs <<<"$raw" || true
+  for spec in ${specs[@]+"${specs[@]}"}; do
+    case "$spec" in
+      *[\*\?\[]*)
+        echo -e "${RED}E2E_SPECS: '${spec}' contains a glob character — name each spec file${NC}" >&2
+        bad=1; continue ;;
+    esac
+    # playwright.config.ts: testDir ./scripts/smoke, testMatch /\.smoke\.spec\.ts$/.
+    # A plain *.spec.ts there is a Vitest file Playwright never selects.
+    if ! [[ "$spec" =~ ^scripts/smoke/[A-Za-z0-9_./-]+\.smoke\.spec\.ts$ ]] || [[ "/$spec/" == */../* ]]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' is not a scripts/smoke/<name>.smoke.spec.ts path${NC}" >&2
       bad=1
     elif [ ! -f "$REPO_ROOT/$spec" ]; then
       echo -e "${RED}E2E_SPECS: '${spec}' does not exist in this checkout${NC}" >&2
@@ -1847,6 +1855,12 @@ _prepare_playwright_scope() {
   if [ -z "$specs" ]; then
     return 0
   fi
+  if [ "$specs" = NONE ] && [ "${e2e_explicit:-false}" = true ]; then
+    # --with-e2e is an explicit request; NONE is a diff inference. Run the
+    # full suite rather than skip (Codex P2, ROK-1792).
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec, but --with-e2e forces the full Playwright suite${NC}"
+    return 0
+  fi
   if [ "$specs" = NONE ]; then
     # Same `Playwright (desktop + mobile` prefix as every other label, so the
     # sentinel parser still finds the row — and reads its SKIPPED as "no
@@ -1883,7 +1897,9 @@ run_playwright_e2e() {
   # wireframe route, a new ui file nothing imports yet). E2E_SPECS and
   # E2E_SCOPE=all never reach here — _prepare_playwright_scope leaves the flag
   # false for both.
-  if [ "${PLAYWRIGHT_SCOPE_NONE:-false}" = true ]; then
+  # An explicit --with-e2e still wins (as it does over E2E_SCOPE=none):
+  # _prepare_playwright_scope already left the full suite selected for it.
+  if [ "${PLAYWRIGHT_SCOPE_NONE:-false}" = true ] && [ "${e2e_explicit:-false}" != true ]; then
     echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec — skipping Playwright (E2E_SCOPE=all forces the full suite; GitHub CI still runs it)${NC}"
     skip_step
     return 0
@@ -2365,8 +2381,13 @@ main() {
       auto|"") ;;
       *) specs_conflict="E2E_SCOPE=${E2E_SCOPE}" ;;
     esac
+    # Every mode that never reaches run_playwright_e2e (Codex P2, ROK-1792):
+    # --static, --no-e2e, --only-unit, --only-integration, and --contrast-audit
+    # (which swaps the Playwright tier for the sweep under --only-e2e).
     if $static_mode; then specs_conflict="--static"; fi
     if [ "$e2e_mode" = "off" ]; then specs_conflict="--no-e2e"; fi
+    case "$only_mode" in unit|integration) specs_conflict="--only-${only_mode}" ;; esac
+    if $contrast_audit; then specs_conflict="--contrast-audit"; fi
     if [ -n "$specs_conflict" ]; then
       echo -e "${RED}E2E_SPECS and ${specs_conflict} are mutually exclusive.${NC}" >&2
       exit 2

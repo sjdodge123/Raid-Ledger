@@ -13,6 +13,7 @@ import {
   checkE2eSpecs,
   E2E_SPEC_PATTERN,
   MAX_E2E_SPECS,
+  resolveArgs,
   resolveInnerEnv,
 } from '../tools/validate-ci.js';
 import { playwrightRowStatus } from '../gate-summary.js';
@@ -86,6 +87,12 @@ describe('e2e_specs (ROK-1792)', () => {
       'scripts/smoke/a.spec.ts; rm -rf /',
       "scripts/smoke/a'.spec.ts",
       'scripts/smoke/$(id).spec.ts',
+      // Codex P2: Vitest files under scripts/smoke that Playwright's testMatch
+      // (/\.smoke\.spec\.ts$/) never selects, and glob patterns.
+      'scripts/smoke/console-filter.spec.ts',
+      'scripts/smoke/*.smoke.spec.ts',
+      'scripts/smoke/game?.smoke.spec.ts',
+      'scripts/smoke/[a-z].smoke.spec.ts',
     ]) {
       expect(E2E_SPEC_PATTERN.test(bad), bad).toBe(false);
       expect(checkE2eSpecs([bad], undefined), bad).toMatch(/must match scripts\/smoke/);
@@ -93,13 +100,13 @@ describe('e2e_specs (ROK-1792)', () => {
   });
 
   it("rejects a '..' segment the character class would otherwise admit", () => {
-    const sneaky = 'scripts/smoke/../../api/src/x.spec.ts';
+    const sneaky = 'scripts/smoke/../../api/src/x.smoke.spec.ts';
     expect(E2E_SPEC_PATTERN.test(sneaky)).toBe(true);
     expect(checkE2eSpecs([sneaky], undefined)).toMatch(/no '\.\.'/);
   });
 
   it(`caps the list at ${MAX_E2E_SPECS} paths`, () => {
-    const many = Array.from({ length: MAX_E2E_SPECS + 1 }, (_, i) => `scripts/smoke/s${i}.spec.ts`);
+    const many = Array.from({ length: MAX_E2E_SPECS + 1 }, (_, i) => `scripts/smoke/s${i}.smoke.spec.ts`);
     expect(checkE2eSpecs(many.slice(0, MAX_E2E_SPECS), undefined)).toBeNull();
     expect(checkE2eSpecs(many, undefined)).toMatch(/at most 20 paths \(got 21\)/);
   });
@@ -112,6 +119,21 @@ describe('e2e_specs (ROK-1792)', () => {
   it('is rejected with --static / --no-e2e, which never run Playwright', () => {
     expect(checkE2eSpecs([A], undefined, ['--static'])).toMatch(/--static are mutually exclusive/);
     expect(checkE2eSpecs([A], undefined, ['--no-e2e'])).toMatch(/--no-e2e are mutually exclusive/);
+  });
+
+  it('is rejected with every other mode that bypasses Playwright (Codex P2)', () => {
+    for (const flag of ['--only-unit', '--only-integration', '--contrast-audit']) {
+      expect(checkE2eSpecs([A], undefined, ['--only-e2e', flag]), flag).toMatch(
+        new RegExp(`${flag} are mutually exclusive`),
+      );
+    }
+  });
+
+  it('is rejected via the only_unit / only_integration convenience booleans too', () => {
+    for (const p of [{ only_unit: true }, { only_integration: true }]) {
+      const args = resolveArgs({ e2e_specs: [A], ...p });
+      expect(checkE2eSpecs([A], undefined, args), JSON.stringify(p)).toMatch(/--only-\w+ are mutually exclusive/);
+    }
   });
 
   it('keeps the explicit row label a Playwright row, so a PASS writes the sentinel', () => {

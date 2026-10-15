@@ -291,8 +291,28 @@ test('E2E_SPECS: every invalid path is rejected with exit 2 and named', () => {
     const res = parseSpecs(bad);
     assert.equal(res.code, 2, `${bad} must be an invocation error, got ${res.code}`);
     assert.equal(res.list, '', `${bad} must not leave a partial list`);
-    assert.match(res.stderr, /not a scripts\/smoke\/<name>\.spec\.ts path/);
+    assert.match(res.stderr, /not a scripts\/smoke\/<name>\.smoke\.spec\.ts path/);
   }
+});
+
+test('E2E_SPECS: a glob is rejected as written, never expanded to real files (Codex P2)', () => {
+  // Unquoted word splitting would expand these to existing *.smoke.spec.ts
+  // files, so the list would pass validation and run whatever matched.
+  for (const glob of ['scripts/smoke/*.smoke.spec.ts', 'scripts/smoke/a?tivity-timeline.smoke.spec.ts', 'scripts/smoke/[a]ctivity-timeline.smoke.spec.ts']) {
+    const res = parseSpecs(`${REAL_SPECS[0]} ${glob}`);
+    assert.equal(res.code, 2, `${glob} must be an invocation error, got ${res.code} (list: ${res.list})`);
+    assert.equal(res.list, '', `${glob} must not expand into a list`);
+    assert.match(res.stderr, /contains a glob character/);
+  }
+});
+
+test('E2E_SPECS: a scripts/smoke Vitest file Playwright never selects is rejected (Codex P2)', () => {
+  // playwright.config.ts testMatch is /\.smoke\.spec\.ts$/: this file exists,
+  // but a list naming it would pass while Playwright silently skipped it.
+  const res = parseSpecs(`${REAL_SPECS[0]} scripts/smoke/console-filter.spec.ts`);
+  assert.equal(res.code, 2);
+  assert.equal(res.list, '');
+  assert.match(res.stderr, /'scripts\/smoke\/console-filter\.spec\.ts' is not a scripts\/smoke\/<name>\.smoke\.spec\.ts path/);
 });
 
 test('E2E_SPECS: a well-formed but missing spec is exit 2, even beside a good one', () => {
@@ -383,10 +403,14 @@ test('validate-ci.sh exits 2 before any step on a bad list or a conflicting mode
     });
   const good = REAL_SPECS.join(',');
   const cases = [
-    [{ E2E_SPECS: 'scripts/smoke/nope.spec.ts' }, ['--only-e2e'], /does not exist/],
+    [{ E2E_SPECS: 'scripts/smoke/nope.smoke.spec.ts' }, ['--only-e2e'], /does not exist/],
     [{ E2E_SPECS: good }, ['--static'], /E2E_SPECS and --static are mutually exclusive/],
     [{ E2E_SPECS: good }, ['--no-e2e'], /E2E_SPECS and --no-e2e are mutually exclusive/],
     [{ E2E_SPECS: good, E2E_SCOPE: 'none' }, ['--only-e2e'], /E2E_SPECS and E2E_SCOPE=none/],
+    // Codex P2: every other mode that never reaches run_playwright_e2e.
+    [{ E2E_SPECS: good }, ['--only-unit'], /E2E_SPECS and --only-unit are mutually exclusive/],
+    [{ E2E_SPECS: good }, ['--only-integration'], /E2E_SPECS and --only-integration are mutually exclusive/],
+    [{ E2E_SPECS: good }, ['--only-e2e', '--contrast-audit'], /E2E_SPECS and --contrast-audit are mutually exclusive/],
   ];
   for (const [env, args, msg] of cases) {
     const res = run(env, args);
@@ -404,7 +428,7 @@ test('validate-ci.sh exits 2 before any step on a bad list or a conflicting mode
 // ---------------------------------------------------------------------------
 
 /** _prepare_playwright_scope THEN run_playwright_e2e, as main runs them. */
-function prepareAndRun({ stubOut, scope, list = '' }) {
+function prepareAndRun({ stubOut, scope, list = '', withE2e = false }) {
   const root = mkdtempSync(join(tmpdir(), 'validate-ci-none-'));
   try {
     mkdirSync(join(root, 'scripts', 'smoke'), { recursive: true });
@@ -414,7 +438,7 @@ function prepareAndRun({ stubOut, scope, list = '' }) {
     const script = [
       'set -uo pipefail',
       `REPO_ROOT=${JSON.stringify(root)}`,
-      'YELLOW=""; RED=""; NC=""; e2e_mode=auto; e2e_explicit=false',
+      withE2e ? 'YELLOW=""; RED=""; NC=""; e2e_mode=on; e2e_explicit=true' : 'YELLOW=""; RED=""; NC=""; e2e_mode=auto; e2e_explicit=false',
       'playwright_relevant=true',
       scope === undefined ? 'unset E2E_SCOPE || true' : `export E2E_SCOPE=${JSON.stringify(scope)}`,
       `E2E_SPECS_LIST=${JSON.stringify(list)}`,
@@ -474,4 +498,12 @@ test('specs + ALL is unchanged by the NONE handling — full suite', () => {
 
   assert.equal(label, 'Playwright (desktop + mobile)');
   assert.match(out, /^NPX playwright test$/m);
+});
+
+test('NONE + an explicit --with-e2e runs the FULL suite, never skips (Codex P2)', () => {
+  const { label, out } = prepareAndRun({ stubOut: 'NONE', withE2e: true });
+
+  assert.equal(label, 'Playwright (desktop + mobile)');
+  assert.match(out, /^NPX playwright test$/m, `--with-e2e must force the suite; got ${out}`);
+  assert.doesNotMatch(out, /SKIPPED/);
 });
