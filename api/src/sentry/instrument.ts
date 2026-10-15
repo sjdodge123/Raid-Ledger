@@ -4,17 +4,24 @@
  * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, opt-in via ENABLE_TELEMETRY=true (DISABLE_TELEMETRY=true still wins).
  */
 import * as Sentry from '@sentry/nestjs';
+import { config as loadEnvFile } from 'dotenv';
 import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
 import { scrubPii } from './sentry-pii.helpers';
-import { isTelemetryEnabled } from './telemetry-policy';
+import { API_ENV_FILE, resolveBootTelemetry } from './telemetry-policy';
 
 const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
 
+// ROK-1779: ConfigModule loads .env only once Nest boots — too late for this
+// gate. Load the same file now (dotenv never overrides a set variable, like
+// ConfigModule), so ENABLE_TELEMETRY set only in .env counts here too.
+loadEnvFile({ path: API_ENV_FILE, quiet: true });
+
 const isProduction = process.env.NODE_ENV === 'production';
-// ROK-1779: the opt-in default lives in telemetry-policy.ts.
-const telemetryDisabled = !isTelemetryEnabled();
+// ROK-1779: the opt-in default lives in telemetry-policy.ts; the decision is
+// recorded there so GET /system/status serves exactly what this gate used.
+const telemetryDisabled = !resolveBootTelemetry();
 
 /** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
 const PII_HEADER_DENY = {

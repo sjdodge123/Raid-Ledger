@@ -10,7 +10,7 @@ import {
   type AuthProvider,
 } from '../plugins/plugin-host/extension-points';
 import type { SystemStatusDto, LoginMethodDto } from '@raid-ledger/contract';
-import { isTelemetryEnabled } from '../sentry/telemetry-policy';
+import { servedTelemetryEnabled } from '../sentry/telemetry-policy';
 
 /**
  * System status controller (ROK-175, ROK-146, ROK-238, ROK-267, ROK-271).
@@ -143,12 +143,13 @@ export class SystemController {
       this.settingsService.getEphemeralVoiceEnabled(),
       this.settingsService.getEphemeralVoiceForced(),
     ]);
-    // ROK-1779: read per request so the web follows the api's ENABLE/DISABLE_TELEMETRY.
+    // ROK-1779: the decision the api's Sentry gate booted with (live read only
+    // when instrument.ts never ran), so the web follows ENABLE/DISABLE_TELEMETRY.
     return {
       ...dto,
       ephemeralVoiceEnabled,
       ephemeralVoiceForced,
-      telemetryEnabled: isTelemetryEnabled(),
+      telemetryEnabled: servedTelemetryEnabled(),
     };
   }
 }

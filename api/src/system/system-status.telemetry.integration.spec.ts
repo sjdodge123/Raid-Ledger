@@ -1,8 +1,10 @@
 /**
  * ROK-1779 — the public GET /system/status serves the api's telemetry decision
  * (opt-in: ENABLE_TELEMETRY='true', DISABLE_TELEMETRY='true' wins) so the web
- * app initialises Sentry only when the instance opted in. Read per request, so
- * flipping the env vars here is observable.
+ * app initialises Sentry only when the instance opted in. The test app never
+ * loads instrument.ts, so no boot decision is recorded and the endpoint reads
+ * the env live — flipping the env vars here is observable. In production it
+ * serves the boot gate's decision (instrument-telemetry-gate.spec.ts).
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 

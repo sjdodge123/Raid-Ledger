@@ -26,3 +26,30 @@ export function isTelemetryEnabled(
   if (env.ENABLE_TELEMETRY === 'true') return true;
   return TELEMETRY_DEFAULT_ENABLED;
 }
+
+/** The env file ConfigModule loads (app.module.ts). instrument.ts loads it first. */
+export const API_ENV_FILE = '.env';
+
+let bootDecision: boolean | undefined;
+
+/**
+ * Called once by instrument.ts, before Sentry.init: resolves the policy and
+ * records it as the decision this process booted with.
+ */
+export function resolveBootTelemetry(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  bootDecision = isTelemetryEnabled(env);
+  return bootDecision;
+}
+
+/**
+ * What GET /system/status tells the browser: the decision the api's Sentry
+ * gate actually used, so the two halves can never disagree. Falls back to a
+ * live read only when instrument.ts never ran (tests, one-off scripts).
+ */
+export function servedTelemetryEnabled(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return bootDecision ?? isTelemetryEnabled(env);
+}

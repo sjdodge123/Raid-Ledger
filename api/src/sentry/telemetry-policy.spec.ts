@@ -52,3 +52,30 @@ describe('isTelemetryEnabled (ROK-1779)', () => {
     }
   });
 });
+
+type Policy = typeof import('./telemetry-policy');
+
+describe('servedTelemetryEnabled (ROK-1779 Codex P2)', () => {
+  afterEach(() => jest.resetModules());
+
+  it('reads the env live when instrument.ts never ran (tests, scripts)', async () => {
+    jest.resetModules();
+    const policy: Policy = await import('./telemetry-policy.js');
+    expect(policy.servedTelemetryEnabled({ ENABLE_TELEMETRY: 'true' })).toBe(
+      true,
+    );
+    expect(policy.servedTelemetryEnabled({})).toBe(false);
+  });
+
+  it('serves the boot decision once one was recorded', async () => {
+    jest.resetModules();
+    const policy: Policy = await import('./telemetry-policy.js');
+    expect(policy.resolveBootTelemetry({ ENABLE_TELEMETRY: 'true' })).toBe(
+      true,
+    );
+    expect(policy.servedTelemetryEnabled({})).toBe(true);
+    expect(policy.servedTelemetryEnabled({ DISABLE_TELEMETRY: 'true' })).toBe(
+      true,
+    );
+  });
+});
