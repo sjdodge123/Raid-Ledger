@@ -408,6 +408,13 @@ import json, sys
 print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_code': int(sys.argv[3])}))
 " "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
   perf_emit_local "validate.step.end" "$step_extra"
+  # ROK-1793 S0 — machine-readable step duration for rl_task_status
+  # steps[].duration_s. Printed BEFORE the "<name>: <STATUS>" line so the
+  # orchestrator's steps[] parser (task-start, PATTERN_STEP_TIME) and the MCP
+  # log-tail backfill (tools/mcp-rl-fleet/src/step-durations.ts) can attach it
+  # to the row that follows. Format: `[step-time] <name> <seconds, 1 dp>`.
+  printf '[step-time] %s %d.%d\n' "$name" \
+    $(( step_dur / 1000 )) $(( (step_dur % 1000) / 100 ))
 
   # A skip requires BOTH the explicit declaration and a clean exit, so a step
   # that declares a skip and then fails is still reported as a failure.
