@@ -15,12 +15,22 @@ export const CALENDAR_HIDDEN_LAYERS_PREF = 'calendarHiddenLayers';
 interface CalendarLayerFilterState {
     /** Layer keys the viewer has hidden. Empty = every layer shown (the default). */
     hiddenLayers: ReadonlySet<string>;
+    /**
+     * True once a signed-in viewer's saved preference has been applied (or failed
+     * to load). Until then `useCalendarLayers` keeps checkbox layers off for a
+     * signed-in viewer, so a hidden layer never flashes or fetches on cold load.
+     */
+    hydrated: boolean;
     /** Flip one layer and persist the new hidden list. */
     toggleLayer: (key: string) => void;
     /** Show every layer again ("Clear all") and persist. */
     showAllLayers: () => void;
-    /** Apply the saved preference — does not write it back. */
+    /** Apply the saved preference — does not write it back. Marks the store hydrated. */
     loadHiddenLayers: (keys: readonly string[]) => void;
+    /** The preference could not be loaded: show the defaults. */
+    markHydrated: () => void;
+    /** The viewer changed (logout, login, impersonation): drop the previous viewer's set. */
+    clearViewer: () => void;
     /** Reset to the default (for tests). */
     _reset: () => void;
 }
@@ -43,6 +53,7 @@ function toggled(hidden: ReadonlySet<string>, key: string): ReadonlySet<string> 
 
 export const useCalendarLayerFilterStore = create<CalendarLayerFilterState>((set, get) => ({
     hiddenLayers: NONE_HIDDEN,
+    hydrated: false,
     toggleLayer(key) {
         const next = toggled(get().hiddenLayers, key);
         set({ hiddenLayers: next });
@@ -54,7 +65,9 @@ export const useCalendarLayerFilterStore = create<CalendarLayerFilterState>((set
         persistHiddenLayers(NONE_HIDDEN);
     },
     loadHiddenLayers(keys) {
-        set({ hiddenLayers: keys.length > 0 ? new Set(keys) : NONE_HIDDEN });
+        set({ hiddenLayers: keys.length > 0 ? new Set(keys) : NONE_HIDDEN, hydrated: true });
     },
-    _reset() { set({ hiddenLayers: NONE_HIDDEN }); },
+    markHydrated() { set({ hydrated: true }); },
+    clearViewer() { set({ hiddenLayers: NONE_HIDDEN, hydrated: false }); },
+    _reset() { set({ hiddenLayers: NONE_HIDDEN, hydrated: false }); },
 }));

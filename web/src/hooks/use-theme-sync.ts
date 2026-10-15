@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from './use-auth';
+import { useEffect, useRef } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth, useViewerCacheScope } from './use-auth';
 import { getMyPreferences } from '../lib/api-client';
 import { useThemeStore } from '../stores/theme-store';
 import type { ThemeModePreference } from '../stores/theme-store';
@@ -13,7 +14,7 @@ const VALID_MODES: ThemeModePreference[] = ['light', 'dark', 'auto'];
 /**
  * Syncs theme, timezone, and calendar view preferences from server on login.
  * Server is source of truth -- overrides localStorage if different.
- * Fires once per session (staleTime: Infinity).
+ * Fetches once per viewer (staleTime: Infinity, key scoped by viewer).
  *
  * AC-6 backward compat: handles both legacy `theme` key and new
  * `themeMode`/`lightTheme`/`darkTheme` keys from the server.
@@ -29,10 +30,13 @@ interface PreferenceSetters {
     loadHiddenLayers: (keys: readonly string[]) => void;
 }
 
-/** ROK-1775: the calendar layers the viewer hid (absent = every layer shown). */
+/**
+ * ROK-1775: the calendar layers the viewer hid. Absent = every layer shown —
+ * applied as an explicit empty set, so a previous viewer's set never survives.
+ */
 function applyHiddenLayers(prefs: Record<string, unknown>, setters: PreferenceSetters): void {
     const saved = prefs[CALENDAR_HIDDEN_LAYERS_PREF];
-    if (Array.isArray(saved)) setters.loadHiddenLayers(saved.filter((k): k is string => typeof k === 'string'));
+    setters.loadHiddenLayers(Array.isArray(saved) ? saved.filter((k): k is string => typeof k === 'string') : []);
 }
 
 function applyServerPreferences(prefs: Record<string, unknown>, setters: PreferenceSetters) {
@@ -56,27 +60,51 @@ function applyServerPreferences(prefs: Record<string, unknown>, setters: Prefere
     applyHiddenLayers(prefs, setters);
 }
 
+function readSetters(): PreferenceSetters {
+    const theme = useThemeStore.getState();
+    return {
+        setMode: theme.setMode,
+        setLightTheme: theme.setLightTheme,
+        setDarkTheme: theme.setDarkTheme,
+        setThemeLegacy: theme.setTheme,
+        setTimezone: useTimezoneStore.getState().setTimezone,
+        setViewPref: useCalendarViewStore.getState().setViewPref,
+        loadSavedFilter: useGameFilterStore.getState().loadSavedFilter,
+        loadHiddenLayers: useCalendarLayerFilterStore.getState().loadHiddenLayers,
+    };
+}
+
+/**
+ * ROK-1775: when the viewer changes (logout, another login, impersonation),
+ * drop the previous viewer's hidden-layer set and the unscoped
+ * `['user-preferences']` entries the profile panels cache.
+ */
+function useResetOnViewerChange(viewer: number | 'anon'): void {
+    const queryClient = useQueryClient();
+    const previous = useRef(viewer);
+    useEffect(() => {
+        if (previous.current === viewer) return;
+        previous.current = viewer;
+        useCalendarLayerFilterStore.getState().clearViewer();
+        queryClient.removeQueries({ queryKey: ['user-preferences'], exact: true });
+    }, [viewer, queryClient]);
+}
+
 export function useThemeSync() {
     const { isAuthenticated } = useAuth();
-    const setters: PreferenceSetters = {
-        setMode: useThemeStore((s) => s.setMode),
-        setLightTheme: useThemeStore((s) => s.setLightTheme),
-        setDarkTheme: useThemeStore((s) => s.setDarkTheme),
-        setThemeLegacy: useThemeStore((s) => s.setTheme),
-        setTimezone: useTimezoneStore((s) => s.setTimezone),
-        setViewPref: useCalendarViewStore((s) => s.setViewPref),
-        loadSavedFilter: useGameFilterStore((s) => s.loadSavedFilter),
-        loadHiddenLayers: useCalendarLayerFilterStore((s) => s.loadHiddenLayers),
-    };
+    const viewer = useViewerCacheScope();
+    useResetOnViewerChange(viewer);
 
-    useQuery({
-        queryKey: ['user-preferences'],
-        queryFn: async () => {
-            const prefs = await getMyPreferences();
-            applyServerPreferences(prefs, setters);
-            return prefs;
-        },
+    const { data, isError } = useQuery({
+        queryKey: ['user-preferences', viewer],
+        queryFn: getMyPreferences,
         enabled: isAuthenticated,
         staleTime: Infinity,
     });
+    useEffect(() => {
+        if (data) applyServerPreferences(data, readSetters());
+    }, [data]);
+    useEffect(() => {
+        if (isError) useCalendarLayerFilterStore.getState().markHydrated();
+    }, [isError]);
 }
