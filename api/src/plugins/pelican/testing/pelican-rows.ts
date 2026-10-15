@@ -14,7 +14,7 @@ export function pelicanRow(
     name: s.name,
     gameId: 7,
     showOnCalendar: true,
-    timezone: null,
+    timezone: null, // ROK-1795: column unread; dropped in a follow-up
     currentState: 'running',
     isSuspended: false,
     statusCheckedAt: null,

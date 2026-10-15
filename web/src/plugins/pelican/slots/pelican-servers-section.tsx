@@ -20,7 +20,7 @@ function showSyncToast(result: PelicanSyncResult): void {
     else toast.error(t.text);
 }
 
-function ServersBody({ defaultTimezone, onUpdate }: { defaultTimezone: string; onUpdate: ServerUpdateHandler }) {
+function ServersBody({ onUpdate }: { onUpdate: ServerUpdateHandler }) {
     const { data: rows, isLoading, isError } = usePelicanServers();
     if (isError) return <p role="alert" className="text-sm text-danger">Couldn&apos;t load the Pelican servers.</p>;
     if (isLoading || !rows) return null;
@@ -31,10 +31,10 @@ function ServersBody({ defaultTimezone, onUpdate }: { defaultTimezone: string; o
             </div>
         );
     }
-    return <PelicanServersTable rows={rows} defaultTimezone={defaultTimezone} onUpdate={onUpdate} />;
+    return <PelicanServersTable rows={rows} onUpdate={onUpdate} />;
 }
 
-export function PelicanServersSection({ defaultTimezone }: { defaultTimezone: string }) {
+export function PelicanServersSection() {
     const sync = usePelicanSyncNow();
     const update = useUpdatePelicanServer();
     const onSync = () => sync.mutate(undefined, {
@@ -52,7 +52,7 @@ export function PelicanServersSection({ defaultTimezone }: { defaultTimezone: st
                     Sync now
                 </Button>
             </div>
-            <ServersBody defaultTimezone={defaultTimezone} onUpdate={onUpdate} />
+            <ServersBody onUpdate={onUpdate} />
         </section>
     );
 }

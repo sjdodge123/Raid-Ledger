@@ -9,7 +9,6 @@ import {
 export const PELICAN_SETTING_KEYS = [
   SETTING_KEYS.PELICAN_PANEL_URL,
   SETTING_KEYS.PELICAN_CLIENT_API_KEY,
-  SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE,
 ] as const;
 
 /**
@@ -27,7 +26,7 @@ export const PELICAN_MANIFEST: PluginManifest = {
   author: { name: 'Raid Ledger' },
   gameSlugs: [],
   capabilities: ['game-server-provider', 'cron-registrar'],
-  settingKeys: [SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE],
+  settingKeys: [],
   integrations: [
     {
       key: PELICAN_INTEGRATION_KEY,
