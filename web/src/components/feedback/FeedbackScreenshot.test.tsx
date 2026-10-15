@@ -125,3 +125,25 @@ describe('FeedbackWidget — screenshot picker', () => {
         expect((await submit(user, dialog)).screenshotBase64).toBeUndefined();
     });
 });
+
+describe('FeedbackWidget — screenshot still being read', () => {
+    it('Send stays disabled until the attached screenshot has been read', async () => {
+        const { user, dialog } = await openDialog();
+        let finishRead = (): void => { throw new Error('read never started'); };
+        class SlowReader extends FileReader {
+            override readAsDataURL(blob: Blob): void { finishRead = () => super.readAsDataURL(blob); }
+        }
+        vi.stubGlobal('FileReader', SlowReader);
+        try {
+            await user.upload(fileInput(dialog), png());
+            const send = within(dialog).getByRole('button', { name: 'Send Feedback' });
+            expect(send).toBeDisabled();
+            finishRead();
+            expect(await within(dialog).findByRole('img', { name: 'Screenshot preview' })).toBeInTheDocument();
+            expect(send).toBeEnabled();
+            expect((await submit(user, dialog)).screenshotBase64).toBe(PNG_BASE64);
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+});

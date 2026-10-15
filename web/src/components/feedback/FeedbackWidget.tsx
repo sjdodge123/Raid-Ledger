@@ -116,7 +116,7 @@ function useFeedbackSubmitHandler(
     submitFeedback: ReturnType<typeof useSubmitFeedback>,
 ) {
     return useCallback(() => {
-        if (state.message.length < 10 || state.isSubmitting) return;
+        if (state.message.length < 10 || state.isSubmitting || state.isReadingScreenshot) return;
         state.setIsSubmitting(true); state.setSentryError(false);
         const { screenshot } = state;
         const payload = buildPayload(state.category, state.message, state.includeClientLogs, screenshot);
@@ -159,7 +159,8 @@ function FeedbackDialogWrapper({ state, submitFeedback, handleSubmit }: {
     if (!state.isOpen) return null;
     return (
         <FeedbackDialog showSuccess={state.showSuccess} category={state.category} message={state.message}
-            includeClientLogs={state.includeClientLogs} isSubmitting={state.isSubmitting} sentryError={state.sentryError}
+            includeClientLogs={state.includeClientLogs} isSubmitting={state.isSubmitting}
+            isReadingScreenshot={state.isReadingScreenshot} sentryError={state.sentryError}
             submitError={submitFeedback.error} isError={submitFeedback.isError}
             onCategoryChange={state.setCategory} onMessageChange={state.setMessage}
             onIncludeLogsChange={state.setIncludeClientLogs} screenshot={state.screenshot}

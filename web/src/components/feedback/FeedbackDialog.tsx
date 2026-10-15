@@ -42,6 +42,8 @@ interface FeedbackDialogProps {
     message: string;
     includeClientLogs: boolean;
     isSubmitting: boolean;
+    /** A screenshot is still being read — Send waits so it isn't dropped. */
+    isReadingScreenshot?: boolean;
     sentryError: boolean;
     submitError: Error | null;
     isError: boolean;
@@ -57,9 +59,10 @@ interface FeedbackDialogProps {
 }
 
 export function FeedbackDialog(props: FeedbackDialogProps): JSX.Element {
-    const { showSuccess, message, isSubmitting, onSubmit, onClose, ...formProps } = props;
+    const { showSuccess, message, isSubmitting, isReadingScreenshot = false, onSubmit, onClose, ...formProps } = props;
     const footer = !showSuccess && (
-        <Button fullWidth loading={isSubmitting} loadingLabel="Sending…" disabled={message.length < MIN_LENGTH} onClick={onSubmit}>
+        <Button fullWidth loading={isSubmitting} loadingLabel="Sending…" disabled={message.length < MIN_LENGTH || isReadingScreenshot}
+            onClick={onSubmit}>
             Send Feedback
         </Button>
     );
@@ -99,7 +102,7 @@ function errorText(sentryError: boolean, submitError: Error | null): string {
     return submitError?.message || 'Something went wrong. Please try again.';
 }
 
-type FormProps = Omit<FeedbackDialogProps, 'showSuccess' | 'onClose' | 'onSubmit' | 'isSubmitting'>;
+type FormProps = Omit<FeedbackDialogProps, 'showSuccess' | 'onClose' | 'onSubmit' | 'isSubmitting' | 'isReadingScreenshot'>;
 
 function FeedbackForm({
     category, message, includeClientLogs, sentryError, submitError, isError,

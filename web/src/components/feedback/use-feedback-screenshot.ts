@@ -12,6 +12,8 @@ import {
 export interface FeedbackScreenshotState {
     screenshot: FeedbackScreenshot | null;
     screenshotError: string | null;
+    /** A picked/pasted file is still being read: Send must wait for it. */
+    isReadingScreenshot: boolean;
     attachScreenshot: (file: File) => void;
     clearScreenshot: () => void;
 }
@@ -19,6 +21,7 @@ export interface FeedbackScreenshotState {
 export function useFeedbackScreenshot(): FeedbackScreenshotState {
     const [screenshot, setScreenshot] = useState<FeedbackScreenshot | null>(null);
     const [screenshotError, setError] = useState<string | null>(null);
+    const [isReadingScreenshot, setReading] = useState(false);
     const current = useRef<FeedbackScreenshot | null>(null);
     const pick = useRef(0);
 
@@ -32,16 +35,21 @@ export function useFeedbackScreenshot(): FeedbackScreenshotState {
         const problem = validateScreenshotFile(file);
         setError(problem);
         if (problem) return;
-        const mine = ++pick.current;
+        const mine = ++pick.current; setReading(true);
         readScreenshot(file).then(
-            (shot) => { if (mine === pick.current) replace(shot); else URL.revokeObjectURL(shot.previewUrl); },
-            () => { if (mine === pick.current) setError(SCREENSHOT_ERROR); },
+            (shot) => {
+                if (mine !== pick.current) { URL.revokeObjectURL(shot.previewUrl); return; }
+                replace(shot); setReading(false);
+            },
+            () => { if (mine === pick.current) { setError(SCREENSHOT_ERROR); setReading(false); } },
         );
     }, [replace]);
 
-    const clearScreenshot = useCallback(() => { pick.current += 1; replace(null); setError(null); }, [replace]);
+    const clearScreenshot = useCallback(() => {
+        pick.current += 1; replace(null); setError(null); setReading(false);
+    }, [replace]);
 
     useEffect(() => () => { if (current.current) URL.revokeObjectURL(current.current.previewUrl); }, []);
 
-    return { screenshot, screenshotError, attachScreenshot, clearScreenshot };
+    return { screenshot, screenshotError, isReadingScreenshot, attachScreenshot, clearScreenshot };
 }
