@@ -22,6 +22,7 @@ import type { CronJobService } from '../../cron-jobs/cron-job.service';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import * as discord from './game-role-discord.helpers';
 import { GameRoleReconcileService } from './game-role-reconcile.service';
+import { saveGameRole } from './game-roles-settings.helpers';
 
 /** The raw CJS module the service's `import * as Sentry` reads through. */
 const sentry = jest.requireActual<typeof SentryModule>('@sentry/nestjs');
@@ -398,5 +399,57 @@ describe('GameRoleReconcileService (ROK-1767)', () => {
     expect((await auditOf(roleRowId)).map((a) => a.action)).toEqual([
       'role_added',
     ]);
+  });
+});
+
+describe('ROK-1767 Codex P2 — relink and concurrent link races', () => {
+  it('grantNow after a Discord relink removes the role from the OLD account, then grants the new one', async () => {
+    const gameId = await makeGame('Relink');
+    const roleRowId = await link(gameId, 'role-relink');
+    const user = await makeUser();
+    await grant(roleRowId, { id: user.id, discordId: 'old-account-1' });
+    mocked.memberHoldsRole.mockResolvedValue(false);
+
+    expect(await service.grantNow(user.id, gameId)).toBe(true);
+
+    expect(mocked.removeMemberRole.mock.calls.map((c) => c[1])).toEqual([
+      'old-account-1',
+    ]);
+    expect(mocked.addMemberRole.mock.calls.map((c) => c[1])).toEqual([
+      user.discordId,
+    ]);
+    const rows = await testApp.db
+      .select()
+      .from(schema.discordGameRoleGrants)
+      .where(eq(schema.discordGameRoleGrants.gameRoleId, roleRowId));
+    expect(rows.map((r) => r.discordUserId)).toEqual([user.discordId]);
+    expect(await auditOf(roleRowId)).toEqual(
+      expect.arrayContaining([
+        { action: 'role_removed', reason: 'discord account relinked' },
+      ]),
+    );
+  });
+
+  it('a second save for an already-linked game keeps the stored role and returns it', async () => {
+    const gameId = await makeGame('Race');
+    await link(gameId, 'first-role');
+
+    const saved = await saveGameRole(testApp.db, {
+      gameId,
+      roleId: 'second-role',
+      botCreated: true,
+      windowDays: 7,
+      enabled: true,
+    });
+
+    expect(saved).toEqual({ roleId: 'first-role' });
+    const [row] = await testApp.db
+      .select()
+      .from(schema.discordGameRoles)
+      .where(eq(schema.discordGameRoles.gameId, gameId));
+    expect({ roleId: row?.roleId, windowDays: row?.windowDays }).toEqual({
+      roleId: 'first-role',
+      windowDays: 7,
+    });
   });
 });
