@@ -123,24 +123,16 @@ afterEach(async () => {
 });
 
 describe('GET /admin/plugins/pelican/config (ROK-121)', () => {
-  it('reports an unconfigured panel with the UTC fallback timezone', async () => {
+  it('reports an unconfigured panel', async () => {
     const res = await getConfig();
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      panelUrl: null,
-      apiKeySet: false,
-      defaultTimezone: 'UTC',
-      timezoneInherited: true,
-    });
+    expect(res.body).toEqual({ panelUrl: null, apiKeySet: false });
   });
 
-  it('inherits the community default timezone when none is stored', async () => {
-    await settings().set(SETTING_KEYS.DEFAULT_TIMEZONE, 'America/Chicago');
+  it('carries no timezone even with a community timezone set (ROK-1795)', async () => {
+    await settings().set(SETTING_KEYS.DEFAULT_TIMEZONE, 'America/New_York');
     const res = await getConfig();
-    expect(res.body).toMatchObject({
-      defaultTimezone: 'America/Chicago',
-      timezoneInherited: true,
-    });
+    expect(res.body).toEqual({ panelUrl: null, apiKeySet: false });
   });
 });
 
@@ -182,14 +174,11 @@ describe('PUT /admin/plugins/pelican/config (ROK-121)', () => {
     const saved = await putConfig({
       panelUrl: '  https://panel.example.com/sub/  ',
       apiKey: FAKE_CLIENT_KEY,
-      defaultTimezone: 'Europe/Berlin',
     });
     expect(saved.status).toBe(200);
     const expected = {
       panelUrl: 'https://panel.example.com/sub',
       apiKeySet: true,
-      defaultTimezone: 'Europe/Berlin',
-      timezoneInherited: false,
     };
     expect(saved.body).toEqual(expected);
     expect(JSON.stringify(saved.body)).not.toContain(FAKE_CLIENT_KEY);
@@ -205,13 +194,11 @@ describe('PUT /admin/plugins/pelican/config (ROK-121)', () => {
       panelUrl: 'https://panel.example.com',
       apiKey: FAKE_CLIENT_KEY,
     });
-    const res = await putConfig({ defaultTimezone: 'Asia/Tokyo' });
+    const res = await putConfig({ panelUrl: 'https://other.example.com' });
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
-      panelUrl: 'https://panel.example.com',
+      panelUrl: 'https://other.example.com',
       apiKeySet: true,
-      defaultTimezone: 'Asia/Tokyo',
-      timezoneInherited: false,
     });
   });
 
@@ -219,20 +206,10 @@ describe('PUT /admin/plugins/pelican/config (ROK-121)', () => {
     await putConfig({
       panelUrl: 'https://panel.example.com',
       apiKey: FAKE_CLIENT_KEY,
-      defaultTimezone: 'Asia/Tokyo',
     });
-    const res = await putConfig({
-      panelUrl: '',
-      apiKey: '',
-      defaultTimezone: '',
-    });
+    const res = await putConfig({ panelUrl: '', apiKey: '' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      panelUrl: null,
-      apiKeySet: false,
-      defaultTimezone: 'UTC',
-      timezoneInherited: true,
-    });
+    expect(res.body).toEqual({ panelUrl: null, apiKeySet: false });
     expect(await pelicanSettingRows()).toEqual([]);
   });
 });
@@ -246,7 +223,8 @@ describe('PUT /admin/plugins/pelican/config validation (ROK-121)', () => {
     ],
     ['a query string', { panelUrl: 'https://panel.example.com/?x=1' }],
     ['not a URL', { panelUrl: 'panel.example.com' }],
-    ['an unknown timezone', { defaultTimezone: 'Mars/Olympus_Mons' }],
+    // ROK-1795: the plugin timezone was removed; the strict schema rejects it.
+    ['the removed defaultTimezone field', { defaultTimezone: 'UTC' }],
     ['an unknown field', { apiKeyValue: FAKE_CLIENT_KEY }],
   ])('rejects %s with 400 and stores nothing', async (_label, body) => {
     const res = await putConfig(body);
@@ -339,7 +317,6 @@ describe('Pelican uninstall (ROK-121)', () => {
     const saved = await putConfig({
       panelUrl: 'https://panel.example.com',
       apiKey: FAKE_CLIENT_KEY,
-      defaultTimezone: 'Europe/Berlin',
     });
     expect(saved.body).toMatchObject({ apiKeySet: true });
     expect((await pluginAction('deactivate')).status).toBe(200);
@@ -359,12 +336,7 @@ describe('Pelican uninstall (ROK-121)', () => {
     expect((await pluginAction('install')).status).toBe(200);
     const res = await getConfig();
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      panelUrl: null,
-      apiKeySet: false,
-      defaultTimezone: 'UTC',
-      timezoneInherited: true,
-    });
+    expect(res.body).toEqual({ panelUrl: null, apiKeySet: false });
   });
 
   it('stays uninstalled when the Pelican module re-initialises', async () => {

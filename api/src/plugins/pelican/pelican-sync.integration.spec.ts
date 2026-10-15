@@ -181,14 +181,14 @@ describe('PelicanSyncService.syncServers — partial listing (ROK-1772 D3)', () 
 });
 
 describe('PelicanSyncService.syncServers — admin mapping survives (ROK-1772 D4)', () => {
-  it('keeps game_id, show_on_calendar and timezone across a re-sync and a missing/restore cycle', async () => {
+  it('keeps game_id and show_on_calendar across a re-sync and a missing/restore cycle', async () => {
     const panel = createFakePanel([S1, S2]);
     stubPanel(testApp, panel);
     await syncOk();
     const gameId = testApp.seed.game.id;
     await testApp.db
       .update(schema.pelicanServers)
-      .set({ gameId, showOnCalendar: false, timezone: 'Europe/Berlin' })
+      .set({ gameId, showOnCalendar: false })
       .where(eq(schema.pelicanServers.panelUuid, S1.uuid));
 
     panel.servers = [{ ...S1, name: 'Renamed On Panel' }, S2];
@@ -198,7 +198,6 @@ describe('PelicanSyncService.syncServers — admin mapping survives (ROK-1772 D4
     expect(renamed).toMatchObject({
       gameId,
       showOnCalendar: false,
-      timezone: 'Europe/Berlin',
     });
 
     panel.servers = [S2];
@@ -208,7 +207,6 @@ describe('PelicanSyncService.syncServers — admin mapping survives (ROK-1772 D4
     expect(await rowFor(S1.uuid)).toMatchObject({
       gameId,
       showOnCalendar: false,
-      timezone: 'Europe/Berlin',
       missingSince: null,
     });
   });

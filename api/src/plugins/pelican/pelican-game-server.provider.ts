@@ -7,7 +7,6 @@ import type {
 import type { GameServerProvider } from '../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
 import { PelicanClientFactory } from './pelican-client.factory';
-import { PelicanConfigService } from './pelican-config.service';
 import {
   projectSchedules,
   type ProjectionResult,
@@ -31,7 +30,6 @@ export class PelicanGameServerProvider implements GameServerProvider {
   constructor(
     private readonly repo: PelicanServersRepository,
     private readonly schedules: PelicanSchedulesRepository,
-    private readonly config: PelicanConfigService,
     private readonly clients: PelicanClientFactory,
   ) {}
 
@@ -40,13 +38,9 @@ export class PelicanGameServerProvider implements GameServerProvider {
     range: { from: Date; to: Date },
     gameIds?: number[],
   ): Promise<GameServerCalendarItemDto[]> {
-    const [schedules, defaultTimezone] = await Promise.all([
-      this.schedules.listServable(gameIds),
-      this.config.resolveDefaultTimezone(),
-    ]);
+    const schedules = await this.schedules.listServable(gameIds);
     const result = projectSchedules({
       schedules,
-      defaultTimezone,
       range,
       ...(gameIds !== undefined ? { gameIds } : {}),
     });
@@ -75,17 +69,10 @@ export class PelicanGameServerProvider implements GameServerProvider {
 
   /** Ids only — never names, crons or panel payloads. */
   private logProjection(result: ProjectionResult): void {
-    const { truncatedServerIds, tzMismatchServerIds, skipped } = result;
+    const { truncatedServerIds, skipped } = result;
     if (truncatedServerIds.length > 0) {
       this.logger.warn(
         `Pelican projection truncated servers: ${truncatedServerIds.join(', ')}`,
-      );
-    }
-    // debug, not warn: this runs on every member calendar load; the admin
-    // panel already surfaces the mismatch (ROK-1096 review).
-    if (tzMismatchServerIds.length > 0) {
-      this.logger.debug(
-        `Pelican tz mismatch servers: ${tzMismatchServerIds.join(', ')}`,
       );
     }
     for (const s of skipped) {
