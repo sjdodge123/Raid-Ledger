@@ -218,5 +218,9 @@ export * from './ledgerlink-json-schema.js';
 export * from './guilds.schema.js';
 // Guild page S3 raids payload (ROK-1787).
 export * from './guild-raids.schema.js';
+
+// Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
+export * from './discord-join-post.schema.js';
+
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';

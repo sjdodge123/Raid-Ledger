@@ -11,10 +11,6 @@ import {
   type PelicanServersAdminRepository,
 } from './pelican-servers-admin.repository';
 import { toAdminServerRowDto } from './pelican-servers-admin.helpers';
-import type {
-  PelicanTzCheckService,
-  TzCheckServer,
-} from './pelican-tz-check.service';
 
 const NOW = new Date('2026-10-13T12:00:00.000Z');
 const FRESH = new Date('2026-10-13T11:59:00.000Z');
@@ -26,7 +22,6 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
     gameId: 9,
     gameName: 'Valheim',
     showOnCalendar: true,
-    timezone: null,
     currentState: 'running',
     isSuspended: false,
     statusCheckedAt: FRESH,
@@ -37,30 +32,22 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
   return row;
 }
 
-function build(
-  result: PelicanMappingUpdateResult = { kind: 'not_found' },
-  mismatched: number[] = [],
-) {
+function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
   const listForAdmin = jest.fn(() => Promise.resolve([makeRow()]));
   const updateMapping = jest.fn<
     Promise<PelicanMappingUpdateResult>,
     [number, PelicanServerUpdate]
   >(() => Promise.resolve(result));
   const repo = { listForAdmin, updateMapping };
-  const mismatchedServerIds = jest.fn<
-    Promise<Set<number>>,
-    [readonly TzCheckServer[]]
-  >(() => Promise.resolve(new Set(mismatched)));
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
-    { mismatchedServerIds } as unknown as PelicanTzCheckService,
   );
-  return { controller, listForAdmin, updateMapping, mismatchedServerIds };
+  return { controller, listForAdmin, updateMapping };
 }
 
 describe('toAdminServerRowDto (ROK-1094)', () => {
   it('maps a fresh running row to the contract shape', () => {
-    const dto = toAdminServerRowDto(makeRow(), NOW, false);
+    const dto = toAdminServerRowDto(makeRow(), NOW);
     expect(dto).toEqual({
       id: 4,
       name: 'Valheim',
@@ -69,11 +56,9 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
       gameId: 9,
       gameName: 'Valheim',
       showOnCalendar: true,
-      timezone: null,
       lastSyncedAt: FRESH.toISOString(),
       statusCheckedAt: FRESH.toISOString(),
       missing: false,
-      tzMismatch: false,
     });
     expect(PelicanServerRowSchema.parse(dto)).toEqual(dto);
   });
@@ -94,28 +79,20 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
     ],
   ];
   it.each(cases)('%s', (_label, over, state, suspended) => {
-    const dto = toAdminServerRowDto(makeRow(over), NOW, false);
+    const dto = toAdminServerRowDto(makeRow(over), NOW);
     expect(dto.state).toBe(state);
     expect(dto.isSuspended).toBe(suspended);
   });
 
   it('flags a row with missing_since as missing', () => {
-    const dto = toAdminServerRowDto(
-      makeRow({ missingSince: FRESH }),
-      NOW,
-      false,
-    );
+    const dto = toAdminServerRowDto(makeRow({ missingSince: FRESH }), NOW);
     expect(dto.missing).toBe(true);
-  });
-
-  it('carries the tzMismatch flag it is given (ROK-1096)', () => {
-    expect(toAdminServerRowDto(makeRow(), NOW, true).tzMismatch).toBe(true);
   });
 });
 
 describe('toMappingSet (ROK-1094)', () => {
-  it("stores timezone '' as NULL and keeps only sent keys", () => {
-    expect(toMappingSet({ timezone: '' })).toEqual({ timezone: null });
+  it('keeps only sent keys', () => {
+    expect(toMappingSet({})).toEqual({});
     expect(toMappingSet({ gameId: null, showOnCalendar: false })).toEqual({
       gameId: null,
       showOnCalendar: false,
@@ -129,14 +106,6 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     const res = await controller.listServers();
     expect(res.data).toHaveLength(1);
     expect(res.data[0]?.id).toBe(4);
-    expect(res.data[0]?.tzMismatch).toBe(false);
-  });
-
-  it('flags listed rows the tz check reports (ROK-1096)', async () => {
-    const { controller, mismatchedServerIds } = build(undefined, [4]);
-    const res = await controller.listServers();
-    expect(mismatchedServerIds).toHaveBeenCalledWith([makeRow()]);
-    expect(res.data[0]?.tzMismatch).toBe(true);
   });
 
   it('rejects an invalid body with 400 before touching the repository', async () => {
@@ -144,8 +113,9 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     await expect(controller.updateServer(4, {})).rejects.toBeInstanceOf(
       BadRequestException,
     );
+    // ROK-1795: `timezone` is no longer a field — the strict schema rejects it.
     await expect(
-      controller.updateServer(4, { timezone: 'Mars/Olympus' }),
+      controller.updateServer(4, { timezone: 'Europe/Berlin' }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(updateMapping).not.toHaveBeenCalled();
   });
@@ -165,24 +135,10 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
   });
 
   it('returns the updated row and passes the parsed patch through', async () => {
-    const row = makeRow({ timezone: 'Europe/Berlin' });
+    const row = makeRow({ showOnCalendar: false });
     const { controller, updateMapping } = build({ kind: 'ok', row });
-    const res = await controller.updateServer(4, {
-      timezone: ' Europe/Berlin ',
-    });
-    expect(updateMapping).toHaveBeenCalledWith(4, {
-      timezone: 'Europe/Berlin',
-    });
-    expect(res.timezone).toBe('Europe/Berlin');
-  });
-
-  it('re-evaluates tzMismatch for the updated row (ROK-1096 D11)', async () => {
-    const row = makeRow({ timezone: 'America/New_York' });
-    const { controller, mismatchedServerIds } = build({ kind: 'ok', row }, [4]);
-    const res = await controller.updateServer(4, {
-      timezone: 'America/New_York',
-    });
-    expect(mismatchedServerIds).toHaveBeenCalledWith([row]);
-    expect(res.tzMismatch).toBe(true);
+    const res = await controller.updateServer(4, { showOnCalendar: false });
+    expect(updateMapping).toHaveBeenCalledWith(4, { showOnCalendar: false });
+    expect(res.showOnCalendar).toBe(false);
   });
 });

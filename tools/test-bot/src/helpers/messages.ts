@@ -35,6 +35,8 @@ export interface SimpleComponent {
    * Optional so hand-built fixtures stay valid; `toSimpleMessage` always sets it.
    */
   emoji?: string | null;
+  /** A link button's URL (ROK-1740). Optional so hand-built fixtures stay valid. */
+  url?: string | null;
 }
 
 /** Convert a discord.js Message to a plain-object SimpleMessage. */
@@ -60,11 +62,12 @@ export function toSimpleMessage(msg: Message): SimpleMessage {
     })),
     components: msg.components.flatMap((row) => {
       if (!('components' in row)) return [];
-      return (row.components as Array<{ type: { toString(): string }; customId: string | null; label?: string | null; emoji?: { name?: string | null } | null }>).map((c) => ({
+      return (row.components as Array<{ type: { toString(): string }; customId: string | null; label?: string | null; emoji?: { name?: string | null } | null; url?: string | null }>).map((c) => ({
         type: c.type.toString(),
         customId: c.customId,
         label: c.label ?? null,
         emoji: c.emoji?.name ?? null,
+        url: c.url ?? null,
       }));
     }),
     timestamp: msg.createdAt,
@@ -180,4 +183,19 @@ export async function messageExists(
     if ((err as { code?: unknown }).code === 10008) return false;
     throw err;
   }
+}
+
+/**
+ * The channel's pinned messages from the app bot under test (ROK-1740).
+ * A REST read (never the cache), so a fresh pin or unpin is always seen.
+ */
+export async function readPinnedMessages(
+  channelId: string,
+): Promise<SimpleMessage[]> {
+  const channel = await getClient().channels.fetch(channelId);
+  if (!channel?.isTextBased() || channel.isDMBased()) {
+    throw new Error(`Channel ${channelId} is not a guild text channel`);
+  }
+  const pins = await channel.messages.fetchPins();
+  return filterByApiBot(pins.items.map((pin) => toSimpleMessage(pin.message)));
 }

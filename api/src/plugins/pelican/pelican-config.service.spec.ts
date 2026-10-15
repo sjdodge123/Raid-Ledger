@@ -65,42 +65,18 @@ describe('PelicanConfigService.getConfig', () => {
     expect(JSON.stringify(cfg)).not.toContain(KEY);
   });
 
-  it('inherits the community timezone when none is stored', async () => {
+  it('carries no timezone — Pelican crons are always UTC (ROK-1795)', async () => {
     const { svc } = await build({
-      [SETTING_KEYS.DEFAULT_TIMEZONE]: 'Europe/Berlin',
+      [SETTING_KEYS.DEFAULT_TIMEZONE]: 'America/New_York',
     });
-    const cfg = await svc.getConfig();
-    expect(cfg).toMatchObject({
-      defaultTimezone: 'Europe/Berlin',
-      timezoneInherited: true,
-      panelUrl: null,
-      apiKeySet: false,
-    });
-  });
-
-  it('falls back to UTC when the community timezone is missing or invalid', async () => {
-    const { svc } = await build({
-      [SETTING_KEYS.DEFAULT_TIMEZONE]: 'Not/AZone',
-    });
-    expect((await svc.getConfig()).defaultTimezone).toBe('UTC');
-  });
-
-  it('uses the stored Pelican timezone over the community one', async () => {
-    const { svc } = await build({
-      [SETTING_KEYS.DEFAULT_TIMEZONE]: 'Europe/Berlin',
-      [SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE]: 'America/Chicago',
-    });
-    expect(await svc.getConfig()).toMatchObject({
-      defaultTimezone: 'America/Chicago',
-      timezoneInherited: false,
-    });
+    expect(await svc.getConfig()).toEqual({ panelUrl: null, apiKeySet: false });
   });
 });
 
 describe('PelicanConfigService.updateConfig', () => {
   it('leaves omitted fields unchanged', async () => {
     const { svc, settings } = await build(configured);
-    await svc.updateConfig({ defaultTimezone: 'Asia/Tokyo' });
+    await svc.updateConfig({ panelUrl: 'https://panel2.example.test' });
     expect(settings.set).toHaveBeenCalledTimes(1);
     expect(settings.delete).not.toHaveBeenCalled();
     expect(settings.store.get(SETTING_KEYS.PELICAN_CLIENT_API_KEY)).toBe(KEY);

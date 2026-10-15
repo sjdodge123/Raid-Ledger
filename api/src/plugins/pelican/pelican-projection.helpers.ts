@@ -4,7 +4,6 @@
  */
 import {
   GameServerEffectSchema,
-  isValidIanaTimezone,
   type GameServerCalendarItemDto,
   type GameServerEffect,
 } from '@raid-ledger/contract';
@@ -20,7 +19,6 @@ import {
   prevBefore,
   toCronExpression,
 } from './pelican-schedule-cron.helpers';
-import { hasTzMismatch } from './pelican-tz-check.helpers';
 import {
   compareEvents,
   compareSpans,
@@ -50,7 +48,6 @@ export interface ProjectionSchedule extends Pick<
   gameId: number;
   /** Raw panel name — redacted here before it reaches an item. */
   serverName: string;
-  serverTimezone: string | null;
 }
 
 export interface ProjectionRange {
@@ -60,12 +57,11 @@ export interface ProjectionRange {
 
 export interface ProjectionInput {
   schedules: readonly ProjectionSchedule[];
-  defaultTimezone: string;
   range: ProjectionRange;
   gameIds?: readonly number[];
 }
 
-export type ProjectionSkipReason = 'bad_tz' | 'bad_cron' | 'bad_effect';
+export type ProjectionSkipReason = 'bad_cron' | 'bad_effect';
 
 export interface ProjectionSkip {
   serverId: number;
@@ -76,9 +72,15 @@ export interface ProjectionSkip {
 export interface ProjectionResult {
   items: GameServerCalendarItemDto[];
   truncatedServerIds: number[];
-  tzMismatchServerIds: number[];
   skipped: ProjectionSkip[];
 }
+
+/**
+ * Pelican panel crons are always UTC (ROK-1795): the panel has no per-server
+ * or per-schedule timezone, so every cron is evaluated in UTC — never in the
+ * community timezone.
+ */
+export const PELICAN_CRON_TIMEZONE = 'UTC';
 
 const isStop = (e: GameServerEffect): boolean => e === 'stop' || e === 'kill';
 
@@ -87,7 +89,6 @@ export function projectSchedules(input: ProjectionInput): ProjectionResult {
   const result: ProjectionResult = {
     items: [],
     truncatedServerIds: [],
-    tzMismatchServerIds: [],
     skipped: [],
   };
   const { gameIds } = input;
@@ -111,12 +112,7 @@ function projectServer(
 ): void {
   const first = group[0];
   if (first === undefined) return;
-  const tz = first.serverTimezone ?? input.defaultTimezone;
-  if (!isValidIanaTimezone(tz)) {
-    result.skipped.push({ serverId, reason: 'bad_tz' });
-    return;
-  }
-  if (hasTzMismatch(group, tz)) result.tzMismatchServerIds.push(serverId);
+  const tz = PELICAN_CRON_TIMEZONE;
   const lastStopMs = latestStopBefore(group, tz, input.range.from);
   const events = group.flatMap((s) =>
     scheduleEvents(s, { tz, range: input.range, lastStopMs }, result),

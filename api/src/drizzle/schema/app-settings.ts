@@ -102,6 +102,10 @@ export const SETTING_KEYS = {
   LFG_NOW_INDICATOR_EMOJI: 'lfg_now_indicator_emoji',
   /** ROK-1471: id of the board's "how this works" intro thread; posted once. */
   LFG_BOARD_INTRO_THREAD_ID: 'lfg_board_intro_thread_id',
+  /** ROK-1740: channel holding the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_CHANNEL_ID: 'discord_join_post_channel_id',
+  /** ROK-1740: message id of the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_MESSAGE_ID: 'discord_join_post_message_id',
   // 'lfg_composer_enabled' (ROK-1612) was retired by ROK-1658; a leftover row is ignored.
   /** ROK-471: Default voice channel for Discord Scheduled Events */
   DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',
@@ -213,8 +217,6 @@ export const SETTING_KEYS = {
   PELICAN_PANEL_URL: 'pelican_panel_url',
   /** ROK-121: Pelican client API key (pacc_…). Write-only — never returned by any API. */
   PELICAN_CLIENT_API_KEY: 'pelican_client_api_key',
-  /** ROK-121: IANA tz for Pelican schedules; unset ⇒ community default_timezone. */
-  PELICAN_DEFAULT_TIMEZONE: 'pelican_default_timezone',
   /** ROK-1786: JSON array of `PinnedAddon` shown on every guild page.
    *  Unset ⇒ LedgerLink only (`readPinnedAddons`); `[]` ⇒ none. */
   GUILD_PINNED_ADDONS: 'guild_pinned_addons',

@@ -31,3 +31,20 @@ describe('PelicanConfigUpdateSchema apiKey charset', () => {
         ]);
     });
 });
+
+describe('PelicanConfigUpdateSchema — no timezone (ROK-1795)', () => {
+    it.each([[''], ['America/New_York']])(
+        'rejects a defaultTimezone key (%j): the field was removed',
+        (defaultTimezone) => {
+            expect(
+                PelicanConfigUpdateSchema.safeParse({ defaultTimezone }).success,
+            ).toBe(false);
+            expect(
+                PelicanConfigUpdateSchema.safeParse({
+                    panelUrl: '',
+                    defaultTimezone,
+                }).success,
+            ).toBe(false);
+        },
+    );
+});
