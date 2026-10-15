@@ -34,6 +34,13 @@ export class AdminFetchError extends Error {
     }
 }
 
+/** Builds the error for a failed non-GET call from its (optional) JSON body. */
+async function toAdminFetchError(response: Response, fallback: string): Promise<AdminFetchError> {
+    const body: unknown = await response.json().catch(() => null);
+    const message = (body as { message?: unknown } | null)?.message;
+    return new AdminFetchError(message ? String(message) : fallback, response.status, body);
+}
+
 /** Standard admin fetch with error handling */
 export async function adminFetch<T>(
     path: string,
@@ -68,13 +75,7 @@ export async function adminFetch<T>(
 
     if (!response.ok) {
         if (options?.method && options.method !== 'GET') {
-            const body: unknown = await response.json().catch(() => null);
-            const message = (body as { message?: unknown } | null)?.message;
-            throw new AdminFetchError(
-                message ? String(message) : errorMessage,
-                response.status,
-                body,
-            );
+            throw await toAdminFetchError(response, errorMessage);
         }
         throw new Error(errorMessage);
     }
