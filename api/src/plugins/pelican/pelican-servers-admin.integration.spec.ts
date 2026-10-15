@@ -352,6 +352,33 @@ describe('Quick Play detection switch (ROK-1800)', () => {
     });
   });
 
+  it('refuses to switch it on for a server whose game has no log parser, with 400 (ROK-1800 m1)', async () => {
+    const unmapped = await insertServer(1);
+    const noParser = await insertServer(2, { gameId: testApp.seed.game.id });
+
+    const results = [
+      await patchServer(unmapped.id, { presenceTracking: true }),
+      await patchServer(noParser.id, { presenceTracking: true }),
+      await patchServer(unmapped.id, {
+        gameId: testApp.seed.game.id,
+        presenceTracking: true,
+      }),
+    ];
+    expect(results.map((r) => [r.status, String(r.body.message)])).toEqual(
+      Array(3).fill([
+        400,
+        "Quick Play detection isn't supported for this server's game",
+      ]),
+    );
+    expect(await reload(unmapped.id)).toMatchObject({
+      presenceTracking: false,
+      gameId: null,
+    });
+    expect(await reload(noParser.id)).toMatchObject({
+      presenceTracking: false,
+    });
+  });
+
   it('a member cannot flip it (admin guard)', async () => {
     const server = await insertServer(1);
     const token = await memberToken(testApp, 'pelicanpresencemember');

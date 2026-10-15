@@ -1,4 +1,5 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, notInArray } from 'drizzle-orm';
+import { QUICK_PLAY_FIXTURE_UUIDS } from './pelican-demo-quick-play-seed.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -104,13 +105,18 @@ function schedulesFor(
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-/** Wipe `pelican_servers` (schedules cascade), insert `specs` + their schedules. */
+/**
+ * Wipe `pelican_servers` (schedules cascade) except the ROK-1800 Quick Play
+ * smoke fixture rows, then insert `specs` + their schedules.
+ */
 async function resetDemoRows(
   tx: Tx,
   specs: SeedSpec[],
   now: Date,
 ): Promise<PelicanSeedServer[]> {
-  await tx.delete(pelicanServers);
+  await tx
+    .delete(pelicanServers)
+    .where(notInArray(pelicanServers.panelUuid, QUICK_PLAY_FIXTURE_UUIDS));
   const inserted = await tx
     .insert(pelicanServers)
     .values(specs.map((s) => s.values))
