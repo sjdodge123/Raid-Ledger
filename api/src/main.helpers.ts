@@ -5,7 +5,7 @@
 
 import type { INestApplication, LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import type { Request, Response, NextFunction } from 'express';
+import type { Request, RequestHandler, Response, NextFunction } from 'express';
 import * as bodyParser from 'body-parser';
 
 // Descending severity. A threshold like 'log' enables itself plus everything
@@ -117,6 +117,28 @@ export function installCspReportBodyParser(app: NestExpressApplication): void {
       }
       next();
     });
+  });
+}
+
+/** ROK-1313: JSON limit for POST /feedback (a 3.75 MB screenshot ≈ 5 MB base64). */
+export const FEEDBACK_JSON_BODY_LIMIT = '8mb';
+
+/**
+ * Install a larger JSON body parser for POST /feedback only, BEFORE the
+ * global 2 MB parser: that one would answer every real screenshot with its
+ * own 413. body-parser skips a body already parsed here. The controller still
+ * enforces the contract's encoded-length cap (FEEDBACK_SCREENSHOT_MAX_BASE64_CHARS).
+ */
+export function installFeedbackBodyParser(app: {
+  use: (handler: RequestHandler) => unknown;
+}): void {
+  const parse = bodyParser.json({ limit: FEEDBACK_JSON_BODY_LIMIT });
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method === 'POST' && req.path === '/feedback') {
+      parse(req, res, next);
+      return;
+    }
+    next();
   });
 }
 
