@@ -83,9 +83,19 @@ export async function writeScreenshot(
   const dir = getFeedbackScreenshotDir();
   await mkdir(dir, { recursive: true });
   const fileName = `${feedbackId}.${ext}`;
-  await writeFile(path.join(dir, fileName), buf, { flag: 'w' });
+  const target = path.join(dir, fileName);
   const sibling = `${feedbackId}.${ext === 'png' ? 'jpg' : 'png'}`;
-  await deleteScreenshotFiles([`${FEEDBACK_SCREENSHOT_REL_PREFIX}${sibling}`]);
+  try {
+    await writeFile(target, buf, { flag: 'w' });
+    await deleteScreenshotFiles([
+      `${FEEDBACK_SCREENSHOT_REL_PREFIX}${sibling}`,
+    ]);
+  } catch (err) {
+    // A partial write (ENOSPC) or a failed sibling delete would otherwise
+    // leave a file no row points at: remove the target before rethrowing.
+    await unlink(target).catch(() => undefined);
+    throw err;
+  }
   return `${FEEDBACK_SCREENSHOT_REL_PREFIX}${fileName}`;
 }
 
