@@ -95,14 +95,15 @@ test('member: Resources shows rules split by line, links, and addons with Ledger
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#resources');
         await expectResourcesTab(page);
-        const rules = page.getByTestId('guild-rules');
+        // The cards are `<section aria-labelledby>` regions (WidgetCard) with no test id.
+        const rules = page.getByRole('region', { name: 'Guild rules & loot rules' });
         await expect(rules.getByTestId('guild-rule-items')).toHaveCount(2);
         await expect(rules.getByTestId('guild-rule-items').first().locator('li'), 'one item per body line').toHaveText([
             'Loot council for tier pieces',
             'Main spec over off spec',
             'No trading raid drops',
         ]);
-        const group = page.getByTestId('guild-links').getByTestId('guild-link-group');
+        const group = page.getByRole('region', { name: 'Links & resources' }).getByTestId('guild-link-group');
         await expect(group).toHaveCount(1);
         await expect(group.getByRole('link', { name: 'Raid strategy' })).toHaveAttribute('href', 'https://www.wowhead.com/classic/guides/raids');
         const items = addonItems(page);
