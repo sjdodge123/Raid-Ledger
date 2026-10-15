@@ -9,12 +9,12 @@
 import type { ReactNode } from 'react';
 import { ExtLink, Lead } from './privacy-copy-parts';
 
-export const PRIVACY_LAST_UPDATED = '13 October 2026';
+export const PRIVACY_LAST_UPDATED = '14 October 2026';
 export const COMMUNITY_FALLBACK = 'this community';
 export const GOOGLE_USER_DATA_POLICY_URL = 'https://developers.google.com/terms/api-services-user-data-policy';
 
 /** Features whose disclosure only applies while they are on. */
-export type PrivacyFeature = 'calendar' | 'ai';
+export type PrivacyFeature = 'calendar' | 'ai' | 'telemetry';
 export type PrivacyFeatures = Record<PrivacyFeature, boolean>;
 
 export interface PrivacyBlock {
@@ -100,7 +100,8 @@ function whoElseSection(): PrivacySection {
         bullets: [
             { key: 'discord', content: <><Lead>Discord</Lead> shows event posts and messages that mention members.</> },
             { key: 'google', requires: 'calendar', content: <><Lead>Google</Lead>: calendar sync, as above.</> },
-            { key: 'errors', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with on-screen text masked) is sent to the Raid Ledger project&apos;s error tracker, Sentry, so the developers can fix it. Passwords, tokens and calendar ids are removed first.</> },
+            // ROK-1779: PROPOSED wording, pending the operator's sign-off in the PR.
+            { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Passwords, tokens, calendar ids, usernames, email addresses and IP addresses are removed first. This site&apos;s admins can turn error reports off.</> },
             { key: 'ai', requires: 'ai', content: <><Lead>AI suggestions.</Lead> If the admins turn on AI features, members&apos; usernames and gaming stats (not calendar data) are sent to the AI provider they chose to suggest games.</> },
             { key: 'games', content: 'Game databases (IGDB, Steam, IsThereAnyDeal, Blizzard) are asked about games and characters. If you link Steam, your Steam id is used to read your game library.' },
         ],
