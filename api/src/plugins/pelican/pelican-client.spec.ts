@@ -91,6 +91,41 @@ describe('PelicanClient requests', () => {
     expect(result.ok && result.data.map((s) => s.tasks.length)).toEqual([1, 1]);
   });
 
+  it('fetches websocket credentials for the encoded server id', async () => {
+    const body = {
+      data: {
+        token: 'jwt.fake.token',
+        socket: 'wss://node.example.test/api/servers/u/ws',
+      },
+    };
+    const { client, fetchMock } = setup(() =>
+      Promise.resolve(jsonResponse(body)),
+    );
+    const result = await client.getWebsocketCredentials('ab/c');
+    const { url, init } = lastCall(fetchMock);
+    expect(url).toBe(
+      'https://panel.example.test/panel/api/client/servers/ab%2Fc/websocket',
+    );
+    expect(init.headers).toEqual({
+      Authorization: `Bearer ${KEY}`,
+      Accept: 'application/json',
+    });
+    expect(result).toEqual({ ok: true, data: body.data });
+  });
+
+  it.each([
+    [
+      'a non-ws socket URL',
+      { data: { token: 't', socket: 'https://n.test/ws' } },
+    ],
+    ['an empty token', { data: { token: '', socket: 'wss://n.test/ws' } }],
+    ['a missing data envelope', { token: 't', socket: 'wss://n.test/ws' }],
+  ])('maps websocket credentials with %s to bad_response', async (_l, body) => {
+    const { client } = setup(() => Promise.resolve(jsonResponse(body)));
+    const result = await client.getWebsocketCredentials('abc');
+    expect(errorOf(result)).toEqual({ kind: 'bad_response', status: 200 });
+  });
+
   it('refuses an invalid panel URL at construction without echoing the key', () => {
     expect(
       () => new PelicanClient({ baseUrl: 'ftp://x.example.test', apiKey: KEY }),
