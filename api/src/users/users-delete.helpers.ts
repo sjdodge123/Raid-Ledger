@@ -67,6 +67,10 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.gameInterestSuppressions,
     column: schema.gameInterestSuppressions.userId,
   },
+  {
+    table: schema.gameNotificationMutes,
+    column: schema.gameNotificationMutes.userId,
+  },
   { table: schema.feedback, column: schema.feedback.userId },
   {
     table: schema.wowClassicQuestProgress,

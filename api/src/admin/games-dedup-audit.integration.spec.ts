@@ -336,6 +336,7 @@ const EXPECTED_BLAST_RADIUS_KEYS = [
   'tiebreakerBracketVotes',
   'tiebreakerVetoes',
   'playerIntensitySnapshots',
+  'notificationMutes', // ROK-1797
 ] as const;
 
 /** Read all persisted audit rows in deterministic order. */

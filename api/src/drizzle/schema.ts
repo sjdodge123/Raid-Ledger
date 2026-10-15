@@ -36,6 +36,7 @@ export * from './schema/game-activity-rollups';
 export * from './schema/discord-game-mappings';
 export * from './schema/ad-hoc-participants';
 export * from './schema/game-interest-suppressions';
+export * from './schema/game-notification-mutes';
 export * from './schema/event-voice-sessions';
 export * from './schema/enrichments';
 export * from './schema/ai-request-logs';
