@@ -9,7 +9,8 @@
  *     role is gone and an `idle since` audit row exists.
  *  4. Hand-assign the role (no grant), run, and confirm it stays — the bot
  *     only removes what it granted.
- *  Teardown: unlink the game and delete this run's role.
+ *  Only an unlinked game is used (skipped if none), and teardown unlinks
+ *  only the link this run created, then deletes this run's role.
  *
  * Membership is read through `GET /admin/test/game-roles/member-roles` — the
  * companion bot has no GuildMembers intent.
@@ -22,27 +23,30 @@ const BASE = '/admin/settings/discord-bot/game-roles';
 const FIXTURES = '/admin/test/game-roles';
 const POLL_MS = 20_000;
 
-interface Summary { gameId: number; roleId: string; windowDays: number }
+interface Summary {
+  gameId: number; roleId: string; roleName: string | null; botCreated: boolean; windowDays: number;
+}
 interface RunResult { added: number; removed: number; failedGames: number[] }
 interface Audit { action: string; reason: string; userId: number }
 
 /**
- * A game no channel-pool test is bound to, so no other run plays it.
+ * A game no channel-pool test is bound to, so no other run plays it, AND not
+ * already linked to a role — this run must only ever unlink what it created.
  * `ctx.games` only holds the admin character's game and is empty on a seed
  * with no characters (the fleet env), so fall back to the games registry.
+ * Null when every game is busy or linked (the caller skips).
  */
-async function pickGame(ctx: TestContext): Promise<number> {
+async function pickUnlinkedGame(ctx: TestContext): Promise<number | null> {
   const busy = new Set((ctx.channelPool ?? []).map((s) => s.gameId));
   if (ctx.mmoGameId !== undefined) busy.add(ctx.mmoGameId);
+  for (const l of await ctx.api.get<Summary[]>(BASE)) busy.add(l.gameId);
   const registry = ctx.games.length > 0
     ? ctx.games
     : (await ctx.api.get<{ data: { id: number; name: string }[] }>(
         '/admin/settings/games?limit=100',
       )).data ?? [];
   const free = registry.filter((g) => !busy.has(g.id));
-  const game = free[free.length - 1] ?? registry[registry.length - 1];
-  if (!game) throw new Error('game-role smoke: no games in demo data');
-  return game.id;
+  return free[free.length - 1]?.id ?? null;
 }
 
 async function memberRoles(api: ApiClient, discordUserId: string): Promise<string[]> {
@@ -115,11 +119,20 @@ async function handAssignedStays(ctx: TestContext, gameId: number, roleId: strin
 
 async function gameRoleAddAndIdleRemove(ctx: TestContext): Promise<void> {
   await ctx.api.post(`${FIXTURES}/sweep`, {});
-  const gameId = await pickGame(ctx);
+  const gameId = await pickUnlinkedGame(ctx);
+  if (gameId === null) {
+    console.warn('  game-role smoke SKIPPED: every demo game is already linked or pool-bound');
+    return;
+  }
   const name = `smoke-gr-${Date.now().toString(36)}`;
   let linked = false;
   try {
     const link = await ctx.api.put<Summary>(`${BASE}/${gameId}`, { roleId: null, windowDays: 14, name });
+    // A link made by someone else between pick and PUT keeps ITS role: never
+    // claim (and so never tear down) a link this run did not create.
+    if (!link.botCreated || (link.roleName !== null && link.roleName !== name)) {
+      throw new Error(`game ${gameId} was linked concurrently (role ${link.roleName ?? link.roleId}); not ours`);
+    }
     linked = true;
     await addThenIdleRemove(ctx, gameId, link.roleId);
     await handAssignedStays(ctx, gameId, link.roleId);
