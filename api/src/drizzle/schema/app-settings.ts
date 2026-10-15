@@ -102,6 +102,10 @@ export const SETTING_KEYS = {
   LFG_NOW_INDICATOR_EMOJI: 'lfg_now_indicator_emoji',
   /** ROK-1471: id of the board's "how this works" intro thread; posted once. */
   LFG_BOARD_INTRO_THREAD_ID: 'lfg_board_intro_thread_id',
+  /** ROK-1740: channel holding the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_CHANNEL_ID: 'discord_join_post_channel_id',
+  /** ROK-1740: message id of the pinned "Join Raid Ledger" post; unset until posted. */
+  DISCORD_JOIN_POST_MESSAGE_ID: 'discord_join_post_message_id',
   // 'lfg_composer_enabled' (ROK-1612) was retired by ROK-1658; a leftover row is ignored.
   /** ROK-471: Default voice channel for Discord Scheduled Events */
   DISCORD_BOT_DEFAULT_VOICE_CHANNEL: 'discord_bot_default_voice_channel',

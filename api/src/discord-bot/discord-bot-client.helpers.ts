@@ -56,6 +56,9 @@ export const REQUIRED_PERMISSIONS: { label: string; flag: bigint }[] = [
     label: 'Send Messages in Threads',
     flag: PermissionsBitField.Flags.SendMessagesInThreads,
   },
+  // ROK-1740: the join post pins itself. Discord split pinning out of Manage
+  // Messages (enforced 2026-02-23), so it must be requested on its own.
+  { label: 'Pin Messages', flag: PermissionsBitField.Flags.PinMessages },
 ];
 
 /**
