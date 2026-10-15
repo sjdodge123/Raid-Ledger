@@ -143,7 +143,7 @@ export class SystemController {
       this.settingsService.getEphemeralVoiceEnabled(),
       this.settingsService.getEphemeralVoiceForced(),
     ]);
-    // ROK-1779: read per request so the web follows the api's DISABLE_TELEMETRY.
+    // ROK-1779: read per request so the web follows the api's ENABLE/DISABLE_TELEMETRY.
     return {
       ...dto,
       ephemeralVoiceEnabled,

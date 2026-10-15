@@ -1,6 +1,7 @@
 /**
  * ROK-1779: the api's beforeSend strips personal data, sendDefaultPii stays
- * off, and an explicit DISABLE_TELEMETRY='false' keeps production reporting.
+ * off, and production reports only when ENABLE_TELEMETRY='true' (opt-in;
+ * DISABLE_TELEMETRY='true' still wins).
  * Split from instrument.spec.ts (at the 750-line test-file limit); the
  * loader mirrors its `jest.resetModules` + `jest.mock` harness.
  */
@@ -11,7 +12,12 @@ type InitMock = jest.MockedFunction<
 >;
 type Hook = (event: Record<string, unknown>) => Record<string, unknown> | null;
 
-const KEYS = ['NODE_ENV', 'DISABLE_TELEMETRY', 'SENTRY_ENVIRONMENT'];
+const KEYS = [
+  'NODE_ENV',
+  'DISABLE_TELEMETRY',
+  'ENABLE_TELEMETRY',
+  'SENTRY_ENVIRONMENT',
+];
 
 async function loadInstrument(
   env: Record<string, string | undefined>,
@@ -80,7 +86,10 @@ describe('Sentry instrument — ROK-1779 PII + runtime opt-out', () => {
   describe('production', () => {
     let init: InitMock;
     beforeEach(async () => {
-      init = await loadInstrument({ NODE_ENV: 'production' });
+      init = await loadInstrument({
+        NODE_ENV: 'production',
+        ENABLE_TELEMETRY: 'true',
+      });
     });
 
     it('beforeSend output carries no email, IP or username', () => {
@@ -97,17 +106,31 @@ describe('Sentry instrument — ROK-1779 PII + runtime opt-out', () => {
     });
   });
 
-  it("DISABLE_TELEMETRY='false' in production still calls init", async () => {
+  it('production with nothing set skips init (opt-in default)', async () => {
+    const init = await loadInstrument({ NODE_ENV: 'production' });
+    expect(init).not.toHaveBeenCalled();
+  });
+
+  it("ENABLE_TELEMETRY='true' in production calls init", async () => {
     const init = await loadInstrument({
       NODE_ENV: 'production',
-      DISABLE_TELEMETRY: 'false',
+      ENABLE_TELEMETRY: 'true',
     });
     expect(init).toHaveBeenCalledTimes(1);
   });
 
-  it("DISABLE_TELEMETRY='true' in production skips init", async () => {
+  it("DISABLE_TELEMETRY='false' alone in production skips init", async () => {
     const init = await loadInstrument({
       NODE_ENV: 'production',
+      DISABLE_TELEMETRY: 'false',
+    });
+    expect(init).not.toHaveBeenCalled();
+  });
+
+  it('DISABLE_TELEMETRY wins over ENABLE_TELEMETRY in production', async () => {
+    const init = await loadInstrument({
+      NODE_ENV: 'production',
+      ENABLE_TELEMETRY: 'true',
       DISABLE_TELEMETRY: 'true',
     });
     expect(init).not.toHaveBeenCalled();

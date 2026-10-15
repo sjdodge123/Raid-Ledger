@@ -1,7 +1,7 @@
 /**
  * Sentry instrumentation for the NestJS backend.
  * MUST be imported FIRST in main.ts — before any other imports.
- * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via DISABLE_TELEMETRY.
+ * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, opt-in via ENABLE_TELEMETRY=true (DISABLE_TELEMETRY=true still wins).
  */
 import * as Sentry from '@sentry/nestjs';
 import * as os from 'os';
@@ -13,7 +13,7 @@ const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
 
 const isProduction = process.env.NODE_ENV === 'production';
-// ROK-1779: the default (opt-out vs opt-in) lives in telemetry-policy.ts.
+// ROK-1779: the opt-in default lives in telemetry-policy.ts.
 const telemetryDisabled = !isTelemetryEnabled();
 
 /** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */

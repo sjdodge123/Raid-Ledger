@@ -263,26 +263,41 @@ function describeSystemController() {
     });
 
     describe('ROK-1779: telemetryEnabled', () => {
-      let saved: string | undefined;
+      const KEYS = ['DISABLE_TELEMETRY', 'ENABLE_TELEMETRY'] as const;
+      const saved: Partial<Record<(typeof KEYS)[number], string>> = {};
       beforeEach(() => {
-        saved = process.env.DISABLE_TELEMETRY;
+        for (const key of KEYS) {
+          const value = process.env[key];
+          if (value === undefined) delete saved[key];
+          else saved[key] = value;
+          delete process.env[key];
+        }
         (mockUsersService.count as jest.Mock).mockResolvedValue(1);
         (
           mockSettingsService.isDiscordConfigured as jest.Mock
         ).mockResolvedValue(false);
       });
       afterEach(() => {
-        if (saved === undefined) delete process.env.DISABLE_TELEMETRY;
-        else process.env.DISABLE_TELEMETRY = saved;
+        for (const key of KEYS) {
+          const value = saved[key];
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
       });
 
-      it('is true when DISABLE_TELEMETRY is unset (opt-out default)', async () => {
-        delete process.env.DISABLE_TELEMETRY;
+      it('is false when nothing is set (opt-in default)', async () => {
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+
+      it("is true when ENABLE_TELEMETRY='true'", async () => {
+        process.env.ENABLE_TELEMETRY = 'true';
         const result = await controller.getStatus();
         expect(result.telemetryEnabled).toBe(true);
       });
 
-      it("is false when DISABLE_TELEMETRY='true'", async () => {
+      it('is false when DISABLE_TELEMETRY also is true (disable wins)', async () => {
+        process.env.ENABLE_TELEMETRY = 'true';
         process.env.DISABLE_TELEMETRY = 'true';
         const result = await controller.getStatus();
         expect(result.telemetryEnabled).toBe(false);

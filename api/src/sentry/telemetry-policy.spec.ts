@@ -1,40 +1,54 @@
-/** ROK-1779: DISABLE_TELEMETRY truth table for the runtime opt-out. */
+/** ROK-1779: ENABLE_TELEMETRY / DISABLE_TELEMETRY truth table (opt-in). */
 import {
   TELEMETRY_DEFAULT_ENABLED,
   isTelemetryEnabled,
 } from './telemetry-policy';
 
 describe('isTelemetryEnabled (ROK-1779)', () => {
-  it('keeps the opt-out default until the operator rules otherwise', () => {
-    expect(TELEMETRY_DEFAULT_ENABLED).toBe(true);
+  it('defaults to off — opt-in per the 2026-10-15 ruling', () => {
+    expect(TELEMETRY_DEFAULT_ENABLED).toBe(false);
   });
 
-  it('unset → the default', () => {
-    expect(isTelemetryEnabled({})).toBe(TELEMETRY_DEFAULT_ENABLED);
+  it('unset → off', () => {
+    expect(isTelemetryEnabled({})).toBe(false);
   });
 
-  it("'true' → off", () => {
+  it("ENABLE_TELEMETRY='true' → on", () => {
+    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: 'true' })).toBe(true);
+  });
+
+  it("DISABLE_TELEMETRY='true' → off", () => {
     expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'true' })).toBe(false);
   });
 
-  it("'false' set explicitly → on", () => {
-    expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'false' })).toBe(true);
+  it('DISABLE_TELEMETRY wins when both are set', () => {
+    expect(
+      isTelemetryEnabled({
+        ENABLE_TELEMETRY: 'true',
+        DISABLE_TELEMETRY: 'true',
+      }),
+    ).toBe(false);
   });
 
-  it.each(['1', '', 'TRUE', 'yes'])("'%s' → the default", (value) => {
-    expect(isTelemetryEnabled({ DISABLE_TELEMETRY: value })).toBe(
-      TELEMETRY_DEFAULT_ENABLED,
-    );
+  it("DISABLE_TELEMETRY='false' alone does not opt in", () => {
+    expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'false' })).toBe(false);
+  });
+
+  it.each(['1', '', 'TRUE', 'yes'])("ENABLE_TELEMETRY='%s' → off", (value) => {
+    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(false);
   });
 
   it('reads process.env when no env is passed', () => {
-    const saved = process.env.DISABLE_TELEMETRY;
-    process.env.DISABLE_TELEMETRY = 'true';
+    const saved = process.env.ENABLE_TELEMETRY;
+    const savedOff = process.env.DISABLE_TELEMETRY;
+    process.env.ENABLE_TELEMETRY = 'true';
+    delete process.env.DISABLE_TELEMETRY;
     try {
-      expect(isTelemetryEnabled()).toBe(false);
+      expect(isTelemetryEnabled()).toBe(true);
     } finally {
-      if (saved === undefined) delete process.env.DISABLE_TELEMETRY;
-      else process.env.DISABLE_TELEMETRY = saved;
+      if (saved === undefined) delete process.env.ENABLE_TELEMETRY;
+      else process.env.ENABLE_TELEMETRY = saved;
+      if (savedOff !== undefined) process.env.DISABLE_TELEMETRY = savedOff;
     }
   });
 });

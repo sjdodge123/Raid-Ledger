@@ -153,8 +153,10 @@ describe('instrument.ts wiring', () => {
     const saved = {
       NODE_ENV: process.env.NODE_ENV,
       DISABLE_TELEMETRY: process.env.DISABLE_TELEMETRY,
+      ENABLE_TELEMETRY: process.env.ENABLE_TELEMETRY,
     };
     process.env.NODE_ENV = 'production';
+    process.env.ENABLE_TELEMETRY = 'true';
     delete process.env.DISABLE_TELEMETRY;
     jest.resetModules();
     jest.doMock('@sentry/nestjs', () => ({ init: jest.fn() }));
@@ -165,6 +167,9 @@ describe('instrument.ts wiring', () => {
     process.env.NODE_ENV = saved.NODE_ENV;
     if (saved.DISABLE_TELEMETRY !== undefined)
       process.env.DISABLE_TELEMETRY = saved.DISABLE_TELEMETRY;
+    if (saved.ENABLE_TELEMETRY === undefined)
+      delete process.env.ENABLE_TELEMETRY;
+    else process.env.ENABLE_TELEMETRY = saved.ENABLE_TELEMETRY;
     const options = sentry.init.mock.calls[0]?.[0] as {
       beforeSend: (e: object) => object;
     };
