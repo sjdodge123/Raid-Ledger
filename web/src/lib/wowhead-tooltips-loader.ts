@@ -1,10 +1,11 @@
 /**
  * ROK-1366: load Wowhead's tooltips.js from the entry, never from index.html.
  *
- * main.tsx imports this module straight after `./magic-link-capture`, so the
- * `#token=` fragment is already stripped when the third-party script is even
- * requested — the ordering holds by construction, not by HTML attribute
- * semantics. The script is `async`, so it does not hold DOMContentLoaded (a
+ * app-entry.tsx imports this module last — after main.tsx's first import
+ * (`./lib/magic-link-capture`) stripped the `#token=` fragment, and after the
+ * app graph ran `lib/api/native-fetch.ts` (ROK-1779), so the third-party
+ * script can neither read the token nor patch fetch/XHR before the capture —
+ * the ordering holds by construction, not by HTML attribute semantics. The script is `async`, so it does not hold DOMContentLoaded (a
  * `defer` tag after the entry did, and changed the boot order smoke relies on).
  *
  * The `whTooltips` config stays an inline script in index.html's <head>, so it

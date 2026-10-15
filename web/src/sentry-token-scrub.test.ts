@@ -39,7 +39,7 @@ beforeAll(async () => {
     // Replay is lazy-loaded only when a replay can be sampled (production).
     vi.stubEnv('PROD', true);
     const Sentry = await import('@sentry/react');
-    await import('./sentry');
+    (await import('./sentry')).initSentry(true);
     await vi.dynamicImportSettled();
     config = at(vi.mocked(Sentry.init).mock.calls, 0)[0] as unknown as InitConfig;
     const replayOpts = at(vi.mocked(Sentry.replayIntegration).mock.calls, 0)[0];

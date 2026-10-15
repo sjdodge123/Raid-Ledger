@@ -13,5 +13,11 @@ import { scrubRecordingEvent } from './sentry-scrub-events';
 
 /** Adds Replay to the running client with the options it had in `Sentry.init`. */
 export function addReplayIntegration(): void {
-    addIntegration(replayIntegration({ beforeAddRecordingEvent: scrubRecordingEvent }));
+    // ROK-1779: masking is explicit rather than an SDK default.
+    addIntegration(replayIntegration({
+        maskAllText: true,
+        maskAllInputs: true,
+        blockAllMedia: true,
+        beforeAddRecordingEvent: scrubRecordingEvent,
+    }));
 }
