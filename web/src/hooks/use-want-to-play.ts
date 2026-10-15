@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { fetchApi } from '../lib/api/fetch-api';
 import { toast } from '../lib/toast';
-import { getAuthToken } from './use-auth';
+import { getAuthToken, useViewerCacheScope } from './use-auth';
+import { gameInterestQueryKey } from './game-interest-query-key';
 import { WantToPlayContext, NO_PROVIDER } from './want-to-play-context';
 
 /**
@@ -46,7 +47,8 @@ export function useWantToPlay(gameId: number | undefined) {
  */
 function useInterestToggleMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
-    const queryKey = ['games', 'interest', gameId];
+    const viewer = useViewerCacheScope();
+    const queryKey = gameInterestQueryKey(gameId, viewer);
 
     return useMutation<GameInterestResponseDto, Error, boolean>({
         mutationFn: (wantToPlay: boolean) =>
@@ -82,8 +84,9 @@ function useInterestToggleMutation(gameId: number | undefined) {
 }
 
 function useWantToPlayIndividual(gameId: number | undefined, enabled: boolean) {
+    const viewer = useViewerCacheScope();
     const interest = useQuery<GameInterestResponseDto>({
-        queryKey: ['games', 'interest', gameId],
+        queryKey: gameInterestQueryKey(gameId, viewer),
         queryFn: () =>
             fetchApi<GameInterestResponseDto>(`/games/${gameId}/interest`),
         enabled: enabled && !!gameId && !!getAuthToken(),

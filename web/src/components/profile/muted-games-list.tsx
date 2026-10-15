@@ -9,8 +9,9 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import type { GameNotificationMuteItemDto, GameNotificationMuteListDto } from '@raid-ledger/contract';
 import { fetchApi } from '../../lib/api/fetch-api';
-import { getAuthToken } from '../../hooks/use-auth';
-import { GAME_MUTES_QUERY_KEY, useGameNotificationMuteMutation } from '../../hooks/use-game-notification-mute';
+import { getAuthToken, useViewerCacheScope } from '../../hooks/use-auth';
+import { gameMutesQueryKey } from '../../hooks/game-interest-query-key';
+import { useGameNotificationMuteMutation } from '../../hooks/use-game-notification-mute';
 import { Button } from '../ui/button';
 
 function MutedGameRow({ game }: { game: GameNotificationMuteItemDto }): JSX.Element {
@@ -29,8 +30,9 @@ function MutedGameRow({ game }: { game: GameNotificationMuteItemDto }): JSX.Elem
 }
 
 export function MutedGamesList(): JSX.Element | null {
+    const viewer = useViewerCacheScope();
     const { data } = useQuery<GameNotificationMuteListDto>({
-        queryKey: GAME_MUTES_QUERY_KEY,
+        queryKey: gameMutesQueryKey(viewer),
         queryFn: () => fetchApi<GameNotificationMuteListDto>('/notifications/game-mutes'),
         enabled: !!getAuthToken(),
     });

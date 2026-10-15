@@ -4,7 +4,8 @@
  * The state is read from the game-interest query (`notificationsMuted`), the
  * same cache entry `useWantToPlay` fills, so the page makes no extra request.
  * The toggle is optimistic on that entry and rolls back on error; settling
- * invalidates it and the viewer's muted-games list.
+ * invalidates it and the viewer's muted-games list. Both keys are
+ * viewer-scoped (`game-interest-query-key.ts`).
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type {
@@ -13,15 +14,8 @@ import type {
 } from '@raid-ledger/contract';
 import { fetchApi } from '../lib/api/fetch-api';
 import { toast } from '../lib/toast';
-import { getAuthToken } from './use-auth';
-
-/** The viewer's muted-games list (`GET /notifications/game-mutes`). */
-export const GAME_MUTES_QUERY_KEY = ['notifications', 'game-mutes'] as const;
-
-/** Same key as `use-want-to-play.ts` — one cache entry per game. */
-export function gameInterestQueryKey(gameId: number | undefined) {
-    return ['games', 'interest', gameId] as const;
-}
+import { getAuthToken, useViewerCacheScope } from './use-auth';
+import { gameInterestQueryKey, gameMutesQueryKey } from './game-interest-query-key';
 
 interface MuteContext { previous: GameInterestResponseDto | undefined }
 
@@ -32,7 +26,8 @@ interface MuteContext { previous: GameInterestResponseDto | undefined }
  */
 export function useGameNotificationMuteMutation(gameId: number | undefined) {
     const queryClient = useQueryClient();
-    const queryKey = gameInterestQueryKey(gameId);
+    const viewer = useViewerCacheScope();
+    const queryKey = gameInterestQueryKey(gameId, viewer);
     return useMutation<GameNotificationMuteResponseDto, Error, boolean, MuteContext>({
         mutationFn: (muted) =>
             fetchApi<GameNotificationMuteResponseDto>(`/games/${gameId}/notification-mute`, {
@@ -54,15 +49,16 @@ export function useGameNotificationMuteMutation(gameId: number | undefined) {
         },
         onSettled: () => {
             void queryClient.invalidateQueries({ queryKey });
-            void queryClient.invalidateQueries({ queryKey: GAME_MUTES_QUERY_KEY });
+            void queryClient.invalidateQueries({ queryKey: gameMutesQueryKey(viewer) });
         },
     });
 }
 
 /** Read + toggle the viewer's mute for one game. */
 export function useGameNotificationMute(gameId: number | undefined) {
+    const viewer = useViewerCacheScope();
     const interest = useQuery<GameInterestResponseDto>({
-        queryKey: gameInterestQueryKey(gameId),
+        queryKey: gameInterestQueryKey(gameId, viewer),
         queryFn: () => fetchApi<GameInterestResponseDto>(`/games/${gameId}/interest`),
         enabled: !!gameId && !!getAuthToken(),
         staleTime: 1000 * 60 * 5,

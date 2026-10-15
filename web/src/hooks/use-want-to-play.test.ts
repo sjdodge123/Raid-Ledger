@@ -6,8 +6,15 @@ import type { GameInterestResponseDto } from '@raid-ledger/contract';
 import { useWantToPlay } from './use-want-to-play';
 import { setAccessToken } from '../lib/api/access-token-store';
 
+vi.mock('./use-auth', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./use-auth')>()),
+    useViewerCacheScope: () => VIEWER_ID,
+}));
+
 const GAME_ID = 19837;
-const PER_GAME_KEY = ['games', 'interest', GAME_ID];
+const VIEWER_ID = 42;
+// ROK-1797: the per-game interest key is viewer-scoped (viewer last).
+const PER_GAME_KEY = ['games', 'interest', GAME_ID, VIEWER_ID];
 const BATCH_KEY_PREFIX = ['games', 'interest', 'batch'];
 const HEARTED_KEY = ['userHeartedGames'];
 
