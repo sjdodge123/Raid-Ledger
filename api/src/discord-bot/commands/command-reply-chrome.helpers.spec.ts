@@ -286,6 +286,25 @@ describe('bindingTitle (AC2)', () => {
     ).toBe('#valheim-qp → Quick Play Announcements · Valheim');
   });
 
+  it('caps a long Quick Play title at the 256-char embed limit (ROK-1768)', () => {
+    const title = bindingTitle(
+      'c'.repeat(100),
+      'quick-play-announcements',
+      'g'.repeat(130),
+    );
+    expect(title.length).toBe(256);
+    expect(title.endsWith('…')).toBe(true);
+    expect(title.startsWith(`#${'c'.repeat(100)} → `)).toBe(true);
+  });
+
+  it('leaves a title of exactly 256 chars untouched (ROK-1768)', () => {
+    const head = '#qp → Quick Play Announcements · ';
+    const game = 'g'.repeat(256 - head.length);
+    const title = bindingTitle('qp', 'quick-play-announcements', game);
+    expect(title).toBe(`${head}${game}`);
+    expect(title.length).toBe(256);
+  });
+
   it('never appends a game to any other purpose (ROK-1768)', () => {
     expect(bindingTitle('news', 'game-announcements', 'Valheim')).toBe(
       '#news → Announcements',

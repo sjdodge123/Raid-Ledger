@@ -177,8 +177,22 @@ export function bindingTitle(
 ): string {
   const title = `#${channelName} → ${BINDING_PURPOSE_LABELS[purpose]}`;
   return purpose === 'quick-play-announcements' && gameName
-    ? `${title} · ${gameName}`
+    ? capEmbedTitle(`${title} · ${gameName}`)
     : title;
+}
+
+/** Discord rejects an embed title over 256 characters (`setTitle` throws). */
+const EMBED_TITLE_MAX = 256;
+
+/**
+ * ROK-1768: catalog game names are unbounded, so a 100-char channel plus a
+ * long game name can overflow the title — and the throw lands AFTER the bind
+ * saved, telling the admin it failed. Trim with an ellipsis instead.
+ */
+function capEmbedTitle(title: string): string {
+  return title.length <= EMBED_TITLE_MAX
+    ? title
+    : `${title.slice(0, EMBED_TITLE_MAX - 1)}…`;
 }
 
 /**
