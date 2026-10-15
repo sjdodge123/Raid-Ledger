@@ -950,6 +950,17 @@ a `FAIL` row anywhere, or a cancelled/killed run, still writes nothing. A
 `SKIPPED` Playwright row no longer blocks the gate — GitHub runs the full suite
 before the merge either way.
 
+`rl_validate_ci` also takes **`e2e_specs`** (ROK-1792; `string[]`, ≤20 paths,
+each matching `^scripts/smoke/[\w./-]+\.spec\.ts$`, no `..`), forwarded as
+`E2E_SPECS`. It runs exactly those specs on desktop + mobile and is the
+CLAUDE.md fleet gate's Playwright half:
+`{args:["--only-e2e"], e2e_specs:[…], against_env_slug, base_url:"https://slot-N.gamernight.net"}`.
+An explicit list bypasses the changed-files gate and FAILs on a down env
+instead of skipping. Rejected (`error: invalid_e2e_specs`) with `e2e_scope`
+other than `auto`, `--static` or `--no-e2e`; `validate-ci.sh` re-checks the
+paths exist and exits 2 otherwise. Its row, `Playwright (desktop + mobile,
+explicit: N specs)`, keeps the sentinel prefix.
+
 `rl_validate_ci` also takes **`e2e_scope`** (`'auto'` | `'all'` | `'none'`,
 default `auto`), forwarded to the runner as `E2E_SCOPE`. `auto` runs only the
 specs `scripts/smoke/scope-specs.sh` maps the branch diff to (the whole suite
