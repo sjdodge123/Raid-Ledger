@@ -608,7 +608,11 @@ function describeGamesIGDB() {
       expect(suppressions.length).toBe(1);
     });
 
-    it('should NOT create suppression when removing manual interest', async () => {
+    // ROK-1796 intentional behaviour change (was: "should NOT create
+    // suppression when removing manual interest"). Un-heart now ALWAYS
+    // suppresses, so un-heart → manual re-heart → un-heart stays opted out and
+    // kept Steam ownership rows stop counting as interest.
+    it('creates a suppression even when removing a manual-only interest (ROK-1796)', async () => {
       const game = await insertTestGame(testApp, 'No Suppression Game', {
         igdbId: 13002,
       });
@@ -623,7 +627,7 @@ function describeGamesIGDB() {
         .delete(`/games/${game.id}/want-to-play`)
         .set('Authorization', `Bearer ${adminToken}`);
 
-      // Verify no suppression was created
+      // Verify the suppression was created (ROK-1796)
       const suppressions = await testApp.db
         .select()
         .from(schema.gameInterestSuppressions)
@@ -637,7 +641,7 @@ function describeGamesIGDB() {
           ),
         );
 
-      expect(suppressions.length).toBe(0);
+      expect(suppressions.length).toBe(1);
     });
   }
   describe('discord auto-heart suppression', () =>
