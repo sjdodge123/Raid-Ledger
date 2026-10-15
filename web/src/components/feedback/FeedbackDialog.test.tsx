@@ -18,6 +18,7 @@ function renderDialog(overrides: Partial<Props> = {}) {
         showSuccess: false, category: 'bug', message: '', includeClientLogs: false,
         isSubmitting: false, sentryError: false, submitError: null, isError: false,
         onCategoryChange: vi.fn(), onMessageChange: vi.fn(), onIncludeLogsChange: vi.fn(),
+        screenshot: null, screenshotError: null, onScreenshotFile: vi.fn(), onScreenshotRemove: vi.fn(),
         onSubmit: vi.fn(), onClose: vi.fn(), ...overrides,
     };
     render(<FeedbackDialog {...props} />);
