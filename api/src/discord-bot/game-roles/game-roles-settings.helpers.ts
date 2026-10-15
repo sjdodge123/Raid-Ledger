@@ -95,6 +95,20 @@ export async function findOtherGameUsingRole(
   return row?.gameId ?? null;
 }
 
+/** Whether ANY game is linked to `roleId` (a lost-race role may be in use). */
+export async function isRoleLinked(
+  db: GameRoleDb,
+  roleId: string,
+): Promise<boolean> {
+  const r = schema.discordGameRoles;
+  const [row] = await db
+    .select({ gameId: r.gameId })
+    .from(r)
+    .where(eq(r.roleId, roleId))
+    .limit(1);
+  return row !== undefined;
+}
+
 /**
  * Upsert the link and return the role it ends up with. The controller refuses
  * a role change on an existing link (unlink first), so the grant rows always

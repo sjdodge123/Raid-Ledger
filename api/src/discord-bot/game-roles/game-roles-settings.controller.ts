@@ -46,6 +46,7 @@ import {
   findGameName,
   findGameRoleLink,
   findOtherGameUsingRole,
+  isRoleLinked,
   listGameRoleAudit,
   listGameRoleSummaries,
   saveGameRole,
@@ -161,7 +162,8 @@ export class GameRolesSettingsController {
   /**
    * A concurrent PUT linked the game between our read and our save, and the
    * stored link kept its role. If this request created a role for it, that
-   * role is now unused: delete it (best-effort — the helper never throws).
+   * role is now unused: delete it (best-effort — the helper never throws) —
+   * unless ANY game links it, which a delete would break.
    */
   private async dropLosingCreatedRole(
     existing: unknown,
@@ -170,6 +172,7 @@ export class GameRolesSettingsController {
     saved: { roleId: string },
   ): Promise<void> {
     if (existing || !botCreated || saved.roleId === roleId) return;
+    if (await isRoleLinked(this.db, roleId)) return;
     const guild = this.botClient.getGuild();
     if (guild) await deleteCreatedRole(guild, roleId);
   }

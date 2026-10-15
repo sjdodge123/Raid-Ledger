@@ -66,6 +66,7 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
     s.findGameName.mockResolvedValue('Valheim');
     s.findGameRoleLink.mockResolvedValue(null);
     s.findOtherGameUsingRole.mockResolvedValue(null);
+    s.isRoleLinked.mockResolvedValue(false);
     s.saveGameRole.mockImplementation((_db, input) =>
       Promise.resolve({ roleId: input.roleId }),
     );
@@ -121,6 +122,19 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
 
     expect(res.status).toBe(200);
     expect(d.deleteCreatedRole.mock.calls).toEqual([[guild, 'new-role']]);
+  });
+
+  it('a created role that lost the race is kept when any game links it', async () => {
+    d.preflightGameRole.mockResolvedValue(OK);
+    d.createGameRole.mockResolvedValue({ id: 'new-role', name: 'smoke-gr-x' });
+    s.saveGameRole.mockResolvedValue({ roleId: 'winner-role' });
+    s.isRoleLinked.mockResolvedValue(true);
+
+    const res = await put({ roleId: null, windowDays: 10, name: 'smoke-gr-x' });
+
+    expect(res.status).toBe(200);
+    expect(s.isRoleLinked).toHaveBeenCalledWith({}, 'new-role');
+    expect(d.deleteCreatedRole.mock.calls).toEqual([]);
   });
 
   it('a picked (not created) role that lost the race is never deleted', async () => {
