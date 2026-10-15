@@ -69,7 +69,12 @@ export function validateScreenshot(b64: string): {
   return { buf, ext };
 }
 
-/** Write `<dir>/<id>.<ext>` (never overwriting); returns the relative path. */
+/**
+ * Write `<dir>/<id>.<ext>`; returns the relative path. The just-inserted row
+ * owns `<id>`, so any file already there is a stale orphan from before a DB
+ * reset/restore rewound the id sequence: overwrite it, and drop a stale
+ * sibling with the other extension so no earlier user's image lingers.
+ */
 export async function writeScreenshot(
   feedbackId: number,
   buf: Buffer,
@@ -78,7 +83,9 @@ export async function writeScreenshot(
   const dir = getFeedbackScreenshotDir();
   await mkdir(dir, { recursive: true });
   const fileName = `${feedbackId}.${ext}`;
-  await writeFile(path.join(dir, fileName), buf, { flag: 'wx' });
+  await writeFile(path.join(dir, fileName), buf, { flag: 'w' });
+  const sibling = `${feedbackId}.${ext === 'png' ? 'jpg' : 'png'}`;
+  await deleteScreenshotFiles([`${FEEDBACK_SCREENSHOT_REL_PREFIX}${sibling}`]);
   return `${FEEDBACK_SCREENSHOT_REL_PREFIX}${fileName}`;
 }
 

@@ -42,7 +42,7 @@ beforeAll(async () => {
 });
 
 afterEach(async () => {
-  // Ids restart after a truncate; clear the dir so `wx` never collides.
+  // Ids restart after a truncate; clear the dir so files never leak across tests.
   for (const f of await readdir(dir)) await rm(path.join(dir, f));
   testApp.seed = await truncateAllTables(testApp.db);
   adminToken = await loginAsAdmin(testApp.request, testApp.seed);

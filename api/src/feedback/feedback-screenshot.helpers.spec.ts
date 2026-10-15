@@ -85,11 +85,17 @@ describe('screenshot storage', () => {
     await expect(stat(abs)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
-  it('never overwrites an existing file', async () => {
-    await writeScreenshot(7, PNG, 'png');
-    await expect(writeScreenshot(7, PNG, 'png')).rejects.toMatchObject({
-      code: 'EEXIST',
-    });
+  it('replaces a stale file left by a reused id (DB reset/restore)', async () => {
+    const stale = path.join(getFeedbackScreenshotDir(), '7.png');
+    await writeScreenshot(7, JPEG, 'jpg');
+    await writeFile(stale, Buffer.from('stale-orphan-from-old-db'));
+
+    await expect(writeScreenshot(7, PNG, 'png')).resolves.toBe(
+      'feedback/7.png',
+    );
+    expect((await readFile(stale)).toString('hex')).toBe(PNG.toString('hex'));
+    const sibling = path.join(getFeedbackScreenshotDir(), '7.jpg');
+    await expect(stat(sibling)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
   it('treats an already-deleted file as success', async () => {

@@ -4,7 +4,7 @@
  */
 import { Logger, PayloadTooLargeException } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { mkdtemp, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { FEEDBACK_SCREENSHOT_MAX_BASE64_CHARS } from '@raid-ledger/contract';
@@ -35,7 +35,7 @@ describe('storeScreenshot', () => {
   it('logs + reports to Sentry and does not throw when the write fails', async () => {
     const dir = await mkdtemp(path.join(tmpdir(), 'rl-fb-unit-'));
     process.env.RAID_LEDGER_FEEDBACK_DIR = dir;
-    await writeFile(path.join(dir, '7.png'), 'taken'); // `wx` → EEXIST
+    await mkdir(path.join(dir, '7.png')); // a directory → EISDIR on write
     const update = jest.fn();
     const db = { update } as unknown as Parameters<typeof storeScreenshot>[0];
     const logger = new Logger('spec');
