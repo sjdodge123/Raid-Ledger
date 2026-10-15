@@ -17,6 +17,10 @@ import {
   buildPrimaryButton,
   buildInlineButtons,
 } from './notification-embed.helpers';
+import {
+  buildAdjustNotificationsUrl,
+  buildNotificationSettingsUrl,
+} from './adjust-notifications-url.helpers';
 
 interface NotificationEmbedInput {
   notificationId: string;
@@ -119,7 +123,7 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('Notification Settings')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/profile/preferences/notifications`),
+        .setURL(buildNotificationSettingsUrl(clientUrl)),
     );
   }
 
@@ -144,11 +148,11 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('View All')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/profile/preferences/notifications`),
+        .setURL(buildNotificationSettingsUrl(clientUrl)),
       new ButtonBuilder()
         .setLabel('Adjust Notifications')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/profile/preferences/notifications`),
+        .setURL(buildNotificationSettingsUrl(clientUrl, type)),
     );
     return { embed, row };
   }
@@ -204,7 +208,14 @@ export class DiscordNotificationEmbedService {
       new ButtonBuilder()
         .setLabel('Adjust Notifications')
         .setStyle(ButtonStyle.Link)
-        .setURL(`${clientUrl}/profile/preferences/notifications`),
+        .setURL(
+          buildAdjustNotificationsUrl(
+            input.type,
+            input.payload,
+            input.notificationId,
+            clientUrl,
+          ),
+        ),
     );
     return new ActionRowBuilder<ButtonBuilder>().addComponents(buttons);
   }
