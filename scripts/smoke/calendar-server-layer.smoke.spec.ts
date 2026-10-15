@@ -132,13 +132,28 @@ async function seedMember(token: string): Promise<number> {
 }
 
 const SLOT_MS = 30 * 60_000;
+/**
+ * Clearance around our card. A card is never shorter than `.day-event-block`'s
+ * `min-height: 100px` (calendar-styles.css), and an hour of grid is as little as
+ * 44px (phone Day view, `.calendar-view-day .rbc-timeslot-group`) or 40px (Week
+ * view). react-big-calendar lays cards out by TIME, not by that min-height, so a
+ * 1h card ending at 21:00 still paints ~100px — over a 21:00 card (main CI,
+ * mobile: "Alt Raid Night … intercepts pointer events"). 100px / 40px-per-hour
+ * = 2.5h, so no other event may START within 2.5h either side of ours.
+ */
+const CLEARANCE_MS = 150 * 60_000;
 interface Slot { start: string; end: string; date: string }
 interface ListedEvent { id: number; startTime: string; endTime: string }
 
-const overlaps = (s: Slot, e: ListedEvent): boolean =>
-    Date.parse(e.startTime) < Date.parse(s.end) && Date.parse(s.start) < Date.parse(e.endTime);
+/** `e` overlaps our slot in time, or starts close enough for either card to paint over the other. */
+const crowds = (s: Slot, e: ListedEvent): boolean => {
+    const start = Date.parse(s.start);
+    const eStart = Date.parse(e.startTime);
+    const overlaps = eStart < Date.parse(s.end) && start < Date.parse(e.endTime);
+    return overlaps || Math.abs(eStart - start) < CLEARANCE_MS;
+};
 
-/** Every event that could overlap [from, to): starts in [from - 2d, to), all pages. */
+/** Every event that could crowd [from, to): starts in [from - 2d, to], all pages. */
 async function eventsNear(token: string, from: number, to: number): Promise<ListedEvent[]> {
     const out: ListedEvent[] = [];
     const range = `startAfter=${new Date(from - 2 * DAY_MS).toISOString()}&endBefore=${new Date(to).toISOString()}`;
@@ -166,32 +181,33 @@ async function slotsInside(page: Page, w: LayerWindow): Promise<Slot[]> {
 
 /**
  * Create `title` in a 30-min slot inside a future window that NO other event
- * overlaps (an overlapping card stacks over ours at phone width). Each project
- * starts from a different slot; a sibling that lands in the same slot anyway is
- * caught by the re-read, and the event moves on. Fails loudly if none is free.
+ * crowds (see `CLEARANCE_MS`: a nearby card paints over ours at phone width).
+ * Each project starts from a different window (day). A sibling's event created
+ * between our check and our create is caught by the re-read: the NEWER event
+ * (higher id) yields and moves on, so two siblings never both back off. Fails
+ * loudly if no slot is free.
  */
 async function createInFreeSlot(
     token: string, page: Page, windows: LayerWindow[], title: string, project: string,
 ): Promise<{ id: number; slot: Slot }> {
-    const offset = Math.max(0, ['desktop', 'mobile', 'tablet'].indexOf(project)) * 3;
-    for (const w of windows) {
-        const all = await slotsInside(page, w);
-        const slots = [...all.slice(offset % (all.length || 1)), ...all.slice(0, offset % (all.length || 1))];
-        const busy = await eventsNear(token, Date.parse(w.start), Date.parse(w.end));
-        for (const slot of slots) {
-            if (busy.some((e) => overlaps(slot, e))) continue;
+    const offset = Math.max(0, ['desktop', 'mobile', 'tablet'].indexOf(project)) % (windows.length || 1);
+    for (const w of [...windows.slice(offset), ...windows.slice(0, offset)]) {
+        const near = (s: Slot) => eventsNear(token, Date.parse(s.start) - CLEARANCE_MS, Date.parse(s.end) + CLEARANCE_MS);
+        const busy = await eventsNear(token, Date.parse(w.start) - CLEARANCE_MS, Date.parse(w.end) + CLEARANCE_MS);
+        for (const slot of await slotsInside(page, w)) {
+            if (busy.some((e) => crowds(slot, e))) continue;
             const created = (await apiPost(token, '/events', {
                 title, startTime: slot.start, endTime: slot.end, maxAttendees: 10, gameId: seed?.gameId,
             })) as { id?: number };
             if (typeof created.id !== 'number') throw new Error(`POST /events: ${JSON.stringify(created)}`);
-            const rivals = (await eventsNear(token, Date.parse(slot.start), Date.parse(slot.end)))
-                .filter((e) => e.id !== created.id && overlaps(slot, e));
-            if (rivals.length === 0) return { id: created.id, slot };
-            await apiDelete(token, `/events/${created.id}`);
+            const createdId = created.id;
+            const rivals = (await near(slot)).filter((e) => e.id < createdId && crowds(slot, e));
+            if (rivals.length === 0) return { id: createdId, slot };
+            await apiDelete(token, `/events/${createdId}`);
             busy.push(...rivals);
         }
     }
-    throw new Error(`no 30-min slot free of other events inside any of ${windows.length} future windows`);
+    throw new Error(`no 30-min slot ${CLEARANCE_MS / 60_000} min clear of other events in any of ${windows.length} future windows`);
 }
 
 /** A point (relative to `card`) where the card is the topmost hit, or what covers it instead. */
