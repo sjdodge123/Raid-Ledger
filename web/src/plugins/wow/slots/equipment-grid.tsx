@@ -9,6 +9,8 @@ import { isWowheadLoaded } from '../hooks/use-wowhead-tooltips';
 import { ItemFallbackTooltip } from '../components/item-fallback-tooltip';
 import { getWowheadItemUrl, getWowheadItemData } from '../lib/wowhead-urls';
 import { itemWowheadVariant } from '../lib/item-wowhead-variant';
+import { portraitKey, type ForeverPortrait } from '../lib/forever-portrait';
+import { ForeverPortraitTile } from '../components/forever-portrait';
 import type { CharacterEquipmentDto, EquipmentItemDto } from '@raid-ledger/contract';
 import {
     QUALITY_COLORS, QUALITY_BORDERS, SLOT_LABELS,
@@ -113,17 +115,20 @@ function SlotColumn({ slots, itemsBySlot, gameVariant, onItemClick }: {
 }
 
 /** Equipment grid with responsive paperdoll layout */
-export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }: {
+export function EquipmentGrid({ equipment, gameVariant, renderUrl, portrait, onItemClick }: {
     equipment: CharacterEquipmentDto; gameVariant: string | null;
     renderUrl: string | null; onItemClick: (item: EquipmentItemDto) => void;
+    /** ROK-1747: the Forever fallback portrait, shown in the render slot when `renderUrl` is null. */
+    portrait?: ForeverPortrait | undefined;
 }) {
     const itemsBySlot = new Map(equipment.items.map((i) => [i.slot, i]));
     const columnProps = { itemsBySlot, gameVariant, onItemClick };
+    const renderCenter = pickCenter(renderUrl, portrait);
 
     return (
         <div className="space-y-4">
-            {renderUrl ? (
-                <EquipmentWithRender renderUrl={renderUrl} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
+            {renderCenter ? (
+                <EquipmentWithCenter renderCenter={renderCenter} renderSlotColumn={(slots: string[]) => <SlotColumn slots={slots} {...columnProps} />} />
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <SlotColumn slots={LEFT_SLOTS} {...columnProps} />
@@ -140,6 +145,20 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
     );
 }
 
+type RenderLayout = 'desktop' | 'mobile';
+type CenterRenderer = (layout: RenderLayout) => JSX.Element;
+
+/** The render slot's content: the Blizzard render wins, else the Forever portrait, else nothing (2-col grid). */
+function pickCenter(renderUrl: string | null, portrait: ForeverPortrait | undefined): CenterRenderer | null {
+    if (renderUrl) return (layout) => <RenderImage renderUrl={renderUrl} layout={layout} />;
+    if (!portrait || portrait.kind === 'none') return null;
+    return () => (
+        <div data-testid="equipment-portrait">
+            <ForeverPortraitTile key={portraitKey(portrait)} portrait={portrait} size="lg" />
+        </div>
+    );
+}
+
 /**
  * Expected box of the character render, per layout (ROK-1159): Blizzard's
  * `main-raw` render at an assumed 4:3, scaled to each layout's max height.
@@ -152,28 +171,40 @@ export function EquipmentGrid({ equipment, gameVariant, renderUrl, onItemClick }
 const RENDER_BOX_DESKTOP = { width: 800, height: 600 } as const;
 const RENDER_BOX_MOBILE = { width: 400, height: 300 } as const;
 
-/** Desktop and mobile layouts with character render image */
-function EquipmentWithRender({ renderUrl, renderSlotColumn }: {
-    renderUrl: string; renderSlotColumn: (slots: string[]) => JSX.Element;
+/** The Blizzard character render for one layout; a dead URL hides the image. */
+function RenderImage({ renderUrl, layout }: { renderUrl: string; layout: RenderLayout }) {
+    if (layout === 'desktop') {
+        return (
+            <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
+                className="w-auto max-h-[600px] object-contain drop-shadow-lg"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+        );
+    }
+    return (
+        <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
+            className="w-auto max-h-[300px] object-contain drop-shadow-lg"
+            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+        />
+    );
+}
+
+/** Desktop (3-col) and mobile (stacked) layouts with a centre column: the render image or the portrait. */
+function EquipmentWithCenter({ renderCenter, renderSlotColumn }: {
+    renderCenter: CenterRenderer; renderSlotColumn: (slots: string[]) => JSX.Element;
 }) {
     return (
         <>
             <div className="hidden lg:grid lg:grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 {renderSlotColumn(LEFT_SLOTS)}
                 <div className="flex items-center justify-center px-2">
-                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_DESKTOP}
-                        className="w-auto max-h-[600px] object-contain drop-shadow-lg"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
+                    {renderCenter('desktop')}
                 </div>
                 {renderSlotColumn(RIGHT_SLOTS)}
             </div>
             <div className="lg:hidden space-y-4">
                 <div className="flex justify-center">
-                    <img src={renderUrl} alt="Character render" {...RENDER_BOX_MOBILE}
-                        className="w-auto max-h-[300px] object-contain drop-shadow-lg"
-                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                    />
+                    {renderCenter('mobile')}
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {renderSlotColumn(LEFT_SLOTS)}
