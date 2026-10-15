@@ -334,17 +334,3 @@ describe('web Sentry runtime opt-out gate (ROK-1779)', () => {
         expect(Sentry.captureMessage).toHaveBeenCalledWith('[BUG] hi', {});
     });
 });
-
-describe('web Sentry boot glue: bootTelemetry (ROK-1779)', () => {
-    it.each([
-        ['true', () => Promise.resolve({ telemetryEnabled: true }), true],
-        ['false', () => Promise.resolve({ telemetryEnabled: false }), false],
-        ['absent', () => Promise.resolve({}), false],
-        ['a failed fetch', () => Promise.reject(new Error('offline')), false],
-    ])('passes the served flag through when status is %s', async (_label, loadStatus, active) => {
-        const { Sentry, mod } = await freshSentry();
-        await expect(mod.bootTelemetry(loadStatus)).resolves.toBe(active);
-        expect(Sentry.init).toHaveBeenCalledTimes(active ? 1 : 0);
-        expect(mod.isTelemetryActive()).toBe(active);
-    });
-});

@@ -2,48 +2,24 @@
 // initialises, so it never reaches breadcrumbs, tracing or replay. This MUST
 // stay the very first import (magic-link-capture.test.ts pins it).
 import './lib/magic-link-capture';
-// ROK-1366: third-party tooltips.js is injected (async) only now, after the
-// strip above — never from index.html (magic-link-capture.test.ts pins it).
-import './lib/wowhead-tooltips-loader';
-// Sentry next — before any other modules.
-// ROK-306: Maintainer telemetry for error tracking.
-import { Sentry, bootTelemetry, bufferBoundaryError, captureReactError } from './sentry';
+// ROK-306 / ROK-1779: Sentry next. Importing it installs the boot error
+// buffer; nothing initialises until the telemetry decision below.
+import { Sentry, initSentry } from './sentry';
+import { bootstrap, fetchSystemStatus, renderBootFailure } from './bootstrap';
 
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { QueryClientProvider } from '@tanstack/react-query';
-import { queryClient } from './lib/query-client';
-import { initPerformanceMonitoring } from './lib/performance';
-import './index.css';
-import App from './App.tsx';
-import { ErrorFallback } from './components/ErrorFallback';
-import { systemStatusQueryOptions } from './hooks/use-system-status';
-
-// ROK-1779: Sentry initialises only once /system/status allows it (runtime
-// opt-out). A failed fetch means no init — fail closed. The mount below does
-// NOT wait for it: errors raised meanwhile are held by the boot buffer and
-// sent after init (ON) or dropped (OFF).
-void bootTelemetry(() => queryClient.fetchQuery(systemStatusQueryOptions));
-
-const root = createRoot(document.getElementById('root')!, {
-  // React 19 error hooks — forward uncaught/caught/recoverable errors to Sentry.
-  onUncaughtError: captureReactError,
-  onCaughtError: captureReactError,
-  onRecoverableError: captureReactError,
+// ROK-1779 (Codex r6): App is NOT imported statically. bootstrap.ts decides
+// telemetry first (GET /system/status, hard timeout, fail closed), runs
+// initSentry, and only then imports the app — so Sentry's fetch/XHR wrappers
+// are in place before native-fetch.ts captures them, and a throw while the
+// app's modules evaluate is captured. bootstrap.test.ts pins this file's
+// static imports.
+void bootstrap({
+  loadStatus: fetchSystemStatus,
+  initSentry,
+  loadApp: () => import('./app-entry'),
+  reportFatal: (error, telemetryOn) => {
+    console.error('[boot] the app failed to load', error);
+    if (telemetryOn) Sentry.captureException(error, { tags: { 'boot.stage': 'app-import' } });
+    renderBootFailure(document.getElementById('root'));
+  },
 });
-
-// ROK-343: Web Vitals monitoring (FCP <1.8s, LCP <2.5s targets)
-initPerformanceMonitoring();
-
-root.render(
-  <StrictMode>
-    <Sentry.ErrorBoundary
-      fallback={({ error }) => <ErrorFallback error={error} />}
-      onError={bufferBoundaryError}
-    >
-      <QueryClientProvider client={queryClient}>
-        <App />
-      </QueryClientProvider>
-    </Sentry.ErrorBoundary>
-  </StrictMode>,
-);

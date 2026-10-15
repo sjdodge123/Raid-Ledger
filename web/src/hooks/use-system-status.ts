@@ -20,8 +20,8 @@ async function getSystemStatus(): Promise<SystemStatusDto> {
 }
 
 /**
- * Shared query options. ROK-1779: main.tsx fetches these before render to
- * gate Sentry, which seeds the cache `useSystemStatus` then reuses.
+ * Shared query options. ROK-1779: bootstrap.ts fetches /system/status before
+ * the app loads to gate Sentry; app-entry.tsx seeds this query's cache with it.
  */
 export const systemStatusQueryOptions = {
     queryKey: ['system', 'status'] as const,

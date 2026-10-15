@@ -20,19 +20,8 @@
  * native-fetch.test.ts). Tests that stub `fetch` for a request routed through
  * here must install the stub before this module is imported (`vi.hoisted`),
  * or route the request through MSW.
- *
- * ROK-1779 (Codex r5): Sentry initialises after this capture, so its own
- * fetch/XHR instrumentation never sees these clients. They record their own
- * breadcrumbs + spans (`native-http-telemetry.ts`, a no-op while telemetry is
- * off) — the globals are still captured here, never re-read.
  */
-import { noteXhrOpen, traceNativeFetch, traceXhrSend } from './native-http-telemetry';
-
-const capturedFetch: typeof fetch = window.fetch.bind(window);
-
-/** The fetch captured at module load, traced when telemetry is ON. */
-export const nativeFetch: typeof fetch = (input, init) =>
-    traceNativeFetch(capturedFetch, input, init);
+export const nativeFetch: typeof fetch = window.fetch.bind(window);
 
 /** The `XMLHttpRequest` constructor as it was at module load. */
 export const NativeXHR: typeof XMLHttpRequest = window.XMLHttpRequest;
@@ -46,13 +35,11 @@ const xhrSend = xhrProto.send;
 export const nativeXhr = {
   open(xhr: XMLHttpRequest, method: string, url: string): void {
     xhrOpen.call(xhr, method, url, true);
-    noteXhrOpen(xhr, method, url);
   },
   setRequestHeader(xhr: XMLHttpRequest, name: string, value: string): void {
     xhrSetRequestHeader.call(xhr, name, value);
   },
   send(xhr: XMLHttpRequest, body: XMLHttpRequestBodyInit | null): void {
-    traceXhrSend(xhr);
     xhrSend.call(xhr, body);
   },
 };

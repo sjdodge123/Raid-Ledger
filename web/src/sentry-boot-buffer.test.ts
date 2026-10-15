@@ -26,7 +26,16 @@ async function freshSentry(): Promise<{ app: SentryModule; captureException: Ret
 }
 
 function fireWindowError(error: Error): void {
-    window.dispatchEvent(new ErrorEvent('error', { error, message: error.message }));
+    // Vitest's jsdom env rethrows a window 'error' event as an uncaught
+    // exception when no user listener exists — exactly the closed-buffer state
+    // these tests assert. A no-op listener stands in for the page's own.
+    const pageListener = (): void => {};
+    window.addEventListener('error', pageListener);
+    try {
+        window.dispatchEvent(new ErrorEvent('error', { error, message: error.message }));
+    } finally {
+        window.removeEventListener('error', pageListener);
+    }
 }
 
 function fireRejection(reason: unknown): void {

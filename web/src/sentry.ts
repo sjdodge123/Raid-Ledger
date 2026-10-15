@@ -2,7 +2,8 @@
  * Sentry initialization for the React frontend.
  * ROK-306: Maintainer telemetry — hardcoded DSN (lib/sentry-options.ts).
  * ROK-1779: runtime opt-out. Nothing initialises at import time any more;
- * main.tsx fetches /system/status and calls `initSentry(telemetryEnabled)`.
+ * bootstrap.ts fetches /system/status and calls `initSentry(telemetryEnabled)`
+ * before the app's modules are imported.
  * VITE_DISABLE_TELEMETRY=true still disables it at build time. Until init
  * runs (or when it never does) every Sentry call below is a no-op.
  *
@@ -92,19 +93,6 @@ export function captureReactError(
  */
 export function bufferBoundaryError(error: unknown, componentStack: string): void {
     bufferCapture({ error, source: 'error-boundary', componentStack });
-}
-
-/**
- * ROK-1779: main.tsx boot glue — load /system/status, then decide. A failed
- * load means no init (fail closed). Resolves to whether telemetry is active.
- */
-export function bootTelemetry(
-    loadStatus: () => Promise<{ telemetryEnabled?: boolean | undefined }>,
-): Promise<boolean> {
-    return loadStatus().then(
-        (s) => initSentry(s.telemetryEnabled),
-        () => initSentry(undefined),
-    );
 }
 
 /** Whether `initSentry` has initialised the client. */

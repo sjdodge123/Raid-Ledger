@@ -1,8 +1,9 @@
 /**
  * ROK-1779: hold startup errors while the telemetry decision is pending.
  *
- * main.tsx mounts React while GET /system/status is still in flight, so an
- * error thrown during that window happens before any Sentry client exists.
+ * bootstrap.ts holds the app import while GET /system/status is in flight,
+ * so an error thrown in that window (or by the entry's own modules) happens
+ * before any Sentry client exists.
  * This module (no Sentry import — it only collects) buffers those errors:
  * window `error` / `unhandledrejection` listeners plus the root error
  * handlers and the ErrorBoundary push here. `closeBootBuffer()` ends the
