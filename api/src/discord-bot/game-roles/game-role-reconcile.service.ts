@@ -57,6 +57,14 @@ interface RunState {
 
 const ymd = (d: Date): string => d.toISOString().slice(0, 10);
 
+/** Tracked outcome: offline is a no-op; any failed game makes it degraded. */
+function cronOutcome(
+  result: GameRoleRunResultDto | false,
+): false | { degraded: true } | undefined {
+  if (result === false) return false;
+  return result.failedGames.length > 0 ? { degraded: true } : undefined;
+}
+
 @Injectable()
 export class GameRoleReconcileService {
   private readonly logger = new Logger(GameRoleReconcileService.name);
@@ -73,8 +81,7 @@ export class GameRoleReconcileService {
   async reconcileCron(): Promise<void> {
     await this.cronJobService.executeWithTracking(
       GAME_ROLE_RECONCILE_JOB,
-      async () =>
-        (await this.runReconciliation()) === false ? false : undefined,
+      async () => cronOutcome(await this.runReconciliation()),
     );
   }
 
