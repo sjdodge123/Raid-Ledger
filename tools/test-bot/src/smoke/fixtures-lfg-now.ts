@@ -16,6 +16,7 @@
  * not by any smoke.
  */
 import { ApiClient } from "./api.js";
+import { awaitProcessing } from "./fixtures.js";
 
 /** `POST /admin/test/lfg-now/voice-join|voice-leave` response. */
 export interface LfgNowVoiceResult {
@@ -101,4 +102,42 @@ export function endLfgSession(
   return api.post<LfgEndSessionResult>("/admin/test/lfg/end-session", {
     gameId,
   });
+}
+
+/**
+ * Best-effort {@link endLfgSession} for a smoke's `finally`: tear down the
+ * session the run spawned, if any (a no-op when none was).
+ *
+ * Warns on `ended && !channelDestroyed` — a temp voice channel that may now be
+ * orphaned in the shared guild — and on any error, but never throws, so a
+ * cleanup failure cannot replace the test's real one. Drained afterwards so
+ * the post's closing re-render lands before the caller deletes the binding or
+ * thread it routes through.
+ *
+ * @param api - An ADMIN client.
+ * @param gameId - The game whose session to end.
+ * @param tag - Log prefix naming the calling smoke, e.g. `lfg-board`.
+ */
+export async function endSpawnedLfgSession(
+  api: ApiClient,
+  gameId: number,
+  tag: string,
+): Promise<void> {
+  try {
+    const res = await endLfgSession(api, gameId);
+    if (res.ended && !res.channelDestroyed) {
+      console.warn(
+        `[${tag}] session ended for game ${gameId} but its temp voice ` +
+          `channel was NOT deleted — never created, bot offline, already ` +
+          `gone, or the delete failed; if it exists it may be orphaned in ` +
+          `the guild`,
+      );
+    }
+    await awaitProcessing(api);
+  } catch (err) {
+    console.warn(
+      `[${tag}] end-session cleanup failed for game ${gameId} — its temp ` +
+        `voice channel may be orphaned: ${String(err)}`,
+    );
+  }
 }
