@@ -1,6 +1,9 @@
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import type { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { ValheimAdapterRegistration, VALHEIM_LOG_PARSER } from './valheim-adapters';
+import {
+  ValheimAdapterRegistration,
+  VALHEIM_LOG_PARSER,
+} from './valheim-adapters';
 import { VALHEIM_MANIFEST } from './valheim.manifest';
 
 describe('Valheim plugin registration', () => {

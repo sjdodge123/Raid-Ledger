@@ -8,8 +8,14 @@ describe('parseValheimLine', () => {
   describe('join (handshake)', () => {
     it('emits join with the SteamID64 and the parsed timestamp', () => {
       expect(
-        parseValheimLine(`10/14/2026 00:10:50: Got handshake from client ${STEAM_A}`),
-      ).toEqual({ kind: 'join', steamId: STEAM_A, loggedAt: '2026-10-14T00:10:50' });
+        parseValheimLine(
+          `10/14/2026 00:10:50: Got handshake from client ${STEAM_A}`,
+        ),
+      ).toEqual({
+        kind: 'join',
+        steamId: STEAM_A,
+        loggedAt: '2026-10-14T00:10:50',
+      });
     });
 
     it('matches the on-disk BepInEx prefix too (unanchored)', () => {
@@ -17,7 +23,11 @@ describe('parseValheimLine', () => {
         parseValheimLine(
           `[Info   : Unity Log] 10/14/2026 00:10:50: Got handshake from client ${STEAM_A}`,
         ),
-      ).toEqual({ kind: 'join', steamId: STEAM_A, loggedAt: '2026-10-14T00:10:50' });
+      ).toEqual({
+        kind: 'join',
+        steamId: STEAM_A,
+        loggedAt: '2026-10-14T00:10:50',
+      });
     });
 
     it('omits loggedAt when the line has no timestamp', () => {
@@ -29,7 +39,9 @@ describe('parseValheimLine', () => {
 
     it('ignores the redundant "Got connection SteamID" line', () => {
       expect(
-        parseValheimLine(`10/14/2026 00:10:50: Got connection SteamID ${STEAM_A}`),
+        parseValheimLine(
+          `10/14/2026 00:10:50: Got connection SteamID ${STEAM_A}`,
+        ),
       ).toBeNull();
     });
   });
@@ -37,7 +49,9 @@ describe('parseValheimLine', () => {
   describe('character (ZDOID)', () => {
     it('emits a live character with its name', () => {
       expect(
-        parseValheimLine('10/14/2026 00:11:12: Got character ZDOID from Ragnhild : 123456789:1'),
+        parseValheimLine(
+          '10/14/2026 00:11:12: Got character ZDOID from Ragnhild : 123456789:1',
+        ),
       ).toEqual({
         kind: 'character',
         name: 'Ragnhild',
@@ -48,7 +62,9 @@ describe('parseValheimLine', () => {
 
     it('flags a 0:0 ZDOID as a death (trap: not a leave)', () => {
       expect(
-        parseValheimLine('10/14/2026 02:45:04: Got character ZDOID from Bjorn : 0:0'),
+        parseValheimLine(
+          '10/14/2026 02:45:04: Got character ZDOID from Bjorn : 0:0',
+        ),
       ).toEqual({
         kind: 'character',
         name: 'Bjorn',
@@ -75,8 +91,14 @@ describe('parseValheimLine', () => {
   describe('auth-failed (wrong password)', () => {
     it('emits auth-failed with the SteamID64', () => {
       expect(
-        parseValheimLine(`10/14/2026 01:47:54: Peer ${STEAM_B} has wrong password`),
-      ).toEqual({ kind: 'auth-failed', steamId: STEAM_B, loggedAt: '2026-10-14T01:47:54' });
+        parseValheimLine(
+          `10/14/2026 01:47:54: Peer ${STEAM_B} has wrong password`,
+        ),
+      ).toEqual({
+        kind: 'auth-failed',
+        steamId: STEAM_B,
+        loggedAt: '2026-10-14T01:47:54',
+      });
     });
   });
 
@@ -84,12 +106,18 @@ describe('parseValheimLine', () => {
     it('emits leave with the SteamID64', () => {
       expect(
         parseValheimLine(`10/14/2026 03:50:28: Closing socket ${STEAM_B}`),
-      ).toEqual({ kind: 'leave', steamId: STEAM_B, loggedAt: '2026-10-14T03:50:28' });
+      ).toEqual({
+        kind: 'leave',
+        steamId: STEAM_B,
+        loggedAt: '2026-10-14T03:50:28',
+      });
     });
 
     it('ignores mod chatter that names a peer (Seasonality)', () => {
       expect(
-        parseValheimLine(`[Info   :Seasonality] Peer (${STEAM_B}) disconnected`),
+        parseValheimLine(
+          `[Info   :Seasonality] Peer (${STEAM_B}) disconnected`,
+        ),
       ).toBeNull();
     });
 
@@ -107,14 +135,26 @@ describe('parseValheimLine', () => {
   describe('heartbeat (Connections N ZDOS:)', () => {
     it('emits the peer count from the ZDOS form', () => {
       expect(
-        parseValheimLine('10/14/2026 02:39:02:  Connections 5 ZDOS:180848  sent:2549 recv:1723'),
-      ).toEqual({ kind: 'heartbeat', count: 5, loggedAt: '2026-10-14T02:39:02' });
+        parseValheimLine(
+          '10/14/2026 02:39:02:  Connections 5 ZDOS:180848  sent:2549 recv:1723',
+        ),
+      ).toEqual({
+        kind: 'heartbeat',
+        count: 5,
+        loggedAt: '2026-10-14T02:39:02',
+      });
     });
 
     it('emits a zero count', () => {
       expect(
-        parseValheimLine('10/14/2026 03:59:02:  Connections 0 ZDOS:211724  sent:0 recv:0'),
-      ).toEqual({ kind: 'heartbeat', count: 0, loggedAt: '2026-10-14T03:59:02' });
+        parseValheimLine(
+          '10/14/2026 03:59:02:  Connections 0 ZDOS:211724  sent:0 recv:0',
+        ),
+      ).toEqual({
+        kind: 'heartbeat',
+        count: 0,
+        loggedAt: '2026-10-14T03:59:02',
+      });
     });
 
     it('ignores the bare dungeon-generation "Connections 4" (trap)', () => {
@@ -124,7 +164,9 @@ describe('parseValheimLine', () => {
 
   describe('server lifecycle', () => {
     it('emits server-ready on "Game server connected"', () => {
-      expect(parseValheimLine('10/14/2026 00:09:02: Game server connected')).toEqual({
+      expect(
+        parseValheimLine('10/14/2026 00:09:02: Game server connected'),
+      ).toEqual({
         kind: 'server-ready',
         loggedAt: '2026-10-14T00:09:02',
       });
@@ -154,7 +196,9 @@ describe('parseValheimLine', () => {
 
     it('never echoes a secret-bearing startup line', () => {
       expect(
-        parseValheimLine('./valheim_server.x86_64 -name "Srv" -password "hunter2" -public 0'),
+        parseValheimLine(
+          './valheim_server.x86_64 -name "Srv" -password "hunter2" -public 0',
+        ),
       ).toBeNull();
     });
   });

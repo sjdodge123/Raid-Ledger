@@ -33,9 +33,7 @@ export function parseValheimLine(line: string): GamePresenceEvent | null {
 
 function matchBody(line: string): EventBody | null {
   return (
-    matchSteamEvent(line) ??
-    matchCharacter(line) ??
-    matchServerEvent(line)
+    matchSteamEvent(line) ?? matchCharacter(line) ?? matchServerEvent(line)
   );
 }
 

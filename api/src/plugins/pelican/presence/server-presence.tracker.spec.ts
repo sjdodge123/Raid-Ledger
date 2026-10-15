@@ -9,8 +9,14 @@ const A = '76561190000000001';
 const B = '76561190000000002';
 const C = '76561190000000003';
 
-const join = (steamId: string): GamePresenceEvent => ({ kind: 'join', steamId });
-const leave = (steamId: string): GamePresenceEvent => ({ kind: 'leave', steamId });
+const join = (steamId: string): GamePresenceEvent => ({
+  kind: 'join',
+  steamId,
+});
+const leave = (steamId: string): GamePresenceEvent => ({
+  kind: 'leave',
+  steamId,
+});
 const authFailed = (steamId: string): GamePresenceEvent => ({
   kind: 'auth-failed',
   steamId,
@@ -20,7 +26,10 @@ const character = (name: string, zdoidZero = false): GamePresenceEvent => ({
   name,
   zdoidZero,
 });
-const heartbeat = (count: number): GamePresenceEvent => ({ kind: 'heartbeat', count });
+const heartbeat = (count: number): GamePresenceEvent => ({
+  kind: 'heartbeat',
+  count,
+});
 
 /** Feed events at t = 1s, 2s, … and collect every change. */
 function run(
@@ -28,7 +37,9 @@ function run(
   events: GamePresenceEvent[],
   startSec = 1,
 ): PresenceChange[] {
-  return events.flatMap((e, i) => tracker.apply(e, new Date((startSec + i) * 1000)));
+  return events.flatMap((e, i) =>
+    tracker.apply(e, new Date((startSec + i) * 1000)),
+  );
 }
 
 describe('ServerPresenceTracker', () => {
@@ -51,7 +62,12 @@ describe('ServerPresenceTracker', () => {
     });
 
     it('pairs character lines to handshakes FIFO', () => {
-      const changes = run(tracker, [join(A), join(B), character('X'), character('Y')]);
+      const changes = run(tracker, [
+        join(A),
+        join(B),
+        character('X'),
+        character('Y'),
+      ]);
       expect(changes).toEqual([
         { kind: 'joined', steamId: A, name: 'X' },
         { kind: 'joined', steamId: B, name: 'Y' },
@@ -68,15 +84,17 @@ describe('ServerPresenceTracker', () => {
   describe('death and respawn', () => {
     it('a 0:0 death of a present player does not leave', () => {
       run(tracker, [join(A), character('Bjorn')]);
-      expect(run(tracker, [character('Bjorn', true), character('Bjorn')], 10)).toEqual([]);
+      expect(
+        run(tracker, [character('Bjorn', true), character('Bjorn')], 10),
+      ).toEqual([]);
       expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'Bjorn' }]);
     });
 
     it('a respawn does not consume a newer pending handshake', () => {
       run(tracker, [join(A), character('Bjorn'), join(B)]);
-      expect(run(tracker, [character('Bjorn'), character('Freya')], 10)).toEqual([
-        { kind: 'joined', steamId: B, name: 'Freya' },
-      ]);
+      expect(
+        run(tracker, [character('Bjorn'), character('Freya')], 10),
+      ).toEqual([{ kind: 'joined', steamId: B, name: 'Freya' }]);
     });
 
     it('a 0:0 line never pairs to a pending handshake', () => {
@@ -87,21 +105,25 @@ describe('ServerPresenceTracker', () => {
 
   describe('auth-failed', () => {
     it('retracts the pending handshake with no joined/left churn', () => {
-      expect(run(tracker, [join(B), authFailed(B), character('X')])).toEqual([]);
+      expect(run(tracker, [join(B), authFailed(B), character('X')])).toEqual(
+        [],
+      );
       expect(tracker.snapshot()).toEqual([]);
     });
 
     it('retracts only that handshake — the next character pairs to the other', () => {
-      expect(run(tracker, [join(B), join(A), authFailed(B), character('X')])).toEqual([
-        { kind: 'joined', steamId: A, name: 'X' },
-      ]);
+      expect(
+        run(tracker, [join(B), join(A), authFailed(B), character('X')]),
+      ).toEqual([{ kind: 'joined', steamId: A, name: 'X' }]);
     });
   });
 
   describe('leave', () => {
     it('removes a present player and reports their name', () => {
       run(tracker, [join(A), character('X')]);
-      expect(run(tracker, [leave(A)], 10)).toEqual([{ kind: 'left', steamId: A, name: 'X' }]);
+      expect(run(tracker, [leave(A)], 10)).toEqual([
+        { kind: 'left', steamId: A, name: 'X' },
+      ]);
       expect(tracker.snapshot()).toEqual([]);
     });
 
@@ -127,8 +149,13 @@ describe('ServerPresenceTracker', () => {
     it('N < tracked leaves the longest-silent players', () => {
       // A joins t2, B t4, C t6; A's death line at t7 makes B the most silent.
       run(tracker, [
-        join(A), character('X'), join(B), character('Y'),
-        join(C), character('Z'), character('X', true),
+        join(A),
+        character('X'),
+        join(B),
+        character('Y'),
+        join(C),
+        character('Z'),
+        character('X', true),
       ]);
       expect(run(tracker, [heartbeat(2)], 10)).toEqual([
         { kind: 'left', steamId: B, name: 'Y' },
@@ -187,16 +214,18 @@ describe('ServerPresenceTracker', () => {
         { steamId: A, name: 'X' },
         { steamId: B, name: null },
       ]);
-      expect(run(tracker, [leave(B)], 10)).toEqual([{ kind: 'left', steamId: B, name: null }]);
+      expect(run(tracker, [leave(B)], 10)).toEqual([
+        { kind: 'left', steamId: B, name: null },
+      ]);
     });
 
     it('replaces prior state, and a hydrated name still marks a respawn', () => {
       run(tracker, [join(C), character('Z')]);
       tracker.hydrate([{ steamId: A, name: 'X' }]);
       expect(tracker.snapshot()).toEqual([{ steamId: A, name: 'X' }]);
-      expect(run(tracker, [join(B), character('X'), character('Y')], 10)).toEqual([
-        { kind: 'joined', steamId: B, name: 'Y' },
-      ]);
+      expect(
+        run(tracker, [join(B), character('X'), character('Y')], 10),
+      ).toEqual([{ kind: 'joined', steamId: B, name: 'Y' }]);
     });
 
     it('hydrated players are the longest-silent on a short heartbeat', () => {
