@@ -166,13 +166,19 @@ function voiceSettingsFields(
  *
  * @param channelName - Channel name WITHOUT the leading `#`.
  * @param purpose - The binding's resolved purpose.
- * @returns e.g. `#general → General Lobby`, in the admin form's words.
+ * @param gameName - ROK-1768: a Quick Play bind names its game in the title.
+ * @returns e.g. `#general → General Lobby`, in the admin form's words, or
+ *   `#valheim-qp → Quick Play Announcements · Valheim`.
  */
 export function bindingTitle(
   channelName: string,
   purpose: BindingPurpose,
+  gameName?: string | null,
 ): string {
-  return `#${channelName} → ${BINDING_PURPOSE_LABELS[purpose]}`;
+  const title = `#${channelName} → ${BINDING_PURPOSE_LABELS[purpose]}`;
+  return purpose === 'quick-play-announcements' && gameName
+    ? `${title} · ${gameName}`
+    : title;
 }
 
 /**
@@ -199,7 +205,8 @@ export function settingsFields(binding: CommandReplyBinding): APIEmbedField[] {
   if (binding.seriesTitle) {
     fields.push({ name: 'Series', value: binding.seriesTitle, inline: true });
   }
-  if (binding.gameName) {
+  // ROK-1768: a Quick Play bind already names its game in the title.
+  if (binding.gameName && binding.purpose !== 'quick-play-announcements') {
     fields.push({ name: 'Game', value: binding.gameName, inline: true });
   }
   return fields;
