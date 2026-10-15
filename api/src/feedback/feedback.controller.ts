@@ -10,7 +10,6 @@ import {
   HttpStatus,
   Logger,
   Inject,
-  BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import * as Sentry from '@sentry/nestjs';
@@ -18,7 +17,6 @@ import { AdminGuard } from '../auth/admin.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import {
-  CreateFeedbackSchema,
   type FeedbackResponseDto,
   type FeedbackListResponseDto,
   type UserRole,
@@ -27,7 +25,13 @@ import { eq, desc, sql } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 import type { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { SlowQueriesService } from '../slow-queries/slow-queries.service';
-import { defined } from '../common/defined.helpers';
+import {
+  insertFeedbackRow,
+  parseFeedbackBody,
+  prepareScreenshot,
+  storeScreenshot,
+  toFeedbackResponse,
+} from './feedback-submit.helpers';
 
 interface AuthRequest extends Request {
   user: { id: number; role: UserRole };
@@ -60,39 +64,22 @@ export class FeedbackController {
     @Body() body: unknown,
     @Req() req: AuthRequest,
   ): Promise<FeedbackResponseDto> {
-    const parsed = CreateFeedbackSchema.safeParse(body);
-    if (!parsed.success)
-      throw new BadRequestException(parsed.error.flatten().fieldErrors);
+    const dto = parseFeedbackBody(body);
+    const screenshot = prepareScreenshot(dto);
     const userId = req.user.id;
-    const { category, message, pageUrl, clientLogs } = parsed.data;
-    const truncatedClientLogs = clientLogs ? clientLogs.slice(0, 50_000) : null;
-    const [row] = await this.db
-      .insert(schema.feedback)
-      .values({
-        userId,
-        category,
-        message,
-        pageUrl: pageUrl ?? null,
-        clientLogs: truncatedClientLogs,
-      })
-      .returning();
-    const inserted = defined(row, 'inserted feedback row');
+    const inserted = await insertFeedbackRow(this.db, userId, dto);
     this.logger.log(
-      `Feedback submitted: id=${inserted.id} category=${category} user=${userId}`,
+      `Feedback submitted: id=${inserted.id} category=${dto.category} user=${userId}`,
     );
+    if (screenshot) {
+      await storeScreenshot(this.db, inserted.id, screenshot, this.logger);
+    }
     await this.attachSlowQueryContext(
       inserted.id,
       req.user.role,
-      truncatedClientLogs,
+      inserted.clientLogs,
     );
-    return {
-      id: inserted.id,
-      category: inserted.category as FeedbackResponseDto['category'],
-      message: inserted.message,
-      pageUrl: inserted.pageUrl,
-      githubIssueUrl: null,
-      createdAt: inserted.createdAt.toISOString(),
-    };
+    return toFeedbackResponse(inserted);
   }
 
   /**
