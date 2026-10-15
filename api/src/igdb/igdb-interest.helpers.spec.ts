@@ -376,12 +376,10 @@ describe('getInterestCount — adversarial edge cases', () => {
   });
 });
 
-// ─── removeInterest — poll-source suppression (ROK-1031 Gap 2) ────────────────
+// ─── removeInterest — suppression (ROK-1031 Gap 2, ROK-1796) ─────────────────
 
-describe('removeInterest — poll-source suppression', () => {
-  function buildRemoveInterestDb(
-    source: string | null,
-  ): Record<string, jest.Mock> {
+describe('removeInterest — suppression', () => {
+  function buildRemoveInterestDb(): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = ['from', 'innerJoin', 'orderBy', 'groupBy'];
     for (const m of chainMethods) {
@@ -393,18 +391,17 @@ describe('removeInterest — poll-source suppression', () => {
     db.values = jest.fn().mockReturnThis();
     db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
     db.delete = jest.fn().mockReturnThis();
+    // transaction(cb) runs cb against the same chain mock
+    db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
 
-    // all-sources query (ROK-1796): select().from().where() → [{ source }]
-    // removeInterest delete: delete().where() → void
+    // tx.delete().where() → void (heart sources only)
     // getInterestCount: select().from().where() → [{ count }]
     // getInterestedPlayers: selectDistinctOn().from().innerJoin().where().orderBy().limit() → []
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1)
-        return Promise.resolve(source ? [{ source }] : []); // all-sources query
-      if (whereCallCount === 2) return Promise.resolve(undefined); // delete
-      if (whereCallCount === 3) return Promise.resolve([{ count: 0 }]); // getInterestCount
+      if (whereCallCount === 1) return Promise.resolve(undefined); // delete
+      if (whereCallCount === 2) return Promise.resolve([{ count: 0 }]); // getInterestCount
       return db; // getInterestedPlayers chain
     });
     db.limit = jest.fn().mockResolvedValue([]); // getInterestedPlayers
@@ -412,50 +409,28 @@ describe('removeInterest — poll-source suppression', () => {
     return db;
   }
 
-  it('creates suppression row when source is "poll"', async () => {
-    const db = buildRemoveInterestDb('poll');
+  it('deletes the heart rows and writes the suppression in one transaction', async () => {
+    const db = buildRemoveInterestDb();
 
-    await removeInterest(db as never, 42, 7);
+    const result = await removeInterest(db as never, 42, 7);
 
-    expect(db.insert).toHaveBeenCalled();
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.delete).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith({ userId: 7, gameId: 42 });
+    expect(db.onConflictDoNothing).toHaveBeenCalled();
+    expect(result.wantToPlay).toBe(false);
   });
 
-  it('creates suppression row when source is "discord"', async () => {
-    const db = buildRemoveInterestDb('discord');
+  // ROK-1796 intentional behaviour change: a manual-only (or empty) un-heart
+  // now ALSO records a suppression, so a later un-heart → manual re-heart →
+  // un-heart sequence still leaves the user opted out (Codex P2).
+  it('writes the suppression whatever backed the heart (incl. manual-only)', async () => {
+    const db = buildRemoveInterestDb();
 
-    await removeInterest(db as never, 42, 7);
+    await removeInterest(db as never, 10, 2);
 
-    expect(db.insert).toHaveBeenCalled();
-  });
-
-  it.each(['steam_library', 'steam_wishlist'])(
-    'creates suppression row when source is "%s" (ROK-1796)',
-    async (steamSource) => {
-      const db = buildRemoveInterestDb(steamSource);
-
-      await removeInterest(db as never, 42, 7);
-
-      expect(db.insert).toHaveBeenCalled();
-      expect(db.values).toHaveBeenCalledWith({ userId: 7, gameId: 42 });
-    },
-  );
-
-  it('does not create suppression row when there is no interest row', async () => {
-    const db = buildRemoveInterestDb(null);
-
-    await removeInterest(db as never, 42, 7);
-
-    expect(db.insert).not.toHaveBeenCalled();
-  });
-
-  it('does not create suppression row when source is "manual"', async () => {
-    const db = buildRemoveInterestDb('manual');
-
-    await removeInterest(db as never, 42, 7);
-
-    // insert should be called only for delete, not for suppression
-    // We check insert was NOT called (the delete uses db.delete, not db.insert)
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith({ userId: 2, gameId: 10 });
   });
 });
 

@@ -118,6 +118,11 @@ export async function getAutoHeartSteamUrlsPref(
 /**
  * Add a game interest row with source 'discord'. Idempotent via onConflictDoNothing.
  *
+ * Every caller is an explicit user act (posting a Steam link with auto-heart
+ * on, or clicking a heart button), so — like a manual re-heart — it lifts any
+ * earlier un-heart suppression; otherwise the suppression would keep the new
+ * heart invisible and the user out of interest DMs (ROK-1796).
+ *
  * @param db - Drizzle database instance
  * @param userId - Raid Ledger user ID
  * @param gameId - Game ID
@@ -127,10 +132,20 @@ export async function addDiscordInterest(
   userId: number,
   gameId: number,
 ): Promise<void> {
-  await db
-    .insert(schema.gameInterests)
-    .values({ userId, gameId, source: 'discord' })
-    .onConflictDoNothing();
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(schema.gameInterests)
+      .values({ userId, gameId, source: 'discord' })
+      .onConflictDoNothing();
+    await tx
+      .delete(schema.gameInterestSuppressions)
+      .where(
+        and(
+          eq(schema.gameInterestSuppressions.userId, userId),
+          eq(schema.gameInterestSuppressions.gameId, gameId),
+        ),
+      );
+  });
 }
 
 /**

@@ -4,14 +4,13 @@
  * Tests focus on the ROK-444 changes:
  * - getGameInterest: returns `source` field when user has an interest
  * - addWantToPlay: returns `source: 'manual'`
- * - removeWantToPlay: records suppression when removing a discord-sourced interest
+ * - removeWantToPlay: always records a suppression (ROK-444, widened by ROK-1796)
  *
  * The GameInterestResponseSchema source field is also validated.
  *
- * Query chain analysis for removeWantToPlay:
- *   1. All sources: db.select({source}).from(gameInterests).where(and(...)) → terminates at .where() (ROK-1796)
- *   2. Insert suppression (if discord): db.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
- *   3. Delete: db.delete(gameInterests).where(and(...)) → terminates at .where()
+ * Query chain analysis for removeWantToPlay (ROK-1796: one transaction):
+ *   1. Delete heart rows: tx.delete(gameInterests).where(and(...)) → terminates at .where()
+ *   2. Insert suppression (always): tx.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
  *   4. Count: db.select({count}).from(gameInterests).where(eq(...)) → terminates at .where() (no limit)
  *   5. getInterestedPlayers: ...innerJoin(...).where(...).orderBy(...).limit(8) → terminates at .limit(8)
  *
@@ -434,14 +433,13 @@ describe('IgdbController.addWantToPlay — source: manual (ROK-444)', () =>
 function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   /**
    * removeWantToPlay query sequence:
-   *   1. db.select({source}).from(gameInterests).where(and(...))  ← .where() terminal (ROK-1796)
-   *   2. db.insert(suppressions).values({userId, gameId}).onConflictDoNothing()  ← if discord
-   *   3. db.delete(gameInterests).where(and(...))  ← .where() terminal
-   *   4. db.select({count}).from(gameInterests).where(eq(...))  ← .where() terminal (2nd where after delete chain)
-   *   5. getInterestedPlayers → .limit(8) terminal
+   *   1. tx.delete(gameInterests).where(and(...))  ← .where() terminal (heart sources only)
+   *   2. tx.insert(suppressions).values({userId, gameId}).onConflictDoNothing()  ← always (ROK-1796)
+   *   3. db.select({count}).from(gameInterests).where(eq(...))  ← .where() terminal
+   *   4. getInterestedPlayers → .limit(8) terminal
    */
 
-  function buildRemoveDb(existingSource: 'discord' | 'manual' | null): {
+  function buildRemoveDb(): {
     db: Record<string, jest.Mock>;
     insertMock: jest.Mock;
   } {
@@ -464,29 +462,15 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
     // .limit() calls: getInterestedPlayers → returns []
     db.limit = jest.fn().mockResolvedValue([]);
 
-    // .where() calls:
-    //   1st call chains (part of existing interest query — continues to .limit)
-    //   After that: delete where → terminates
-    //   Then: count where → terminates
+    // .where() calls: 1st = transactional delete, 2nd = count, then chains
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1) {
-        // all-sources query (ROK-1796): .where(and(...)) → terminal
-        return Promise.resolve(
-          existingSource ? [{ source: existingSource }] : [],
-        );
-      }
-      if (whereCallCount === 2) {
-        // delete .where(and(...)) → terminal
-        return Promise.resolve(undefined);
-      }
-      if (whereCallCount === 3) {
-        // count .where(eq(...)) → terminal
-        return Promise.resolve([{ count: 0 }]);
-      }
+      if (whereCallCount === 1) return Promise.resolve(undefined);
+      if (whereCallCount === 2) return Promise.resolve([{ count: 0 }]);
       return db;
     });
+    db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
 
     const insertMock = jest.fn().mockReturnThis();
     db.insert = insertMock;
@@ -498,7 +482,7 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   }
 
   it('records suppression when removing a discord-sourced interest', async () => {
-    const { db, insertMock } = buildRemoveDb('discord');
+    const { db, insertMock } = buildRemoveDb();
     const ctrl = await createController(buildMockService(db));
 
     const result = await ctrl.removeWantToPlay(42, mockAuthReq(1));
@@ -511,27 +495,24 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
     expect(result.wantToPlay).toBe(false);
   });
 
-  it('does NOT record suppression when removing a manual interest', async () => {
-    const { db, insertMock } = buildRemoveDb('manual');
+  // ROK-1796 intentional behaviour change (was: "does NOT record suppression
+  // when removing a manual interest"). Un-heart now always suppresses, so an
+  // un-heart → manual re-heart → un-heart sequence stays opted out and Steam
+  // ownership rows (kept on un-heart) stop counting as interest.
+  it('records suppression even for a manual-only interest (ROK-1796)', async () => {
+    const { db, insertMock } = buildRemoveDb();
     const ctrl = await createController(buildMockService(db));
 
     await ctrl.removeWantToPlay(10, mockAuthReq(2));
 
-    // No suppression insert for manual interests
-    expect(insertMock).not.toHaveBeenCalled();
-  });
-
-  it('does NOT record suppression when there is no existing interest', async () => {
-    const { db, insertMock } = buildRemoveDb(null);
-    const ctrl = await createController(buildMockService(db));
-
-    await ctrl.removeWantToPlay(10, mockAuthReq(2));
-
-    expect(insertMock).not.toHaveBeenCalled();
+    expect(insertMock).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 2, gameId: 10 }),
+    );
   });
 
   it('returns wantToPlay: false and no source after removal', async () => {
-    const { db } = buildRemoveDb('discord');
+    const { db } = buildRemoveDb();
     const ctrl = await createController(buildMockService(db));
 
     const result = await ctrl.removeWantToPlay(42, mockAuthReq(1));
@@ -541,7 +522,7 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   });
 
   it('suppression insert uses onConflictDoNothing (idempotent)', async () => {
-    const { db } = buildRemoveDb('discord');
+    const { db } = buildRemoveDb();
     const ctrl = await createController(buildMockService(db));
 
     await ctrl.removeWantToPlay(5, mockAuthReq(3));
@@ -550,7 +531,7 @@ function describeIgdbControllerRemoveWantToPlaySuppressionOnDiscordSou() {
   });
 
   it('suppression is recorded with correct userId and gameId', async () => {
-    const { db } = buildRemoveDb('discord');
+    const { db } = buildRemoveDb();
     const ctrl = await createController(buildMockService(db));
 
     await ctrl.removeWantToPlay(77, mockAuthReq(42));
