@@ -13,7 +13,7 @@ const TIPS = [{ title: TITLE, detail: DETAIL }];
 function withContext(ui: ReactElement, gridRight: number | null, markers: CalendarLayerContextValue['markers'] = []) {
     const grid = document.createElement('div');
     if (gridRight !== null) vi.spyOn(grid, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, gridRight, 600));
-    const value: CalendarLayerContextValue = { markers, gridRef: { current: grid } };
+    const value: CalendarLayerContextValue = { markers, dayEntries: new Map(), gridRef: { current: grid } };
     return render(<CalendarLayerContext.Provider value={value}>{ui}</CalendarLayerContext.Provider>);
 }
 

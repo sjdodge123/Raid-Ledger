@@ -16,6 +16,9 @@ import { AttendeeAvatars } from './AttendeeAvatars';
 import { toAttendeePreviews } from './attendee-previews';
 import type { CalendarEvent } from './CalendarView';
 import { coverSrcSetProps } from '../../lib/igdb-image';
+import type { LayerDayEntry, LayerDayMap } from './layers/calendar-layer-days';
+import { mergeScheduleRows } from './layers/schedule-layer-rows';
+import { ScheduleLayerRow } from './layers/ScheduleLayerRow';
 
 interface ScheduleViewProps {
     events: CalendarEvent[];
@@ -25,6 +28,8 @@ interface ScheduleViewProps {
     eventOverlapsGameTime: (start: Date, end: Date) => boolean;
     /** When true, a background fetch is in progress — suppresses the empty state */
     isFetching?: boolean;
+    /** ROK-1775 — plugin layer entries per local day, interleaved with that day's events. */
+    layerDays?: LayerDayMap;
 }
 
 /** Horizontal line with dot indicating current time, rendered among today's events. */
@@ -98,7 +103,7 @@ function ScheduleEventCard({ event, onSelect }: { event: CalendarEvent; onSelect
 }
 
 /**
- * Mobile schedule view — continuous scrollable agenda showing only days with events.
+ * Mobile schedule view — continuous scrollable agenda of days with events, today, and days with layer rows.
  * Features: sticky day headers, week range separators, now-line, auto-scroll to today.
  */
 function ScheduleEmpty() {
@@ -114,31 +119,40 @@ function ScheduleEmpty() {
     );
 }
 
-function DayLabel({ day, isToday, stickyTop }: { day: Date; isToday: boolean; stickyTop: string }) {
+/** `muted`: a day listed only for its server rows — its header is as quiet as the rows (ROK-1775). */
+function dayNumberClass(isToday: boolean, muted: boolean): string {
+    if (isToday) return 'w-8 h-8 mx-auto rounded-full bg-success text-white flex items-center justify-center text-base font-bold';
+    return muted ? 'text-base font-medium text-dim mt-0.5' : 'text-lg font-bold text-foreground mt-0.5';
+}
+
+function DayLabel({ day, isToday, muted, stickyTop }: { day: Date; isToday: boolean; muted: boolean; stickyTop: string }) {
+    const weekday = isToday ? 'text-emerald-400' : muted ? 'text-dim' : 'text-muted';
     return (
         <div className="w-11 flex-shrink-0">
             <div className="sticky z-10 bg-backdrop pt-3 pb-2 text-center transition-[top] duration-300" style={{ top: stickyTop }}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}>{format(day, 'EEE')}</div>
-                <div className={isToday ? 'w-8 h-8 mx-auto rounded-full bg-success text-white flex items-center justify-center text-base font-bold' : 'text-lg font-bold text-foreground mt-0.5'}>{format(day, 'd')}</div>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider ${weekday}`}>{format(day, 'EEE')}</div>
+                <div className={dayNumberClass(isToday, muted)}>{format(day, 'd')}</div>
             </div>
         </div>
     );
 }
 
-function DayEvents({ dayEvents, isToday, nowLineIndex, onSelectEvent }: {
-    dayEvents: CalendarEvent[]; isToday: boolean; nowLineIndex: number; onSelectEvent: (e: CalendarEvent) => void;
+/** Events and layer rows by time; today gets the now-line before the first row still ahead. */
+function DayEvents({ dayEvents, entries, isToday, now, onSelectEvent }: {
+    dayEvents: CalendarEvent[]; entries: readonly LayerDayEntry[] | undefined; isToday: boolean; now: Date; onSelectEvent: (e: CalendarEvent) => void;
 }) {
+    const rows = mergeScheduleRows(dayEvents, entries);
+    const ahead = rows.findIndex((r) => r.at > now.getTime());
+    const nowLineIndex = !isToday ? -1 : ahead === -1 ? rows.length : ahead;
     return (
         <div className="flex-1 min-w-0 py-2 pr-2 space-y-2">
-            {isToday && dayEvents.length === 0 ? <NowLine /> : (
-                dayEvents.map((event, eventIdx) => (
-                    <Fragment key={event.id}>
-                        {isToday && eventIdx === nowLineIndex && <NowLine />}
-                        <ScheduleEventCard event={event} onSelect={onSelectEvent} />
-                    </Fragment>
-                ))
-            )}
-            {isToday && dayEvents.length > 0 && nowLineIndex === dayEvents.length && <NowLine />}
+            {rows.map((row, idx) => (
+                <Fragment key={row.key}>
+                    {idx === nowLineIndex && <NowLine />}
+                    {row.kind === 'event' ? <ScheduleEventCard event={row.event} onSelect={onSelectEvent} /> : <ScheduleLayerRow entry={row.entry} />}
+                </Fragment>
+            ))}
+            {nowLineIndex === rows.length && <NowLine />}
         </div>
     );
 }
@@ -174,7 +188,13 @@ function useSwipeNavigation(currentDate: Date, onDateChange: (d: Date) => void) 
     return { handleTouchStart, handleTouchEnd };
 }
 
-function useScheduleData(events: CalendarEvent[]) {
+/**
+ * Days the agenda lists: every day with an event, today, and (ROK-1775 Lead ruling)
+ * every day with a layer entry — so a server window on an event-free day is visible.
+ * `layerDays` is already empty when the layer is toggled off, its plugin is inactive
+ * or the game filter excludes it, so those days drop out again.
+ */
+function useScheduleData(events: CalendarEvent[], layerDays: LayerDayMap | undefined) {
     const eventsByDate = useMemo(() => {
         const map = new Map<string, CalendarEvent[]>();
         const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -191,14 +211,15 @@ function useScheduleData(events: CalendarEvent[]) {
         const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
         const keys = new Set(eventsByDate.keys());
         keys.add(todayKey);
+        for (const [k, entries] of layerDays ?? []) if (entries.length > 0) keys.add(k);
         return [...keys].sort().map((k) => parse(k, 'yyyy-MM-dd', new Date()));
-    }, [eventsByDate]);
+    }, [eventsByDate, layerDays]);
 
     return { eventsByDate, daysWithEvents };
 }
 
-function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, now, stickyTop, todayRef, onSelectEvent }: {
-    day: Date; idx: number; daysWithEvents: Date[]; eventsByDate: Map<string, CalendarEvent[]>;
+function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, layerDays, now, stickyTop, todayRef, onSelectEvent }: {
+    day: Date; idx: number; daysWithEvents: Date[]; eventsByDate: Map<string, CalendarEvent[]>; layerDays: LayerDayMap | undefined;
     now: Date; stickyTop: string; todayRef: React.RefObject<HTMLDivElement | null>; onSelectEvent: (e: CalendarEvent) => void;
 }) {
     const key = format(day, 'yyyy-MM-dd');
@@ -206,24 +227,24 @@ function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, now, stickyTop
     const isDayToday = isSameDay(day, now);
     const prevDay = idx > 0 ? daysWithEvents[idx - 1] : null;
     const isNewWeek = !prevDay || !isSameWeek(day, prevDay, { weekStartsOn: 0 });
-    let nowLineIndex = -1;
-    if (isDayToday) { nowLineIndex = dayEvents.findIndex((e) => e.start > now); if (nowLineIndex === -1) nowLineIndex = dayEvents.length; }
+    const layerOnly = dayEvents.length === 0 && !isDayToday;
     return (
         <Fragment key={key}>
             {isNewWeek && <div className="week-separator pl-1 pr-2 py-2 text-xs font-medium text-muted tracking-wide">{formatWeekRange(day)}</div>}
-            <div ref={isDayToday ? todayRef : undefined} className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isDayToday ? 'scroll-mt-36' : ''}`}>
-                <DayLabel day={day} isToday={isDayToday} stickyTop={stickyTop} />
-                <DayEvents dayEvents={dayEvents} isToday={isDayToday} nowLineIndex={nowLineIndex} onSelectEvent={onSelectEvent} />
+            <div ref={isDayToday ? todayRef : undefined} data-testid="schedule-day" data-date={key} data-layer-only={layerOnly ? 'true' : undefined}
+                className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isDayToday ? 'scroll-mt-36' : ''}`}>
+                <DayLabel day={day} isToday={isDayToday} muted={layerOnly} stickyTop={stickyTop} />
+                <DayEvents dayEvents={dayEvents} entries={layerDays?.get(key)} isToday={isDayToday} now={now} onSelectEvent={onSelectEvent} />
             </div>
         </Fragment>
     );
 }
 
-export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent, isFetching }: ScheduleViewProps) {
+export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent, isFetching, layerDays }: ScheduleViewProps) {
     const todayRef = useRef<HTMLDivElement>(null);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
-    const { eventsByDate, daysWithEvents } = useScheduleData(events);
+    const { eventsByDate, daysWithEvents } = useScheduleData(events, layerDays);
     const { handleTouchStart, handleTouchEnd } = useSwipeNavigation(currentDate, onDateChange);
 
     useEffect(() => {
@@ -231,7 +252,8 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
         return () => clearTimeout(timer);
     }, []);
 
-    if (events.length === 0) {
+    const hasLayerRows = [...(layerDays?.values() ?? [])].some((entries) => entries.length > 0);
+    if (events.length === 0 && !hasLayerRows) {
         if (isFetching) return <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>;
         return <ScheduleEmpty />;
     }
@@ -241,7 +263,7 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
 
     return (
         <div className="schedule-view min-w-0" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-            {daysWithEvents.map((day, idx) => <ScheduleDayRow key={format(day, 'yyyy-MM-dd')} day={day} idx={idx} daysWithEvents={daysWithEvents} eventsByDate={eventsByDate} now={now} stickyTop={stickyTop} todayRef={todayRef} onSelectEvent={onSelectEvent} />)}
+            {daysWithEvents.map((day, idx) => <ScheduleDayRow key={format(day, 'yyyy-MM-dd')} day={day} idx={idx} daysWithEvents={daysWithEvents} eventsByDate={eventsByDate} layerDays={layerDays} now={now} stickyTop={stickyTop} todayRef={todayRef} onSelectEvent={onSelectEvent} />)}
         </div>
     );
 }
