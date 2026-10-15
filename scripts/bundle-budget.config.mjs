@@ -85,6 +85,7 @@ const LAZY_NAMED = [
     why: "react-router's own dist chunk name (chunk-BV7QT456 today); it changes on a react-router bump",
   },
   { name: 'sentry-replay', kb: 38.8, why: 'Sentry 11 Session Replay, dynamically imported after Sentry.init (src/lib/sentry-replay.ts); split out of the eager sentry vendor group' },
+  { name: 'app-entry', kb: 163.2, why: "ROK-1779: the former entry body (App, router, query client, shared core). main.tsx now imports it dynamically, after the telemetry decision and Sentry.init, so Sentry's fetch/XHR wrappers exist before native-fetch.ts captures them; measured 2026-10-15, and the index-* entry fell to 5.4 KB by the same move" },
   { name: 'calendar-page', kb: 12.7, why: 'route; +0.13 KB ROK-1775 server-schedule layer in Month (date-header glyph) and Schedule (muted rows), +0.1 KB Schedule lists server-only days with a muted header (Lead ruling) — the layer pieces share the calendar chunk with CalendarView, their only importer' },
   { name: 'lfg-group-page', kb: 11.81, why: 'route' },
 ];
