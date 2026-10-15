@@ -12,9 +12,12 @@ import { AddonDetailFields } from './addon-form';
 import type { AddonDetails, AddonView } from './addon-view';
 import { Pill } from './guild-bits';
 
+/** Per-call outcome of a row save; the editor closes only on success. */
+export interface SaveCallbacks { onSuccess: () => void; onError: (error: Error) => void }
+
 export interface RowActions {
     onMove: (id: number, dir: -1 | 1) => void;
-    onSave: (id: number, details: AddonDetails) => void;
+    onSave: (id: number, details: AddonDetails, callbacks: SaveCallbacks) => void;
     onRemove: (id: number) => void;
 }
 
@@ -58,38 +61,57 @@ function EditorControls({ addon, id, actions, isFirst, isLast, onEdit }: {
     );
 }
 
-function RowEditor({ addon, initial, onSave, onCancel }: {
-    addon: AddonView; initial: AddonDetails; onSave: (d: AddonDetails) => void; onCancel: () => void;
+interface EditState { saving: boolean; error: string | null }
+
+function RowEditor({ addon, initial, state, onSave, onCancel }: {
+    addon: AddonView; initial: AddonDetails; state: EditState; onSave: (d: AddonDetails) => void; onCancel: () => void;
 }): JSX.Element {
     const [draft, setDraft] = useState<AddonDetails>(initial);
     return (
         <div className="flex flex-col gap-3">
             <span className="font-semibold text-foreground">Editing {addon.name}</span>
             <AddonDetailFields value={draft} onChange={setDraft} />
+            {state.error && (
+                <p role="alert" data-testid="guild-addon-edit-error" className="text-sm text-danger">
+                    Couldn’t save {addon.name}. {state.error}
+                </p>
+            )}
             <div className="flex justify-end gap-2">
                 <Button variant="secondary" onClick={onCancel}>Cancel</Button>
-                <Button onClick={() => onSave(draft)}>Save</Button>
+                <Button onClick={() => onSave(draft)} loading={state.saving}>Save</Button>
             </div>
         </div>
     );
 }
 
+/** Editor open/closed plus the in-flight save; a failed save keeps the edit open. */
+function useRowEdit(id: number | null, actions: RowActions) {
+    const [editing, setEditing] = useState(false);
+    const [state, setState] = useState<EditState>({ saving: false, error: null });
+    const close = (): void => { setEditing(false); setState({ saving: false, error: null }); };
+    const save = (d: AddonDetails): void => {
+        if (id === null) return;
+        setState({ saving: true, error: null });
+        actions.onSave(id, d, { onSuccess: close, onError: (e) => setState({ saving: false, error: e.message }) });
+    };
+    return { editing, open: () => setEditing(true), close, save, state };
+}
+
 export function AddonRow({ addon, details, canEdit, actions, isFirst, isLast }: {
     addon: AddonView; details?: AddonDetails; canEdit: boolean; actions: RowActions; isFirst: boolean; isLast: boolean;
 }): JSX.Element {
-    const [editing, setEditing] = useState(false);
     const id = addon.id;
     const pinned = id === null;
+    const edit = useRowEdit(id, actions);
     return (
         <li data-testid={pinned ? 'guild-addon-pinned' : 'guild-addon-row'}
             className={`rounded-lg border p-3 ${pinned ? 'border-success/30 bg-success/5' : 'border-edge bg-surface'}`}>
-            {canEdit && id !== null && editing && details ? (
-                <RowEditor addon={addon} initial={details} onCancel={() => setEditing(false)}
-                    onSave={(d) => { actions.onSave(id, d); setEditing(false); }} />
+            {canEdit && id !== null && edit.editing && details ? (
+                <RowEditor addon={addon} initial={details} state={edit.state} onCancel={edit.close} onSave={edit.save} />
             ) : (
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
                     <AddonSummary addon={addon} pinned={pinned} />
-                    {canEdit && id !== null && <EditorControls addon={addon} id={id} actions={actions} isFirst={isFirst} isLast={isLast} onEdit={() => setEditing(true)} />}
+                    {canEdit && id !== null && <EditorControls addon={addon} id={id} actions={actions} isFirst={isFirst} isLast={isLast} onEdit={edit.open} />}
                     {canEdit && pinned && <span className="text-xs text-muted sm:max-w-[10rem] sm:text-right">Pinned on every guild. Can&apos;t be removed.</span>}
                 </div>
             )}

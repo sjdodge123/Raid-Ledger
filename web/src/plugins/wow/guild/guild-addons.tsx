@@ -24,27 +24,35 @@ const FILTER_OPTIONS = [
 
 function useAddonActions(guildId: number, list: GuildAddonList, visible: ReadonlySet<number>) {
     const m = useGuildAddonMutations(guildId);
+    const [listError, setListError] = useState<string | null>(null);
+    const report = (what: string) => ({
+        onSuccess: () => setListError(null),
+        onError: (e: Error) => setListError(`Couldn’t ${what} that addon. ${e.message}`),
+    });
     const actions: RowActions = {
-        onMove: (id, dir) => { const ids = reorderedIds(list.addons, id, dir, visible); if (ids) m.reorder.mutate(ids); },
-        onSave: (id, d) => m.update.mutate({ id, input: { note: d.note.trim() || null, requirement: d.requirement, flavor: d.flavor } }),
-        onRemove: (id) => m.remove.mutate(id),
+        onMove: (id, dir) => { const ids = reorderedIds(list.addons, id, dir, visible); if (ids) m.reorder.mutate(ids, report('move')); },
+        onSave: (id, d, callbacks) => m.update.mutate(
+            { id, input: { note: d.note.trim() || null, requirement: d.requirement, flavor: d.flavor } }, callbacks,
+        ),
+        onRemove: (id) => m.remove.mutate(id, report('remove')),
     };
     const add = (a: NewAddon, reset: () => void): void => m.add.mutate(
         { url: a.url, note: a.note.trim() || null, requirement: a.requirement, flavor: a.flavor }, { onSuccess: reset },
     );
-    return { actions, add, adding: m.add.isPending, addFailed: !!m.add.error };
+    return { actions, add, adding: m.add.isPending, addFailed: !!m.add.error, listError };
 }
 
 export function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
     const [filter, setFilter] = useState<FlavorFilter>('any');
     const visible = list.addons.filter((a) => guildAddonMatches(a, filter));
-    const { actions, add, adding, addFailed } = useAddonActions(guildId, list, new Set(visible.map((a) => a.id)));
+    const { actions, add, adding, addFailed, listError } = useAddonActions(guildId, list, new Set(visible.map((a) => a.id)));
     const pinned = list.pinned.filter((p) => pinnedMatches(p, filter));
     return (
         <section id="addons" className="scroll-mt-4" data-testid="guild-addons">
             <SectionTitle title="Recommended addons" blurb="What this guild asks members to install. Required addons come first in raid prep." />
             <RadioGroup label="Flavor" hideLabel appearance="segmented" options={FILTER_OPTIONS} value={filter} onChange={setFilter} className="mb-4" />
             {canEdit && <div className="mb-4"><AddAddonForm onAdd={add} pending={adding} failed={addFailed} /></div>}
+            {listError && <p role="alert" data-testid="guild-addons-error" className="mb-3 text-sm text-danger">{listError}</p>}
             <ul className="flex flex-col gap-2" aria-label="Recommended addons">
                 {pinned.map((p, i) => <AddonRow key={`p-${i}`} addon={pinnedAddonView(p, i)} canEdit={canEdit} actions={actions} isFirst isLast />)}
                 {visible.map((a, i) => (

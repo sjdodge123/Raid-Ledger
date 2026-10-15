@@ -151,11 +151,12 @@ describe('Resources: rules and links', () => {
     });
 });
 
+const list: GuildAddonList = {
+    pinned: [{ name: 'LedgerLink', url: 'https://github.com/sjdodge123/ledger-link', note: null, requirement: 'required', flavors: [] }],
+    addons: [addon(1, 'DBM', { requirement: 'required' }), addon(2, 'Details')],
+};
+
 describe('Resources: recommended addons', () => {
-    const list: GuildAddonList = {
-        pinned: [{ name: 'LedgerLink', url: 'https://github.com/sjdodge123/ledger-link', note: null, requirement: 'required', flavors: [] }],
-        addons: [addon(1, 'DBM', { requirement: 'required' }), addon(2, 'Details')],
-    };
 
     it('lists pinned first, then the guild addons; a viewer gets no controls', async () => {
         serve(false, EMPTY_PROFILE, list);
@@ -180,5 +181,43 @@ describe('Resources: recommended addons', () => {
         await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'DELETE', url: `${BASE}/addons/1`, body: null }));
         await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
         await waitFor(() => expect(calls.at(-1)).toEqual({ method: 'PUT', url: `${BASE}/addons/order`, body: { ids: [2, 1] } }));
+    });
+});
+
+describe('Resources: addon write failures', () => {
+    it('a failed edit keeps the editor open with the server error; a retry that succeeds closes it', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        let fail = true;
+        server.use(http.patch(`${BASE}/addons/:addonId`, async ({ request }) => {
+            await record(request);
+            return fail
+                ? HttpResponse.json({ message: 'Note is too long' }, { status: 400 })
+                : HttpResponse.json(addon(1, 'DBM', { note: 'Boss timers' }));
+        }));
+        renderPage('#resources');
+        await userEvent.click(await screen.findByRole('button', { name: 'Edit DBM' }));
+        // The add form above the list has its own Note; the row editor's is second.
+        const rowNote = (): HTMLElement => at(screen.getAllByLabelText('Note'), 1);
+        await userEvent.type(rowNote(), 'Boss timers');
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        expect(await screen.findByTestId('guild-addon-edit-error')).toHaveTextContent('Couldn’t save DBM. Note is too long');
+        expect(rowNote(), 'the edit must survive a failed save').toHaveValue('Boss timers');
+        fail = false;
+        await userEvent.click(screen.getByRole('button', { name: 'Save' }));
+        await waitFor(() => expect(screen.getAllByLabelText('Note'), 'the editor closes once the save lands').toHaveLength(1));
+        expect(calls.filter((c) => c.method === 'PATCH')).toHaveLength(2);
+    });
+
+    it('a failed remove or reorder shows the server error above the list', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(
+            http.delete(`${BASE}/addons/:addonId`, () => HttpResponse.json({ message: 'Addon not found' }, { status: 404 })),
+            http.put(`${BASE}/addons/order`, () => HttpResponse.json({ message: 'ids must list every addon of the guild' }, { status: 400 })),
+        );
+        renderPage('#resources');
+        await userEvent.click(await screen.findByRole('button', { name: 'Remove DBM' }));
+        expect(await screen.findByTestId('guild-addons-error')).toHaveTextContent('Couldn’t remove that addon. Addon not found');
+        await userEvent.click(screen.getByRole('button', { name: 'Move DBM down' }));
+        await waitFor(() => expect(screen.getByTestId('guild-addons-error')).toHaveTextContent('Couldn’t move that addon. ids must list every addon of the guild'));
     });
 });
