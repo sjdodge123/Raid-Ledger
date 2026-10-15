@@ -213,3 +213,5 @@ export * from './ledgerlink-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+// Guild page content — GM post, rules, links, recommended addons (ROK-1786).
+export * from './guild-content.schema.js';
