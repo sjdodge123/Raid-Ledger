@@ -1,20 +1,22 @@
 /**
  * ROK-1785 (S1 of ROK-1781) — `/guilds/:id`: hero + `TabRow` + the active tab.
- * S1 shows Overview and Roster only; every other tab is hidden until its
- * story ships (spec Q3). A 403 (not a member) is a friendly empty state.
+ * S1 shows Overview and Roster, S3 (ROK-1787) adds Raids; every other tab is
+ * hidden until its story ships (spec Q3). A 403 (not a member) is a friendly empty state.
  */
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
+import type { UseQueryResult } from '@tanstack/react-query';
+import type { GuildPage as GuildPageDto, GuildRaidsDto } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { TabRow } from '../../../components/ui/tab-row';
 import { tabPanelId, useHashTab } from '../../../components/ui/tab-row.helpers';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { GuildHero } from './guild-hero';
 import { GuildOverview } from './guild-overview';
+import { GuildRaidsTab } from './guild-raids-tab';
 import { GUILD_TABS, VISIBLE_TAB_IDS, tabLabel } from './guild-roster.helpers';
 import { GuildRoster } from './guild-roster';
-import { useGuildPage } from './use-guild';
+import { useGuildPage, useGuildRaids } from './use-guild';
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
 
@@ -48,7 +50,15 @@ function LoadingState(): JSX.Element {
 }
 
 /** Scroll the panel top back into view when a tab switch happens below it (prototype `GuildTabPanel`). */
-function TabPanel({ active, page }: { active: string; page: GuildPageDto }): JSX.Element {
+type RaidsQuery = UseQueryResult<GuildRaidsDto, Error>;
+
+function ActiveTab({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
+    if (active === 'roster') return <GuildRoster page={page} />;
+    if (active === 'raids') return <GuildRaidsTab query={raids} />;
+    return <GuildOverview page={page} raids={raids.data} />;
+}
+
+function TabPanel({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const el = ref.current;
@@ -56,18 +66,19 @@ function TabPanel({ active, page }: { active: string; page: GuildPageDto }): JSX
     }, [active]);
     return (
         <div ref={ref} id={tabPanelId('guild', active)} role="region" aria-label={tabLabel(active)} className="scroll-mt-4">
-            {active === 'roster' ? <GuildRoster page={page} /> : <GuildOverview page={page} />}
+            <ActiveTab active={active} page={page} raids={raids} />
         </div>
     );
 }
 
 function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     const [active] = useHashTab(VISIBLE_TAB_IDS, 'overview');
+    const raids = useGuildRaids(page.guild.id);
     return (
         <div className={PAGE}>
-            <GuildHero page={page} />
+            <GuildHero page={page} nextRaid={raids.data?.nextRaid ?? null} />
             <TabRow tabs={GUILD_TABS} activeId={active} label="Guild page sections" className="mb-6" />
-            <TabPanel active={active} page={page} />
+            <TabPanel active={active} page={page} raids={raids} />
         </div>
     );
 }

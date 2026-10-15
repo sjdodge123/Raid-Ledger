@@ -2,10 +2,10 @@
  * ROK-1785: TanStack Query hooks for the guild page and its editor delegation.
  */
 import { useMutation, useQuery, useQueryClient, type UseMutationResult, type UseQueryResult } from '@tanstack/react-query';
-import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildEditorList, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { httpStatusOf } from '../../../lib/api/api-error';
 import { useViewerCacheScope } from '../../../hooks/use-auth';
-import { createGuildEditor, deleteGuildEditor, fetchGuildEditors, fetchGuildPage } from './guild-api';
+import { createGuildEditor, deleteGuildEditor, fetchGuildEditors, fetchGuildPage, fetchGuildRaids } from './guild-api';
 
 const MAX_RETRIES = 2;
 
@@ -34,6 +34,17 @@ export function useGuildPage(guildId: number): UseQueryResult<GuildPage, Error> 
     return useQuery({
         queryKey: [...guildPageKey(guildId), viewer],
         queryFn: () => fetchGuildPage(guildId),
+        enabled: guildId > 0,
+        retry: retryUnlessClientError,
+    });
+}
+
+/** ROK-1787: Raids tab + Overview widgets + hero chip. Membership-gated, so viewer-scoped like the page. */
+export function useGuildRaids(guildId: number): UseQueryResult<GuildRaidsDto, Error> {
+    const viewer = useViewerCacheScope();
+    return useQuery({
+        queryKey: [...guildPageKey(guildId), 'raids', viewer],
+        queryFn: () => fetchGuildRaids(guildId),
         enabled: guildId > 0,
         retry: retryUnlessClientError,
     });
