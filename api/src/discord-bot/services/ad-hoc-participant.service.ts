@@ -9,6 +9,20 @@ import {
   AD_HOC_EVENTS,
   type AdHocParticipantLeftPayload,
 } from '../discord-bot.constants';
+import {
+  attachDiscordToUserRow,
+  markSteamLeave,
+  upsertSteamParticipant,
+  type ServerPresenceMemberInfo,
+  type SteamUpsertOutcome,
+} from './ad-hoc-steam-participant.helpers';
+
+export type { ServerPresenceMemberInfo, SteamUpsertOutcome };
+
+/** Narrow the stored `source` column to the contract enum (ROK-1800). */
+function toParticipantSource(value: string): 'discord' | 'steam' {
+  return value === 'steam' ? 'steam' : 'discord';
+}
 
 export interface VoiceMemberInfo {
   discordUserId: string;
@@ -68,6 +82,13 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<boolean> {
+    // ROK-1800: a linked user already on the event via the game server is ONE
+    // participant — the voice identity joins their Steam row.
+    if (member.userId !== null) {
+      const { userId } = member;
+      if (await attachDiscordToUserRow(this.db, eventId, { ...member, userId }))
+        return false;
+    }
     const [row] = await this.db
       .insert(schema.adHocParticipants)
       .values({
@@ -84,6 +105,9 @@ export class AdHocParticipantService {
           schema.adHocParticipants.eventId,
           schema.adHocParticipants.discordUserId,
         ],
+        // ROK-1800: the unique index is partial — the predicate is required
+        // for Postgres to infer it.
+        targetWhere: sql`${schema.adHocParticipants.discordUserId} IS NOT NULL`,
         set: {
           leftAt: null,
           discordUsername: member.discordUsername,
@@ -147,6 +171,29 @@ export class AdHocParticipantService {
   }
 
   /**
+   * ROK-1800: record a game-server player. Emits PARTICIPANT_JOINED only for a
+   * genuinely new participation (`inserted`), mirroring {@link addParticipant}.
+   */
+  async addServerParticipant(
+    eventId: number,
+    member: ServerPresenceMemberInfo,
+  ): Promise<SteamUpsertOutcome> {
+    const outcome = await upsertSteamParticipant(this.db, eventId, member);
+    if (outcome === 'inserted') {
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
+        eventId,
+        userId: member.userId,
+      });
+    }
+    return outcome;
+  }
+
+  /** ROK-1800: close a Steam-only row when the player leaves the server. */
+  markServerLeave(eventId: number, steamId: string): Promise<boolean> {
+    return markSteamLeave(this.db, eventId, steamId);
+  }
+
+  /**
    * Get the full roster for an ad-hoc event.
    */
   async getRoster(eventId: number): Promise<AdHocParticipantDto[]> {
@@ -160,6 +207,8 @@ export class AdHocParticipantService {
       eventId: r.eventId,
       userId: r.userId,
       discordUserId: r.discordUserId,
+      steamId: r.steamId,
+      source: toParticipantSource(r.source),
       discordUsername: r.discordUsername,
       discordAvatarHash: r.discordAvatarHash,
       joinedAt: r.joinedAt.toISOString(),
