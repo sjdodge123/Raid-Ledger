@@ -228,7 +228,7 @@ That is a SteamID-to-name directory. It may come from vanilla 1.0 or from a mod,
    - Replace the unique index with two **partial** uniques: `(event_id, discord_user_id) WHERE discord_user_id IS NOT NULL` and `(event_id, steam_id) WHERE steam_id IS NOT NULL`.
    - Keep `discord_username` as the display-name column (character name for Steam rows). Renaming it is churn; flag it as tech debt.
    - **Rejected:** a synthetic `discord_user_id = 'steam:<id>'`. It would leak into code that treats the value as a Discord snowflake: DMs, avatar URLs, `voiceAttendanceService.handleLeave`.
-6. **Roster contract (additive):** add an optional `source` / `steamId` to the ad-hoc roster DTO. This is additive, so `--static` plus the new integration spec.
+6. **Roster contract (NOT purely additive, Codex P2):** `AdHocParticipantSchema.discordUserId` is `z.string()` (`packages/contract/src/ad-hoc-events.schema.ts:16`). A Steam-only row has no Discord id, so the field must become `z.string().nullable()`, plus optional `source` / `steamId`. Widening a response field breaks every consumer that assumes a string (web roster rendering, avatar URLs, DM helpers), so this slice is a **breaking** contract change under CLAUDE.md: `--full` gate, every `discordUserId` reader on the ad-hoc path updated in the same PR, and a test with a Steam-only participant.
 
 ---
 
@@ -251,7 +251,7 @@ That is a SteamID-to-name directory. It may come from vanilla 1.0 or from a mod,
   - If it stays unreachable past **15 min** (default, operator Q7), leave all, then grace, then finalize. That way an orphaned Quick Play ends cleanly instead of waiting for the reaper.
 - **RL restart:** the in-memory `activeEvents` map is lost.
   - The voice path rehydrates in `onModuleInit` (`ad-hoc-event.service.ts:75`).
-  - The server path rehydrates from the 150-line replay plus the next heartbeat. A session older than the replay window and with no fresh joins re-attaches at the heartbeat (≤10 min).
+  - The server path rehydrates from the DB, not the log (Codex P2: the heartbeat carries only a count, so it cannot recover WHO is present once their joins are older than the 150-line replay). On boot, load the open Pelican-sourced ad-hoc event per server and its participants with `left_at IS NULL` (their `steam_id` is persisted by item 5) into the tracker, then apply the replay on top (joins/leaves newer than the last processed line), then let the next `Connections N ZDOS` heartbeat reconcile the count. If the server went offline while RL was down, the first status poll leaves everyone and the grace period finalizes the event.
 - **Secrets:** yolk entrypoints conventionally echo the parsed startup line to the console, and this egg's startup line contains `-password "{{PASSWORD}}"` (UNVERIFIED for this image).
   - **The console stream must be treated as secret-bearing:** never log or persist raw lines.
   - The parser emits only typed presence events.
