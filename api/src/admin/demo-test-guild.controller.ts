@@ -10,7 +10,10 @@
  *     delegated-editor rank), `member` (rank 3) — each owning a main character
  *     whose `addon_guid` is its roster GUID — and `outsider` (no character);
  *   - two roster rows with no RL character (ranks 2 and 4);
- *   - a `guild_editors` rank grant for rank 1, granted by the GM.
+ *   - a `guild_editors` rank grant for rank 1, granted by the GM;
+ *   - with `withContent: true` (ROK-1786), the guild page content too: GM
+ *     post, rules, links and two recommended addons (see
+ *     `demo-test-guild-content.helpers.ts`). Re-seeding restores it.
  *
  * Also makes sure the WoW plugin (`blizzard`) is installed + active, since
  * every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`.
@@ -48,6 +51,10 @@ import {
   upsertSeedUser,
   type SeedGuildRole,
 } from './demo-test-guild.helpers';
+import {
+  seedGuildContent,
+  type SeedGuildContent,
+} from './demo-test-guild-content.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -78,6 +85,8 @@ export interface SeedGuildResponse {
   users: Record<SeedGuildRole, SeedGuildUser>;
   /** Roster rows with no RL character (ranks 2 and 4). */
   unlinkedMemberIds: number[];
+  /** Present only when the body sent `withContent: true`. */
+  content?: SeedGuildContent;
 }
 
 interface SeededRoster {
@@ -100,8 +109,7 @@ export class DemoTestGuildController {
   async seedGuild(@Body() body?: unknown): Promise<SeedGuildResponse> {
     const input = parseSeedGuildBody(body);
     const gameId = await findWowGameId(this.db, input.gameSlug);
-    await this.plugins.ensureInstalled(WOW_COMMON_MANIFEST.id);
-    await this.plugins.activate(WOW_COMMON_MANIFEST.id);
+    await this.ensurePluginActive();
     const now = new Date();
     const guildId = await upsertGuild(this.db, gameId, input.name, now);
     const hash = guildKeyHash(input.name.toLowerCase());
@@ -112,6 +120,9 @@ export class DemoTestGuildController {
       now,
     });
     const editorId = await ensureRankEditor(this.db, guildId, users.gm.userId);
+    const content = input.withContent
+      ? await seedGuildContent(this.db, guildId, users.gm.userId, now)
+      : null;
     return {
       guildId,
       gameId,
@@ -120,7 +131,14 @@ export class DemoTestGuildController {
       editorRankIndex: SEED_GUILD_EDITOR_RANK,
       users,
       unlinkedMemberIds: unlinked,
+      ...(content ? { content } : {}),
     };
+  }
+
+  /** Every `/plugins/wow/guilds/*` route sits behind `PluginActiveGuard`. */
+  private async ensurePluginActive(): Promise<void> {
+    await this.plugins.ensureInstalled(WOW_COMMON_MANIFEST.id);
+    await this.plugins.activate(WOW_COMMON_MANIFEST.id);
   }
 
   /** Roster rows + their owners; `unlinked` collects owner-less member ids. */
