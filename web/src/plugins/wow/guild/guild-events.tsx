@@ -10,7 +10,7 @@ import type { GuildEventCardDto, GuildRaidsDto, GuildRecentEventDto } from '@rai
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { Card, Pill, SectionTitle, WidgetCard } from './guild-bits';
 import { GuildMeter } from './guild-meter';
-import { dateTile, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
+import { dateTile, dayLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
 import { JumpLink, QuietEmpty } from './guild-raids-bits';
 
 const SUBHEAD = 'mb-2 text-xs font-semibold uppercase tracking-wider text-muted';
@@ -45,7 +45,7 @@ function UpcomingCard({ e }: { e: GuildEventCardDto }): JSX.Element {
             <div className="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
                 <div className="min-w-0">
                     <Link to={`/events/${e.id}`} className={`block truncate rounded-sm font-semibold text-foreground hover:underline ${FOCUS_RING}`}>{e.title}</Link>
-                    <span className="text-xs text-muted">{whenLabel(e.startTime)} · {timeRange(e.startTime, e.endTime)}</span>
+                    <span data-testid="guild-upcoming-when" className="text-xs text-muted">{dayLabel(e.startTime)} · {timeRange(e.startTime, e.endTime)}</span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                     <SignupMeter e={e} />

@@ -11,6 +11,7 @@ import { emptyGuildRaids } from '../../../test/mocks/guild-raids-handlers';
 import { at } from '../../../test/defined';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { GuildPage } from './guild-page';
+import { dayLabel, timeRange, timeShort } from './guild-raids.helpers';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
 const CHAR_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
@@ -131,5 +132,16 @@ describe('Guild Overview raid widgets + hero chip (ROK-1787)', () => {
         expect(chip.tagName, 'a plain anchor fires hashchange; a router Link would not').toBe('A');
         expect(chip).toHaveAttribute('href', '#raids');
         expect(chip).toHaveTextContent('2/20 signed');
+        expect(within(chip).getByTestId('guild-next-raid-text'), 'date and count share one wrapping text run').toHaveTextContent(/Next raid: .+ · 2\/20 signed/);
+    });
+
+    it('upcoming cards show the start time once (date, then the time range)', async () => {
+        serve(FULL);
+        renderPage('#raids');
+        const when = await screen.findAllByTestId('guild-upcoming-when');
+        const start = timeShort('2030-01-08T20:00:00.000Z');
+        const text = at(when, 0).textContent ?? '';
+        expect(text.split(start).length - 1, `start time "${start}" should appear once in "${text}"`).toBe(1);
+        expect(text).toBe(`${dayLabel('2030-01-08T20:00:00.000Z')} · ${timeRange('2030-01-08T20:00:00.000Z', '2030-01-08T23:00:00.000Z')}`);
     });
 });

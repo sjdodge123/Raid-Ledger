@@ -43,10 +43,13 @@ function importLine(page: GuildPage): string | null {
 /** Plain `<a href>`, not `NavChip`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
 function NextRaidChip({ raid }: { raid: GuildEventCardDto }): JSX.Element {
     return (
-        <a href="#raids" className={NAV_CHIP_CLASS} data-testid="guild-next-raid">
-            <CalendarDaysIcon className="h-4 w-4 text-success" aria-hidden="true" />
-            <span className="text-foreground">Next raid: {whenLabel(raid.startTime)}</span>
-            <span className="text-muted">· {signedShort(raid)}</span>
+        <a href="#raids" className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
+            <CalendarDaysIcon className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
+            {/* One inline text run, so a narrow screen wraps it as a sentence instead of splitting the count into its own flex column. */}
+            <span data-testid="guild-next-raid-text" className="min-w-0">
+                <span className="text-foreground">Next raid: {whenLabel(raid.startTime)}</span>{' '}
+                <span className="whitespace-nowrap text-muted">· {signedShort(raid)}</span>
+            </span>
         </a>
     );
 }

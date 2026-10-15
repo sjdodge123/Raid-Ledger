@@ -31,10 +31,14 @@ export function dateTile(iso: string): { month: string; day: string } {
     return { month: d.toLocaleDateString(undefined, { month: 'short' }).toUpperCase(), day: String(d.getDate()) };
 }
 
+/** "Tue, Oct 14" */
+export function dayLabel(iso: string): string {
+    return new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
 /** "Tue, Oct 14 · 8:00 PM" */
 export function whenLabel(iso: string): string {
-    const day = new Date(iso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    return `${day} · ${timeShort(iso)}`;
+    return `${dayLabel(iso)} · ${timeShort(iso)}`;
 }
 
 /** "3 / 20 signed up", or "3 signed up" when the event is uncapped. */
