@@ -1,12 +1,18 @@
 import { Logger } from '@nestjs/common';
 import { GameServerCalendarItemSchema } from '@raid-ledger/contract';
+import type {
+  PelicanClientFactory,
+  PelicanConnection,
+} from './pelican-client.factory';
 import type { PelicanConfigService } from './pelican-config.service';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
 import type {
   PelicanSchedulesRepository,
   PelicanServableSchedule,
 } from './pelican-schedules.repository';
+import type { PelicanServerRow } from '../../drizzle/schema';
 import type { PelicanServersRepository } from './pelican-servers.repository';
+import { pelicanRow } from './testing/pelican-rows';
 import { servableSchedule } from './testing/pelican-schedule-rows';
 
 const RANGE = {
@@ -14,18 +20,29 @@ const RANGE = {
   to: new Date('2026-10-15T00:00:00.000Z'),
 };
 
-function build(rows: PelicanServableSchedule[], defaultTz = 'UTC') {
+const CONNECTED = {
+  host: 'panel.example.test',
+} as unknown as PelicanConnection;
+
+function build(
+  rows: PelicanServableSchedule[],
+  defaultTz = 'UTC',
+  pollable: PelicanServerRow[] = [],
+  connection: PelicanConnection | null = CONNECTED,
+) {
   const listServable = jest.fn<Promise<PelicanServableSchedule[]>, [number[]?]>(
     () => Promise.resolve(rows),
   );
   const resolveDefaultTimezone = jest.fn(() => Promise.resolve(defaultTz));
-  const listPollable = jest.fn(() => Promise.resolve([]));
+  const listPollable = jest.fn(() => Promise.resolve(pollable));
+  const connect = jest.fn(() => Promise.resolve(connection));
   const provider = new PelicanGameServerProvider(
     { listPollable } as unknown as PelicanServersRepository,
     { listServable } as unknown as PelicanSchedulesRepository,
     { resolveDefaultTimezone } as unknown as PelicanConfigService,
+    { connect } as unknown as PelicanClientFactory,
   );
-  return { provider, listServable, resolveDefaultTimezone };
+  return { provider, listServable, resolveDefaultTimezone, listPollable };
 }
 
 const evening = (over: Partial<PelicanServableSchedule> = {}) => [
@@ -130,6 +147,26 @@ describe('PelicanGameServerProvider.getCalendarItems filtering (ROK-1096)', () =
     expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([]);
     expect(debug.mock.calls.map((c) => String(c[0]))).toEqual([
       'Pelican tz mismatch servers: 9',
+    ]);
+  });
+});
+
+describe('PelicanGameServerProvider.getStatuses (ROK-1776)', () => {
+  const checked = new Date(Date.now() - 60_000);
+  const rows = () => [pelicanRow(1, { statusCheckedAt: checked })];
+
+  it('returns nothing and skips the repository while unconfigured', async () => {
+    const { provider, listPollable } = build([], 'UTC', rows(), null);
+    await expect(provider.getStatuses()).resolves.toEqual([]);
+    expect(listPollable).not.toHaveBeenCalled();
+  });
+
+  it('maps checked rows to member-safe DTOs while configured', async () => {
+    const { provider, listPollable } = build([], 'UTC', rows());
+    const out = await provider.getStatuses();
+    expect(listPollable).toHaveBeenCalledTimes(1);
+    expect(out.map((s) => [s.serverKey, s.provider, s.state])).toEqual([
+      ['1', 'Pelican', 'running'],
     ]);
   });
 });

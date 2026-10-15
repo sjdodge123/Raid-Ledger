@@ -11,6 +11,7 @@ import { describe, it, expect } from 'vitest';
 import type { z } from 'zod';
 import {
     GAME_SERVER_CALENDAR_MAX_RANGE_DAYS,
+    GAME_SERVER_STATUS_STALE_MS,
     GameServerCalendarItemSchema,
     GameServerCalendarQuerySchema,
     GameServerCalendarResponseSchema,
@@ -116,6 +117,12 @@ describe('GameServerStatusSchema', () => {
         expect(issuesOf(GameServerStatusSchema, { ...status, state: 'crashed' })).toEqual([
             expect.objectContaining({ code: 'invalid_value', path: ['state'] }),
         ]);
+    });
+});
+
+describe('GAME_SERVER_STATUS_STALE_MS (ROK-1776)', () => {
+    it('is three missed 2-minute polls', () => {
+        expect(GAME_SERVER_STATUS_STALE_MS).toBe(6 * 60_000);
     });
 });
 

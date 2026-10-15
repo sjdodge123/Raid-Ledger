@@ -83,6 +83,13 @@ export const GAME_SERVER_CALENDAR_MAX_RANGE_DAYS = 62;
 /** Most distinct ids one `gameIds` query may carry (ROK-268 F3). */
 export const GAME_SERVER_MAX_GAME_IDS = 50;
 
+/**
+ * A status checked longer ago than this is shown as `unknown` (ROK-1776).
+ * Three missed ticks of the 2-minute provider poll; the single threshold the
+ * API provider and the web chip share.
+ */
+export const GAME_SERVER_STATUS_STALE_MS = 6 * 60_000;
+
 const MAX_INT4 = 2_147_483_647;
 const DAY_MS = 86_400_000;
 
