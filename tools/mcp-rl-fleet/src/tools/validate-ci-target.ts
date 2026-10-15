@@ -84,6 +84,60 @@ export function sanitizeBaseUrl(raw: string): string {
 export type E2eScope = 'auto' | 'all' | 'none';
 
 /**
+ * ROK-1792 — an explicit Playwright spec list, forwarded as E2E_SPECS. Each path
+ * is a repo-relative smoke spec; the character class admits no whitespace,
+ * quote, glob or shell metacharacter, and the value is shellQuote'd regardless.
+ * It mirrors playwright.config.ts discovery (testDir `./scripts/smoke`,
+ * testMatch `/\.smoke\.spec\.ts$/`): a plain `scripts/smoke/*.spec.ts` is a
+ * Vitest file Playwright would silently never run.
+ * validate-ci.sh re-validates (pattern, no `..`, file exists) and exits 2.
+ */
+export const E2E_SPEC_PATTERN = /^scripts\/smoke\/[\w./-]+\.smoke\.spec\.ts$/;
+
+/**
+ * validate-ci.sh flags under which the Playwright tier never runs, so an
+ * explicit list would "pass" without running a single requested spec.
+ */
+const SPECS_CONFLICTING_FLAGS = [
+  '--static',
+  '--no-e2e',
+  '--only-unit',
+  '--only-integration',
+  '--contrast-audit',
+] as const;
+export const MAX_E2E_SPECS = 20;
+
+/**
+ * Reject an e2e_specs request validate-ci.sh would refuse (exit 2) — at the MCP
+ * boundary, before a dispatch the caller would only learn about by polling.
+ *
+ * @param specs - The requested spec paths; undefined/empty means "not set".
+ * @param scope - e2e_scope; only `auto` (or unset) composes with a list.
+ * @param args - The resolved validate-ci.sh flags.
+ * @returns An error message, or null when the request is valid.
+ */
+export function checkE2eSpecs(
+  specs: readonly string[] | undefined,
+  scope: E2eScope | undefined,
+  args: readonly string[] = [],
+): string | null {
+  if (!specs || specs.length === 0) return null;
+  if (specs.length > MAX_E2E_SPECS) {
+    return `e2e_specs takes at most ${MAX_E2E_SPECS} paths (got ${specs.length}).`;
+  }
+  const bad = specs.filter((s) => !E2E_SPEC_PATTERN.test(s) || `/${s}/`.includes('/../'));
+  if (bad.length) {
+    return `e2e_specs paths must match scripts/smoke/<name>.smoke.spec.ts with no '..': ${bad.join(', ')}`;
+  }
+  if (scope && scope !== 'auto') {
+    return `e2e_specs and e2e_scope:'${scope}' are mutually exclusive — omit e2e_scope (or pass 'auto').`;
+  }
+  const conflict = args.find((a) => (SPECS_CONFLICTING_FLAGS as readonly string[]).includes(a));
+  if (conflict) return `e2e_specs and ${conflict} are mutually exclusive — use --only-e2e.`;
+  return null;
+}
+
+/**
  * Build the `KEY=value ` prefix that binds the runner's e2e target.
  *
  * All THREE variables are exported together on purpose. validate-ci probes
@@ -97,12 +151,15 @@ export type E2eScope = 'auto' | 'all' | 'none';
  * @param opts.baseUrl - Sanitised target; omit for the default (local) gate.
  * @param opts.adminPassword - Seeded env admin password, if one was obtained.
  * @param opts.e2eScope - Playwright scope for validate-ci.sh; omit for its default.
+ * @param opts.e2eSpecs - ROK-1792 explicit spec list (pre-validated by
+ *   checkE2eSpecs); emitted as one space-separated, shell-quoted E2E_SPECS.
  * @returns A trailing-space-terminated env prefix, or '' when nothing applies.
  */
 export function resolveInnerEnv(opts: {
   baseUrl?: string | undefined;
   adminPassword?: string | null | undefined;
   e2eScope?: E2eScope | undefined;
+  e2eSpecs?: readonly string[] | undefined;
 }): string {
   let env = '';
   if (opts.baseUrl) {
@@ -116,5 +173,6 @@ export function resolveInnerEnv(opts: {
     }
   }
   if (opts.e2eScope) env += `E2E_SCOPE=${shellQuote(opts.e2eScope)} `;
+  if (opts.e2eSpecs?.length) env += `E2E_SPECS=${shellQuote(opts.e2eSpecs.join(' '))} `;
   return env;
 }
