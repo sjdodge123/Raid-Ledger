@@ -33,6 +33,14 @@ const LIST_LIMIT = 10;
 /** Signup states that count as "signed up" on a card. */
 const SIGNED = sql`('signed_up', 'tentative', 'departed')`;
 
+/**
+ * The outer `events.id`, table-qualified. Drizzle strips the table from a
+ * column interpolated directly into a single-table select's `sql` field, so a
+ * bare `${events.id}` inside `(select … from event_signups s …)` renders as
+ * `"id"` and binds to `s.id` — an uncorrelated subquery. Name the table.
+ */
+const outerEventId = sql`${events}.${sql.identifier('id')}`;
+
 const at = (d: Date): SQL => sql`${d.toISOString()}::timestamp`;
 const ends = sql`upper(${events.duration})`;
 const starts = sql`lower(${events.duration})`;
@@ -73,10 +81,10 @@ export async function loadUpcoming(
       duration: events.duration,
       slotConfig: events.slotConfig,
       maxAttendees: events.maxAttendees,
-      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${events.id} and s.status in ${SIGNED})`,
+      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${SIGNED})`,
       viewerStatus: sql<
         string | null
-      >`(select s.status from ${eventSignups} s where s.event_id = ${events.id} and s.user_id = ${viewerId} limit 1)`,
+      >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,
     })
     .from(events)
     .where(and(guildEvents(guildId), sql`${ends} > ${at(now)}`))
@@ -148,7 +156,7 @@ export async function loadRecent(
   since: Date,
   now: Date,
 ): Promise<RecentRow[]> {
-  const s = sql`${eventSignups} s where s.event_id = ${events.id}`;
+  const s = sql`${eventSignups} s where s.event_id = ${outerEventId}`;
   return db
     .select({
       id: events.id,
@@ -179,7 +187,7 @@ async function recordedEventIds(
       and(
         guildEvents(guildId),
         endedBetween(since, now),
-        sql`exists (select 1 from ${eventSignups} s where s.event_id = ${events.id} and s.attendance_status is not null)`,
+        sql`exists (select 1 from ${eventSignups} s where s.event_id = ${outerEventId} and s.attendance_status is not null)`,
       ),
     );
   return rows.map((r) => r.id);
