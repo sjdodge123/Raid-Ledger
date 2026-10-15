@@ -64,3 +64,37 @@ describe('selectForeverPortrait (ROK-1761)', () => {
         expect(raceInitials('  ')).toBe('');
     });
 });
+
+describe('selectForeverPortrait race portrait (ROK-1747)', () => {
+    const NE_FEMALE = 'https://wow.zamimg.com/images/wow/icons/large/race_nightelf_female.jpg';
+
+    it('returns the race portrait with a class badge and the class tile as fallback', () => {
+        expect(selectForeverPortrait({ variant: forever, race: 'Night Elf', gender: 'female', characterClass: 'Mage', name: 'Ayla' }))
+            .toEqual({
+                kind: 'race', raceIconUrl: NE_FEMALE, classIconUrl: MAGE_ICON, label: 'Ayla',
+                fallback: { kind: 'tile', classIconUrl: MAGE_ICON, raceInitial: 'NE', label: 'Ayla' },
+            });
+    });
+
+    it('keeps the class tile when the gender is unknown', () => {
+        expect(selectForeverPortrait({ variant: forever, race: 'Night Elf', gender: null, characterClass: 'Mage', name: 'Ayla' }).kind)
+            .toBe('tile');
+    });
+
+    it('keeps the class tile for a race with no icon (Skyborne)', () => {
+        expect(selectForeverPortrait({ variant: forever, race: 'Skyborne', gender: 'female', characterClass: 'Mage', name: 'Ayla' }).kind)
+            .toBe('tile');
+    });
+
+    it('returns a race portrait with no class badge and a neutral fallback for an unknown class', () => {
+        expect(selectForeverPortrait({ variant: forever, race: 'Night Elf', gender: 'female', characterClass: null, name: 'Ayla' }))
+            .toEqual({ kind: 'race', raceIconUrl: NE_FEMALE, classIconUrl: null, label: 'Ayla', fallback: { kind: 'neutral', label: 'Ayla' } });
+    });
+
+    it('still prefers an existing render, and leaves non-Forever characters alone', () => {
+        const input = { race: 'Night Elf', gender: 'female', characterClass: 'Mage', name: 'Ayla' };
+        expect(selectForeverPortrait({ ...input, variant: forever, avatarUrl: 'https://x/a.jpg' })).toEqual({ kind: 'none' });
+        expect(selectForeverPortrait({ ...input, variant: resolveWowVariant({ gameVariant: 'classic_era', ruleset: null }) }))
+            .toEqual({ kind: 'none' });
+    });
+});
