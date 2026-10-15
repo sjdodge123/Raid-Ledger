@@ -103,26 +103,26 @@ describe('CalendarView schedule — muted layer rows (ROK-1775)', () => {
 });
 
 describe('Month + Schedule layer gating (ROK-1775)', () => {
-    const views = [['month', undefined], ['schedule', 'schedule']] as const;
+    const views = [['month', {}], ['schedule', { calendarView: 'schedule' }]] as const;
 
-    it.each(views)('%s: the Filters toggle OFF draws nothing and never enables the layer', (_name, calendarView) => {
+    it.each(views)('%s: the Filters toggle OFF draws nothing and never enables the layer', (_name, viewProps) => {
         useCalendarLayerFilterStore.setState({ hiddenLayers: new Set(['fake:sched']) });
-        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView={calendarView} />);
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} {...viewProps} />);
         expect(screen.queryByTestId('layer-month-glyph')).toBeNull();
         expect(screen.queryByTestId('schedule-layer-row')).toBeNull();
         expect(spy.mock.calls.every(([, , enabled]) => enabled === false)).toBe(true);
     });
 
-    it.each(views)('%s: an inactive plugin draws nothing', (_name, calendarView) => {
+    it.each(views)('%s: an inactive plugin draws nothing', (_name, viewProps) => {
         act(() => usePluginStore.getState().setActiveSlugs([]));
-        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView={calendarView} />);
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} {...viewProps} />);
         expect(screen.queryByTestId('layer-month-glyph')).toBeNull();
         expect(screen.queryByTestId('schedule-layer-row')).toBeNull();
     });
 
-    it.each(views)('%s: the game filter reaches the layer and hides another game\'s items', (_name, calendarView) => {
+    it.each(views)('%s: the game filter reaches the layer and hides another game\'s items', (_name, viewProps) => {
         const selected = new Set([EVENT.game?.slug ?? 'none', 'wow']); // keeps the event, excludes the layer's game
-        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView={calendarView} selectedGames={selected} />);
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} {...viewProps} selectedGames={selected} />);
         expect(spy).toHaveBeenLastCalledWith(expect.anything(), selected, true);
         expect(screen.queryByTestId('layer-month-glyph')).toBeNull();
         expect(screen.queryByTestId('schedule-layer-row')).toBeNull();

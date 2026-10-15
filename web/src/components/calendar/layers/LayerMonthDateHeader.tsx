@@ -8,6 +8,7 @@
 import { format } from 'date-fns';
 import type { JSX, MouseEvent, ReactNode } from 'react';
 import { useCalendarLayerContext } from './calendar-layer-context';
+import { Button } from '../../ui/button';
 import { LayerGlyph } from './LayerGlyph';
 
 export interface LayerMonthDateHeaderProps {
@@ -21,7 +22,7 @@ export function LayerMonthDateHeader({ label, date, drilldownView, onDrillDown }
     const ctx = useCalendarLayerContext();
     const entries = ctx?.dayEntries.get(format(date, 'yyyy-MM-dd')) ?? [];
     const text = drilldownView
-        ? <button type="button" className="rbc-button-link" onClick={onDrillDown}>{label}</button>
+        ? <Button variant="bare" type="button" className="rbc-button-link" onClick={onDrillDown}>{label}</Button>
         : <span>{label}</span>;
     if (entries.length === 0) return text;
     return (
