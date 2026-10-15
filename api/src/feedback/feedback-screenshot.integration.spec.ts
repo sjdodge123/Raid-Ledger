@@ -201,7 +201,10 @@ describe('account delete racing an in-flight screenshot store', () => {
     expect(res.status).toBe(201);
     const id = res.body.id as number;
     // storeScreenshot mid-flight: file written, path update not yet committed.
-    await writeFile(path.join(dir, `${id}.png`), Buffer.from(PNG_1X1_B64, 'base64'));
+    await writeFile(
+      path.join(dir, `${id}.png`),
+      Buffer.from(PNG_1X1_B64, 'base64'),
+    );
     let release: () => void = () => {};
     const gate = new Promise<void>((r) => (release = r));
     const store = testApp.db.transaction(async (tx) => {
