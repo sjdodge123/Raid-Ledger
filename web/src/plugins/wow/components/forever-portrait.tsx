@@ -18,7 +18,7 @@ import { useContext, useState } from 'react';
 import { QueryClientContext } from '@tanstack/react-query';
 import { resolveWowVariant } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
-import { selectForeverPortrait, type ForeverClassTile, type ForeverPortrait } from '../lib/forever-portrait';
+import { portraitKey, selectForeverPortrait, type ForeverClassTile, type ForeverPortrait } from '../lib/forever-portrait';
 import type { WowVariant } from '../lib/wow-era';
 import type { CharacterPortraitFallbackProps, CharacterPortraitSize, CharacterPortraitSubject } from '../../character-identity';
 
@@ -94,12 +94,6 @@ function RacePortraitTile({ portrait, size }: { portrait: RacePortrait; size: Fo
 export function ForeverPortraitTile({ portrait, size }: { portrait: Exclude<ForeverPortrait, { kind: 'none' }>; size: ForeverPortraitSize }) {
     if (portrait.kind === 'race') return <RacePortraitTile portrait={portrait} size={size} />;
     return <ClassTile portrait={portrait} size={size} />;
-}
-
-/** Remount key: a changed image URL must reset the tile's load-error state. */
-function portraitKey(portrait: Exclude<ForeverPortrait, { kind: 'none' }>): string {
-    if (portrait.kind === 'race') return `${portrait.raceIconUrl}|${portrait.classIconUrl ?? ''}`;
-    return portrait.kind === 'neutral' ? '' : portrait.classIconUrl;
 }
 
 function PortraitOrChildren({ variant, character, size, children }: FallbackProps & { variant: WowVariant | null }) {

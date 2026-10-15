@@ -68,3 +68,9 @@ export function selectForeverPortrait(input: ForeverPortraitInput): ForeverPortr
     const raceIconUrl = getRaceIconUrl(race, input.gender);
     return raceIconUrl ? { kind: 'race', raceIconUrl, classIconUrl, fallback, label } : fallback;
 }
+
+/** Remount key: a changed image URL must reset the tile's load-error state. */
+export function portraitKey(portrait: Exclude<ForeverPortrait, { kind: 'none' }>): string {
+    if (portrait.kind === 'race') return `${portrait.raceIconUrl}|${portrait.classIconUrl ?? ''}`;
+    return portrait.kind === 'neutral' ? '' : portrait.classIconUrl;
+}
