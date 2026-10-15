@@ -14,6 +14,11 @@ import { CharacterVariantBadge } from './slots/character-variant-badge';
 import { CharacterDetailOwnerActions } from './slots/character-detail-owner-actions';
 import { CharacterDetailAdminActions } from './slots/character-detail-admin-actions';
 import { CharacterCreateHeaderActions } from './slots/character-create-header-actions';
+import { NavGuildLink } from './slots/nav-guild-link';
+import { DrawerYourGuild } from './slots/drawer-your-guild';
+import { UserMenuGuild } from './slots/user-menu-guild';
+import { PlayersGuildCard } from './slots/players-guild-card';
+import { GameDetailGuilds } from './slots/game-detail-guilds';
 import { foreverIdentityProvider } from './forever-identity-provider';
 
 const blizzard = registerPlugin('blizzard', {
@@ -38,4 +43,9 @@ blizzard.registerSlot('event-detail:signup-warnings', EventDetailSignupWarnings)
 blizzard.registerSlot('admin-settings:plugin-content', BlizzardIntegrationSlot);
 blizzard.registerSlot('profile:character-actions', ProfileCharacterActions);
 blizzard.registerSlot('character-card:badges', CharacterVariantBadge);
+blizzard.registerSlot('nav:primary-links', NavGuildLink);
+blizzard.registerSlot('nav:drawer-top', DrawerYourGuild);
+blizzard.registerSlot('user-menu:items', UserMenuGuild);
+blizzard.registerSlot('players:header-cards', PlayersGuildCard);
+blizzard.registerSlot('game-detail:sections', GameDetailGuilds);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);

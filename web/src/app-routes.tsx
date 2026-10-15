@@ -14,7 +14,7 @@ import { PublicLineupPage } from './pages/public/PublicLineupPage';
 import {
   JoinPage, InvitePage, PollSharePage, PrivacyPage,
   CalendarPage, CreateEventPage, PlanEventPage, EditEventPage,
-  GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage,
+  GamesPage, GameDetailPage, LfgGroupPage, LineupDetailPage, SchedulingPollPage, CharacterDetailPage, GuildPage,
   PlayersPage, EventMetricsPage,
   InsightsHubPage, InsightsCommunityTab, InsightsEventsTab,
   UserProfilePage, OnboardingWizardPage,
@@ -33,7 +33,7 @@ import {
   SimplifyWireframesPage,
   BindingAdminWireframesPage,
   DesignSystemPage,
-  SchedulingWireframesPage, ViewportProbePage,
+  SchedulingWireframesPage, ServerScheduleWireframesPage, ViewportProbePage,
 } from './lazy-routes';
 
 function ProfileRoutes() {
@@ -119,6 +119,7 @@ function DevWireframeRoutes() {
       <Route path="/dev/wireframes/binding-admin" element={<BindingAdminWireframesPage />} />
       <Route path="/dev/design-system" element={<DesignSystemPage />} />
       <Route path="/dev/wireframes/scheduling" element={<SchedulingWireframesPage />} />
+      <Route path="/dev/wireframes/server-schedule" element={<ServerScheduleWireframesPage />} />
       <Route path="/dev/viewport-probe" element={<ViewportProbePage />} />
     </>
   );
@@ -147,6 +148,7 @@ export function AppRoutes() {
         <Route path="/community-lineup/:id" element={<LineupDetailPage />} />
         <Route path="/community-lineup/:lineupId/schedule/:matchId" element={<SchedulingPollPage />} />
         <Route path="/characters/:id" element={<CharacterDetailPage />} />
+        <Route path="/guilds/:id" element={<GuildPage />} />
         <Route path="/players" element={<PlayersPage />} />
         <Route path="/events" element={<EventsPage />} />
         <Route path="/event-metrics" element={<Navigate to="/insights/events" replace />} />

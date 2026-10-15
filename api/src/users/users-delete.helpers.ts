@@ -189,6 +189,9 @@ export const KEEP_TABLES: readonly PgTable[] = [
   // NULL) — a raid pull or guild roster row belongs to the guild, not the user.
   schema.addonEncounterPulls,
   schema.guildMembers,
+  // ROK-1785: `granted_by` is SET NULL; the grant belongs to the guild page,
+  // not to the admin who made it, so it survives the granter's wipe.
+  schema.guildEditors,
 ];
 
 /**

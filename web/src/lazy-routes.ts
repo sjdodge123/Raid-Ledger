@@ -74,6 +74,10 @@ export const SchedulingPollPage = lazyWithRetry(() =>
 export const CharacterDetailPage = lazyWithRetry(() =>
     import('./pages/character-detail-page').then((m) => ({ default: m.CharacterDetailPage })),
 );
+/** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
+export const GuildPage = lazyWithRetry(() =>
+    import('./plugins/wow/guild/guild-page').then((m) => ({ default: m.GuildPage })),
+);
 export const PlayersPage = lazyWithRetry(() =>
     import('./pages/players-page').then((m) => ({ default: m.PlayersPage })),
 );
@@ -146,6 +150,9 @@ export const DesignSystemPage = lazyWithRetry(() =>
 );
 export const SchedulingWireframesPage = lazyWithRetry(() =>
     import('./dev/scheduling-wireframes/SchedulingWireframesPage').then((m) => ({ default: m.SchedulingWireframesPage })),
+);
+export const ServerScheduleWireframesPage = lazyWithRetry(() =>
+    import('./dev/server-schedule-wireframes/ServerScheduleWireframesPage').then((m) => ({ default: m.ServerScheduleWireframesPage })),
 );
 /** ROK-1661 bare viewport probe; `Layout.tsx` renders it with no shell. */
 export const ViewportProbePage = lazyWithRetry(() =>

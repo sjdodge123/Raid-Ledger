@@ -54,6 +54,9 @@ function ButtonVariants(): JSX.Element {
                 <Button loading loadingLabel="Saving…">Save</Button>
                 <Button iconOnly aria-label="Close" variant="ghost"><XMarkIcon className="w-5 h-5" /></Button>
             </StateFrame>
+            <StateFrame label="Button — bare (ROK-1774)" note="Inline glyph control for dense surfaces (calendar markers): no padding, min size, radius, fill or border — className supplies the look. Still named, still the success focus ring.">
+                <Button variant="bare" aria-label="Layer marker" className="h-4 w-4 rounded-full bg-surface text-muted ring-1 ring-edge-strong"><XMarkIcon aria-hidden="true" className="h-3 w-3" /></Button>
+            </StateFrame>
         </>
     );
 }

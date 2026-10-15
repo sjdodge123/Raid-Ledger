@@ -25,6 +25,12 @@
  *   the higher WCAG contrast on the fill (`brandLabelFor`, ROK-1472), which
  *   index.css paints on EVERY scheme. Loading, disabled, iconOnly and type are
  *   unchanged.
+ * - `bare` (ROK-1774) is the escape hatch for an inline icon/glyph control in a
+ *   dense surface (a 16px calendar marker), where a 44px target would steal the
+ *   neighbouring clicks: a real `<button type="button">` with NO padding, min
+ *   size, radius, fill or border — the caller's `className` supplies all of it.
+ *   It keeps the token focus ring and the disabled treatment, and ignores
+ *   `size`, `iconOnly` and `brandColor` paint. It still needs an accessible name.
  * - Link-styled actions stay `<Link>`; this is not a link.
  */
 import { forwardRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
@@ -32,10 +38,11 @@ import { DISABLED, FOCUS_RING } from './form-classes';
 import { brandLabelFor } from '../../lib/brand-label';
 
 export type ButtonVariant =
-    | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'warning-soft' | 'success-soft';
+    | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'warning-soft' | 'success-soft'
+    | 'bare';
 export type ButtonSize = 'md' | 'sm' | 'lg';
 
-const VARIANT_CLS: Record<ButtonVariant, string> = {
+const VARIANT_CLS: Record<Exclude<ButtonVariant, 'bare'>, string> = {
     primary: 'bg-emerald-600 hover:bg-emerald-500 text-foreground',
     secondary: 'bg-panel border border-edge text-foreground hover:bg-overlay',
     ghost: 'text-muted hover:text-foreground hover:bg-overlay',
@@ -57,6 +64,9 @@ const SIZE_CLS: Record<ButtonSize, string> = {
 const BASE_CLS =
     'relative inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ' +
     `${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
+
+/** `bare`: no padding, min size, radius, fill or border — only layout, the focus ring and disabled. */
+const BARE_BASE_CLS = `relative inline-flex items-center justify-center ${FOCUS_RING} ${DISABLED}`;
 
 interface ButtonBaseProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
     variant?: ButtonVariant | undefined;
@@ -86,6 +96,9 @@ function InlineSpinner(): ReactNode {
 type ClassInputs = Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'iconOnly' | 'className' | 'brandColor'>;
 
 function buttonClass(p: ClassInputs): string {
+    if (p.variant === 'bare') {
+        return [BARE_BASE_CLS, p.fullWidth ? 'w-full' : '', p.className ?? ''].filter(Boolean).join(' ');
+    }
     return [
         BASE_CLS,
         p.brandColor ? BRAND_CLS : VARIANT_CLS[p.variant ?? 'primary'],

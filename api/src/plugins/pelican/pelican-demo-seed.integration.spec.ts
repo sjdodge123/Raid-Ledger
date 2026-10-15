@@ -20,7 +20,10 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
-import { DEMO_RESTART_OFFSET_S } from './pelican-demo-seed-schedules.helpers';
+import {
+  DEMO_BACKUP_OFFSET_S,
+  DEMO_RESTART_OFFSET_S,
+} from './pelican-demo-seed-schedules.helpers';
 import {
   DEMO_PELICAN_API_KEY,
   DEMO_PELICAN_PANEL_URL,
@@ -175,7 +178,7 @@ describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () =>
       rows.get(s.id)?.tzMismatch,
     ]);
     expect(tzView).toEqual([
-      ['running_mapped', 3, false, false],
+      ['running_mapped', 6, false, false],
       ['offline_unmapped', 1, true, true],
       ['unknown_hidden', 0, false, false],
       ['missing', 0, false, false],
@@ -187,14 +190,20 @@ describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () =>
         .map((r) => [r.effect, r.effectOffsetS, r.nextRunAt])
         .sort(),
     ).toEqual([
+      ['backup', DEMO_BACKUP_OFFSET_S, null],
       ['restart', DEMO_RESTART_OFFSET_S, null],
       ['start', 0, null],
+      ['start', 0, null],
+      ['stop', 0, null],
       ['stop', 0, null],
     ]);
 
     const kinds = await pelicanCalendarKinds(running.id);
     expect(kinds).toContain('window:Evening open');
     expect(kinds).toContain('marker:restart');
+    // ROK-1774: a backup coincident with the restart, and a short window.
+    expect(kinds).toContain('marker:backup');
+    expect(kinds).toContain('window:Midday open');
 
     const fixed = await testApp.request
       .patch(`/admin/plugins/pelican/servers/${mismatched.id}`)

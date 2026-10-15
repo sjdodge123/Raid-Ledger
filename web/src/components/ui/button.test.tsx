@@ -210,3 +210,34 @@ describe('Button — brandColor (runtime brand fill)', () => {
         expect(onClick, 'a loading brand button fired onClick').not.toHaveBeenCalled();
     });
 });
+
+describe('Button — bare variant (inline glyph controls)', () => {
+    it('renders a type="button" with no min size, padding, radius, fill or border, keeping the focus ring', () => {
+        render(<Button variant="bare" aria-label="Glyph" className="h-4 w-4 rounded-full">G</Button>);
+        const btn = screen.getByRole('button', { name: 'Glyph' });
+        expect(btn).toHaveAttribute('type', 'button');
+        for (const cls of ['min-h-[44px]', 'lg:min-h-9', 'min-w-[44px]', 'px-4', 'py-2', 'px-3', 'py-1.5', 'rounded-lg', 'border', 'bg-emerald-600', 'focus-visible:ring-offset-2']) {
+            expect(btn).not.toHaveClass(cls);
+        }
+        expect(btn).toHaveClass('focus-visible:ring-2', 'focus-visible:ring-success/80', 'disabled:opacity-50', 'h-4', 'w-4', 'rounded-full');
+    });
+
+    it('ignores size and iconOnly, so neither re-adds a 44px target', () => {
+        render(<Button variant="bare" size="lg" iconOnly aria-label="Glyph">G</Button>);
+        const btn = screen.getByRole('button', { name: 'Glyph' });
+        expect(btn).not.toHaveClass('min-h-[44px]');
+        expect(btn).not.toHaveClass('min-w-[44px]');
+        expect(btn).not.toHaveClass('py-3');
+    });
+
+    it('still forwards pointer handlers and onClick', () => {
+        const onClick = vi.fn();
+        const onPointerDown = vi.fn();
+        render(<Button variant="bare" aria-label="Glyph" onClick={onClick} onPointerDown={onPointerDown}>G</Button>);
+        const btn = screen.getByRole('button', { name: 'Glyph' });
+        fireEvent.pointerDown(btn);
+        fireEvent.click(btn);
+        expect(onPointerDown).toHaveBeenCalledTimes(1);
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
+});

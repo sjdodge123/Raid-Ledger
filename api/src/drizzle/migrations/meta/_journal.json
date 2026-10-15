@@ -1478,6 +1478,13 @@
       "when": 1791934935414,
       "tag": "0211_pelican_schedules_offset_check",
       "breakpoints": true
+    },
+    {
+      "idx": 212,
+      "version": "7",
+      "when": 1792008953264,
+      "tag": "0212_guild_editors",
+      "breakpoints": true
     }
   ]
 }

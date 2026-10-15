@@ -16,6 +16,7 @@ import { CommunityActivitySection } from './game-detail/CommunityActivitySection
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GameBanner } from './game-detail/GameBanner';
+import { PluginSlot } from '../plugins';
 import { LfgToggleButton } from './game-detail/lfg-toggle-button';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
 import { useGamePricing } from '../hooks/use-games-discover';
@@ -105,12 +106,14 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
 /**
  * Co-Optimus co-op facts (ROK-1398) followed by community activity. The co-op
  * section renders nothing for games Co-Optimus has never been asked about.
+ * Plugin sections (`game-detail:sections`, ROK-1785) render first.
  */
 function CoopSupportAndActivity({ game, gameId }: {
     game: NonNullable<ReturnType<typeof useGameDetail>['data']>; gameId: number | undefined;
 }): JSX.Element {
     return (
         <>
+            {gameId && <PluginSlot name="game-detail:sections" context={{ gameId, gameSlug: game.slug }} />}
             <CoopFeaturesSection game={game} />
             {gameId && <CommunityActivitySection gameId={gameId} />}
         </>
