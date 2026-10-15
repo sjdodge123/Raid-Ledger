@@ -11,14 +11,12 @@ import { PelicanServersRepository } from './pelican-servers.repository';
 const PELICAN_KEYS = [
   SETTING_KEYS.PELICAN_PANEL_URL,
   SETTING_KEYS.PELICAN_CLIENT_API_KEY,
-  SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE,
 ];
 
 async function build() {
   const cache = new Map<string, string>([
     [SETTING_KEYS.PELICAN_CLIENT_API_KEY, 'pacc_cached'],
     [SETTING_KEYS.PELICAN_PANEL_URL, 'https://panel.example.test'],
-    [SETTING_KEYS.DEFAULT_TIMEZONE, 'UTC'],
   ]);
   const settings = {
     get: jest.fn((k: string) => Promise.resolve(cache.get(k) ?? null)),

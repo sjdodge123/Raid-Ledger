@@ -2,17 +2,11 @@
  * Demo schedules for the DEMO_MODE Pelican seed (ROK-1096 D15): a start/stop
  * window + a nightly restart on the running+mapped server — plus (ROK-1774)
  * a backup in the restart's minute (coincident markers) and a short midday
- * window (short-window label) — and one restart
- * whose stored `next_run_at` deliberately disagrees with its server's
- * timezone override so the fleet UI plan can show (and fix) the warning.
+ * window (short-window label) — and one nightly restart on the offline row.
+ * Every cron is UTC, as Pelican panel crons always are (ROK-1795).
  */
 import type { NewPelicanSchedule } from '../../drizzle/schema';
 import { nextAtOrAfter } from './pelican-schedule-cron.helpers';
-
-/** The override the mismatched demo server is seeded with. */
-export const DEMO_TZ_MISMATCH_STORED = 'UTC';
-/** The override that clears its warning — the zone `next_run_at` was computed in. */
-export const DEMO_TZ_MISMATCH_FIX = 'America/New_York';
 
 const NIGHTLY_RESTART = '0 4 * * *';
 /** Cumulative seconds from the schedule firing to the restart task. */
@@ -96,21 +90,18 @@ function toRow(
 
 /**
  * Start 18:00 + stop 02:00 + restart 04:00 (+5 min) + backup 04:00 (+5.5 min)
- * + a 13:00–13:40 window, in the server's own zone.
+ * + a 13:00–13:40 window, all UTC.
  */
 export function runningServerSchedules(serverId: number): NewPelicanSchedule[] {
   return RUNNING_SCHEDULES.map((spec, i) => toRow(serverId, i + 1, spec, null));
 }
 
-/**
- * One nightly restart whose `next_run_at` is the next 04:00 in
- * {@link DEMO_TZ_MISMATCH_FIX} — never a 04:00 in the stored UTC override.
- */
-export function tzMismatchServerSchedules(
+/** One nightly restart whose `next_run_at` is the next 04:00 UTC. */
+export function offlineServerSchedules(
   serverId: number,
   now: Date,
 ): NewPelicanSchedule[] {
-  const nextRunAt = nextAtOrAfter(NIGHTLY_RESTART, DEMO_TZ_MISMATCH_FIX, now);
+  const nextRunAt = nextAtOrAfter(NIGHTLY_RESTART, 'UTC', now);
   const spec: DemoScheduleSpec = {
     name: 'Nightly restart',
     expr: NIGHTLY_RESTART,
