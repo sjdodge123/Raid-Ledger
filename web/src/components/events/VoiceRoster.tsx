@@ -20,7 +20,10 @@ function formatDuration(seconds: number | null): string {
 
 function ParticipantAvatar({ participant }: { participant: AdHocParticipantDto }) {
   const hash = participant.discordAvatarHash;
-  const url = hash ? `https://cdn.discordapp.com/avatars/${participant.discordUserId}/${hash}.png?size=32` : null;
+  const discordId = participant.discordUserId;
+  // ROK-1800: a Steam-only (game-server) participant has no Discord id — never
+  // build a CDN url around a null; fall back to initials.
+  const url = hash && discordId ? `https://cdn.discordapp.com/avatars/${discordId}/${hash}.png?size=32` : null;
   // ROK-1714: a stale hash falls back to initials instead of a broken glyph.
   return <AvatarWithFallback avatarUrl={url} username={participant.discordUsername} alt="" sizeClassName="w-6 h-6" />;
 }
