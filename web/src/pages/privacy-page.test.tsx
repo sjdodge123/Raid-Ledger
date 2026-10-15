@@ -68,6 +68,14 @@ describe('PrivacyPage', () => {
         expect(page).not.toHaveTextContent('Sentry');
     });
 
+    it('discloses feedback screenshots and page context, and that feedback goes to Sentry (ROK-1313)', () => {
+        const page = renderPage();
+        expect(page).toHaveTextContent(
+            'Feedback you send: your message and, if you add one, a screenshot, plus the page address, your screen size, browser and app version (and, for bug reports, recent browser console logs).',
+        );
+        expect(page).toHaveTextContent('Feedback you send, including any screenshot you attach, also goes to Sentry.');
+    });
+
     it('offers the admin-set contact email and the Discord route', () => {
         status.current = { communityName: 'Night Owls', privacyContactEmail: 'privacy@example.com' };
         const contact = within(renderPage()).getByRole('region', { name: 'Contact' });
