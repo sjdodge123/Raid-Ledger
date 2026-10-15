@@ -108,6 +108,31 @@
 #                                        # instrumentation is what pushes the
 #                                        # unit suite past a 4 GiB cgroup cap.
 #                                        # Coverage stays the default elsewhere.
+#   E2E_SPECS="<spec> [<spec>...]" ./scripts/validate-ci.sh --only-e2e
+#                                        # ROK-1792 EXPLICIT SPEC LIST. Env var
+#                                        # (not a flag, and not a 4th E2E_SCOPE
+#                                        # value) so rl_validate_ci forwards it
+#                                        # the same way it forwards E2E_SCOPE,
+#                                        # and E2E_SCOPE stays a plain enum.
+#                                        # Space- or comma-separated paths, each
+#                                        # scripts/smoke/<name>.spec.ts, no `..`,
+#                                        # and present in the checkout — any bad
+#                                        # path exits 2 before a step runs. The
+#                                        # Playwright tier then runs EXACTLY those
+#                                        # specs, on every configured project
+#                                        # (desktop + mobile; never --project),
+#                                        # and REQUIRES the env: a down target
+#                                        # FAILs instead of skipping, and the
+#                                        # changed-files gate is bypassed. Row:
+#                                        # `Playwright (desktop + mobile,
+#                                        # explicit: N specs)` — same prefix, so a
+#                                        # PASS still writes the playwright-tier
+#                                        # pre-push sentinel. Conflicts (exit 2):
+#                                        # E2E_SCOPE other than auto, --static,
+#                                        # --no-e2e. Example (fleet env):
+#                                        #   BASE_URL=https://slot-2.gamernight.net \
+#                                        #   E2E_SPECS=scripts/smoke/games.smoke.spec.ts \
+#                                        #     ./scripts/validate-ci.sh --only-e2e
 #
 # Every conflicting flag combination (two --only-* flags, --static plus any
 # --only-*/--with-e2e, --only-e2e plus --no-e2e) exits 2 on stderr — an
@@ -212,6 +237,9 @@ GATE_DEFERRED_FAIL=0
 # _prepare_playwright_scope into these two globals.
 PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
 PLAYWRIGHT_SCOPED_SPECS=""
+# ROK-1792 — the validated E2E_SPECS list (space-separated), set by
+# _parse_e2e_specs in main. Non-empty overrides the scope-specs.sh mapping.
+E2E_SPECS_LIST=""
 # Memo for _resolve_e2e_scope; empty means "not resolved yet".
 E2E_SCOPE_RESOLVED=""
 # only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
@@ -1751,6 +1779,32 @@ _scoped_playwright_specs() {
   printf '%s\n' "$out"
 }
 
+# ROK-1792 — parse and validate E2E_SPECS into E2E_SPECS_LIST. Returns 2 (with
+# every bad path named on stderr) on any invalid entry, so main can exit 2 before
+# a step runs: a typo in an explicit list must never silently run nothing or,
+# worse, fall back to a different selection.
+_parse_e2e_specs() {
+  E2E_SPECS_LIST=""
+  local raw="${E2E_SPECS:-}" spec bad=0 out=""
+  raw="${raw//,/ }"
+  # Deliberate word splitting: the list is space/comma-separated and the
+  # pattern below admits no whitespace or glob characters.
+  # shellcheck disable=SC2086
+  for spec in $raw; do
+    if ! [[ "$spec" =~ ^scripts/smoke/[A-Za-z0-9_./-]+\.spec\.ts$ ]] || [[ "/$spec/" == */../* ]]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' is not a scripts/smoke/<name>.spec.ts path${NC}" >&2
+      bad=1
+    elif [ ! -f "$REPO_ROOT/$spec" ]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' does not exist in this checkout${NC}" >&2
+      bad=1
+    else
+      case " $out " in *" $spec "*) ;; *) out="${out:+$out }$spec" ;; esac
+    fi
+  done
+  if [ "$bad" = 1 ]; then return 2; fi
+  E2E_SPECS_LIST="$out"
+}
+
 # Resolve the scope ONCE, before run_step is called, because the summary row
 # name has to carry the spec count. The row keeps its
 # `Playwright (desktop + mobile` prefix in every case — the pre-push sentinel
@@ -1768,6 +1822,15 @@ _prepare_playwright_scope() {
     return 0
   fi
   local specs count
+  # ROK-1792: an explicit E2E_SPECS list wins over the diff mapping.
+  if [ -n "${E2E_SPECS_LIST:-}" ]; then
+    # shellcheck disable=SC2086
+    count=$(printf '%s\n' $E2E_SPECS_LIST | grep -c .)
+    PLAYWRIGHT_SCOPED_SPECS="$E2E_SPECS_LIST"
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, explicit: ${count} specs)"
+    echo -e "${YELLOW}Playwright limited to ${count} spec(s) named by E2E_SPECS${NC}"
+    return 0
+  fi
   specs=$(_scoped_playwright_specs)
   if [ -z "$specs" ]; then
     return 0
@@ -1796,7 +1859,11 @@ run_playwright_e2e() {
       return 0
     fi
   fi
-  case "$e2e_mode" in
+  # ROK-1792: an explicit E2E_SPECS list is a request, not a diff inference —
+  # it bypasses the changed-files gate and FAILs (never skips) on a down env.
+  local mode="$e2e_mode"
+  if [ -n "${E2E_SPECS_LIST:-}" ] && [ "$mode" = "auto" ]; then mode="on"; fi
+  case "$mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
       skip_step
@@ -2258,6 +2325,23 @@ main() {
   if $static_mode && [ "$e2e_mode" = "on" ]; then
     echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}" >&2
     exit 2
+  fi
+
+  # ROK-1792 — an explicit spec list. Validated up front (exit 2, invocation
+  # error) and checked against everything that would leave it unrun.
+  _parse_e2e_specs || exit 2
+  if [ -n "$E2E_SPECS_LIST" ]; then
+    local specs_conflict=""
+    case "${E2E_SCOPE:-auto}" in
+      auto|"") ;;
+      *) specs_conflict="E2E_SCOPE=${E2E_SCOPE}" ;;
+    esac
+    if $static_mode; then specs_conflict="--static"; fi
+    if [ "$e2e_mode" = "off" ]; then specs_conflict="--no-e2e"; fi
+    if [ -n "$specs_conflict" ]; then
+      echo -e "${RED}E2E_SPECS and ${specs_conflict} are mutually exclusive.${NC}" >&2
+      exit 2
+    fi
   fi
 
   echo -e "${GREEN}Starting local CI validation...${NC}"
