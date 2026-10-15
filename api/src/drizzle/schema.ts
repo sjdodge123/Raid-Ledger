@@ -75,3 +75,4 @@ export * from './schema/calendar-busy-blocks';
 export * from './schema/calendar-ignored-days';
 export * from './schema/pelican-servers';
 export * from './schema/pelican-schedules';
+export * from './schema/discord-game-roles';

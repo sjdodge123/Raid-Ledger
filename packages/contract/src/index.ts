@@ -213,3 +213,6 @@ export * from './ledgerlink-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+
+// Auto-maintained per-game Discord @role (ROK-1767).
+export * from './discord-game-role.schema.js';
