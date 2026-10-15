@@ -108,3 +108,26 @@ describe('Regression: ROK-1311 — detail-page wishlist toggle invalidates batch
         expect(queryClient.getQueryData(PER_GAME_KEY)).toEqual(seededInterest);
     });
 });
+
+describe('Regression: ROK-1797 — heart optimistic write keeps the bell mute', () => {
+    beforeEach(() => setAccessToken('test-jwt-token'));
+    afterEach(() => { localStorage.clear(); vi.restoreAllMocks(); });
+
+    it('carries notificationsMuted through the optimistic cache write', async () => {
+        const { queryClient, wrapper } = createTestHarness();
+        queryClient.setQueryData<GameInterestResponseDto>(PER_GAME_KEY, {
+            wantToPlay: false, count: 0, notificationsMuted: true,
+        });
+        // Never settles, so the cache shows the optimistic value, not a refetch.
+        vi.spyOn(globalThis, 'fetch').mockReturnValue(new Promise<Response>(() => undefined));
+
+        const { result } = renderHook(() => useWantToPlay(GAME_ID), { wrapper });
+        act(() => { result.current.toggle(true); });
+
+        await waitFor(() => {
+            expect(queryClient.getQueryData(PER_GAME_KEY)).toEqual({
+                wantToPlay: true, count: 1, notificationsMuted: true,
+            });
+        });
+    });
+});
