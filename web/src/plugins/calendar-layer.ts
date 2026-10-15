@@ -8,6 +8,8 @@
  */
 import { useMemo } from 'react';
 import { usePluginStore } from '../stores/plugin-store';
+import { useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-store';
+import { getAuthToken } from '../hooks/use-auth';
 import { freezeCalendarLayers, getCalendarLayerRegistrations } from './plugin-registry';
 
 /** ISO 8601 with offset — exactly what computeDateRange yields. */
@@ -51,9 +53,18 @@ export interface CalendarLayer {
     /** Unique across plugins, e.g. 'pelican:server-schedule'. Re-registering a key replaces it (HMR). */
     key: string;
     /**
+     * ROK-1775 — the label of this layer's show/hide checkbox in the calendar's
+     * Filters panel, e.g. "Server schedules". A layer without one gets no
+     * checkbox (it is always shown while its plugin is active).
+     */
+    filterLabel?: string;
+    /** Optional one-line hint under the checkbox. */
+    filterDescription?: string;
+    /**
      * A React hook. Called EVERY render for EVERY registered layer, in registration order
-     * (stable hook order); `enabled=false` when the plugin is inactive or the view is not
-     * week/day — the layer must then disable its queries and may return [].
+     * (stable hook order); `enabled=false` when the plugin is inactive, the viewer hid the
+     * layer in the Filters panel (ROK-1775), or the caller's view does not draw layers —
+     * the layer must then disable its queries and may return [].
      */
     useItems(
         range: CalendarLayerRange,
@@ -74,10 +85,15 @@ const NO_ITEMS: readonly CalendarLayerItem[] = Object.freeze([]);
  * Merged items of ACTIVE plugins' layers only, in registration order.
  *
  * Every registered layer's `useItems` runs on every render (rules of hooks);
- * an inactive plugin's layer — or every layer when `viewEnabled` is false —
- * is called with `enabled=false` and its items are discarded. The merged array
+ * an inactive plugin's layer, a layer the viewer hid in the calendar Filters
+ * panel (ROK-1775 — so a hidden layer never fetches, in any view), or every
+ * layer when `viewEnabled` is false, is called with `enabled=false` and its
+ * items are discarded. The merged array
  * keeps its identity while every layer's result does (the empty result is a
  * stable constant), so downstream memos and day columns skip re-rendering.
+ * A signed-in viewer's checkbox layers (those with a `filterLabel`) also stay
+ * off until their saved preference has loaded (`hydrated`), so a layer they
+ * hid never flashes or fetches on a cold load; signed-out viewers are not held.
  * The first call freezes the registration list (stable hook order).
  */
 export function useCalendarLayers(
@@ -86,9 +102,13 @@ export function useCalendarLayers(
     viewEnabled: boolean,
 ): readonly CalendarLayerItem[] {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
+    const hiddenLayers = useCalendarLayerFilterStore((s) => s.hiddenLayers);
+    const notHydrated = useCalendarLayerFilterStore((s) => !s.hydrated);
+    const awaitingPrefs = notHydrated && getAuthToken() !== null;
     freezeCalendarLayers();
     const parts = getCalendarLayerRegistrations().map(({ pluginSlug, layer }) => {
-        const enabled = viewEnabled && activeSlugs.has(pluginSlug);
+        const held = awaitingPrefs && layer.filterLabel !== undefined;
+        const enabled = viewEnabled && activeSlugs.has(pluginSlug) && !hiddenLayers.has(layer.key) && !held;
         const items = layer.useItems(range, selectedGames, enabled);
         return enabled && items.length > 0 ? items : NO_ITEMS;
     });
