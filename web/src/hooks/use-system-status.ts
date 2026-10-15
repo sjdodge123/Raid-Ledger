@@ -20,14 +20,20 @@ async function getSystemStatus(): Promise<SystemStatusDto> {
 }
 
 /**
+ * Shared query options. ROK-1779: main.tsx fetches these before render to
+ * gate Sentry, which seeds the cache `useSystemStatus` then reuses.
+ */
+export const systemStatusQueryOptions = {
+    queryKey: ['system', 'status'] as const,
+    queryFn: getSystemStatus,
+    staleTime: 60_000, // Cache for 1 minute
+    retry: 1, // Only retry once on failure
+};
+
+/**
  * Hook to fetch system status for first-run detection and Discord configuration.
  * Used by LoginPage to show appropriate UI (ROK-175).
  */
 export function useSystemStatus() {
-    return useQuery({
-        queryKey: ['system', 'status'],
-        queryFn: getSystemStatus,
-        staleTime: 60_000, // Cache for 1 minute
-        retry: 1, // Only retry once on failure
-    });
+    return useQuery(systemStatusQueryOptions);
 }

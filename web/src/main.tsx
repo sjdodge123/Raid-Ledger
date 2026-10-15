@@ -7,7 +7,7 @@ import './lib/magic-link-capture';
 import './lib/wowhead-tooltips-loader';
 // Sentry next — before any other modules.
 // ROK-306: Maintainer telemetry for error tracking.
-import { Sentry } from './sentry';
+import { Sentry, initSentry } from './sentry';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -17,6 +17,14 @@ import { initPerformanceMonitoring } from './lib/performance';
 import './index.css';
 import App from './App.tsx';
 import { ErrorFallback } from './components/ErrorFallback';
+import { systemStatusQueryOptions } from './hooks/use-system-status';
+
+// ROK-1779: Sentry initialises only once /system/status allows it (runtime
+// opt-out). A failed fetch means no init — fail closed.
+void queryClient.fetchQuery(systemStatusQueryOptions).then(
+  (s) => initSentry(s.telemetryEnabled),
+  () => initSentry(undefined),
+);
 
 const reportToSentry = Sentry.reactErrorHandler();
 // React hands an absent componentStack as `undefined`; Sentry's ErrorInfo wants the key omitted.
