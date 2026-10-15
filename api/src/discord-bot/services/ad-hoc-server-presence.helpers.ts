@@ -105,13 +105,7 @@ export async function listOnServerSteamIds(
   const rows = await db
     .select({ steamId: p.steamId })
     .from(p)
-    .where(
-      and(
-        eq(p.eventId, eventId),
-        eq(p.onServer, true),
-        isNull(p.leftAt),
-      ),
-    );
+    .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)));
   return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
 }
 
@@ -128,13 +122,7 @@ export async function hasOpenServerPlayers(
   const rows = await db
     .select({ id: p.id })
     .from(p)
-    .where(
-      and(
-        eq(p.eventId, eventId),
-        eq(p.onServer, true),
-        isNull(p.leftAt),
-      ),
-    )
+    .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)))
     .limit(1);
   return rows[0] !== undefined;
 }
@@ -147,9 +135,7 @@ export async function listOpenServerPresence(
   const rows = await db
     .select({ steamId: p.steamId, displayName: p.discordUsername })
     .from(p)
-    .where(
-      and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)),
-    );
+    .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)));
   return rows.flatMap((r) =>
     r.steamId ? [{ steamId: r.steamId, displayName: r.displayName }] : [],
   );

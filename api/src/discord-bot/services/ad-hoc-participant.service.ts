@@ -46,6 +46,20 @@ export interface VoiceMemberInfo {
   userId: number | null;
 }
 
+/** On a Discord-id conflict: re-open the row and mark it in voice. */
+function voiceConflictSet(member: VoiceMemberInfo, now: Date) {
+  return {
+    leftAt: null,
+    // m10: a re-opened row starts its new session now.
+    joinedAt: rejoinJoinedAt(now),
+    inVoice: true,
+    discordUsername: member.discordUsername,
+    discordAvatarHash: member.discordAvatarHash,
+    userId: member.userId,
+    sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
+  };
+}
+
 @Injectable()
 export class AdHocParticipantService {
   private readonly logger = new Logger(AdHocParticipantService.name);
@@ -123,16 +137,7 @@ export class AdHocParticipantService {
       })
       .onConflictDoUpdate({
         ...DISCORD_CONFLICT,
-        set: {
-          leftAt: null,
-          // m10: a re-opened row starts its new session now.
-          joinedAt: rejoinJoinedAt(now),
-          inVoice: true,
-          discordUsername: member.discordUsername,
-          discordAvatarHash: member.discordAvatarHash,
-          userId: member.userId,
-          sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
-        },
+        set: voiceConflictSet(member, now),
       })
       .returning({ sessionCount: schema.adHocParticipants.sessionCount });
     return row?.sessionCount === 1;
