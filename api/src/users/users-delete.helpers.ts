@@ -78,6 +78,13 @@ export const WIPE_BY_COLUMN: readonly WipeTarget[] = [
     table: schema.gameActivityRollups,
     column: schema.gameActivityRollups.userId,
   },
+  // ROK-1767: the bot's record of which game roles it granted this user.
+  // Personal (CASCADE on delete); a ban+wipe keeps the users row, so it must
+  // be wiped explicitly or the grant rows outlive the wipe.
+  {
+    table: schema.discordGameRoleGrants,
+    column: schema.discordGameRoleGrants.userId,
+  },
   {
     table: schema.playerTasteVectors,
     column: schema.playerTasteVectors.userId,
