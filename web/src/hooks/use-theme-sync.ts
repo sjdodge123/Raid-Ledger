@@ -6,6 +6,7 @@ import type { ThemeModePreference } from '../stores/theme-store';
 import { useTimezoneStore } from '../stores/timezone-store';
 import { useCalendarViewStore } from '../stores/calendar-view-store';
 import { useGameFilterStore } from '../stores/game-filter-store';
+import { CALENDAR_HIDDEN_LAYERS_PREF, useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-store';
 
 const VALID_MODES: ThemeModePreference[] = ['light', 'dark', 'auto'];
 
@@ -25,6 +26,13 @@ interface PreferenceSetters {
     setTimezone: (tz: string) => void;
     setViewPref: (v: 'week' | 'month' | 'day') => void;
     loadSavedFilter: (slugs: string[]) => void;
+    loadHiddenLayers: (keys: readonly string[]) => void;
+}
+
+/** ROK-1775: the calendar layers the viewer hid (absent = every layer shown). */
+function applyHiddenLayers(prefs: Record<string, unknown>, setters: PreferenceSetters): void {
+    const saved = prefs[CALENDAR_HIDDEN_LAYERS_PREF];
+    if (Array.isArray(saved)) setters.loadHiddenLayers(saved.filter((k): k is string => typeof k === 'string'));
 }
 
 function applyServerPreferences(prefs: Record<string, unknown>, setters: PreferenceSetters) {
@@ -45,6 +53,7 @@ function applyServerPreferences(prefs: Record<string, unknown>, setters: Prefere
         const slugs = prefs.calendarGameFilter.filter((s): s is string => typeof s === 'string');
         if (slugs.length > 0) setters.loadSavedFilter(slugs);
     }
+    applyHiddenLayers(prefs, setters);
 }
 
 export function useThemeSync() {
@@ -57,6 +66,7 @@ export function useThemeSync() {
         setTimezone: useTimezoneStore((s) => s.setTimezone),
         setViewPref: useCalendarViewStore((s) => s.setViewPref),
         loadSavedFilter: useGameFilterStore((s) => s.loadSavedFilter),
+        loadHiddenLayers: useCalendarLayerFilterStore((s) => s.loadHiddenLayers),
     };
 
     useQuery({
