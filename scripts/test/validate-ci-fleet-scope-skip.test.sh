@@ -17,7 +17,7 @@
 # Harness: npm/npx/docker/curl are stubbed and record argv (npx also records
 # its cwd, which is how web vitest is told apart from the root-config smoke
 # helper specs). git is real except `fetch` (no-op) and `diff --name-only`,
-# which prints $STUB_GIT_DIFF, and `ls-files --others` (untracked), which
+# which prints the file $STUB_GIT_DIFF_FILE, and `ls-files --others` (untracked), which
 # prints $STUB_GIT_UNTRACKED, so each case controls the change set.
 
 set -uo pipefail
@@ -62,9 +62,10 @@ assert_rc() {
 
 stub_bin=$(mktemp -d -t rl-fleet-scope-stub.XXXXXX)
 npx_argv_file=$(mktemp -t rl-fleet-scope-npx.XXXXXX)
+diff_file=$(mktemp -t rl-fleet-scope-diff.XXXXXX)
 npm_argv_file=$(mktemp -t rl-fleet-scope-npm.XXXXXX)
 perf_log=$(mktemp -t rl-fleet-scope-perf.XXXXXX)
-trap 'rm -rf "$stub_bin" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors"' EXIT
+trap 'rm -rf "$stub_bin" "$diff_file" "$npx_argv_file" "$npm_argv_file" "$perf_log" "${perf_log}.errors"' EXIT
 
 cat >"$stub_bin/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -90,7 +91,9 @@ cat >"$stub_bin/git" <<'EOF'
 #!/usr/bin/env bash
 [[ "${1:-}" == "fetch" ]] && exit 0
 if [[ "${1:-}" == "diff" && "$*" == *"--name-only"* ]]; then
-  [[ -n "${STUB_GIT_DIFF:-}" ]] && printf '%s\n' "$STUB_GIT_DIFF"
+  # Read from a file: a 3000-path diff overflows Linux's per-string env limit
+  # (MAX_ARG_STRLEN, 128 KiB) and bash exits 126 before validate-ci starts.
+  [[ -s "${STUB_GIT_DIFF_FILE:-}" ]] && cat "$STUB_GIT_DIFF_FILE"
   exit 0
 fi
 if [[ "${1:-}" == "ls-files" && "$*" == *"--others"* ]]; then
@@ -113,9 +116,10 @@ NPX=""
 invoke() {
     local diff="$1"; shift
     : >"$npx_argv_file"; : >"$npm_argv_file"
+    if [[ -n "$diff" ]]; then printf '%s\n' "$diff" >"$diff_file"; else : >"$diff_file"; fi
     INVOKE_RC=0
     INVOKE_OUT=$(
-        PATH="$stub_bin:$PATH" REAL_GIT="$REAL_GIT" STUB_GIT_DIFF="$diff" \
+        PATH="$stub_bin:$PATH" REAL_GIT="$REAL_GIT" STUB_GIT_DIFF_FILE="$diff_file" \
         STUB_GIT_UNTRACKED="${UNTRACKED:-}" \
         RL_TARGET=remote RL_TARGET_DISPATCHED=1 BASE_URL="$ENV_URL" \
         PERF_LOG_LOCAL="$perf_log" \
