@@ -21,12 +21,19 @@ const REPO_ROOT = dirname(dirname(dirname(SCOPE_SPECS)));
 
 /**
  * Real scope-specs.sh output lines for a synthetic changed-file list. `diff`
- * (ROK-1792) is the route-file diff text, fed through the SCOPE_DIFF hook.
+ * (ROK-1792) is the route-file diff text, fed through the SCOPE_DIFF hook;
+ * `newFiles` are the files absent at the base (SCOPE_NEW_FILES). Both hooks
+ * are always set so no case reads the repo's git state: the fleet runner's
+ * /workspace has no usable origin/main.
  */
-function scopeSpecs(files, diff) {
-  const env = { ...process.env, SCOPE_FILES: files.join('\n'), SCOPE_BASE: 'origin/main' };
-  delete env.SCOPE_DIFF;
-  if (diff !== undefined) env.SCOPE_DIFF = diff;
+function scopeSpecs(files, diff = '', newFiles = []) {
+  const env = {
+    ...process.env,
+    SCOPE_FILES: files.join('\n'),
+    SCOPE_BASE: 'origin/main',
+    SCOPE_DIFF: diff,
+    SCOPE_NEW_FILES: newFiles.join('\n'),
+  };
   return execFileSync('bash', [SCOPE_SPECS], { encoding: 'utf8', cwd: REPO_ROOT, env })
     .trim()
     .split('\n')
@@ -230,7 +237,9 @@ test('a /dev route beside a mapped page lists only the mapped specs', () => {
 });
 
 test('a NEW components/ui file that nothing imports yet maps to NONE', () => {
-  assert.deepEqual(scopeSpecs(['web/src/components/ui/zqxwv-thing.tsx']), ['NONE']);
+  const f = 'web/src/components/ui/zqxwv-thing.tsx';
+
+  assert.deepEqual(scopeSpecs([f], '', [f]), ['NONE']);
 });
 
 test('a changed EXISTING components/ui primitive stays ALL', () => {

@@ -26,7 +26,12 @@
 # components/ui/**: a NEW file maps through the files that import it (none when
 # nothing outside ui/ does yet); an edit to an existing primitive -> ALL.
 # When every changed web file maps to zero specs the output is NONE.
-# SCOPE_DIFF (dry run only) supplies the route-file diff text instead of git.
+# Dry-run hooks (tests; neither touches git when set, so they pass on a runner
+# whose /workspace has no usable .git or origin/main):
+#   SCOPE_DIFF       the unified diff text of the route files, instead of git diff.
+#   SCOPE_NEW_FILES  newline list of files absent at the base (set, even empty,
+#                    = authoritative), instead of `git cat-file -e $BASE:<file>`.
+# Real runs use git; any git failure (no repo, no base) falls back to ALL.
 set -euo pipefail
 BASE="${SCOPE_BASE:-origin/main}"
 SPEC_DIR="scripts/smoke"
@@ -95,7 +100,10 @@ classify_route_lines() {
       if (b ~ /^[[:space:]]*$/ || b ~ /^[[:space:]]*(\/\/|\/\*|\*|\{\/\*)/) next
       if (b ~ /Guard/) { print "ALL"; exit }
       if (b ~ /^[[:space:]]*import[[:space:]]/ || b ~ /^[[:space:]]*\}[[:space:]]*from[[:space:]]/) next
-      if (b ~ /^[[:space:]]*[A-Za-z0-9_]+([[:space:]]*,[[:space:]]*[A-Za-z0-9_]+)*,?[[:space:]]*$/) next
+      # Identifier list (`A, B, C,`). Commas are normalised first: mawk 1.3.4
+      # (the awk on the fleet runner) fails the nested `(ws , ws X+)*` form at 2+ reps.
+      t = b; gsub(/[[:space:]]*,[[:space:]]*/, ",", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+      if (t ~ /^[A-Za-z0-9_]+(,[A-Za-z0-9_]+)*,?$/) next
       if (b ~ /^[[:space:]]*<\/Route>[[:space:]]*$/) next
       if (b ~ /<Route[[:space:]>]/ && match(b, /path="[^"]*"/)) {
         print s " " substr(b, RSTART + 6, RLENGTH - 7); next
@@ -198,10 +206,14 @@ specs_for_route_file() {
 # A new one maps through the non-ui, non-test files that import it.
 specs_for_ui_file() {
   local f="$1" stem imp importers out
-  git rev-parse --verify -q "$BASE" >/dev/null 2>&1 || return 1
-  git cat-file -e "$BASE:$f" 2>/dev/null && return 1
+  if [ -n "${SCOPE_NEW_FILES+x}" ]; then
+    printf '%s\n' "$SCOPE_NEW_FILES" | grep -qxF "$f" || return 1
+  else
+    git rev-parse --verify -q "$BASE" >/dev/null 2>&1 || return 1
+    git cat-file -e "$BASE:$f" 2>/dev/null && return 1
+  fi
   stem=$(basename "$f"); stem="${stem%.*}"
-  importers=$(grep -rlE "/ui/$stem['\"]" web/src --include='*.ts' --include='*.tsx' 2>/dev/null \
+  importers=$(grep -rlE "/ui/${stem}['\"]" web/src --include='*.ts' --include='*.tsx' 2>/dev/null \
     | grep -v '^web/src/components/ui/' | grep -vE '\.(test|spec)\.tsx?$' || true)
   for imp in $importers; do
     out=$(specs_for_file "$imp")
