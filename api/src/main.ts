@@ -19,6 +19,7 @@ import {
   getLogLevels,
   buildLoggerSelfTest,
   installCspReportBodyParser,
+  installFeedbackBodyParser,
   applyTrustProxy,
   enableGracefulShutdown,
 } from './main.helpers';
@@ -64,6 +65,8 @@ async function bootstrap() {
   // so `@Body()` resolves the report payload. Wraps body-parser to 204 (not
   // 400) on a malformed report body. ROK-1158 / ROK-1365.
   installCspReportBodyParser(app);
+  // ROK-1313: 8 MB JSON for POST /feedback (screenshots) — before the 2 MB one.
+  installFeedbackBodyParser(app);
   app.useBodyParser('json', { limit: '2mb' });
   app.use(helmet(buildHelmetOptions()));
   app.use(compression({ threshold: 1024 }));
