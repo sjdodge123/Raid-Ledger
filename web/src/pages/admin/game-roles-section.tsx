@@ -70,14 +70,14 @@ function GameRoleRow({ row, roles }: { row: GameRoleSummaryDto; roles: Roles }):
     return (
         <li className="py-3" data-testid={`game-role-row-${row.gameId}`}>
             <div className="flex items-center justify-between gap-4">
-                <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)}
-                    className="text-left min-w-0 flex-1 min-h-[44px]">
+                <Button variant="bare" aria-expanded={open} onClick={() => setOpen((v) => !v)}
+                    className="block text-left min-w-0 flex-1 min-h-[44px]">
                     <span className="block text-sm font-semibold text-foreground truncate">{row.gameName}</span>
                     <span className={`block text-sm ${row.roleName ? 'text-secondary' : 'text-warning'}`}>{role}</span>
                     <span className="block text-xs text-muted">
                         {row.windowDays}-day window · {row.grantedCount} granted · Last run: {lastRun(row.lastReconciledAt)}
                     </span>
-                </button>
+                </Button>
                 <Switch label={`Manage the ${row.gameName} role`} checked={row.enabled}
                     disabled={roles.upsert.isPending} onChange={toggle} />
             </div>

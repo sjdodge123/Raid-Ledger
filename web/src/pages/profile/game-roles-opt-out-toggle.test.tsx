@@ -11,7 +11,7 @@ import { GameRolesOptOutToggle } from './game-roles-opt-out-toggle';
 import { useGameRolesOptOut } from './identity-hooks';
 
 const prefs = { current: {} as Record<string, unknown> };
-const updatePreference = vi.fn((_k: string, _v: unknown) => Promise.resolve());
+const updatePreference = vi.fn<(k: string, v: unknown) => Promise<void>>(() => Promise.resolve());
 vi.mock('../../lib/api-client', () => ({
     getMyPreferences: () => Promise.resolve(prefs.current),
     updatePreference: (k: string, v: unknown) => updatePreference(k, v),
