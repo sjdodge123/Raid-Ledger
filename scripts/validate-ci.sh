@@ -36,6 +36,9 @@
 #                                        # this only trims duplicated local work for
 #                                        # a single-workspace small fix. Composes
 #                                        # with --static (e.g. --static --scope=auto).
+#   ./scripts/validate-ci.sh --fleet --integration-parallel=2  # Run integration
+#                                        # shards 2 at a time (ROK-1793; opt-in,
+#                                        # = INTEGRATION_PARALLEL=2; default 1).
 #   ./scripts/validate-ci.sh --ci        # Hard-fail on missing local prereqs
 #                                        # (e.g. pg_dump). Use in CI to ensure
 #                                        # backup integration tests never silently
@@ -96,6 +99,12 @@
 #                                        # E2E_SCOPE=none skips Playwright
 #                                        # here too; only an explicit
 #                                        # --with-e2e overrides it.
+#                                        # ROK-1793: a web-only diff skips api
+#                                        # unit + integration, an api-only diff
+#                                        # skips web vitest (SKIPPED rows name
+#                                        # the reason). packages/**, scripts/**,
+#                                        # deps/root config or an empty diff
+#                                        # run everything. --full never skips.
 #                                        # Example:
 #                                        #   BASE_URL=http://rl-env-<slug>-allinone \
 #                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
@@ -212,6 +221,9 @@ NC='\033[0m' # No Color
 # Result tracking
 declare -a CHECK_NAMES=()
 declare -a CHECK_RESULTS=()
+# ROK-1793 S1: optional per-row note (a skip reason), printed after the status
+# as `SKIPPED — <note>` — the row format gate-summary.ts already documents.
+declare -a CHECK_NOTES=()
 FAILURES=0
 
 # Scope flags
@@ -278,6 +290,11 @@ static_mode=false
 scope_mode="all"
 detected_workspace="all"
 effective_scope="all"
+# fleet_test_scope (ROK-1793 S1): which workspace's unit + integration suites a
+# --fleet gate runs — api | web | all. detected_workspace, widened to "all" when
+# the diff touches scripts/** (the gate itself). Only --fleet reads it; --full
+# and --static always run (or defer) everything.
+fleet_test_scope="all"
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -286,6 +303,7 @@ effective_scope="all"
 record_result() {
   CHECK_NAMES+=("$1")
   CHECK_RESULTS+=("$2")
+  CHECK_NOTES+=("${3:-}")
   if [ "$2" = "FAIL" ]; then
     FAILURES=$((FAILURES + 1))
   fi
@@ -372,10 +390,62 @@ perf_now_ms() {
 # exit code a tool happens to pick.
 # ---------------------------------------------------------------------------
 STEP_SKIPPED=0
+# Optional reason for the skip, shown on the step's summary row.
+STEP_SKIP_REASON=""
 
 # Mark the running step as SKIPPED. Call it, then `return 0`.
 skip_step() {
   STEP_SKIPPED=1
+}
+
+# ROK-1793 S1 — does this --fleet gate skip <workspace>'s (api|web) test suites?
+# True only under --fleet with a single-workspace diff that is not <workspace>.
+_fleet_skips() {
+  $fleet_mode && [ "$fleet_test_scope" != "all" ] && [ "$fleet_test_scope" != "$1" ]
+}
+
+# ROK-1793 M1 — the --fleet unit/integration scope for a change set (newline-
+# separated paths on $1). Echoes api | web | all. It narrows ONLY when every
+# path is under api/ or web/ (no inert allowlist: the api guard
+# fleet-first-login-admin.prod-guard.spec.ts scans EVERY tracked file, and
+# others read README.md, .env.example and rl-infra/**, so no other path is
+# provably irrelevant to api jest). A web diff under web/src/{components,pages}/admin/
+# widens to all: discord-bot-permissions-literal.guard.spec.ts scans those dirs.
+# Empty -> all.
+_fleet_test_scope_for() {
+  local files="$1"
+  if [ -z "$(printf '%s' "$files" | tr -d '[:space:]')" ]; then echo all; return 0; fi
+  # Here-strings, never `printf | grep -q`: grep -q exits on its first match,
+  # the writer takes SIGPIPE, and under pipefail the pipeline reads as NO match
+  # (Codex: 1 api path + 2000 web paths classified as web).
+  if grep -qvE -e '^$|^(api|web)/' <<<"$files"; then echo all; return 0; fi
+  local api=false web=false
+  grep -qE -e '^api/' <<<"$files" && api=true
+  grep -qE -e '^web/' <<<"$files" && web=true
+  if $api && $web; then echo all
+  elif $api; then echo api
+  elif grep -qE -e '^web/src/(components|pages)/admin/' <<<"$files"; then echo all
+  else echo web
+  fi
+}
+
+# api specs a web-only diff can still break: they read web/ files or scan every
+# tracked file. Derived at run time (a spec naming a 'web/ path or calling
+# `git ls-files`), so a new cross-workspace guard is picked up without editing
+# this list. Echoes paths relative to api/, one per line.
+_api_cross_workspace_specs() {
+  (cd "$REPO_ROOT/api" && grep -rlE "['\"]web/|'ls-files'" src \
+    --include='*.spec.ts' --exclude='*.integration.spec.ts' 2>/dev/null) | LC_ALL=C sort
+}
+
+# Step body for a suite --fleet skips on a single-workspace diff. The reason
+# lands on the summary row, so a scoped gate is never mistakable for a full one,
+# and says what DID run: GitHub's api job does not fire on web/** either.
+# Args: $1 - optional detail appended to the reason.
+skip_by_fleet_scope() {
+  STEP_SKIP_REASON="${fleet_test_scope}-only diff (--fleet scope): ${1:-not run by this gate}"
+  echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+  skip_step
 }
 
 # Step body for a step disabled by an --only-* flag. Narrowed runs still emit a
@@ -397,6 +467,7 @@ run_step() {
   local rc=0
   # Reset per step — a skip must be declared by THIS step, never inherited.
   STEP_SKIPPED=0
+  STEP_SKIP_REASON=""
   "$@" || rc=$?
   local step_end_ms step_dur
   step_end_ms=$(perf_now_ms)
@@ -408,12 +479,19 @@ import json, sys
 print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_code': int(sys.argv[3])}))
 " "$name" "$step_dur" "$rc" 2>/dev/null || echo '{}')
   perf_emit_local "validate.step.end" "$step_extra"
+  # ROK-1793 S0 — machine-readable step duration for rl_task_status
+  # steps[].duration_s. Printed BEFORE the "<name>: <STATUS>" line so the
+  # orchestrator's steps[] parser (task-start, PATTERN_STEP_TIME) and the MCP
+  # log-tail backfill (tools/mcp-rl-fleet/src/step-durations.ts) can attach it
+  # to the row that follows. Format: `[step-time] <name> <seconds, 1 dp>`.
+  printf '[step-time] %s %d.%d\n' "$name" \
+    $(( step_dur / 1000 )) $(( (step_dur % 1000) / 100 ))
 
   # A skip requires BOTH the explicit declaration and a clean exit, so a step
   # that declares a skip and then fails is still reported as a failure.
   if [ "$rc" -eq 0 ] && [ "$STEP_SKIPPED" -eq 1 ]; then
     echo -e "${YELLOW}$name: SKIPPED${NC}"
-    record_result "$name" "SKIPPED"
+    record_result "$name" "SKIPPED" "$STEP_SKIP_REASON"
   elif [ "$rc" -eq 0 ]; then
     echo -e "${GREEN}$name: PASS${NC}"
     record_result "$name" "PASS"
@@ -439,7 +517,10 @@ detect_scope() {
   git fetch origin --quiet 2>/dev/null || true
 
   local changed_files
-  changed_files="$(git diff --name-only origin/main 2>/dev/null || echo '')"
+  # Untracked (not ignored) files count too: a new, uncommitted spec must not
+  # be invisible to the scope a --fleet gate uses to skip suites (ROK-1793 m2).
+  changed_files="$( { git diff --name-only origin/main 2>/dev/null || true
+    git ls-files --others --exclude-standard 2>/dev/null || true; } | sort -u)"
 
   if echo "$changed_files" | grep -q 'drizzle/migrations'; then
     migrations_changed=true
@@ -505,6 +586,11 @@ detect_scope() {
     detected_workspace="all"
   fi
   echo -e "  Detected workspace (for --scope=auto): ${YELLOW}${detected_workspace}${NC}"
+
+  fleet_test_scope=$(_fleet_test_scope_for "$changed_files")
+  if $fleet_mode; then
+    echo -e "  --fleet unit/integration scope: ${YELLOW}${fleet_test_scope}${NC}"
+  fi
 }
 
 # Resolve the canonical web target for fleet/local. Sets the global `web_url`.
@@ -960,10 +1046,26 @@ run_unit_tests_no_coverage() {
   # `${arr[@]+"${arr[@]}"}` — an empty array under `set -u` is an unbound
   # variable error on bash 3.2 (macOS), and a bare "$arr" would pass an empty
   # string as a real argv entry.
-  (cd api && NODE_OPTIONS="$node_opts" \
-     npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
-  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
-     npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  # ROK-1793 S1: a --fleet gate on a single-workspace diff skips the other
+  # workspace's suite; its own summary row (skip_by_fleet_scope) says so.
+  if ! _fleet_skips api; then
+    (cd api && NODE_OPTIONS="$node_opts" \
+       npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
+  else
+    # A web-only diff still runs the api specs that read web/ (M1).
+    local -a xws=()
+    local f
+    while IFS= read -r f; do [ -n "$f" ] && xws+=("$f"); done < <(_api_cross_workspace_specs)
+    if [ "${#xws[@]}" -gt 0 ]; then
+      echo "api jest narrowed to ${#xws[@]} cross-workspace spec(s): ${xws[*]}"
+      (cd api && NODE_OPTIONS="$node_opts" \
+         npx jest --runTestsByPath "${xws[@]}" ${jest_args[@]+"${jest_args[@]}"}) || return $?
+    fi
+  fi
+  if ! _fleet_skips web; then
+    (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
+       npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  fi
   run_smoke_helper_specs "$node_opts"
 }
 
@@ -1144,10 +1246,22 @@ run_integration_tests() {
   # bits (M9 Redis sidecar, --verbose progress) keep their own guards above.
   # Override the count with INTEGRATION_SHARDS=N; INTEGRATION_SHARDS=1 is the
   # old single-process behaviour if you ever need it.
+  # ROK-1793 S1(ii): INTEGRATION_PARALLEL=2 runs the shards two at a time, in
+  # waves (shards 1+2, then 3+4). Default 1 = the serial loop below, unchanged.
+  # Isolation (verified 2026-10-15): jest.integration.config.js's globalSetup
+  # starts ONE Postgres Testcontainer per jest process, so each shard has its
+  # own DB; the app's REDIS_CLIENT is an in-memory mock per process; the only
+  # real Redis user is BullMQ, keyed under BULLMQ_KEY_PREFIX=test-<pid>-<ts>-.
+  # Parallel shards additionally get their own Redis db index on the sidecar.
   {
     local shards="${INTEGRATION_SHARDS:-4}"
+    local parallel
+    parallel=$(_integration_parallelism "$shards")
     local shard_results=()
     local i
+    if [ "$parallel" -gt 1 ]; then
+      _run_integration_shards_parallel "$shards" "$parallel" "$tmp"
+    else
     for i in $(seq 1 "$shards"); do
       echo "=== Integration shard ${i}/${shards} ==="
       # `npx jest` directly so each shard is its own Node process. We `cd api`
@@ -1165,11 +1279,7 @@ run_integration_tests() {
       # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
        # reporter so jest.suite.end events carry shard labels.
        # --logHeapUsage feeds the reporter's heap_used_mb sample.
-      if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
-         JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
-         npx jest --config ./jest.integration.config.js \
-                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}" \
-                  2>&1 | tee -a "$tmp"); then
+      if _integration_shard_jest "$i" "$shards" 4096 "" 2>&1 | tee -a "$tmp"; then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
@@ -1177,6 +1287,7 @@ run_integration_tests() {
         break
       fi
     done
+    fi
     echo "=== Shard results: ${shard_results[*]} ==="
     local r
     for r in "${shard_results[@]}"; do
@@ -1188,6 +1299,149 @@ run_integration_tests() {
     done
     rm -f "$tmp"
   }
+}
+
+# One integration shard: its own jest process. Args: shard total heap_mb
+# redis_url ("" = inherit). The `cd api` keeps the jest config's relative paths
+# right (ROK-1331 Probe 1 attempt 6, TS5103); JEST_SHARD_ID/JEST_TOTAL_SHARDS
+# label the perf reporter's events (ROK-1331 M11).
+_integration_shard_jest() {
+  local i="$1" n="$2" heap="$3" redis_url="${4:-}"
+  (
+    cd api || exit 1
+    if [ -n "$redis_url" ]; then export REDIS_URL="$redis_url"; fi
+    NODE_OPTIONS="--max-old-space-size=${heap}" \
+      JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${n}" \
+      npx jest --config ./jest.integration.config.js \
+               --runInBand --verbose --logHeapUsage --shard="${i}/${n}"
+  )
+}
+
+# ROK-1793 S1(ii): how many shards run at once. INTEGRATION_PARALLEL defaults
+# to 1 (serial). Capped at 2: two shards at the parallel heap fit the runner's
+# 6 GB ceiling, three do not. Forced back to 1 when CI=true + DATABASE_URL,
+# because the globalSetup then skips its per-process Testcontainer and every
+# shard would truncate the SAME database.
+_integration_parallelism() {
+  local shards="$1" p="${INTEGRATION_PARALLEL:-1}"
+  case "$p" in
+    '' | *[!0-9]*)
+      echo "INTEGRATION_PARALLEL='${p}' is not a positive integer — running shards serially" >&2
+      p=1 ;;
+  esac
+  if [ "$p" -lt 1 ]; then p=1; fi
+  if [ "$p" -gt 2 ]; then
+    echo "INTEGRATION_PARALLEL=${p} capped at 2 (2 x heap must stay under the runner's 6 GB)" >&2
+    p=2
+  fi
+  if [ "$p" -gt 1 ] && [ "${CI:-}" = "true" ] && [ -n "${DATABASE_URL:-}" ]; then
+    echo "INTEGRATION_PARALLEL ignored: CI=true + DATABASE_URL means every shard shares one DB — running shards serially" >&2
+    p=1
+  fi
+  if [ "$p" -gt "$shards" ]; then p="$shards"; fi
+  echo "$p"
+}
+
+# Per-shard Redis db index for parallel shards: redis://host:6379 -> .../<i>.
+# Only a bare TCP URL (no db path, no socket) is rewritten; anything else, or
+# an unset REDIS_URL (laptop: deploy_dev's Redis), is inherited unchanged.
+_integration_shard_redis_url() {
+  local i="$1" url="${REDIS_URL:-}"
+  if [[ "$url" =~ ^redis://[^/]+/?$ ]]; then
+    echo "${url%/}/${i}"
+  fi
+}
+
+# Parallel waves of $parallel shards. Each shard streams to the log with a
+# `[shard i/N]` prefix and keeps a raw copy, appended to $tmp in shard order
+# after the wave so _report_unrun_integration_specs reads clean jest lines.
+# Writes PASS/FAIL/STOPPED into the CALLER's shard_results (bash dynamic
+# scope). A failed shard stops its still-running wave partner (STOPPED), and
+# later waves are never launched.
+# Heap per shard: INTEGRATION_PARALLEL_HEAP_MB (default 2560; 2 x 2.5 GB plus
+# the parent processes stays under 6 GB). UNMEASURED — opt-in until it is.
+_run_integration_shards_parallel() {
+  local shards="$1" parallel="$2" tmp="$3"
+  local heap="${INTEGRATION_PARALLEL_HEAP_MB:-2560}"
+  local first last i wave_failed
+  echo "=== Integration: ${shards} shards, ${parallel} at a time, ${heap} MB heap each ==="
+  for ((first = 1; first <= shards; first += parallel)); do
+    last=$((first + parallel - 1))
+    if [ "$last" -gt "$shards" ]; then last="$shards"; fi
+    local pids=()
+    for ((i = first; i <= last; i++)); do
+      echo "=== Integration shard ${i}/${shards} (parallel) ==="
+      (
+        set -o pipefail
+        # Own LOG_DIR per parallel shard: the slow-query specs unlink/append/read
+        # slow-queries.log there, so two shards sharing it would race (Codex P2).
+        export LOG_DIR="${tmp}.logdir${i}"
+        mkdir -p "$LOG_DIR"
+        _integration_shard_jest "$i" "$shards" "$heap" "$(_integration_shard_redis_url "$i")" 2>&1 \
+          | tee "${tmp}.shard${i}" \
+          | awk -v p="[shard ${i}/${shards}] " '{ print p $0; fflush() }'
+      ) &
+      pids+=("$!")
+    done
+    wave_failed=0
+    local stopped=0 rc
+    # bash >= 4.3 (the fleet runner): `wait -n` notices the FIRST shard to end,
+    # so a failure stops its partner at once. bash 3.2 (macOS) falls back to
+    # the ordered waits below, which stop the rest once a waited shard fails.
+    if _have_wait_n; then
+      local live=$((last - first + 1))
+      while [ "$live" -gt 0 ]; do
+        rc=0; wait -n || rc=$?
+        live=$((live - 1))
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 127 ]; then
+          _stop_wave_shards "${pids[@]}"; stopped=1; break
+        fi
+      done
+    fi
+    for ((i = first; i <= last; i++)); do
+      rc=0; wait "${pids[$((i - first))]}" || rc=$?
+      if [ "$rc" -eq 0 ]; then
+        shard_results+=("PASS")
+      elif [ "$stopped" -eq 1 ] && [ "$rc" -eq 143 ]; then
+        shard_results+=("STOPPED")
+        echo "Shard ${i}/${shards} STOPPED — its wave partner failed"
+      else
+        shard_results+=("FAIL")
+        wave_failed=1
+        echo "Shard ${i}/${shards} FAILED"
+        if [ "$stopped" -eq 0 ]; then _stop_wave_shards "${pids[@]}"; stopped=1; fi
+      fi
+      cat "${tmp}.shard${i}" >>"$tmp" 2>/dev/null || true
+      rm -f "${tmp}.shard${i}"
+      rm -rf "${tmp}.logdir${i}"
+    done
+    if [ "$wave_failed" -eq 1 ]; then
+      echo "Integration wave ${first}-${last} FAILED — stopping early"
+      break
+    fi
+  done
+}
+
+# `wait -n` exists from bash 4.3.
+_have_wait_n() {
+  [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 3 ]; }
+}
+
+# SIGTERM a process and everything under it, children first (once the parent
+# dies its children reparent and `pgrep -P` can no longer find them).
+_kill_tree() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$c"; done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+# Stop every still-running shard of a wave (its pids as args). A stopped shard
+# prints no jest result, so _report_unrun_integration_specs lists its specs.
+_stop_wave_shards() {
+  local p
+  for p in "$@"; do
+    if kill -0 "$p" 2>/dev/null; then _kill_tree "$p"; fi
+  done
 }
 
 # TDB:330 — after a failed shard, list the integration specs that never printed
@@ -2160,7 +2414,9 @@ print_summary() {
     elif [ "${CHECK_RESULTS[$i]}" = "SKIPPED" ]; then
       color="$YELLOW"
     fi
-    printf "%-30s  ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
+    local note="${CHECK_NOTES[$i]:-}"
+    printf "%-30s  ${color}%s${NC}%s\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}" \
+      "${note:+ — $note}"
   done
   echo ""
 }
@@ -2236,10 +2492,21 @@ run_default_gate() {
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
     # randomized on every PR. Full mode keeps them local.
     if ! $static_mode; then
+      # ROK-1793 S1: --fleet on a single-workspace diff skips the other
+      # workspace's suites, each with its own SKIPPED row naming the reason.
+      if _fleet_skips api; then
+        run_step "Unit tests (api jest)" skip_by_fleet_scope \
+          "only the api specs that read web/ or every tracked file ran (in the unit step)"
+      fi
+      if _fleet_skips web; then run_step "Unit tests (web vitest)" skip_by_fleet_scope; fi
       run_step "$unit_step_label" run_unit_tests
       run_step "Tools unit tests (mcp servers)" run_tools_tests
       run_step "Contract schema specs (packages/contract)" run_contract_specs
-      run_step "Integration tests (api)" run_integration_tests
+      if _fleet_skips api; then
+        run_step "Integration tests (api)" skip_by_fleet_scope
+      else
+        run_step "Integration tests (api)" run_integration_tests
+      fi
     fi
 
     # Migration and container checks handle their own SKIPPED/PASS/FAIL
@@ -2307,6 +2574,9 @@ main() {
       --only-unit) _set_only_mode unit; shift ;;
       --no-coverage) no_coverage=true; shift ;;
       --fleet) fleet_mode=true; no_coverage=true; shift ;;
+      # ROK-1793: the fleet runner gets only RL_SLOT/RL_TARGET from the laptop
+      # env, so INTEGRATION_PARALLEL rides in as a flag (rl_validate_ci args).
+      --integration-parallel=*) export INTEGRATION_PARALLEL="${1#--integration-parallel=}"; shift ;;
       *) echo -e "${RED}Unknown argument: $1${NC}"; exit 1 ;;
     esac
   done

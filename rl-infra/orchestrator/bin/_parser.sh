@@ -30,3 +30,8 @@ _ESC=$'\033'
 # at the end of the line.
 PATTERN_STEP_RESULT="^(${_ESC}\\[[0-9;]*m)?([A-Z][A-Za-z0-9 +(),:.-]+): (PASS|FAIL|SKIPPED)(${_ESC}\\[[0-9;]*m)?$"
 export PATTERN_STEP_RESULT
+# ROK-1793 S0 — validate-ci's run_step prints `[step-time] <name> <seconds>`
+# just before each "<name>: <STATUS>" row. task-start holds it and stamps the
+# seconds onto that row's duration_s (null when no step-time line preceded it).
+PATTERN_STEP_TIME='^\[step-time\] (.+) ([0-9]+(\.[0-9]+)?)$'
+export PATTERN_STEP_TIME
