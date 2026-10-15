@@ -15,7 +15,10 @@ const REQUIRED: ReadonlyArray<{
   { name: 'View Channel', flag: PermissionFlagsBits.ViewChannel },
   { name: 'Send Messages', flag: PermissionFlagsBits.SendMessages },
   { name: 'Embed Links', flag: PermissionFlagsBits.EmbedLinks },
-  { name: 'Read Message History', flag: PermissionFlagsBits.ReadMessageHistory },
+  {
+    name: 'Read Message History',
+    flag: PermissionFlagsBits.ReadMessageHistory,
+  },
   { name: 'Manage Messages', flag: PermissionFlagsBits.ManageMessages },
 ];
 

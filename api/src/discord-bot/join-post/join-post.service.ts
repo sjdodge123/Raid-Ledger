@@ -25,7 +25,10 @@ import {
 } from '../../settings/settings-join-post.helpers';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { isUnknownMessage } from '../discord-bot-client.messages.helpers';
-import { buildJoinPostEmbed, buildJoinPostRow } from './join-post-embed.helpers';
+import {
+  buildJoinPostEmbed,
+  buildJoinPostRow,
+} from './join-post-embed.helpers';
 import {
   discordErrorCode,
   findOwnJoinPost,
@@ -82,7 +85,12 @@ export class JoinPostService {
     const message = await this.write(channel, located, payload);
     await setJoinPost(this.settings, channelId, message.id);
     const pin = await tryPin(message, (line) => this.logger.warn(line));
-    return { outcome: located.outcome, channelId, messageId: message.id, ...pin };
+    return {
+      outcome: located.outcome,
+      channelId,
+      messageId: message.id,
+      ...pin,
+    };
   }
 
   /** Delete the post and forget it. */
@@ -93,7 +101,11 @@ export class JoinPostService {
       return { removed: false };
     }
     const ctx = requireBotContext(this.client);
-    const removed = await this.deleteStored(ctx, stored.channelId, stored.messageId);
+    const removed = await this.deleteStored(
+      ctx,
+      stored.channelId,
+      stored.messageId,
+    );
     await clearJoinPost(this.settings);
     return { removed };
   }

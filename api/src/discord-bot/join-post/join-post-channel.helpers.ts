@@ -41,7 +41,8 @@ export function requireBotContext(
 ): JoinPostBotContext {
   const guild = client.isConnected() ? client.getGuild() : null;
   const bot = client.getBotUser();
-  if (!guild || !bot) throw new ServiceUnavailableException(BOT_OFFLINE_MESSAGE);
+  if (!guild || !bot)
+    throw new ServiceUnavailableException(BOT_OFFLINE_MESSAGE);
   return { guild, botUserId: bot.id };
 }
 
