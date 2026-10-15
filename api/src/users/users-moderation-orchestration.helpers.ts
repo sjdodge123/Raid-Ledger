@@ -14,6 +14,7 @@
  */
 import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { Guild } from 'discord.js';
 import * as schema from '../drizzle/schema';
 import type { RefreshTokenService } from '../auth/refresh/refresh-token.service';
 import type { SignupsRosterService } from '../events/signups-roster.service';
@@ -31,6 +32,7 @@ import {
   type ModerationRow,
 } from './users-moderation.helpers';
 import { reassignPugSlots, wipeUserData } from './users-delete.helpers';
+import { revokeGameRoleGrants } from './users-moderation-game-roles.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -43,6 +45,8 @@ export interface ModerationResult {
  * this module doesn't hard-depend on DiscordBotModule internals). */
 export interface DiscordKicker {
   kickMember(discordId: string, reason?: string): Promise<boolean>;
+  /** ROK-1767: the guild, to take back bot-granted game roles on a wipe. */
+  getGuild?(): Guild | null;
 }
 
 export interface ModerationDeps {
@@ -216,6 +220,9 @@ async function applyBanDataChanges(
     await reassignPugSlots(deps.db, row.id, input.actorId);
     return false;
   }
+  // The wipe deletes the grant rows that mark these roles as the bot's.
+  const guild = deps.discord.getGuild?.() ?? null;
+  await revokeGameRoleGrants(deps.db, guild, row.id, deps.logger);
   try {
     await deps.db.transaction(async (tx) => {
       await wipeUserData(tx, row.id, input.actorId);

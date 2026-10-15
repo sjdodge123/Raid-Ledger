@@ -20,6 +20,7 @@ import {
 import * as writes from './users-moderation.helpers';
 import * as audit from './users-admin-actions.helpers';
 import * as wipe from './users-delete.helpers';
+import * as gameRoles from './users-moderation-game-roles.helpers';
 import * as authCache from '../auth/auth-user-cache';
 import * as signupCancel from '../events/signup-cancel-batch.helpers';
 import { at } from '../common/testing/narrow';
@@ -27,6 +28,7 @@ import { at } from '../common/testing/narrow';
 jest.mock('./users-moderation.helpers');
 jest.mock('./users-admin-actions.helpers');
 jest.mock('./users-delete.helpers');
+jest.mock('./users-moderation-game-roles.helpers');
 jest.mock('../auth/auth-user-cache');
 jest.mock('../events/signup-cancel-batch.helpers');
 
@@ -37,6 +39,7 @@ const unbanUserById = writes.unbanUserById as jest.Mock;
 const insertAdminAction = audit.insertAdminAction as jest.Mock;
 const wipeUserData = wipe.wipeUserData as jest.Mock;
 const reassignPugSlots = wipe.reassignPugSlots as jest.Mock;
+const revokeGameRoleGrants = gameRoles.revokeGameRoleGrants as jest.Mock;
 const invalidateAuthUser = authCache.invalidateAuthUser as jest.Mock;
 const cancelAll = signupCancel.cancelAllUpcomingSignupsForUser as jest.Mock;
 
@@ -289,6 +292,49 @@ describe('runBan', () => {
     expect(cancelAll).not.toHaveBeenCalled();
     expect(wipeUserData).not.toHaveBeenCalled();
     expect(deps.discord.kickMember).not.toHaveBeenCalled();
+  });
+});
+
+describe('runBan game-role grants (ROK-1767)', () => {
+  it('wipe without a Discord kick revokes bot-granted roles BEFORE deleting the grant rows', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    cancelAll.mockResolvedValue(0);
+    const guild = { id: 'g' };
+    const deps = makeDeps({
+      discord: {
+        kickMember: jest.fn().mockResolvedValue(true),
+        getGuild: () => guild as never,
+      },
+    });
+
+    await runBan(deps, {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      wipeData: true,
+      kickFromDiscord: false,
+    });
+
+    expect(revokeGameRoleGrants).toHaveBeenCalledWith(
+      deps.db,
+      guild,
+      TARGET.id,
+      deps.logger,
+    );
+    expect(at(revokeGameRoleGrants.mock.invocationCallOrder, 0)).toBeLessThan(
+      at(wipeUserData.mock.invocationCallOrder, 0),
+    );
+  });
+
+  it('a ban that keeps data leaves the grants (and roles) alone', async () => {
+    banUserById.mockResolvedValue({ ...TARGET });
+    cancelAll.mockResolvedValue(0);
+    await runBan(makeDeps(), {
+      userId: TARGET.id,
+      actorId: ACTOR,
+      wipeData: false,
+      kickFromDiscord: false,
+    });
+    expect(revokeGameRoleGrants).not.toHaveBeenCalled();
   });
 });
 
