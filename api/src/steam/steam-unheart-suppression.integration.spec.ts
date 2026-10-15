@@ -18,6 +18,8 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { findGameAffinityRecipients } from '../notifications/game-affinity-recipients.helpers';
 import { findRecipients as findReminderRecipients } from '../notifications/recruitment-reminder.helpers';
+import { findStandalonePollRecipients } from '../lineups/standalone-poll/standalone-poll-recipients.helpers';
+import { getTimeSuggestions } from '../events/event-plans-time.helpers';
 import { SteamService } from './steam.service';
 import { SteamWishlistService } from './steam-wishlist.service';
 import * as steamHttp from './steam-http.util';
@@ -110,16 +112,42 @@ function describeUnheartSuppression() {
     expect(post.status).toBe(200);
   };
 
-  /** Interest-half recipients: game-alert/LFG predicate + recruitment reminder. */
+  /** Interest-half recipients: game-alert/LFG, recruitment reminder, standalone poll. */
   const isRecipient = async (): Promise<{
     lfg: boolean;
     reminder: boolean;
+    poll: boolean;
   }> => {
     const lfg = await findGameAffinityRecipients(testApp.db, gameId, {
       interestsOnly: true,
     });
     const reminder = await findReminderRecipients(testApp.db, gameId, -1, -1);
-    return { lfg: lfg.includes(userId), reminder: reminder.includes(userId) };
+    const poll = await findStandalonePollRecipients(testApp.db, gameId, -1);
+    return {
+      lfg: lfg.includes(userId),
+      reminder: reminder.includes(userId),
+      poll: poll.includes(userId),
+    };
+  };
+
+  /** Event-plan time suggestions' interestedPlayerCount for the game. */
+  const interestedPlayerCount = async (): Promise<number> => {
+    const res = await getTimeSuggestions(
+      testApp.db,
+      testApp.app.get(SettingsService),
+      gameId,
+    );
+    return res.interestedPlayerCount;
+  };
+
+  /** Seed the pre-fix state: a heart row plus an un-heart suppression. */
+  const seedHeartWithSuppression = async (source: string): Promise<void> => {
+    await testApp.db
+      .insert(schema.gameInterests)
+      .values({ userId, gameId, source });
+    await testApp.db
+      .insert(schema.gameInterestSuppressions)
+      .values({ userId, gameId });
   };
 
   beforeAll(async () => {
@@ -166,7 +194,11 @@ function describeUnheartSuppression() {
       count: 0,
     });
     expect(await batchWantToPlay()).toEqual({ wantToPlay: true, count: 0 });
-    expect(await isRecipient()).toEqual({ lfg: true, reminder: true });
+    expect(await isRecipient()).toEqual({
+      lfg: true,
+      reminder: true,
+      poll: true,
+    });
   });
 
   it('(b) un-heart keeps Steam ownership but turns the heart and interest DMs off', async () => {
@@ -182,7 +214,11 @@ function describeUnheartSuppression() {
       wishlistedCount: 1,
     });
     expect(await batchWantToPlay()).toEqual({ wantToPlay: false, count: 0 });
-    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
+    expect(await isRecipient()).toEqual({
+      lfg: false,
+      reminder: false,
+      poll: false,
+    });
   });
 
   it('(c) the un-heart survives a library + wishlist re-sync', async () => {
@@ -194,7 +230,11 @@ function describeUnheartSuppression() {
     expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
     expect((await getInterest()).body.wantToPlay).toBe(false);
     expect(await batchWantToPlay()).toEqual({ wantToPlay: false, count: 0 });
-    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
+    expect(await isRecipient()).toEqual({
+      lfg: false,
+      reminder: false,
+      poll: false,
+    });
   });
 
   it('(d) un-heart → manual re-heart → un-heart with no sync between stays suppressed', async () => {
@@ -207,7 +247,11 @@ function describeUnheartSuppression() {
 
     expect(await suppressionCount()).toBe(1);
     expect(await sourcesFor()).toEqual(['steam_library', 'steam_wishlist']);
-    expect(await isRecipient()).toEqual({ lfg: false, reminder: false });
+    expect(await isRecipient()).toEqual({
+      lfg: false,
+      reminder: false,
+      poll: false,
+    });
   });
 
   it('(e) a manual re-heart makes the user a recipient again', async () => {
@@ -228,7 +272,54 @@ function describeUnheartSuppression() {
       source: 'manual',
       count: 1,
     });
-    expect(await isRecipient()).toEqual({ lfg: true, reminder: true });
+    expect(await isRecipient()).toEqual({
+      lfg: true,
+      reminder: true,
+      poll: true,
+    });
+  });
+
+  it('(f) legacy heart + stale suppression (no Steam rows) still counts as hearted', async () => {
+    await seedHeartWithSuppression('manual');
+
+    expect((await getInterest()).body).toMatchObject({
+      wantToPlay: true,
+      source: 'manual',
+      count: 1,
+    });
+    expect(await batchWantToPlay()).toEqual({ wantToPlay: true, count: 1 });
+    expect(await isRecipient()).toEqual({
+      lfg: true,
+      reminder: true,
+      poll: true,
+    });
+  });
+
+  it('(g) a concurrent Discord heart beside a suppression wins over Steam masking', async () => {
+    await syncBoth();
+    await seedHeartWithSuppression('discord');
+
+    expect((await getInterest()).body.wantToPlay).toBe(true);
+    expect(await isRecipient()).toEqual({
+      lfg: true,
+      reminder: true,
+      poll: true,
+    });
+  });
+
+  it('(h) un-hearted Steam owner drops out of the event-plan interestedPlayerCount', async () => {
+    await syncBoth();
+    await testApp.db
+      .insert(schema.gameTimeTemplates)
+      .values({ userId, dayOfWeek: 2, startHour: 20 });
+    expect(await interestedPlayerCount()).toBe(1);
+
+    await unheart();
+    expect(await interestedPlayerCount()).toBe(0);
+
+    await reheart();
+    // heart + library + wishlist rows: one distinct interested player
+    expect(await interestedPlayerCount()).toBe(1);
   });
 }
 
