@@ -5,6 +5,10 @@ import { eq, sql } from 'drizzle-orm';
 import type * as schema from '../drizzle/schema';
 import * as tables from '../drizzle/schema';
 import { ScheduledEventService } from '../discord-bot/services/scheduled-event.service';
+import type {
+  SECompletionOutcome,
+  SECompletionSkipReason,
+} from '../discord-bot/services/scheduled-event.completion';
 import { ScheduledEventReconciliationService } from '../discord-bot/services/scheduled-event.reconciliation';
 import { PostEventFollowupService } from '../notifications/post-event-followup.service';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
@@ -35,13 +39,33 @@ interface DeletableScheduledEvent {
   delete(): Promise<unknown>;
 }
 
+/**
+ * Result of the completion trigger (ROK-944). `success` is false when any
+ * candidate failed to reach Completed or the bot was not connected — it no
+ * longer reports success over a failed Discord call. `outcomes` names each
+ * event's from/to status and the Discord error code/message; `reason` says
+ * why nothing ran.
+ */
+export interface SECompletionTriggerResult {
+  success: boolean;
+  outcomes: SECompletionOutcome[];
+  reason?: SECompletionSkipReason;
+}
+
 /** Trigger the scheduled event completion cron once (ROK-944). */
 export async function triggerScheduledEventCompletionForTest(
   moduleRef: ModuleRef,
-): Promise<{ success: boolean }> {
+): Promise<SECompletionTriggerResult> {
   const svc = moduleRef.get(ScheduledEventService, { strict: false });
-  await svc.completeExpiredEvents();
-  return { success: true };
+  const run = await svc.completeExpiredEventsDetailed();
+  const success = run.reason
+    ? run.reason === 'no-candidates'
+    : run.outcomes.every((o) => o.ok);
+  return {
+    success,
+    outcomes: run.outcomes,
+    ...(run.reason ? { reason: run.reason } : {}),
+  };
 }
 
 /** Enable Discord scheduled event creation (ROK-969). */
