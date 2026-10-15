@@ -26,12 +26,21 @@ interface Summary { gameId: number; roleId: string; windowDays: number }
 interface RunResult { added: number; removed: number; failedGames: number[] }
 interface Audit { action: string; reason: string; userId: number }
 
-/** A game no channel-pool test is bound to, so no other run plays it. */
-function pickGame(ctx: TestContext): number {
+/**
+ * A game no channel-pool test is bound to, so no other run plays it.
+ * `ctx.games` only holds the admin character's game and is empty on a seed
+ * with no characters (the fleet env), so fall back to the games registry.
+ */
+async function pickGame(ctx: TestContext): Promise<number> {
   const busy = new Set((ctx.channelPool ?? []).map((s) => s.gameId));
   if (ctx.mmoGameId !== undefined) busy.add(ctx.mmoGameId);
-  const free = ctx.games.filter((g) => !busy.has(g.id));
-  const game = free[free.length - 1] ?? ctx.games[ctx.games.length - 1];
+  const registry = ctx.games.length > 0
+    ? ctx.games
+    : (await ctx.api.get<{ data: { id: number; name: string }[] }>(
+        '/admin/settings/games?limit=100',
+      )).data ?? [];
+  const free = registry.filter((g) => !busy.has(g.id));
+  const game = free[free.length - 1] ?? registry[registry.length - 1];
   if (!game) throw new Error('game-role smoke: no games in demo data');
   return game.id;
 }
@@ -106,7 +115,7 @@ async function handAssignedStays(ctx: TestContext, gameId: number, roleId: strin
 
 async function gameRoleAddAndIdleRemove(ctx: TestContext): Promise<void> {
   await ctx.api.post(`${FIXTURES}/sweep`, {});
-  const gameId = pickGame(ctx);
+  const gameId = await pickGame(ctx);
   const name = `smoke-gr-${Date.now().toString(36)}`;
   let linked = false;
   try {
