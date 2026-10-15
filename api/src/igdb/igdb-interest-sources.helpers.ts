@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL, type SQLWrapper } from 'drizzle-orm';
 import * as schema from '../drizzle/schema';
 
 /**
@@ -46,14 +46,49 @@ export function toDtoSource(
   return isDtoSource(source) ? source : undefined;
 }
 
+/** Sources a user sets by hearting. Library/wishlist rows are Steam sync. */
+export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
+
+/** Column refs of the `game_interests` row the interest condition tests. */
+interface InterestRowColumns {
+  userId: SQLWrapper;
+  gameId: SQLWrapper;
+  source: SQLWrapper;
+}
+
 /**
- * SQL condition on a `game_interests` row: the user has NOT un-hearted the
- * game. Un-heart keeps Steam library/wishlist rows (ownership + playtime are
- * facts other features read) and records a suppression instead, so every
- * "is this user interested" read must honour it (ROK-1796).
+ * SQL condition on a `game_interests` row: the row counts as INTEREST.
+ *
+ * Un-heart keeps Steam library/wishlist rows (ownership + playtime are facts
+ * other features read) and records a suppression instead (ROK-1796). The
+ * suppression masks ONLY Steam-sourced rows: a heart-source row always counts,
+ * so a re-heart (or a concurrent Discord heart) wins over a stale suppression.
+ * A (user, game) pair is therefore interested iff it has a heart-source row,
+ * or a Steam row and no suppression. Every reader that treats
+ * `game_interests` as interest/hearts/subscription must apply this.
  */
-export const NOT_SUPPRESSED = sql`not exists (
-  select 1 from ${schema.gameInterestSuppressions} s
-  where s.user_id = ${schema.gameInterests.userId}
-    and s.game_id = ${schema.gameInterests.gameId}
-)`;
+export function interestedRowCondition(cols: InterestRowColumns): SQL {
+  const hearts = sql.join(
+    HEART_SOURCES.map((s) => sql`${s}`),
+    sql`, `,
+  );
+  return sql`(${cols.source} in (${hearts}) or not exists (
+    select 1 from ${schema.gameInterestSuppressions} gis
+    where gis.user_id = ${cols.userId}
+      and gis.game_id = ${cols.gameId}
+  ))`;
+}
+
+/** {@link interestedRowCondition} for query-builder reads of `game_interests`. */
+export const INTERESTED_ROW = interestedRowCondition({
+  userId: schema.gameInterests.userId,
+  gameId: schema.gameInterests.gameId,
+  source: schema.gameInterests.source,
+});
+
+/** {@link interestedRowCondition} for raw SQL aliasing `game_interests gi`. */
+export const INTERESTED_GI_ROW = interestedRowCondition({
+  userId: sql.raw('gi.user_id'),
+  gameId: sql.raw('gi.game_id'),
+  source: sql.raw('gi.source'),
+});

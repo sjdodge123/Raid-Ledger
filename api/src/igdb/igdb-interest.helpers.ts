@@ -10,7 +10,8 @@ import {
   getSteamWishlisters,
 } from './igdb-steam-interest.helpers';
 import {
-  NOT_SUPPRESSED,
+  HEART_SOURCES,
+  INTERESTED_ROW,
   STEAM_SYNC_SOURCES,
   USER_HEART_SOURCES,
   toDtoSource,
@@ -19,7 +20,7 @@ import {
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
-export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
+export { HEART_SOURCES };
 
 /** Order heart sources ahead of Steam sync rows (ROK-1796). */
 const STEAM_SOURCE_LAST = sql`case when ${inArray(schema.gameInterests.source, STEAM_SYNC_SOURCES)} then 1 else 0 end`;
@@ -74,7 +75,7 @@ export async function getUserInterestSource(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
         inArray(schema.gameInterests.source, USER_HEART_SOURCES),
-        NOT_SUPPRESSED,
+        INTERESTED_ROW,
       ),
     )
     .orderBy(STEAM_SOURCE_LAST)
@@ -146,7 +147,7 @@ async function fetchBatchData(
           gameIdFilter,
           eq(schema.gameInterests.userId, userId),
           inArray(schema.gameInterests.source, USER_HEART_SOURCES),
-          NOT_SUPPRESSED,
+          INTERESTED_ROW,
         ),
       ),
   ]);

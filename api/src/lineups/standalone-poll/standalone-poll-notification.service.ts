@@ -12,6 +12,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
+import { INTERESTED_GI_ROW } from '../../igdb/igdb-interest-sources.helpers';
 import { NotificationService } from '../../notifications/notification.service';
 
 /** Notification payload for standalone scheduling polls. */
@@ -154,7 +155,7 @@ export class StandalonePollNotificationService {
         AND (
           u.id IN (
             SELECT gi.user_id FROM game_interests gi
-            WHERE gi.game_id = ${gameId}
+            WHERE gi.game_id = ${gameId} AND ${INTERESTED_GI_ROW}
           )
           OR
           u.id IN (

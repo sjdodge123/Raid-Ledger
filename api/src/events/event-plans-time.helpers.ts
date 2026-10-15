@@ -2,9 +2,10 @@
  * Time suggestion generation and repoll handling for event plans.
  */
 import { Logger } from '@nestjs/common';
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
+import { INTERESTED_ROW } from '../igdb/igdb-interest-sources.helpers';
 import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
 import { SettingsService } from '../settings/settings.service';
 import type { TimeSuggestionsResponse } from '@raid-ledger/contract';
@@ -39,10 +40,12 @@ async function queryRankedTimeSlots(
   db: PostgresJsDatabase<typeof schema>,
   gameId: number,
 ): Promise<{ ranked: [string, number][]; playerCount: number } | null> {
+  // Distinct users whose row counts as interest — an un-hearted Steam owner
+  // does not (ROK-1796); a user with heart + Steam rows counts once.
   const interests = await db
-    .select({ userId: schema.gameInterests.userId })
+    .selectDistinct({ userId: schema.gameInterests.userId })
     .from(schema.gameInterests)
-    .where(eq(schema.gameInterests.gameId, gameId));
+    .where(and(eq(schema.gameInterests.gameId, gameId), INTERESTED_ROW));
   const userIds = interests.map((i) => i.userId);
   if (userIds.length === 0) return null;
   const templates = await db
