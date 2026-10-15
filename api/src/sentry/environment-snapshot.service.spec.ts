@@ -115,12 +115,20 @@ function describeEnvironmentSnapshotService() {
         demoMode: true,
         onboardingCompleted: true,
         defaultTimezone: 'America/New_York',
-        communityName: 'Test Guild',
         relayEnabled: false,
         igdbFilterAdult: true,
         discordBotEnabled: false,
         discordBotSetupCompleted: true,
       });
+    });
+
+    it('ROK-1779: never reads or reports the community name', async () => {
+      const snapshot = await service.collectSnapshot();
+      const calledKeys = mockSettingsService.get.mock.calls.map(
+        (call: string[]) => call[0],
+      );
+      expect(calledKeys).not.toContain(SETTING_KEYS.COMMUNITY_NAME);
+      expect(snapshot.settings).not.toHaveProperty('communityName');
     });
 
     it('never includes secret keys in settings snapshot', async () => {
