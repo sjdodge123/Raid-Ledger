@@ -94,6 +94,28 @@ describe('GM post (Overview)', () => {
         await userEvent.click(screen.getByTestId('guild-gm-post-save'));
         await waitFor(() => expect(calls).toEqual([{ method: 'PATCH', url: `${BASE}/profile`, body: { gmPost: 'Welcome raiders' } }]));
     });
+
+    it('shows the loading skeleton, not Add a post, to an editor while the profile loads', async () => {
+        serve(true);
+        let release: () => void = () => undefined;
+        const gate = new Promise<void>((resolve) => { release = resolve; });
+        server.use(http.get(`${BASE}/profile`, async () => { await gate; return HttpResponse.json(EMPTY_PROFILE); }));
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-loading')).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: 'Add a post' }), 'no Add a post before the profile loads').toBeNull();
+        release();
+        expect(await screen.findByRole('button', { name: 'Add a post' })).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-gm-post-loading')).toBeNull();
+    });
+
+    it('shows an error, not the empty prompt, to an editor when the profile fails', async () => {
+        serve(true);
+        server.use(http.get(`${BASE}/profile`, () => HttpResponse.json({ message: 'boom' }, { status: 500 })));
+        renderPage();
+        expect(await screen.findByTestId('guild-gm-post-error')).toHaveTextContent('Couldn’t load the guild post.');
+        expect(screen.queryByTestId('guild-gm-post-prompt'), 'no empty prompt on a profile error').toBeNull();
+        expect(screen.queryByRole('button', { name: 'Add a post' })).toBeNull();
+    });
 });
 
 describe('Resources tab visibility', () => {

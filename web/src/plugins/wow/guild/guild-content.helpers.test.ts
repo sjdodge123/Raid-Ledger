@@ -37,6 +37,7 @@ describe('guild content helpers', () => {
         ['https://github.com/owner-only', null],
         ['https://example.com/addons/my-cool-addon', { name: 'My Cool Addon', source: 'url' }],
         ['https://GitHub.com/Owner/Repo.git', { name: 'Repo', source: 'github' }],
+        [`https://example.com/addons/${'a'.repeat(200)}`, { name: `A${'a'.repeat(118)}…`, source: 'url' }],
     ] as const)('previews %s exactly as the server parses it', (raw, expected) => {
         expect(parseAddonUrl(raw)).toEqual(expected);
     });

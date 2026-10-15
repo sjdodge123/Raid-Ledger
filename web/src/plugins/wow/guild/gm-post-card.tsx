@@ -43,6 +43,19 @@ function PostEditor({ guildId, initial, onDone }: { guildId: number; initial: st
     );
 }
 
+function PostSkeleton(): JSX.Element {
+    return (
+        <div className="animate-pulse space-y-2" data-testid="guild-gm-post-loading" aria-busy="true" aria-label="Loading the guild post">
+            <div className="h-4 w-3/4 rounded bg-panel" />
+            <div className="h-4 w-1/2 rounded bg-panel" />
+        </div>
+    );
+}
+
+function PostError(): JSX.Element {
+    return <p role="alert" className="text-sm text-danger" data-testid="guild-gm-post-error">Couldn’t load the guild post. Try again later.</p>;
+}
+
 function PostBody({ post, canEdit, onEdit }: { post: GuildGmPost | null; canEdit: boolean; onEdit: () => void }): JSX.Element {
     if (!post) {
         if (!canEdit) return <p className="text-sm text-muted" data-testid="guild-gm-post-empty">No post from the guild master yet.</p>;
@@ -63,8 +76,9 @@ function PostBody({ post, canEdit, onEdit }: { post: GuildGmPost | null; canEdit
 
 export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element {
     const [editing, setEditing] = useState(false);
-    const { data } = useGuildProfile(guildId);
-    const post = data?.gmPost ?? null;
+    const profile = useGuildProfile(guildId);
+    const post = profile.data?.gmPost ?? null;
+    const ready = !profile.isPending && !profile.isError;
     return (
         <section id="gm-post" aria-labelledby="gm-post-title" className="scroll-mt-4 md:col-span-2" data-testid="guild-gm-post">
             <Card className="h-full border-l-4 border-l-success">
@@ -73,15 +87,17 @@ export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boo
                         <Pill tone="success">From the guild master</Pill>
                         <h2 id="gm-post-title" className="sr-only">Message from the guild master</h2>
                     </div>
-                    {canEdit && post && !editing && (
+                    {canEdit && ready && post && !editing && (
                         <Button variant="secondary" size="sm" aria-label="Edit the guild post" onClick={() => setEditing(true)}>
                             <PencilSquareIcon className="h-4 w-4" aria-hidden="true" /> Edit
                         </Button>
                     )}
                 </div>
-                {editing && canEdit
-                    ? <PostEditor guildId={guildId} initial={post?.body ?? ''} onDone={() => setEditing(false)} />
-                    : <PostBody post={post} canEdit={canEdit} onEdit={() => setEditing(true)} />}
+                {profile.isPending ? <PostSkeleton />
+                    : profile.isError ? <PostError />
+                    : editing && canEdit
+                        ? <PostEditor guildId={guildId} initial={post?.body ?? ''} onDone={() => setEditing(false)} />
+                        : <PostBody post={post} canEdit={canEdit} onEdit={() => setEditing(true)} />}
             </Card>
         </section>
     );

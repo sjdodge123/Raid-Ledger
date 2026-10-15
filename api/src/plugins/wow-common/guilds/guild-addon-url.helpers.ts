@@ -1,4 +1,8 @@
-import { GUILD_URL_MAX, type GuildAddonSource } from '@raid-ledger/contract';
+import {
+  GUILD_ADDON_NAME_MAX,
+  GUILD_URL_MAX,
+  type GuildAddonSource,
+} from '@raid-ledger/contract';
 
 /**
  * ROK-1786: server-side addon link parsing (prototype: `addon-url.ts` on
@@ -65,6 +69,16 @@ export function titleCaseSlug(slug: string): string {
     .join(' ');
 }
 
+/**
+ * Name derived from a link segment, clamped to the `display_name` column
+ * (`varchar(GUILD_ADDON_NAME_MAX)`) with a trailing ellipsis.
+ */
+export function suggestName(segment: string): string {
+  const name = titleCaseSlug(segment);
+  if (name.length <= GUILD_ADDON_NAME_MAX) return name;
+  return `${name.slice(0, GUILD_ADDON_NAME_MAX - 1).trimEnd()}…`;
+}
+
 /** Canonical link-out for a stored addon. */
 export function addonLinkUrl(
   source: GuildAddonSource,
@@ -107,7 +121,7 @@ function matchHost(url: URL, rule: HostRule): AddonLinkResult {
   const parts = url.pathname.toLowerCase().split('/').filter(Boolean);
   const slug = slugFromPath(parts, rule);
   if (!slug) return { ok: false, error: rule.label };
-  const name = titleCaseSlug(slug.split('/').pop() ?? slug);
+  const name = suggestName(slug.split('/').pop() ?? slug);
   const link = addonLinkUrl(rule.source, slug);
   return {
     ok: true,
@@ -130,7 +144,7 @@ function plainUrl(url: URL): AddonLinkResult {
     };
   }
   const last = url.pathname.split('/').filter(Boolean).pop();
-  const name = titleCaseSlug(last ?? url.hostname.replace(/^www\./, ''));
+  const name = suggestName(last ?? url.hostname.replace(/^www\./, ''));
   return {
     ok: true,
     link: {

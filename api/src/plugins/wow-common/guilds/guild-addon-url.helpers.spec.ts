@@ -1,3 +1,4 @@
+import { GUILD_ADDON_NAME_MAX } from '@raid-ledger/contract';
 import {
   addonLinkUrl,
   parseAddonLink,
@@ -117,6 +118,20 @@ describe('addonLinkUrl / titleCaseSlug', () => {
     expect(addonLinkUrl('url', 'https://x.io/a')).toBe('https://x.io/a');
   });
 
+  it('clamps a name derived from a 200-char segment to the column width', () => {
+    const link = mustLink(
+      parseAddonLink(`https://example.com/x/${'b'.repeat(200)}`),
+    );
+    expect(link.suggestedName).toHaveLength(GUILD_ADDON_NAME_MAX);
+    expect(link.suggestedName).toBe(`B${'b'.repeat(118)}…`);
+    const known = mustLink(
+      parseAddonLink(
+        `https://www.curseforge.com/wow/addons/${'c'.repeat(200)}`,
+      ),
+    );
+    expect(known.suggestedName).toHaveLength(GUILD_ADDON_NAME_MAX);
+  });
+
   it('title-cases on - _ . and spaces', () => {
     expect(titleCaseSlug('big_wigs-bossmods.core')).toBe(
       'Big Wigs Bossmods Core',
@@ -137,6 +152,10 @@ describe('parseAddonLink — web preview parity table', () => {
       { name: 'My Cool Addon', source: 'url' },
     ],
     ['https://GitHub.com/Owner/Repo.git', { name: 'Repo', source: 'github' }],
+    [
+      `https://example.com/addons/${'a'.repeat(200)}`,
+      { name: `A${'a'.repeat(118)}…`, source: 'url' },
+    ],
   ] as const)('%s', (raw, expected) => {
     const result = parseAddonLink(raw);
     const preview = result.ok
