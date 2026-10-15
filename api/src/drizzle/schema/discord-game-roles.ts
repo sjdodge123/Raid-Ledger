@@ -26,7 +26,9 @@ export const discordGameRoles = pgTable(
       .references(() => games.id, { onDelete: 'cascade' })
       .notNull()
       .unique('discord_game_roles_game_id_unique'),
-    roleId: varchar('role_id', { length: 32 }).notNull(),
+    roleId: varchar('role_id', { length: 32 })
+      .notNull()
+      .unique('discord_game_roles_role_id_unique'),
     botCreated: boolean('bot_created').default(false).notNull(),
     windowDays: integer('window_days').default(14).notNull(),
     enabled: boolean('enabled').default(true).notNull(),
