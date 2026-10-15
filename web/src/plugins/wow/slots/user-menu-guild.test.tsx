@@ -23,7 +23,7 @@ const MINE = 'http://localhost:3000/plugins/wow/guilds/mine';
 function guild(id: number, name: string): MyGuild {
     return {
         id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
-        memberCount: 3, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false,
+        memberCount: 3, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false, gmPostHeadline: null,
     };
 }
 

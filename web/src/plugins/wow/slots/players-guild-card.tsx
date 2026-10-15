@@ -10,15 +10,9 @@ import { guildRealm } from '../guild/guild-roster.helpers';
 import { GuildCrest } from './guild-entry-bits';
 import { guildHref, memberCountLabel, useMyGuilds } from './guild-queries';
 
-/** `gmPostHeadline` (ROK-1786) read defensively: absent on an older API answer. */
-export function gmPostHeadlineOf(guild: MyGuild): string | null {
-    const value = 'gmPostHeadline' in guild ? guild.gmPostHeadline : null;
-    return typeof value === 'string' && value.trim() ? value.trim() : null;
-}
-
 function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
     const where = [guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
-    const headline = gmPostHeadlineOf(guild);
+    const headline = guild.gmPostHeadline?.trim() || null;
     return (
         <div className="flex flex-col gap-3 rounded-xl border border-edge bg-panel p-4 sm:flex-row sm:items-center sm:justify-between" data-testid="players-guild-card">
             <div className="flex min-w-0 items-center gap-3">

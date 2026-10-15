@@ -71,7 +71,7 @@ export function GmPostCard({ guildId, canEdit }: { guildId: number; canEdit: boo
                 <div className="mb-3 flex items-start justify-between gap-3">
                     <div className="min-w-0">
                         <Pill tone="success">From the guild master</Pill>
-                        <h2 id="gm-post-title" className="sr-only">Guild post</h2>
+                        <h2 id="gm-post-title" className="sr-only">Message from the guild master</h2>
                     </div>
                     {canEdit && post && !editing && (
                         <Button variant="secondary" size="sm" aria-label="Edit the guild post" onClick={() => setEditing(true)}>
