@@ -22,6 +22,9 @@ export * from './signups.schema.js';
 // Characters
 export * from './characters.schema.js';
 
+// Character saved instances (ROK-1743)
+export * from './character-lockouts.schema.js';
+
 // Availability
 export * from './availability.schema.js';
 
