@@ -131,3 +131,30 @@ describe('diffGameRole removal reasons (ROK-1767)', () => {
     expect(diff.dropGrant).toEqual([]);
   });
 });
+
+describe('diffGameRole relinked Discord account (ROK-1767)', () => {
+  it('removes the role from the OLD account and adds it to the new one', () => {
+    const diff = diffGameRole(
+      input({
+        holders: new Set(['d1']),
+        grants: new Map([[1, 'd1']]),
+        desired: new Map([
+          [
+            1,
+            {
+              discordUserId: 'd2',
+              lastPlayedAt: played('2026-10-14T20:00:00Z'),
+            },
+          ],
+        ]),
+      }),
+    );
+    expect(diff.remove).toEqual([
+      { userId: 1, discordUserId: 'd1', reason: 'relinked Discord account' },
+    ]);
+    expect(diff.add).toEqual([
+      { userId: 1, discordUserId: 'd2', reason: 'played 2026-10-14' },
+    ]);
+    expect(diff.dropGrant).toEqual([]);
+  });
+});

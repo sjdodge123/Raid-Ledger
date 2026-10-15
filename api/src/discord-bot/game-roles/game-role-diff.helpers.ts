@@ -44,8 +44,9 @@ const ymd = (d: Date): string => d.toISOString().slice(0, 10);
  * ROK-1767: pure diff between who SHOULD hold a game role and who does.
  *
  * - add: desired ∩ guild members − holders.
- * - remove: bot grants ∩ holders − desired. A holder without a grant was
- *   assigned by hand and is never touched.
+ * - remove: bot grants ∩ holders − desired (matched on user AND Discord id,
+ *   so a relinked user's old account loses the role). A holder without a
+ *   grant was assigned by hand and is never touched.
  * - dropGrant: bot grants whose member no longer holds the role (removed by
  *   hand, or left the guild), unless the same run re-adds them.
  */
@@ -76,9 +77,15 @@ function computeAdds(input: GameRoleDiffInput): GameRoleChange[] {
 function computeRemovals(input: GameRoleDiffInput): GameRoleChange[] {
   const out: GameRoleChange[] = [];
   for (const [userId, discordUserId] of input.grants) {
-    if (input.desired.has(userId)) continue;
+    const want = input.desired.get(userId);
+    // Same Discord account still qualifies → keep. A relinked account means
+    // the grant's OLD account loses the role (the new one is an add).
+    if (want?.discordUserId === discordUserId) continue;
     if (!input.holders.has(discordUserId)) continue;
-    out.push({ userId, discordUserId, reason: removalReason(input, userId) });
+    const reason = want
+      ? 'relinked Discord account'
+      : removalReason(input, userId);
+    out.push({ userId, discordUserId, reason });
   }
   return out;
 }
