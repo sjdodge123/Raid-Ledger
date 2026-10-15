@@ -1,5 +1,5 @@
 {
-  "id": "f28a1963-d424-4065-9d1d-3133ac942810",
+  "id": "9fc1f59c-f74b-4f67-a8c5-f34d4ac909f8",
   "prevId": "742d0a25-9edf-45ed-a6a9-122270a693cf",
   "version": "7",
   "dialect": "postgresql",
@@ -422,12 +422,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "guild_id": {
-          "name": "guild_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -464,21 +458,6 @@
           "columns": [
             {
               "expression": "game_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_events_guild_id": {
-          "name": "idx_events_guild_id",
-          "columns": [
-            {
-              "expression": "guild_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -636,19 +615,6 @@
           "tableTo": "channel_bindings",
           "columnsFrom": [
             "channel_binding_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "events_guild_id_guilds_id_fk": {
-          "name": "events_guild_id_guilds_id_fk",
-          "tableFrom": "events",
-          "tableTo": "guilds",
-          "columnsFrom": [
-            "guild_id"
           ],
           "columnsTo": [
             "id"
@@ -3178,6 +3144,18 @@
         "client_logs": {
           "name": "client_logs",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "screenshot_path": {
+          "name": "screenshot_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_context": {
+          "name": "client_context",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

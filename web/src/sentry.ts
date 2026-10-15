@@ -100,21 +100,35 @@ export function isTelemetryActive(): boolean {
     return initialised;
 }
 
+/** A file sent with a Sentry event (e.g. a feedback screenshot, ROK-1313). */
+export type SentryAttachment = Parameters<Sentry.Scope['addAttachment']>[0];
+
 /**
  * Send a Sentry message and verify delivery succeeded.
  * Returns false only when an initialised client failed to deliver. When
  * telemetry is off (opted out, or not yet initialised) it sends nothing and
  * returns true: the caller's own record (e.g. the saved feedback row) is
  * the delivery, and an opted-out instance must not show a Sentry error.
+ * Attachments go on an isolated `withScope` scope, so they ride this one event
+ * and never leak onto later events from the current scope; with telemetry off
+ * they are never sent.
  */
 export async function captureMessageVerified(
     message: string,
     context: Sentry.CaptureContext,
+    attachments?: readonly SentryAttachment[],
 ): Promise<boolean> {
     if (!initialised) return true;
 
     _lastTransportFailed = false;
-    Sentry.captureMessage(message, context);
+    if (attachments && attachments.length > 0) {
+        Sentry.withScope((scope) => {
+            attachments.forEach((a) => scope.addAttachment(a));
+            Sentry.captureMessage(message, context);
+        });
+    } else {
+        Sentry.captureMessage(message, context);
+    }
     await Sentry.flush(3000);
     return !_lastTransportFailed;
 }
