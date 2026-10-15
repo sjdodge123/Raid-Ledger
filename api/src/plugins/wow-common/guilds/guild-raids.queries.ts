@@ -78,6 +78,21 @@ export interface UpcomingRow {
   viewerStatus: string | null;
 }
 
+/** Upcoming card columns; exported for the subquery-correlation guard. */
+export function upcomingFields(viewerId: number) {
+  return {
+    id: events.id,
+    title: events.title,
+    duration: events.duration,
+    slotConfig: events.slotConfig,
+    maxAttendees: events.maxAttendees,
+    signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${LIVE_SIGNED})`,
+    viewerStatus: sql<
+      string | null
+    >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,
+  };
+}
+
 export async function loadUpcoming(
   db: Db,
   guildId: number,
@@ -85,17 +100,7 @@ export async function loadUpcoming(
   now: Date,
 ): Promise<UpcomingRow[]> {
   return db
-    .select({
-      id: events.id,
-      title: events.title,
-      duration: events.duration,
-      slotConfig: events.slotConfig,
-      maxAttendees: events.maxAttendees,
-      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${LIVE_SIGNED})`,
-      viewerStatus: sql<
-        string | null
-      >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,
-    })
+    .select(upcomingFields(viewerId))
     .from(events)
     .where(and(guildEvents(guildId), sql`${ends} > ${at(now)}`))
     .orderBy(asc(starts))
@@ -159,6 +164,20 @@ export interface RecentRow {
   attended: number;
 }
 
+/** Ended card columns; exported for the subquery-correlation guard. */
+export function recentFields() {
+  const s = sql`${eventSignups} s where s.event_id = ${outerEventId}`;
+  return {
+    id: events.id,
+    title: events.title,
+    duration: events.duration,
+    signedUp: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED})`,
+    recorded: sql<number>`(select count(*)::int from ${s} and s.attendance_status is not null)`,
+    // Only signed-up attendees, so `attended` never exceeds `signedUp`.
+    attended: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED} and s.attendance_status = 'attended')`,
+  };
+}
+
 /** Guild events that ended in the window, newest first (P6). */
 export async function loadRecent(
   db: Db,
@@ -166,17 +185,8 @@ export async function loadRecent(
   since: Date,
   now: Date,
 ): Promise<RecentRow[]> {
-  const s = sql`${eventSignups} s where s.event_id = ${outerEventId}`;
   return db
-    .select({
-      id: events.id,
-      title: events.title,
-      duration: events.duration,
-      signedUp: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED})`,
-      recorded: sql<number>`(select count(*)::int from ${s} and s.attendance_status is not null)`,
-      // Only signed-up attendees, so `attended` never exceeds `signedUp`.
-      attended: sql<number>`(select count(*)::int from ${s} and s.status in ${SIGNED} and s.attendance_status = 'attended')`,
-    })
+    .select(recentFields())
     .from(events)
     .where(and(guildEvents(guildId), endedBetween(since, now)))
     .orderBy(desc(ends))
