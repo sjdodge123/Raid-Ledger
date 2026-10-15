@@ -194,7 +194,7 @@ async function createInFreeSlot(
     throw new Error(`no 30-min slot free of other events inside any of ${windows.length} future windows`);
 }
 
-/** A viewport point where `card` is the topmost hit, or what covers it instead. */
+/** A point (relative to `card`) where the card is the topmost hit, or what covers it instead. */
 type CardHit = { x: number; y: number } | { covered: string };
 
 /**
@@ -206,6 +206,13 @@ type CardHit = { x: number; y: number } | { covered: string };
  * runs past the clipped viewport edge can own the exact centre while the rest
  * of the card stays clickable. Re-centring on every poll absorbs late layout
  * shifts (layer data landing after the scroll).
+ *
+ * The point is returned RELATIVE to the card, never as viewport coordinates:
+ * the re-centring scroll flips the phone's hide-on-scroll header, whose animated
+ * `top` (300ms) moves the sticky chrome AFTER this measures, so a raw
+ * `page.mouse.click(x, y)` landed on a stale point and never opened the event
+ * (main CI, mobile only). A hit on the card's own quick actions (Join / Leave /
+ * a link) is skipped too: those stop propagation and by design don't navigate.
  */
 async function topmostPointOn(card: Locator): Promise<CardHit> {
     return card.evaluate((el): CardHit => {
@@ -224,7 +231,8 @@ async function topmostPointOn(card: Locator): Promise<CardHit> {
         for (const y of ys) {
             for (const x of xs) {
                 const hit = document.elementFromPoint(x, y);
-                if (hit && el.contains(hit)) return { x, y };
+                const action = hit?.closest('button, a');
+                if (hit && el.contains(hit) && !(action && el.contains(action))) return { x: x - r.left, y: y - r.top };
                 if (!first) first = hit ? `${hit.tagName.toLowerCase()}[class="${String(hit.getAttribute('class') ?? '').slice(0, 80)}"]` : 'nothing';
             }
         }
@@ -287,6 +295,9 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
             await expect(card).toBeVisible({ timeout: 15_000 });
             // A real click on a point of the card that nothing (band, nav, tab bar,
             // other event) covers — the poll names the occluder if there is none.
+            // The locator click re-checks that point at click time: it waits for the
+            // card to be stable and fails with "<x> intercepts pointer events" if a
+            // band (or anything else) owns it, so the band is still proven harmless.
             const points: Array<{ x: number; y: number }> = [];
             await expect.poll(async () => {
                 const hit = await topmostPointOn(card);
@@ -295,9 +306,9 @@ test.describe.serial('Calendar — server-schedule layer (ROK-1774)', () => {
                 return 'topmost';
             }, { message: 'a visible point of our card is topmost (no band, nav or other event over it)', timeout: 15_000 })
                 .toBe('topmost');
-            const point = points.at(-1);
-            if (!point) throw new Error('topmost poll passed without a point');
-            await page.mouse.click(point.x, point.y);
+            const position = points.at(-1);
+            if (!position) throw new Error('topmost poll passed without a point');
+            await card.click({ position });
             await expect(page).toHaveURL(new RegExp(`/events/${id}(\\?|$)`));
         } finally {
             await apiDelete(token, `/events/${id}`);
