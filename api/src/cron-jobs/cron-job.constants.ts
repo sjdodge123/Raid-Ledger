@@ -280,7 +280,7 @@ export const CORE_JOB_METADATA: Record<string, CoreJobMetadata> = {
   },
   GameRoleReconcileService_reconcile: {
     description:
-      'Adds each linked game\'s Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC',
+      "Adds each linked game's Discord role to members who played it within the window and removes bot-granted roles from idle members — daily at 07:30 UTC",
     category: 'Maintenance',
   },
   EphemeralVoiceScheduler_scanCreateWindow: {
