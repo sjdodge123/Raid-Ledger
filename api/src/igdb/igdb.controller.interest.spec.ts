@@ -16,8 +16,8 @@
  *
  * Query chain analysis for addWantToPlay:
  *   1. Game exists: db.select({id}).from(games).where(eq(...)).limit(1) → terminates at .limit(1)
- *   2. Insert: db.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
- *   2b. Clear suppression: db.delete(suppressions).where(and(...)) → terminates at .where() (ROK-1796)
+ *   2. Clear suppression: db.delete(suppressions).where(and(...)) → terminates at .where() (ROK-1796, runs first)
+ *   2b. Insert: db.insert(...).values({...}).onConflictDoNothing() → terminates at .onConflictDoNothing()
  *   3. Count: db.select({count}).from(gameInterests).where(eq(...)) → terminates at .where() (no limit)
  *   4. getInterestedPlayers: ...innerJoin(...).where(...).orderBy(...).limit(8) → terminates at .limit(8)
  *

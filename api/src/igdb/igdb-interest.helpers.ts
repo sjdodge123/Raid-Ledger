@@ -191,11 +191,10 @@ export async function addInterest(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  await db
-    .insert(schema.gameInterests)
-    .values({ userId, gameId, source: 'manual' })
-    .onConflictDoNothing();
   // A manual re-heart lifts any earlier un-heart suppression (ROK-1796).
+  // Clear it BEFORE inserting the heart: against a concurrent removeInterest
+  // (delete heart → insert suppression) every interleaving then ends with the
+  // heart, the suppression, or both (heart wins) — never neither.
   await db
     .delete(schema.gameInterestSuppressions)
     .where(
@@ -204,6 +203,10 @@ export async function addInterest(
         eq(schema.gameInterestSuppressions.gameId, gameId),
       ),
     );
+  await db
+    .insert(schema.gameInterests)
+    .values({ userId, gameId, source: 'manual' })
+    .onConflictDoNothing();
 
   const [count, players] = await Promise.all([
     getInterestCount(db, gameId),

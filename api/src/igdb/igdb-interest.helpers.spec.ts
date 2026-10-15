@@ -14,6 +14,7 @@ import {
   getInterestedPlayers,
   batchCheckInterests,
   removeInterest,
+  addInterest,
   HEART_SOURCES,
 } from './igdb-interest.helpers';
 import { at } from '../common/testing/narrow';
@@ -545,5 +546,51 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
     expect(result['10']?.count).toBe(2);
     expect(result['20']?.wantToPlay).toBe(false);
     expect(result['20']?.count).toBe(0);
+  });
+});
+
+// ─── addInterest — clear suppression before inserting (ROK-1796) ────────────
+// Against a concurrent removeInterest (delete heart → insert suppression),
+// clearing first means every interleaving leaves the heart, the suppression,
+// or both (heart wins) — never neither (Codex round 3).
+describe('addInterest — suppression clear ordering', () => {
+  it('deletes the suppression before inserting the manual heart', async () => {
+    const db: Record<string, jest.Mock> = {};
+    const deleteMock = jest.fn().mockReturnThis();
+    const insertMock = jest.fn().mockReturnThis();
+    for (const m of [
+      'from',
+      'innerJoin',
+      'orderBy',
+      'groupBy',
+      'select',
+      'selectDistinctOn',
+      'values',
+    ]) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.delete = deleteMock;
+    db.insert = insertMock;
+    db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+    let whereCallCount = 0;
+    db.where = jest.fn().mockImplementation(() => {
+      whereCallCount++;
+      if (whereCallCount === 1) return Promise.resolve(undefined); // suppression delete
+      if (whereCallCount === 2) return Promise.resolve([{ count: 1 }]); // getInterestCount
+      return db; // getInterestedPlayers chain
+    });
+    db.limit = jest.fn().mockResolvedValue([]);
+
+    const result = await addInterest(db as never, 42, 7);
+
+    const deleteOrder = at(deleteMock.mock.invocationCallOrder, 0);
+    const insertOrder = at(insertMock.mock.invocationCallOrder, 0);
+    expect(deleteOrder).toBeLessThan(insertOrder);
+    expect(db.values).toHaveBeenCalledWith({
+      userId: 7,
+      gameId: 42,
+      source: 'manual',
+    });
+    expect(result.wantToPlay).toBe(true);
   });
 });
