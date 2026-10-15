@@ -343,6 +343,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `AvatarWithFallback.tsx`, `RoleIcon.tsx`, `journey-hero/`, `submit-bar/` | `components/shared/` | Avatars, role glyphs, the journey hero and the sticky submit bar. Every Discord-user avatar goes through `AvatarWithFallback` (`avatarUrl` or `user`+`gameId`, `sizeClassName`, optional `loading`, `alt` — `""` when decorative): a dead URL falls back to neutral-token initials, reset per URL (ROK-1714); never a raw `<img>` from a Discord hash. |
 | `ForeverPortraitFallback` / `ForeverPortraitTile` (`components/forever-portrait.tsx`) + selector (`lib/forever-portrait.ts::selectForeverPortrait`) | `plugins/wow/` (ROK-1761) | The WoW: Forever character portrait when a character has no render (Forever has no Blizzard render; LedgerLink exports no image). Core never imports it (ROK-1733 boundary): every character-avatar surface (character page header `lg` 80px, `CharacterCardCompact` `sm`/`md`, `PlayerCard`, profile `CharacterCard`, `SignupCharacterCard`, `SelectableCharacterCard` `md`) wraps its existing avatar in the game-agnostic seam `<CharacterPortraitFallback character size>` (`web/src/plugins/character-portrait.tsx`), which renders each ACTIVE identity provider's optional `PortraitFallback` — the WoW provider registers `ForeverPortraitFallback` there — and with no active provider renders the wrapped avatar unchanged; a non-Forever character or one with an `avatarUrl` renders the wrapped avatar unchanged. Forever is decided by `resolveWowVariant` (gameVariant/ruleset, then the cached game-registry slug only when a QueryClient is in context — the `CharacterVariantBadge` rule). The tile is token-only: a `rounded-full bg-overlay border border-edge` disc with the shared class icon (`class-icons.ts`) centred, plus a race-initial badge (`bg-panel border-edge-strong text-foreground`, type ≥ `text-[0.625rem]` at `sm`, scaling to `text-sm` at `lg`) bottom-right; `role="img"` + `aria-label`/`title` = the character name (like every other avatar's `alt`). Initials come from ANY race string, split on spaces and camelCase, max 2 ("Night Elf"/"NightElf" → "NE", "Skyborne" → "S") — no race allowlist, because the addon import stores unknown race names verbatim. An empty/whitespace/null race → class icon alone; an unknown/null class, or a class icon that fails to load → the neutral person glyph in `text-muted`. Never a broken image. ROK-1747: when the race AND gender are known and map to a race icon (`lib/race-icons.ts::getRaceIconUrl` — `wow.zamimg.com` 56px `race_<token>_<male|female>.jpg`; accepts the Armory display name or the addon token, maps Undead → `scourge`; the Blizzard render CDN lacks nightelf/bloodelf/scourge, so it is not used; an unmapped race such as Skyborne or a null gender is never guessed), the `race` kind shows that icon filling the disc with the class icon as the bottom-right badge (`data-portrait="race"`); a race image that fails to load degrades to the class tile above, and a class badge that fails is hidden. The race kind needs `gender` on the subject: surfaces fed a full `CharacterDto` (page header, profile `CharacterCard`, `SignupCharacterCard`, `SelectableCharacterCard`, `CharacterCardCompact` given `character`) get it; `PlayerCard` (roster assignment payload) and flat-props `CharacterCardCompact` (event attendees) carry no gender, so they show the class tile. The same tile (`size="lg"`) also fills the character page's equipment render slot (`slots/equipment-grid.tsx`, `data-testid="equipment-portrait"`, desktop centre column + phone above the slots) when `renderUrl` is null — `renderUrl` stands in for the avatar there, so a Blizzard render always wins, and a non-Forever character without one keeps the 2-column grid. Add a new character-avatar surface by wrapping it in `CharacterPortraitFallback`, never by importing the WoW component or re-deciding Forever locally. |
 | `LineupEmptyState.tsx` | `components/lineups/` | The empty-state shape (see §4.5) |
+| `GameNotifyBell` (`game-notify-bell.tsx`, `game-notify-bell-panel.tsx`), `MutedGamesList` (`muted-games-list.tsx`) | `pages/game-detail/`, `components/profile/` (ROK-1797) | Per-game notification mute: a bell that opens a popover (≥1024px) or `BottomSheet`, and the viewer's muted-games list with Unmute. Composed from `Button iconOnly`, `Switch`, `useAnchoredPopup`/`usePortalTarget`, `BottomSheet` — see §4.23 |
 | `player-filters.tsx`, `pages/games/coop-filter-controls.tsx` | filter bodies | Reference implementations of `FilterPanel` children |
 | `DurationPresetGroup` (`duration-preset-group.tsx`), `DurationSection` | `components/events/shared/` | Picking an event duration: a segmented `RadioGroup` 'Duration' of the presets you pass in (two lists exist: `shared/event-form-constants.ts` and `reschedule-utils.ts`) plus 'Custom'; value is minutes or `'custom'`, with an `error` slot (`role="alert"`). No asterisk — it always holds a value. `DurationSection` adds the named hr/min number fields for Custom (ROK-1649). |
 | `ForeverIdentityFields` (`components/forever-identity-fields.tsx`) + helpers (`lib/forever-identity.ts`) | `plugins/wow/` (moved out of core, ROK-1733) | WoW: Forever manual character identity (ROK-1721): Region `Select` (US/EU/KR/TW, US default; `regionLocked` disables it in edit mode with a hint), Ruleset segmented `RadioGroup` (Hardcore hidden), First + Second name `Field`/`Input` pairs, a form-level `role="alert"` for "Enter a first and second name" and a muted "Shown in-game as …" preview. Pairs are `grid-cols-1 sm:grid-cols-2`, so they stack one per row below 640px; `compact` uses `fieldSize="sm"` for the inline signup form. Core forms never import it: the WoW plugin registers it as `provider.Fields` via `PluginHandle.registerCharacterIdentity`, and every manual add surface renders the provider from `useCharacterIdentity(gameSlug)` (`plugins/character-identity.ts`) in place of its Name + Realm inputs — never build a per-form copy. The provider's `formatLocation` (`useCharacterLocationLabel()`) renders "PvP (US)" where a realm would show. |
@@ -1107,6 +1108,45 @@ tick z-order), `LayerWindowLabel.tsx`, `LayerMarkerTick.tsx`, `LayerGlyph.tsx` (
 `use-calendar-layer-data.ts`; ROK-1775 adds `calendar-layer-days.ts`, `LayerMonthDateHeader.tsx`,
 `schedule-layer-rows.ts`, `ScheduleLayerRow.tsx`, `use-zoned-layer-range.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
 (`calendar-layer-section.tsx`). Smoke: `scripts/smoke/calendar-server-layer.smoke.spec.ts`.
+
+---
+
+### 4.23 Per-game notification bell and notification-type anchors (ROK-1797)
+
+**DO** — the game page's bell (`pages/game-detail/game-notify-bell.tsx`, beside the heart) is composed only
+from inventory pieces; build the next "small settings for this one thing" the same way:
+
+- **Trigger** — `Button variant="secondary" iconOnly` (44px) with `BellIcon` (on) or `BellSlashIcon` (muted),
+  `aria-haspopup="dialog"` + `aria-expanded`, and a label that states the state ("Notifications for X: muted").
+  It *opens* a panel, so it is not `aria-pressed`.
+- **≥1024px (`DESKTOP_MQ`)** — a portalled `role="dialog"` popover placed by `usePortalTarget` +
+  `useAnchoredPopup` (outside press closes; Esc closes and returns focus to the bell), in the §4.11 popover
+  tokens `bg-panel border border-edge rounded-lg shadow-lg p-3`, `w-80`.
+- **<1024px (phones and the tablet project)** — the same body in a `BottomSheet` (§4.4). One body
+  (`GameNotifyPanelBody`), two shells, as §4.14.
+- **Body** — a `Switch` (checked = notifications **on**), one `text-sm text-muted` line, and a
+  `text-success` "All notification settings →" `Link`. Toggling writes optimistically and rolls back with
+  `toast.error` (§4.8).
+
+**Settings side.** `MutedGamesList` (`components/profile/muted-games-list.tsx`, `data-testid="muted-games-list"`)
+sits under the "Subscribed Games" row on `/profile/notifications`: a game `Link` + `Button variant="ghost"
+size="sm"` "Unmute" per item, a quiet `text-xs text-muted` line when empty. Every notification-type row carries
+`id="notif-<type>"`, `tabIndex={-1}` and `focus:ring-2 focus:ring-success/80` (the §4.11 ring token, `focus:` rather
+than `focus-visible:` because the row is only ever focused programmatically). `useNotifTypeHashFocus()` scrolls
+(`block: 'center'`) and focuses the row named by `location.hash` **after the preferences load** — the rows sit
+behind a skeleton, so a scroll on mount misses them; an unknown anchor does nothing. Link to a row as
+`/profile/notifications#notif-<type>`. The legacy `/profile/preferences/notifications` route redirects through
+`RedirectKeepingLocation`, which keeps `?search` and `#hash`; never use a bare `<Navigate to>` for a route a DM can link to.
+
+**Deep link.** `/games/:id?action=notifications` opens the panel once the interest query has loaded and strips
+`action` (with `notif`, in one functional `setSearchParams`).
+
+**DON'T** hand-roll a popover, a toggle or a second bell; don't add `aria-pressed` to a trigger that opens a
+panel; don't scroll to `#notif-<type>` on mount.
+
+**Light / Dark** — tokens only, so it flips with the family and the fifteen themes. Not mounted on
+`/dev/design-system`: it needs a query-backed game; verify it on a real game page in both families.
+Smoke: `scripts/smoke/game-notification-mute.smoke.spec.ts`.
 
 ---
 
