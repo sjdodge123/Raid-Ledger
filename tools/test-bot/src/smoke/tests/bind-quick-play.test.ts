@@ -14,20 +14,18 @@
 import { pollForCondition } from '../../helpers/polling.js';
 import { SmokeAssertionError } from '../assert.js';
 import { assertBindSucceeded, type BindReply } from '../bind-reply.js';
-import { deleteBinding } from '../fixtures.js';
-import type { ApiClient } from '../api.js';
+import {
+  QP_PURPOSE,
+  listBindings,
+  nonPoolFixtures,
+  quickPlayRows,
+  sweepQuickPlayBindings,
+  type BindingRow,
+} from '../quick-play-bindings.js';
 import type { DiscordChannel, SmokeTest, TestContext } from '../types.js';
 
-const QP_PURPOSE = 'quick-play-announcements';
 /** Discord channel type for a guild text channel. */
 const GUILD_TEXT = 0;
-
-interface BindingRow {
-  id: string;
-  channelId: string;
-  bindingPurpose: string;
-  gameId: number | null;
-}
 
 interface Picked {
   game: { id: number; name: string };
@@ -36,48 +34,30 @@ interface Picked {
 }
 
 /**
- * The SECOND game without a channel-pool binding (ROK-1766's smoke takes the
- * first, and Quick Play allows one channel per game), plus the LAST two text
- * channels that are neither the default nor a pool channel (ROK-1766 takes
- * the first two).
+ * The SECOND free game (ROK-1766's smoke takes the first, and Quick Play
+ * allows one channel per game), plus the LAST two candidate text channels
+ * (ROK-1766 takes the first two). A channel that already holds a non-QP
+ * binding for that game is never picked: the QP upsert would convert that row
+ * and the teardown sweep would then delete a binding this test never made.
  */
 async function pickChannels(ctx: TestContext): Promise<Picked> {
-  const pool = ctx.channelPool ?? [];
-  const poolGames = new Set(pool.map((s) => s.gameId));
-  const poolChannels = new Set(pool.map((s) => s.channelId));
-  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    '/admin/settings/games?limit=25',
+  const { freeGames, texts } = await nonPoolFixtures(ctx);
+  const game = freeGames[1] ?? freeGames[0];
+  const taken = new Set(
+    (await listBindings(ctx.api))
+      .filter((r) => r.gameId === game?.id && r.bindingPurpose !== QP_PURPOSE)
+      .map((r) => r.channelId),
   );
-  const free = res.data.filter((g) => !poolGames.has(g.id));
-  const game = free[1] ?? free[0];
-  const texts = ctx.textChannels.filter(
-    (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
-  );
-  const [second, first] = texts.slice(-2);
+  const usable = texts.filter((c) => !taken.has(c.id));
+  const [second, first] = usable.slice(-2);
   if (!game || !first || !second) {
     throw new SmokeAssertionError(
       `ROK-1768 needs a non-pool game and two non-default non-pool text ` +
-        `channels; got game=${String(game?.id)} texts=${String(texts.length)}`,
+        `channels with no binding for it; got game=${String(game?.id)} ` +
+        `usable=${String(usable.length)}/${String(texts.length)}`,
     );
   }
   return { game, first, second };
-}
-
-async function listBindings(api: ApiClient): Promise<BindingRow[]> {
-  const res = await api.get<{ data: BindingRow[] }>('/admin/discord/bindings');
-  return Array.isArray(res) ? (res as BindingRow[]) : (res.data ?? []);
-}
-
-async function quickPlayRows(api: ApiClient, gameId: number): Promise<BindingRow[]> {
-  const rows = await listBindings(api);
-  return rows.filter((r) => r.bindingPurpose === QP_PURPOSE && r.gameId === gameId);
-}
-
-/** Drop every QP(G) row — a crashed earlier run, or this run's teardown. */
-async function sweepQuickPlayBindings(api: ApiClient, gameId: number) {
-  for (const row of await quickPlayRows(api, gameId)) {
-    await deleteBinding(api, row.id);
-  }
 }
 
 /** `/bind channel:<ch> game:<game> purpose:Quick Play Announcements`. */
