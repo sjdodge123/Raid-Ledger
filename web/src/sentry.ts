@@ -51,6 +51,19 @@ export function initSentry(serverEnabled: boolean | undefined): boolean {
     return true;
 }
 
+/**
+ * ROK-1779: main.tsx boot glue — load /system/status, then decide. A failed
+ * load means no init (fail closed). Resolves to whether telemetry is active.
+ */
+export function bootTelemetry(
+    loadStatus: () => Promise<{ telemetryEnabled?: boolean | undefined }>,
+): Promise<boolean> {
+    return loadStatus().then(
+        (s) => initSentry(s.telemetryEnabled),
+        () => initSentry(undefined),
+    );
+}
+
 /** Whether `initSentry` has initialised the client. */
 export function isTelemetryActive(): boolean {
     return initialised;
