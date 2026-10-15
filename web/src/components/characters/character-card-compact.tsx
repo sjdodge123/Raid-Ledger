@@ -53,6 +53,8 @@ interface ResolvedChar {
     charId: string; charName: string; avatarUrl?: string | null | undefined; faction?: string | null | undefined;
     level?: number | null | undefined; race?: string | null | undefined; charClass?: string | null | undefined;
     spec?: string | null | undefined; role?: string | null | undefined; itemLevel?: number | null | undefined;
+    /** ROK-1747: DTO-only (flat-props callers carry no gender) — feeds the plugin's race portrait. */
+    gender: string | null;
     isMain?: boolean | undefined; gameVariant: string | null; ruleset: string | null; gameId: number | null;
     portraitGameId: number | null; portraitGameVariant: string | null; portraitRuleset: string | null;
     professions?: CharacterProfessionsDto | null | undefined;
@@ -66,7 +68,7 @@ function resolveCharProps(props: CharacterCardCompactProps): ResolvedChar {
         level: c?.level ?? props.level, race: c?.race ?? props.race,
         charClass: c?.class ?? props.className, spec: c?.spec ?? props.spec,
         role: c?.effectiveRole ?? props.role, itemLevel: c?.itemLevel ?? props.itemLevel,
-        isMain: c?.isMain ?? props.isMain,
+        isMain: c?.isMain ?? props.isMain, gender: c?.gender ?? null,
         gameVariant: c?.gameVariant ?? null, ruleset: c?.ruleset ?? null, gameId: c?.gameId ?? null,
         portraitGameId: c?.gameId ?? props.portraitGameId ?? null,
         portraitGameVariant: c?.gameVariant ?? props.portraitGameVariant ?? null,
@@ -128,7 +130,7 @@ export function CharacterCardCompact(props: CharacterCardCompactProps) {
     return (
         <Link to={`/characters/${c.charId}`}
             className={`bg-panel border border-edge rounded-lg ${isSm ? 'p-3' : 'p-4'} flex items-center gap-3 min-w-0 hover:opacity-80 transition-opacity`}>
-            <CharacterPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, class: c.charClass, gameVariant: c.portraitGameVariant, ruleset: c.portraitRuleset, gameId: c.portraitGameId }}>
+            <CharacterPortraitFallback size={isSm ? 'sm' : 'md'} character={{ name: c.charName, avatarUrl: c.avatarUrl, race: c.race, gender: c.gender, class: c.charClass, gameVariant: c.portraitGameVariant, ruleset: c.portraitRuleset, gameId: c.portraitGameId }}>
                 <CharacterAvatar avatarUrl={c.avatarUrl} charName={c.charName} size={isSm ? 'w-8 h-8' : 'w-10 h-10'} />
             </CharacterPortraitFallback>
             <div className="min-w-0 overflow-hidden">
