@@ -5,6 +5,7 @@
  * delete / reorder, cross-guild writes denied, and `gmPostHeadline` on /mine.
  */
 import * as bcrypt from 'bcrypt';
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
@@ -142,6 +143,35 @@ beforeAll(async () => {
   otherAddonId = other.id;
 });
 
+/**
+ * CI runs integration specs in randomized order, so every test starts from a
+ * blank profile and an empty addon list for the main guild. The other guild's
+ * single addon is never written by any test (all writes against it 403/404).
+ */
+beforeEach(async () => {
+  await testApp.db
+    .delete(schema.guildProfiles)
+    .where(eq(schema.guildProfiles.guildId, guildId));
+  await testApp.db
+    .delete(schema.guildRecommendedAddons)
+    .where(eq(schema.guildRecommendedAddons.guildId, guildId));
+});
+
+/** Two addons via the API: CurseForge (required, editor) then Wago (admin). */
+async function seedPair(): Promise<void> {
+  const first = await call('post', `/${guildId}/addons`, 'deleg', {
+    url: CF,
+    requirement: 'required',
+  });
+  expect(first.status).toBe(201);
+  firstId = first.body.id as number;
+  const second = await call('post', `/${guildId}/addons`, 'admin', {
+    url: WAGO,
+  });
+  expect(second.status).toBe(201);
+  secondId = second.body.id as number;
+}
+
 describe('permission matrix', () => {
   it.each([
     ['admin', 200],
@@ -196,6 +226,10 @@ describe('profile', () => {
   });
 
   it('keeps the stamp when the post text is unchanged', async () => {
+    const seeded = await call('patch', `/${guildId}/profile`, 'deleg', {
+      gmPost: 'Raid Tuesday 8pm\nBring flasks',
+    });
+    expect(seeded.status).toBe(200);
     const before = await call('get', `/${guildId}/profile`, 'plain');
     const res = await call('patch', `/${guildId}/profile`, 'admin', {
       gmPost: 'Raid Tuesday 8pm\nBring flasks',
@@ -248,6 +282,7 @@ describe('addons — write', () => {
   });
 
   it('409 on a duplicate link; 400 on a malformed known host', async () => {
+    await seedPair();
     const dup = await call('post', `/${guildId}/addons`, 'admin', {
       url: `${CF}#files`,
     });
@@ -259,6 +294,7 @@ describe('addons — write', () => {
   });
 
   it('updates fields; 409 when re-pointed at an existing link', async () => {
+    await seedPair();
     const res = await call('patch', `/${guildId}/addons/${firstId}`, 'deleg', {
       note: 'Damage meter',
       flavor: 'retail',
@@ -275,8 +311,11 @@ describe('addons — write', () => {
     );
     expect(clash.status).toBe(409);
   });
+});
 
+describe('addons — order', () => {
   it('reorders the full set and rejects a mismatched one', async () => {
+    await seedPair();
     const bad = await call('put', `/${guildId}/addons/order`, 'admin', {
       ids: [firstId, otherAddonId],
     });
@@ -292,6 +331,7 @@ describe('addons — write', () => {
 
 describe('addons — list, scope, delete', () => {
   it('lists pinned addons before the guild list', async () => {
+    await seedPair();
     const res = await call('get', `/${guildId}/addons`, 'plain');
     expect(res.body.pinned[0]).toMatchObject({ requirement: 'required' });
     expect(res.body.addons).toHaveLength(2);
@@ -308,6 +348,7 @@ describe('addons — list, scope, delete', () => {
   });
 
   it('deletes within the guild', async () => {
+    await seedPair();
     const path = `/${guildId}/addons/${firstId}`;
     expect((await call('delete', path, 'deleg')).status).toBe(204);
     expect((await call('delete', path, 'deleg')).status).toBe(404);
