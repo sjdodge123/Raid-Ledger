@@ -3,7 +3,7 @@
  * Verifies it renders Appearance, Timezone, and AutoHeartToggle.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { PreferencesPanel } from './preferences-panel';
 
@@ -77,7 +77,14 @@ describe('PreferencesPanel (ROK-548)', () => {
 
     it('renders auto-heart toggle switch', () => {
         renderWithQueryClient(<PreferencesPanel />);
-        expect(screen.getByRole('switch')).toBeInTheDocument();
+        const card = screen.getByRole('heading', { name: /auto-heart games/i }).closest('.rounded-lg');
+        if (!(card instanceof HTMLElement)) throw new Error('auto-heart card not found');
+        expect(within(card).getByRole('switch')).toBeInTheDocument();
+    });
+
+    it('renders the auto game roles switch beside it (ROK-1767)', () => {
+        renderWithQueryClient(<PreferencesPanel />);
+        expect(screen.getByRole('switch', { name: 'Auto game roles' })).toBeInTheDocument();
     });
 });
 
