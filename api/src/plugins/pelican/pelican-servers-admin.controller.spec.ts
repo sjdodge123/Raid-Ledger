@@ -98,7 +98,11 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
   });
 
   it('flags a row with missing_since as missing', () => {
-    const dto = toAdminServerRowDto(makeRow({ missingSince: FRESH }), NOW, false);
+    const dto = toAdminServerRowDto(
+      makeRow({ missingSince: FRESH }),
+      NOW,
+      false,
+    );
     expect(dto.missing).toBe(true);
   });
 });
