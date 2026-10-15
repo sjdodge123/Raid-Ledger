@@ -57,7 +57,9 @@ describe('PelicanPluginContent — render states', () => {
         expect(urlInput().value).toBe('');
         expect(keyInput().value).toBe('');
         expect(testButton()).toBeNull();
-        expect(screen.getByText(/Prefilled from the community default\./)).toBeInTheDocument();
+        // ROK-1795: the plugin has no timezone setting any more.
+        expect(screen.queryByText(/timezone/i)).toBeNull();
+        expect(screen.queryByRole('combobox')).toBeNull();
     });
 
     it('configured: Online, Saved chip, URL prefilled, key input empty, Test visible', async () => {

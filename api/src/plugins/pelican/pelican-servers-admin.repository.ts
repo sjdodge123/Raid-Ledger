@@ -17,10 +17,11 @@ type Db = PostgresJsDatabase<typeof schema>;
 /**
  * A `pelican_servers` row plus the mapped game's name (ROK-1094). The panel
  * uuid and identifier are never selected, so they cannot leak from here.
+ * `timezone` is unread since Pelican crons are always UTC (ROK-1795).
  */
 export type PelicanAdminServerRow = Omit<
   PelicanServerRow,
-  'panelUuid' | 'identifier'
+  'panelUuid' | 'identifier' | 'timezone'
 > & { gameName: string | null };
 
 /** Outcome of an admin mapping edit; never a caught FK violation. */
@@ -29,20 +30,14 @@ export type PelicanMappingUpdateResult =
   | { kind: 'not_found' }
   | { kind: 'unknown_game' };
 
-type MappingSet = Pick<
-  NewPelicanServer,
-  'gameId' | 'showOnCalendar' | 'timezone'
->;
+type MappingSet = Pick<NewPelicanServer, 'gameId' | 'showOnCalendar'>;
 
-/** Only the keys the admin sent; `timezone: ''` stores NULL (inherit). */
+/** Only the keys the admin sent. */
 export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
   return {
     ...(patch.gameId !== undefined ? { gameId: patch.gameId } : {}),
     ...(patch.showOnCalendar !== undefined
       ? { showOnCalendar: patch.showOnCalendar }
-      : {}),
-    ...(patch.timezone !== undefined
-      ? { timezone: patch.timezone === '' ? null : patch.timezone }
       : {}),
   };
 }
@@ -114,7 +109,6 @@ function getServerColumns() {
     name: pelicanServers.name,
     gameId: pelicanServers.gameId,
     showOnCalendar: pelicanServers.showOnCalendar,
-    timezone: pelicanServers.timezone,
     currentState: pelicanServers.currentState,
     isSuspended: pelicanServers.isSuspended,
     statusCheckedAt: pelicanServers.statusCheckedAt,

@@ -3,9 +3,10 @@
  * Creates game→channel bindings so embed tests can distribute
  * across multiple Discord channels instead of sharing one.
  */
-import type { ApiClient } from './api.js';
-import type { DiscordChannel, ChannelSlot } from './types.js';
-import { createBinding, deleteBinding } from './fixtures.js';
+import type { ApiClient } from "./api.js";
+import type { DiscordChannel, ChannelSlot } from "./types.js";
+import { createBinding, deleteBinding } from "./fixtures.js";
+import { poolCandidateChannels } from "./join-post-channel.js";
 
 interface GameEntry {
   id: number;
@@ -15,7 +16,7 @@ interface GameEntry {
 /** Fetch all games from admin API for binding creation. */
 async function fetchGames(api: ApiClient): Promise<GameEntry[]> {
   try {
-    const res = await api.get<{ data: GameEntry[] }>('/admin/games');
+    const res = await api.get<{ data: GameEntry[] }>("/admin/games");
     return Array.isArray(res.data) ? res.data : [];
   } catch {
     return [];
@@ -33,11 +34,11 @@ export async function setupChannelPool(
   defaultChannelId: string,
 ): Promise<ChannelSlot[]> {
   const poolGames = await fetchGames(api);
-  // Use non-default channels for the pool
-  const poolChannels = textChannels.filter((ch) => ch.id !== defaultChannelId);
+  // Non-default channels, minus the one reserved for the join post (ROK-1740)
+  const poolChannels = poolCandidateChannels(textChannels, defaultChannelId);
 
   if (poolGames.length === 0 || poolChannels.length === 0) {
-    console.log('  Channel pool: not enough games or channels, skipping');
+    console.log("  Channel pool: not enough games or channels, skipping");
     return [];
   }
 
@@ -54,8 +55,8 @@ export async function setupChannelPool(
     try {
       const bindingId = await createBinding(api, {
         channelId: channel.id,
-        channelType: 'text',
-        purpose: 'notification',
+        channelType: "text",
+        purpose: "notification",
         gameId: game.id,
       });
       pool.push({
@@ -81,7 +82,10 @@ export async function teardownChannelPool(
     try {
       await deleteBinding(api, slot.bindingId);
     } catch (err) {
-      console.warn(`  Channel pool: failed to delete binding ${slot.bindingId}:`, err);
+      console.warn(
+        `  Channel pool: failed to delete binding ${slot.bindingId}:`,
+        err,
+      );
     }
   }
   if (pool.length > 0) {
