@@ -2,9 +2,11 @@
  * ROK-1743: "Saved instances" on the WoW: Forever character page — the raid
  * and dungeon lockouts from the addon snapshot (name · difficulty · killed/
  * total · "Resets in …"). Rows whose reset has passed are dropped, and the
- * card renders nothing when none remain (no empty state).
+ * card renders nothing when none remain (no empty state). One shared
+ * `useNowTick` clock keeps the countdowns moving while the page is open.
  */
 import type { CharacterLockoutDto, CharacterLockoutsDto } from '@raid-ledger/contract';
+import { useNowTick } from '../../../hooks/use-now-tick';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { formatResetIn } from '../lib/lockout-reset';
 
@@ -34,9 +36,10 @@ function LockoutRowItem({ lockout, resetIn }: LockoutRow) {
 
 /** The Saved instances card; chrome matches the Quests and Talents sections. */
 export function CharacterLockoutsSection({ lockouts }: { lockouts: CharacterLockoutsDto | undefined }) {
-    if (!lockouts) return null;
-    const rows = activeRows(lockouts.instances, Date.now());
-    if (rows.length === 0) return null;
+    const instances = lockouts?.instances ?? [];
+    const nowMs = useNowTick(instances.map((lockout) => lockout.resetAt));
+    const rows = activeRows(instances, nowMs);
+    if (!lockouts || rows.length === 0) return null;
     return (
         <div className="bg-panel border border-edge rounded-lg p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">Saved instances</h2>

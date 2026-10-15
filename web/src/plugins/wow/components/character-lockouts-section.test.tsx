@@ -3,7 +3,7 @@
  * difficulty, and the hidden states (absent, all expired).
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import type { CharacterLockoutDto, CharacterLockoutsDto } from '@raid-ledger/contract';
 import { CharacterLockoutsSection } from './character-lockouts-section';
 
@@ -56,6 +56,15 @@ describe('CharacterLockoutsSection', () => {
         const { container } = render(<CharacterLockoutsSection lockouts={lockouts([
             lockout({ name: 'Expired Keep', instanceId: 1, resetAt: inHours(-1) }), lockout(),
         ])} />);
+        expect(rowsIn(container).map((r) => r.firstChild?.textContent)).toEqual(['Molten Core']);
+    });
+
+    it('drops a row once its reset passes while the page stays open', () => {
+        const { container } = render(<CharacterLockoutsSection lockouts={lockouts([
+            lockout({ name: 'Zul\'Gurub', instanceId: 309, resetAt: inHours(0.1) }), lockout(),
+        ])} />);
+        expect(rowsIn(container).map((r) => r.firstChild?.textContent)).toEqual(['Zul\'Gurub', 'Molten Core']);
+        act(() => { vi.advanceTimersByTime(7 * 60_000); });
         expect(rowsIn(container).map((r) => r.firstChild?.textContent)).toEqual(['Molten Core']);
     });
 
