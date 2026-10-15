@@ -36,9 +36,11 @@ const spies = {
   load: jest.spyOn(helpers, 'loadEnabledGameRoles'),
   candidate: jest.spyOn(helpers, 'loadGrantCandidate'),
   upsert: jest.spyOn(helpers, 'upsertGrant'),
+  deleteGrant: jest.spyOn(helpers, 'deleteGrant'),
   audit: jest.spyOn(helpers, 'writeAudit'),
   holds: jest.spyOn(discord, 'memberHoldsRole'),
   add: jest.spyOn(discord, 'addMemberRole'),
+  remove: jest.spyOn(discord, 'removeMemberRole'),
 };
 
 beforeEach(() => {
@@ -46,8 +48,13 @@ beforeEach(() => {
   spies.load.mockResolvedValue([
     { id: 3, gameId: 7, roleId: ROLE } as helpers.GameRoleRow,
   ] as never);
-  spies.candidate.mockResolvedValue({ discordId: DISCORD_ID, granted: true });
+  spies.candidate.mockResolvedValue({
+    discordId: DISCORD_ID,
+    grantedTo: DISCORD_ID,
+  });
   spies.upsert.mockResolvedValue(undefined);
+  spies.deleteGrant.mockResolvedValue(undefined);
+  spies.remove.mockResolvedValue(true);
   spies.audit.mockResolvedValue(undefined);
   spies.holds.mockResolvedValue(false);
   spies.add.mockResolvedValue(true);
@@ -75,5 +82,50 @@ describe('GameRoleReconcileService.grantNow with an existing grant', () => {
     const granted = await service(guildWith(null)).grantNow(1, 7);
     expect(granted).toBe(false);
     expect(spies.holds).not.toHaveBeenCalled();
+  });
+});
+
+describe('GameRoleReconcileService.grantNow after a Discord relink', () => {
+  const OLD_ID = '8800';
+  beforeEach(() =>
+    spies.candidate.mockResolvedValue({
+      discordId: DISCORD_ID,
+      grantedTo: OLD_ID,
+    }),
+  );
+
+  it('takes the role off the OLD account, audits it, then grants the new one', async () => {
+    // The new account's cached member already "holds" a role of that id in
+    // the cache check — the relink must not be suppressed by it.
+    const granted = await service(guildWith([ROLE])).grantNow(1, 7);
+    expect({
+      granted,
+      removed: spies.remove.mock.calls.map((c) => c[1]),
+      added: spies.add.mock.calls.map((c) => c[1]),
+      upserted: spies.upsert.mock.calls.map((c) => c[3]),
+      audits: spies.audit.mock.calls.map((c) => [
+        c[1].action,
+        c[1].discordUserId,
+        c[1].reason.startsWith('played') ? 'played' : c[1].reason,
+      ]),
+    }).toEqual({
+      granted: true,
+      removed: [OLD_ID],
+      added: [DISCORD_ID],
+      upserted: [DISCORD_ID],
+      audits: [
+        ['role_removed', OLD_ID, 'discord account relinked'],
+        ['role_added', DISCORD_ID, 'played'],
+      ],
+    });
+  });
+
+  it('a failed removal on the old account is best-effort: the new grant still lands', async () => {
+    spies.remove.mockRejectedValue(new Error('Missing Permissions'));
+    const granted = await service(guildWith(null)).grantNow(1, 7);
+    expect({ granted, added: spies.add.mock.calls.length }).toEqual({
+      granted: true,
+      added: 1,
+    });
   });
 });

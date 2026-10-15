@@ -155,7 +155,7 @@ export async function stampReconciled(
 type CandidateRow = {
   discord_id: string | null;
   eligible: boolean;
-  granted: boolean;
+  granted_to: string | null;
 } & Record<string, unknown>;
 
 /** The near-real-time add's gate: snowflake, active, not opted out, no grant yet. */
@@ -163,7 +163,7 @@ export async function loadGrantCandidate(
   db: GameRoleDb,
   userId: number,
   gameRoleId: number,
-): Promise<{ discordId: string; granted: boolean } | null> {
+): Promise<{ discordId: string; grantedTo: string | null } | null> {
   const rows = await db.execute<CandidateRow>(sql`
     SELECT u.discord_id,
       (u.deactivated_at IS NULL AND u.discord_id NOT LIKE 'local:%'
@@ -171,10 +171,10 @@ export async function loadGrantCandidate(
         AND NOT EXISTS (SELECT 1 FROM user_preferences up WHERE up.user_id = u.id
           AND up.key = ${GAME_ROLES_OPT_OUT_PREF_KEY}
           AND up.value = 'true'::jsonb)) AS eligible,
-      EXISTS (SELECT 1 FROM discord_game_role_grants g
-        WHERE g.game_role_id = ${gameRoleId} AND g.user_id = u.id) AS granted
+      (SELECT g.discord_user_id FROM discord_game_role_grants g
+        WHERE g.game_role_id = ${gameRoleId} AND g.user_id = u.id) AS granted_to
     FROM users u WHERE u.id = ${userId} AND u.discord_id IS NOT NULL`);
   const [row] = [...rows];
   if (!row || !row.eligible || !row.discord_id) return null;
-  return { discordId: row.discord_id, granted: row.granted };
+  return { discordId: row.discord_id, grantedTo: row.granted_to ?? null };
 }

@@ -243,10 +243,16 @@ export class GameRoleReconcileService {
     if (!row) return false;
     const who = await loadGrantCandidate(this.db, userId, row.id);
     if (!who) return false;
-    // A grant row only suppresses the add while the member still holds the
-    // role: one removed by hand is restored (cache read, no REST call).
-    if (who.granted && !cachedMemberLacksRole(guild, who.discordId, row.roleId))
+    if (who.grantedTo !== null && who.grantedTo !== who.discordId) {
+      await this.releaseRelinked(guild, row, userId, who.grantedTo);
+    } else if (
+      // A grant row only suppresses the add while the member still holds the
+      // role: one removed by hand is restored (cache read, no REST call).
+      who.grantedTo !== null &&
+      !cachedMemberLacksRole(guild, who.discordId, row.roleId)
+    ) {
       return false;
+    }
     const holds = await memberHoldsRole(guild, who.discordId, row.roleId);
     if (holds !== false) return false;
     const reason = `played ${ymd(new Date())}`;
@@ -261,6 +267,41 @@ export class GameRoleReconcileService {
       ...change,
     });
     return true;
+  }
+
+  /**
+   * The member relinked Discord since the grant: the role sits on the OLD
+   * account, so take it off there (and drop the grant) before granting the
+   * new one. Best-effort — a failure is logged and the new grant proceeds.
+   */
+  private async releaseRelinked(
+    guild: Guild,
+    row: GameRoleRow,
+    userId: number,
+    oldDiscordId: string,
+  ): Promise<void> {
+    const reason = 'discord account relinked';
+    try {
+      const ok = await removeMemberRole(
+        guild,
+        oldDiscordId,
+        row.roleId,
+        reason,
+      );
+      await deleteGrant(this.db, row.id, userId);
+      if (!ok) return;
+      await writeAudit(this.db, {
+        gameRoleId: row.id,
+        action: 'role_removed',
+        userId,
+        discordUserId: oldDiscordId,
+        reason,
+      });
+    } catch (err) {
+      this.logger.warn(
+        `[ROK-1767] relink cleanup for user ${userId} (old ${oldDiscordId}) failed: ${err}`,
+      );
+    }
   }
 
   /**
