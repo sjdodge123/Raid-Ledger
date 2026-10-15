@@ -4,6 +4,7 @@ import { useParams, useNavigate, useLocation, useSearchParams } from 'react-rout
 import { useEventDetail } from '../hooks/use-events';
 import { useAuth, isOperatorOrAdmin, type User } from '../hooks/use-auth';
 import { EventBanner } from '../components/events/EventBanner';
+import { GameServerStatusChip } from '../components/events/GameServerStatusChip';
 import { isMMOSlotConfig } from '../utils/game-utils';
 import type { EventResponseDto, VoiceChannelResponseDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto, ViewerRosterWithAssignments } from '../lib/api/viewer-event-schemas';
@@ -194,6 +195,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
                 canManageRoster={derived.canManageRoster} canJoinSlot={!!derived.canJoinSlot} isMMOGame={derived.isMMOGame} handlers={handlers} user={page.user} />
             <EventDetailFallbackSignup rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} isSignedUp={derived.isSignedUp}
                 isCancelled={derived.isCancelled} onSignup={handlers.handleSignup} isPending={handlers.signup.isPending} />
+            {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
             <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
