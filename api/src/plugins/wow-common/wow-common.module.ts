@@ -7,6 +7,7 @@ import { GuildEditorGuard } from './guilds/guild-editor.guard';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildEditorsService } from './guilds/guild-editors.service';
+import { GuildEventTagger } from './guilds/guild-event-tagger';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
@@ -30,7 +31,10 @@ import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { EXTENSION_POINTS } from '../plugin-host/extension-points';
+import {
+  EVENT_GUILD_TAGGER_KEY,
+  EXTENSION_POINTS,
+} from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import { AddonImportController } from './addon-import/addon-import.controller';
@@ -90,6 +94,7 @@ import { CharacterQuestsService } from './character-quests.service';
     GuildEditorGuard,
     GuildPageService,
     GuildEditorsService,
+    GuildEventTagger,
   ],
   exports: [
     BlizzardService,
@@ -116,6 +121,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly dungeonQuestsService: DungeonQuestsService,
     private readonly bossEncountersService: BossEncountersService,
     private readonly identityProvider: WowForeverIdentityProvider,
+    private readonly guildEventTagger: GuildEventTagger,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -252,6 +258,14 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       EXTENSION_POINTS.CRON_REGISTRAR,
       WOW_COMMON_MANIFEST.id,
       this.cronRegistrar,
+    );
+
+    // ROK-1787: guild editors tag events to their guild (core resolves it).
+    this.pluginRegistry.registerAdapter(
+      EXTENSION_POINTS.EVENT_GUILD_TAGGER,
+      EVENT_GUILD_TAGGER_KEY,
+      this.guildEventTagger,
+      { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
   }
 }

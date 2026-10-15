@@ -21,6 +21,7 @@ import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
+import { EventGuildTagService } from './event-guild-tag.service';
 import { SignupsService } from './signups.service';
 import { ShareService } from './share.service';
 import {
@@ -68,6 +69,7 @@ export class EventsController {
     private readonly shareService: ShareService,
     private readonly activityLog: ActivityLogService,
     private readonly lfgEventConvert: LfgEventConvertService,
+    private readonly guildTag: EventGuildTagService,
   ) {}
 
   @Post()
@@ -78,6 +80,7 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = CreateEventSchema.parse(body);
+      await this.guildTag.assertCreate(req.user, dto);
       const deps = {
         eventsService: this.eventsService,
         signupsService: this.signupsService,
@@ -147,7 +150,8 @@ export class EventsController {
   ): Promise<EventResponseDto> {
     try {
       const dto = UpdateEventSchema.parse(body);
-      return this.eventsService.update(
+      await this.guildTag.assertUpdate(req.user, id, dto);
+      return await this.eventsService.update(
         id,
         req.user.id,
         isOperatorOrAdmin(req.user.role),
@@ -247,6 +251,7 @@ export class EventsController {
   ): Promise<{ message: string }> {
     try {
       const dto = UpdateSeriesSchema.parse(body);
+      await this.guildTag.assertUpdate(req.user, id, dto.data);
       await this.seriesService.update(
         id,
         req.user.id,

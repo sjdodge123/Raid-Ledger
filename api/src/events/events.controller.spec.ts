@@ -10,6 +10,7 @@ import { AttendanceService } from './attendance.service';
 import { PugsService } from './pugs.service';
 import { ShareService } from './share.service';
 import { EventSeriesService } from './event-series.service';
+import { EventGuildTagService } from './event-guild-tag.service';
 import { AdHocEventService } from '../discord-bot/services/ad-hoc-event.service';
 import { VoiceAttendanceService } from '../discord-bot/services/voice-attendance.service';
 import { AnalyticsService } from './analytics.service';
@@ -105,6 +106,13 @@ describe('EventsController', () => {
         },
       },
       { provide: SignupsService, useValue: mockSignupsService },
+      {
+        provide: EventGuildTagService,
+        useValue: {
+          assertCreate: jest.fn().mockResolvedValue(undefined),
+          assertUpdate: jest.fn().mockResolvedValue(undefined),
+        },
+      },
       { provide: AttendanceService, useValue: createMockAttendanceService() },
       { provide: PugsService, useValue: mockPugsService },
       {
