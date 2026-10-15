@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { EventResponseDto } from '@raid-ledger/contract';
-import { getInitialState } from './create-event-form.utils';
+import { buildSubmitDto, getInitialState, guildIdForSubmit } from './create-event-form.utils';
 
 const TZ = 'UTC';
 
@@ -96,5 +96,34 @@ describe('getInitialState — copy-from-event prefill', () => {
         expect(state.title).toBe('');
         expect(state.durationMinutes).toBe(120);
         expect(state.slotType).toBe('generic');
+    });
+});
+
+describe('guildId (ROK-1787)', () => {
+    it('defaults to null on create and reads the tag in edit and copy modes', () => {
+        expect(getInitialState(undefined, TZ).guildId).toBeNull();
+        const tagged = buildEndedEvent({ guildId: 9 });
+        expect(getInitialState(tagged, TZ).guildId, 'edit mode must show the existing tag').toBe(9);
+        expect(getInitialState(undefined, TZ, null, tagged).guildId, 'a follow-up keeps the guild').toBe(9);
+        expect(getInitialState(buildEndedEvent(), TZ).guildId, 'an untagged event (no field) reads as null').toBeNull();
+    });
+
+    it('create sends guildId only when a guild is picked', () => {
+        expect(guildIdForSubmit(null, false, null)).toEqual({});
+        expect(guildIdForSubmit(9, false, null)).toEqual({ guildId: 9 });
+    });
+
+    it('edit sends guildId only when it changed — null clears the tag', () => {
+        expect(guildIdForSubmit(9, true, 9), 'an unchanged tag is omitted so a non-editor can still save').toEqual({});
+        expect(guildIdForSubmit(null, true, 9)).toEqual({ guildId: null });
+        expect(guildIdForSubmit(4, true, 9)).toEqual({ guildId: 4 });
+        expect(guildIdForSubmit(4, true, null)).toEqual({ guildId: 4 });
+    });
+
+    it('buildSubmitDto carries the guild into the create DTO', () => {
+        const form = { ...getInitialState(undefined, TZ), title: 'MC', startDate: '2030-01-08', startTime: '20:00', guildId: 9 };
+        expect(buildSubmitDto(form, TZ, 42, false)).toMatchObject({ gameId: 42, guildId: 9 });
+        expect(buildSubmitDto({ ...form, guildId: null }, TZ, 42, false)).not.toHaveProperty('guildId');
+        expect(buildSubmitDto({ ...form, guildId: null }, TZ, 42, true, null, 9)).toMatchObject({ guildId: null });
     });
 });

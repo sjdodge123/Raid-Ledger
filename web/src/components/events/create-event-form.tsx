@@ -180,6 +180,14 @@ export function CreateEventForm({ event: editEvent, seriesScope, initialGame, in
     );
 }
 
+/** ROK-1787: plugin-owned Guild picker (WoW guild editors only). */
+function GuildFieldSlot({ gameId, guildId, setForm }: {
+    gameId: number | null; guildId: number | null; setForm: React.Dispatch<React.SetStateAction<FormState>>;
+}) {
+    const onGuildChange = useCallback((next: number | null) => setForm((prev) => ({ ...prev, guildId: next })), [setForm]);
+    return <PluginSlot name="event-create:guild-field" context={{ gameId, guildId, onGuildChange }} />;
+}
+
 function GameContentSection({ form, setForm, errors, setErrors, registryGameId, isEditMode, interestCount, interestLoading }: {
     form: FormState; setForm: React.Dispatch<React.SetStateAction<FormState>>;
     registryGameId: number | null | undefined;
@@ -188,7 +196,6 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
     interestCount: number; interestLoading: boolean;
 }) {
     const onEventTypeIdChange = useCallback((id: number | null) => setForm((prev) => ({ ...prev, eventTypeId: id })), [setForm]);
-    const onGuildChange = useCallback((guildId: number | null) => setForm((prev) => ({ ...prev, guildId })), [setForm]);
 
     return (
         <FormSection title="Game & Content">
@@ -214,7 +221,7 @@ function GameContentSection({ form, setForm, errors, setErrors, registryGameId, 
                 interestCount={interestCount} interestLoading={interestLoading}
                 slotBetween={<><div className="border-t border-edge-subtle -mx-0" /><h3 className="text-sm font-semibold text-muted uppercase tracking-wider">Details</h3></>}
             />
-            <PluginSlot name="event-create:guild-field" context={{ gameId: registryGameId ?? null, guildId: form.guildId, onGuildChange }} />
+            <GuildFieldSlot gameId={registryGameId ?? null} guildId={form.guildId} setForm={setForm} />
         </FormSection>
     );
 }
