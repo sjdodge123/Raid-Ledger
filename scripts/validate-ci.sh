@@ -212,6 +212,9 @@ NC='\033[0m' # No Color
 # Result tracking
 declare -a CHECK_NAMES=()
 declare -a CHECK_RESULTS=()
+# ROK-1793 S1: optional per-row note (a skip reason), printed after the status
+# as `SKIPPED — <note>` — the row format gate-summary.ts already documents.
+declare -a CHECK_NOTES=()
 FAILURES=0
 
 # Scope flags
@@ -278,6 +281,11 @@ static_mode=false
 scope_mode="all"
 detected_workspace="all"
 effective_scope="all"
+# fleet_test_scope (ROK-1793 S1): which workspace's unit + integration suites a
+# --fleet gate runs — api | web | all. detected_workspace, widened to "all" when
+# the diff touches scripts/** (the gate itself). Only --fleet reads it; --full
+# and --static always run (or defer) everything.
+fleet_test_scope="all"
 
 # ---------------------------------------------------------------------------
 # Result tracking helpers
@@ -286,6 +294,7 @@ effective_scope="all"
 record_result() {
   CHECK_NAMES+=("$1")
   CHECK_RESULTS+=("$2")
+  CHECK_NOTES+=("${3:-}")
   if [ "$2" = "FAIL" ]; then
     FAILURES=$((FAILURES + 1))
   fi
@@ -372,10 +381,26 @@ perf_now_ms() {
 # exit code a tool happens to pick.
 # ---------------------------------------------------------------------------
 STEP_SKIPPED=0
+# Optional reason for the skip, shown on the step's summary row.
+STEP_SKIP_REASON=""
 
 # Mark the running step as SKIPPED. Call it, then `return 0`.
 skip_step() {
   STEP_SKIPPED=1
+}
+
+# ROK-1793 S1 — does this --fleet gate skip <workspace>'s (api|web) test suites?
+# True only under --fleet with a single-workspace diff that is not <workspace>.
+_fleet_skips() {
+  $fleet_mode && [ "$fleet_test_scope" != "all" ] && [ "$fleet_test_scope" != "$1" ]
+}
+
+# Step body for a suite --fleet skips on a single-workspace diff. The reason
+# lands on the summary row, so a scoped gate is never mistakable for a full one.
+skip_by_fleet_scope() {
+  STEP_SKIP_REASON="${fleet_test_scope}-only diff (--fleet scope; GitHub CI runs it)"
+  echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
+  skip_step
 }
 
 # Step body for a step disabled by an --only-* flag. Narrowed runs still emit a
@@ -397,6 +422,7 @@ run_step() {
   local rc=0
   # Reset per step — a skip must be declared by THIS step, never inherited.
   STEP_SKIPPED=0
+  STEP_SKIP_REASON=""
   "$@" || rc=$?
   local step_end_ms step_dur
   step_end_ms=$(perf_now_ms)
@@ -420,7 +446,7 @@ print(json.dumps({'step': sys.argv[1], 'duration_ms': int(sys.argv[2]), 'exit_co
   # that declares a skip and then fails is still reported as a failure.
   if [ "$rc" -eq 0 ] && [ "$STEP_SKIPPED" -eq 1 ]; then
     echo -e "${YELLOW}$name: SKIPPED${NC}"
-    record_result "$name" "SKIPPED"
+    record_result "$name" "SKIPPED" "$STEP_SKIP_REASON"
   elif [ "$rc" -eq 0 ]; then
     echo -e "${GREEN}$name: PASS${NC}"
     record_result "$name" "PASS"
@@ -512,6 +538,12 @@ detect_scope() {
     detected_workspace="all"
   fi
   echo -e "  Detected workspace (for --scope=auto): ${YELLOW}${detected_workspace}${NC}"
+
+  fleet_test_scope="$detected_workspace"
+  if echo "$changed_files" | grep -qE '^scripts/'; then fleet_test_scope="all"; fi
+  if $fleet_mode; then
+    echo -e "  --fleet unit/integration scope: ${YELLOW}${fleet_test_scope}${NC}"
+  fi
 }
 
 # Resolve the canonical web target for fleet/local. Sets the global `web_url`.
@@ -967,10 +999,16 @@ run_unit_tests_no_coverage() {
   # `${arr[@]+"${arr[@]}"}` — an empty array under `set -u` is an unbound
   # variable error on bash 3.2 (macOS), and a bare "$arr" would pass an empty
   # string as a real argv entry.
-  (cd api && NODE_OPTIONS="$node_opts" \
-     npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
-  (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
-     npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  # ROK-1793 S1: a --fleet gate on a single-workspace diff skips the other
+  # workspace's suite; its own summary row (skip_by_fleet_scope) says so.
+  if ! _fleet_skips api; then
+    (cd api && NODE_OPTIONS="$node_opts" \
+       npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
+  fi
+  if ! _fleet_skips web; then
+    (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
+       npx vitest run ${vitest_args[@]+"${vitest_args[@]}"}) || return $?
+  fi
   run_smoke_helper_specs "$node_opts"
 }
 
@@ -2167,7 +2205,9 @@ print_summary() {
     elif [ "${CHECK_RESULTS[$i]}" = "SKIPPED" ]; then
       color="$YELLOW"
     fi
-    printf "%-30s  ${color}%s${NC}\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}"
+    local note="${CHECK_NOTES[$i]:-}"
+    printf "%-30s  ${color}%s${NC}%s\n" "${CHECK_NAMES[$i]}" "${CHECK_RESULTS[$i]}" \
+      "${note:+ — $note}"
   done
   echo ""
 }
@@ -2243,10 +2283,18 @@ run_default_gate() {
     # gate) mode they're deferred to GitHub CI, which runs them sharded +
     # randomized on every PR. Full mode keeps them local.
     if ! $static_mode; then
+      # ROK-1793 S1: --fleet on a single-workspace diff skips the other
+      # workspace's suites, each with its own SKIPPED row naming the reason.
+      if _fleet_skips api; then run_step "Unit tests (api jest)" skip_by_fleet_scope; fi
+      if _fleet_skips web; then run_step "Unit tests (web vitest)" skip_by_fleet_scope; fi
       run_step "$unit_step_label" run_unit_tests
       run_step "Tools unit tests (mcp servers)" run_tools_tests
       run_step "Contract schema specs (packages/contract)" run_contract_specs
-      run_step "Integration tests (api)" run_integration_tests
+      if _fleet_skips api; then
+        run_step "Integration tests (api)" skip_by_fleet_scope
+      else
+        run_step "Integration tests (api)" run_integration_tests
+      fi
     fi
 
     # Migration and container checks handle their own SKIPPED/PASS/FAIL
