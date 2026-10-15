@@ -116,12 +116,28 @@ export async function listOpenSteamOnlyIds(
   return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
 }
 
-/** Whether any Steam-only row is still open — voice leave must not start grace. */
+/**
+ * Whether any Steam-only row is still open — voice leave must not start grace.
+ * An indexed read (`rows[0]`) on purpose: the voice-path unit specs' drizzle
+ * chain mock resolves `limit` to a non-array, which reads as "none open".
+ */
 export async function hasOpenServerPlayers(
   db: Db,
   eventId: number,
 ): Promise<boolean> {
-  return (await listOpenSteamOnlyIds(db, eventId)).length > 0;
+  const rows = await db
+    .select({ id: p.id })
+    .from(p)
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        isNotNull(p.steamId),
+        isNull(p.discordUserId),
+        isNull(p.leftAt),
+      ),
+    )
+    .limit(1);
+  return rows[0] !== undefined;
 }
 
 /** Open rows carrying a SteamID — the rehydrate set for the supervisor. */
