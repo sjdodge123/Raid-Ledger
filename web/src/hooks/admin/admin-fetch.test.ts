@@ -138,7 +138,7 @@ describe('adminFetch — structured error bodies (ROK-1740)', () => {
     });
 
     it('a failed POST throws AdminFetchError carrying the status and parsed body', async () => {
-        const body = { message: "The bot can't post in #general.", missing: ['Manage Messages'] };
+        const body = { message: "The bot can't post in #general.", missing: ['Pin Messages'] };
         server.use(http.post(`${API_BASE}/admin/thing`, () => HttpResponse.json(body, { status: 422 })));
         const err: unknown = await adminFetch('/admin/thing', { method: 'POST' }, 'fallback')
             .catch((e: unknown) => e);

@@ -14,7 +14,7 @@ import { test, expect } from "./base";
 const BOT_STATUS = /\/admin\/settings\/discord-bot$/;
 const CHANNELS = /\/admin\/settings\/discord-bot\/channels$/;
 const JOIN_POST = /\/admin\/settings\/discord-bot\/join-post$/;
-const MISSING = ["Embed Links", "Manage Messages"];
+const MISSING = ["Embed Links", "Pin Messages"];
 
 test.describe("Admin Discord — Join post card (ROK-1740)", () => {
   test.beforeEach(async ({ page }) => {
@@ -76,7 +76,7 @@ test.describe("Admin Discord — Join post card (ROK-1740)", () => {
           },
           json: {
             message:
-              "The bot can't post in #welcome. Missing: Embed Links, Manage Messages.",
+              "The bot can't post in #welcome. Missing: Embed Links, Pin Messages.",
             missing: MISSING,
           },
         });

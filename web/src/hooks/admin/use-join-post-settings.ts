@@ -8,6 +8,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult, UseMutationResult } from '@tanstack/react-query';
+import { JOIN_POST_PERMISSION_NAMES } from '@raid-ledger/contract';
 import type {
     DiscordJoinPostResult,
     DiscordJoinPostStatus,
@@ -33,8 +34,14 @@ export interface JoinPostSettingsHook {
 /** The missing-permission names of a 422 publish error, else null. */
 export function joinPostMissing(error: unknown): JoinPostPermissionName[] | null {
     if (!(error instanceof AdminFetchError) || error.status !== 422) return null;
-    const missing = (error.body as { missing?: unknown } | null)?.missing;
-    return Array.isArray(missing) ? (missing as JoinPostPermissionName[]) : null;
+    const { body } = error;
+    if (typeof body !== 'object' || body === null || !('missing' in body)) return null;
+    const { missing } = body;
+    return Array.isArray(missing) ? missing.filter(isPermissionName) : null;
+}
+
+function isPermissionName(value: unknown): value is JoinPostPermissionName {
+    return JOIN_POST_PERMISSION_NAMES.some((name) => name === value);
 }
 
 /** Reads the join post's location; posts, re-posts and removes it. */

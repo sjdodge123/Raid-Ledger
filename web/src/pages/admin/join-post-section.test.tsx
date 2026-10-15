@@ -82,7 +82,7 @@ describe('JoinPostSection (ROK-1740) — states', () => {
     });
 
     it('posted but not pinned → warning banner carries the server reason', async () => {
-        const warning = 'The bot needs Manage Messages to pin it.';
+        const warning = 'The bot needs Pin Messages to pin it.';
         serve(POSTED, () => HttpResponse.json(result({ outcome: 'edited', pinned: false, warning })));
         await renderCard();
         fireEvent.click(await screen.findByRole('button', { name: 'Re-post' }));
@@ -98,7 +98,7 @@ describe('JoinPostSection (ROK-1740) — states', () => {
 describe('JoinPostSection (ROK-1740) — errors', () => {
     it('422 lists every missing permission for the channel, no toast', async () => {
         serve(POSTED, () => HttpResponse.json(
-            { message: "The bot can't post in #welcome.", missing: ['Embed Links', 'Manage Messages'] }, { status: 422 }));
+            { message: "The bot can't post in #welcome.", missing: ['Embed Links', 'Pin Messages'] }, { status: 422 }));
         await renderCard();
         fireEvent.click(await screen.findByRole('button', { name: 'Re-post' }));
         // Settle on either outcome (banner or toast), then assert which one won.
@@ -108,7 +108,7 @@ describe('JoinPostSection (ROK-1740) — errors', () => {
         const banner = screen.getByTestId('join-post-missing');
         expect(banner).toHaveTextContent("The bot can't post here. Missing in #welcome:");
         expect(within(banner).getAllByRole('listitem').map((li) => li.textContent))
-            .toEqual(['Embed Links', 'Manage Messages']);
+            .toEqual(['Embed Links', 'Pin Messages']);
     });
 
     it('503 toasts the server message and shows no permission banner', async () => {
