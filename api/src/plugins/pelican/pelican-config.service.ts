@@ -2,7 +2,6 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import {
   PelicanConfigSchema,
   PelicanTestResultSchema,
-  isValidIanaTimezone,
 } from '@raid-ledger/contract';
 import type {
   PelicanConfig,
@@ -17,8 +16,6 @@ import { SettingsService } from '../../settings/settings.service';
 import { PelicanClientFactory } from './pelican-client.factory';
 import { normalisePanelUrl } from './pelican-url.helpers';
 import { pelicanTestMessage } from './pelican-test-messages';
-
-const FALLBACK_TIMEZONE = 'UTC';
 
 /**
  * Pelican admin config (ROK-121). The client key is write-only: reads report
@@ -35,38 +32,14 @@ export class PelicanConfigService {
 
   /** Current config; parsed `.strict()` so a leaked key field throws. */
   async getConfig(): Promise<PelicanConfig> {
-    const [panelUrl, apiKey, tz] = await Promise.all([
+    const [panelUrl, apiKey] = await Promise.all([
       this.settings.get(SETTING_KEYS.PELICAN_PANEL_URL),
       this.settings.get(SETTING_KEYS.PELICAN_CLIENT_API_KEY),
-      this.readDefaultTimezone(),
     ]);
     return PelicanConfigSchema.parse({
       panelUrl,
       apiKeySet: apiKey !== null && apiKey !== '',
-      defaultTimezone: tz.defaultTimezone,
-      timezoneInherited: tz.inherited,
     });
-  }
-
-  /**
-   * The plugin's default timezone (ROK-1096 D8): its own setting, else the
-   * community timezone, else UTC. Never reads the client API key.
-   */
-  async resolveDefaultTimezone(): Promise<string> {
-    return (await this.readDefaultTimezone()).defaultTimezone;
-  }
-
-  private async readDefaultTimezone(): Promise<{
-    defaultTimezone: string;
-    inherited: boolean;
-  }> {
-    const ownTz = await this.settings.get(
-      SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE,
-    );
-    if (ownTz !== null && ownTz !== '') {
-      return { defaultTimezone: ownTz, inherited: false };
-    }
-    return { defaultTimezone: await this.communityTimezone(), inherited: true };
   }
 
   /** Apply a validated update: omitted = unchanged, `''` = cleared. */
@@ -74,10 +47,6 @@ export class PelicanConfigService {
     const panelUrl = this.normaliseUrl(dto.panelUrl);
     await this.apply(SETTING_KEYS.PELICAN_PANEL_URL, panelUrl);
     await this.apply(SETTING_KEYS.PELICAN_CLIENT_API_KEY, dto.apiKey);
-    await this.apply(
-      SETTING_KEYS.PELICAN_DEFAULT_TIMEZONE,
-      dto.defaultTimezone,
-    );
     const fields = Object.keys(dto).join(', ') || 'nothing';
     this.logger.log(`Pelican config updated: ${fields}`);
     return this.getConfig();
@@ -126,10 +95,5 @@ export class PelicanConfigService {
     if (value === undefined) return;
     if (value === '') await this.settings.delete(key);
     else await this.settings.set(key, value);
-  }
-
-  private async communityTimezone(): Promise<string> {
-    const tz = await this.settings.get(SETTING_KEYS.DEFAULT_TIMEZONE);
-    return tz !== null && isValidIanaTimezone(tz) ? tz : FALLBACK_TIMEZONE;
   }
 }

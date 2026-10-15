@@ -11,11 +11,10 @@ export interface PelicanDraft {
     apiKey: string;
     /** The admin pressed "Remove saved secret" and has not saved yet. */
     removeKey: boolean;
-    defaultTimezone: string;
 }
 
 export function draftFromConfig(config: PelicanConfig): PelicanDraft {
-    return { panelUrl: config.panelUrl ?? '', apiKey: '', removeKey: false, defaultTimezone: config.defaultTimezone };
+    return { panelUrl: config.panelUrl ?? '', apiKey: '', removeKey: false };
 }
 
 function apiKeyChange(draft: PelicanDraft): string | undefined {
@@ -27,11 +26,9 @@ function apiKeyChange(draft: PelicanDraft): string | undefined {
 export function buildUpdateBody(draft: PelicanDraft, config: PelicanConfig): PelicanConfigUpdate {
     const panelUrl = draft.panelUrl.trim();
     const apiKey = apiKeyChange(draft);
-    const tz = draft.defaultTimezone.trim();
     return {
         ...(panelUrl !== (config.panelUrl ?? '') ? { panelUrl } : {}),
         ...(apiKey !== undefined ? { apiKey } : {}),
-        ...(tz !== config.defaultTimezone ? { defaultTimezone: tz } : {}),
     };
 }
 

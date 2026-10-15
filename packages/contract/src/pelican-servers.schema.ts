@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { GameServerStateSchema } from './game-servers.schema.js';
-import { PELICAN_ERROR_KINDS, isValidIanaTimezone } from './pelican.schema.js';
+import { PELICAN_ERROR_KINDS } from './pelican.schema.js';
 
 /**
  * Pelican server mirror — admin "Sync now" (ROK-1772).
@@ -69,14 +69,10 @@ export const PelicanServerRowSchema = z
     gameId: z.number().int().positive().nullable(),
     gameName: z.string().nullable(),
     showOnCalendar: z.boolean(),
-    /** `null` = inherits the plugin's default timezone. */
-    timezone: z.string().nullable(),
     lastSyncedAt: isoOrNull,
     statusCheckedAt: isoOrNull,
     /** The last complete listing did not include this server. */
     missing: z.boolean(),
-    /** A schedule's stored next run is not an occurrence of its cron in this server's timezone (ROK-1096). */
-    tzMismatch: z.boolean(),
   })
   .strict();
 export type PelicanServerRowDto = z.infer<typeof PelicanServerRowSchema>;
@@ -88,18 +84,14 @@ export type PelicanServerListResponse = z.infer<
   typeof PelicanServerListResponseSchema
 >;
 
-/** `PATCH /admin/plugins/pelican/servers/:id` — omitted = unchanged, `timezone: ''` = inherit. */
+/**
+ * `PATCH /admin/plugins/pelican/servers/:id` — omitted = unchanged. Pelican
+ * schedules are always UTC (ROK-1795), so there is no timezone field.
+ */
 export const PelicanServerUpdateSchema = z
   .object({
     gameId: z.number().int().positive().nullable(),
     showOnCalendar: z.boolean(),
-    timezone: z
-      .string()
-      .trim()
-      .max(64)
-      .refine((v) => v === '' || isValidIanaTimezone(v), {
-        message: 'Unknown timezone',
-      }),
   })
   .partial()
   .strict()

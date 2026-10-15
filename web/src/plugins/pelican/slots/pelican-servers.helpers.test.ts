@@ -52,11 +52,6 @@ describe('applyServerPatch', () => {
             .toEqual({ ...pelicanServerFixture, showOnCalendar: false });
     });
 
-    it("timezone '' means inherit (null)", () => {
-        const custom = { ...pelicanServerFixture, timezone: 'Europe/Berlin' };
-        expect(applyServerPatch(custom, { timezone: '' }).timezone).toBeNull();
-    });
-
     it('a game change takes the picked name; clearing it clears the name', () => {
         expect(applyServerPatch(pelicanServerFixture, { gameId: 9 }, 'Rust')).toMatchObject({ gameId: 9, gameName: 'Rust' });
         expect(applyServerPatch(pelicanServerFixture, { gameId: null })).toMatchObject({ gameId: null, gameName: null });
