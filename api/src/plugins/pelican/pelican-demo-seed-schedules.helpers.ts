@@ -6,6 +6,7 @@
  * Every cron is UTC, as Pelican panel crons always are (ROK-1795).
  */
 import type { NewPelicanSchedule } from '../../drizzle/schema';
+import { PELICAN_CRON_TIMEZONE } from './pelican-projection.helpers';
 import { nextAtOrAfter } from './pelican-schedule-cron.helpers';
 
 const NIGHTLY_RESTART = '0 4 * * *';
@@ -101,7 +102,7 @@ export function offlineServerSchedules(
   serverId: number,
   now: Date,
 ): NewPelicanSchedule[] {
-  const nextRunAt = nextAtOrAfter(NIGHTLY_RESTART, 'UTC', now);
+  const nextRunAt = nextAtOrAfter(NIGHTLY_RESTART, PELICAN_CRON_TIMEZONE, now);
   const spec: DemoScheduleSpec = {
     name: 'Nightly restart',
     expr: NIGHTLY_RESTART,

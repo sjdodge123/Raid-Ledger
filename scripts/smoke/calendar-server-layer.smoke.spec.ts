@@ -5,11 +5,12 @@
  *
  * Seed: `POST /admin/test/pelican/seed-servers` (DEMO_MODE) activates Pelican and
  * maps "Demo Server — Running" to a game with daily schedules: start 18:00,
- * stop 02:00, restart 04:00 (+5 min), in the server's zone. The band and ticks
- * therefore exist on EVERY day, so the spec never needs a fixed date for them.
+ * stop 02:00, restart 04:00 (+5 min), in UTC — Pelican crons are always UTC
+ * (ROK-1795). The band and ticks therefore exist on EVERY day, so the spec
+ * never needs a fixed date for them.
  *
  * ## Determinism
- * - Times: the server zone and the browser zone are both whatever the env runs
+ * - Times: the crons are UTC but the browser zone is whatever the env runs
  *   in, so nothing here hard-codes an hour. The click-through event is placed
  *   inside a window READ BACK from `GET /game-servers/calendar`, and its day is
  *   computed in the BROWSER in the app's timezone (`raid_ledger_timezone`, else

@@ -21,6 +21,7 @@ import {
 } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
+import { SETTING_KEYS } from '../../drizzle/schema/app-settings';
 import { SettingsService } from '../../settings/settings.service';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
@@ -279,5 +280,33 @@ describe('GET /admin/plugins/pelican/servers — no timezone fields (ROK-1795)',
     expect(body.data.map((r) => r.id)).toEqual([server.id]);
     expect(res.text).not.toContain('timezone');
     expect(res.text).not.toContain('tzMismatch');
+  });
+});
+
+describe('GET /game-servers/calendar — community zone does not shift crons (ROK-1795)', () => {
+  it('projects a NULL-column server in UTC while DEFAULT_TIMEZONE is America/New_York', async () => {
+    await testApp.app
+      .get(SettingsService)
+      .set(SETTING_KEYS.DEFAULT_TIMEZONE, NY);
+    const server = await insertServer(N.main, { name: 'Valheim' });
+    expect(server.timezone).toBeNull();
+    await insertSchedule(server.id, '0 0 * * 3,5', 'start');
+    await insertSchedule(server.id, '0 4 * * 3,5', 'stop');
+    const token = await memberToken(testApp, 'pelicanprodzonemember');
+    const from = encodeURIComponent('2026-10-13T12:00:00.000Z');
+    const to = encodeURIComponent('2026-10-17T12:00:00.000Z');
+    const res = await testApp.request
+      .get(`/game-servers/calendar?from=${from}&to=${to}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    const items = GameServerCalendarResponseSchema.parse(res.body).data.filter(
+      (i) => i.provider === PELICAN_PROVIDER_LABEL,
+    );
+    const S = String(server.id);
+    // Wed 2026-10-14 and Fri 2026-10-16, 00:00Z–04:00Z — not 04:00Z–08:00Z.
+    expect(view(items)).toEqual([
+      ['window', S, '2026-10-14T00:00:00.000Z', '2026-10-14T04:00:00.000Z'],
+      ['window', S, '2026-10-16T00:00:00.000Z', '2026-10-16T04:00:00.000Z'],
+    ]);
   });
 });
