@@ -67,18 +67,47 @@ async function triggerCompletion(
 }
 
 /**
+ * Status of the captured Discord Scheduled Event, read by id via the bot's
+ * Discord API (HTTP, not cache). `null` = Discord no longer has it (10070),
+ * which the final check below also treats as completed-and-cleaned-up.
+ */
+async function fetchScheduledEventStatus(
+  seId: string,
+): Promise<GuildScheduledEventStatus | null> {
+  try {
+    const se = await getGuild().scheduledEvents.fetch({
+      guildScheduledEvent: seId,
+      force: true,
+    });
+    return se.status;
+  } catch (err) {
+    if ((err as { code?: unknown }).code === 10070) return null;
+    throw err;
+  }
+}
+
+/**
  * Fail loudly — naming the Discord error code/message — when the completion
  * pass did not complete THIS event (ROK-944: the pool-0 failure was a silent
- * poll timeout because the trigger always said success).
+ * poll timeout because the trigger always said success). No outcome for our
+ * event is accepted only when the background cron already completed it
+ * between the reschedule and the trigger (it then has no Discord binding, so
+ * the pass's candidate query skips it).
  */
-function assertOwnOutcomeOk(
+async function assertOwnOutcomeOk(
   result: SECompletionTriggerResult,
   eventId: number,
-): void {
+  seId: string,
+): Promise<void> {
   const own = result.outcomes?.find((o) => o.eventId === eventId);
   if (!own) {
+    const status = await fetchScheduledEventStatus(seId);
+    if (status === null || status === GuildScheduledEventStatus.Completed) {
+      return;
+    }
     throw new Error(
-      `ROK-944: completion pass did not reach event ${eventId} ` +
+      `ROK-944: completion pass did not reach event ${eventId} and SE ${seId} ` +
+        `is ${GuildScheduledEventStatus[status]}, not Completed ` +
         `(reason=${result.reason ?? 'none'}, success=${result.success}, ` +
         `outcomes=${JSON.stringify(result.outcomes ?? [])})`,
     );
@@ -159,7 +188,7 @@ const scheduledEventCompletedAfterCron: SmokeTest = {
 
       // Trigger the completion cron; its own outcome must be ok (ROK-944)
       const result = await triggerCompletion(ctx);
-      assertOwnOutcomeOk(result, ev.id);
+      await assertOwnOutcomeOk(result, ev.id, created.id);
       await awaitProcessing(ctx.api);
 
       // Poll for the scheduled event to reach Completed status or be removed.
