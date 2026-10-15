@@ -171,3 +171,36 @@ it('never hands a raw console line to any logger', async () => {
   expect(logged).not.toContain(SECRET);
   spies.forEach((s) => s.mockRestore());
 });
+
+it('a cold-start replay never removes a rehydrated player (FB1 #1)', async () => {
+  const h = harness([
+    { steamId: 'A', displayName: 'Alice' },
+    { steamId: 'B', displayName: 'Bob' },
+  ]);
+  await h.connect([
+    line({ kind: 'heartbeat', count: 1, loggedAt: T(1) }),
+    ...arrive('B', 'Bob', T(2)),
+    ...arrive('C', 'Cara', T(3)),
+  ]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([]);
+  expect(h.sink.playerJoined.mock.calls).toEqual([
+    [SRC, { steamId: 'C', displayName: 'Cara' }],
+  ]);
+  // A live heartbeat that disagrees still evicts the never-seen player.
+  await h.live([line({ kind: 'heartbeat', count: 2, loggedAt: T(4) })]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+});
+
+it('a re-auth inside the settle window keeps the buffered replay (FB1 #2)', async () => {
+  const h = harness();
+  await h.connect();
+  h.wings.authenticate();
+  h.wings.lines(arrive('A', 'Alice', T(1)));
+  h.wings.frame('auth success');
+  h.wings.lines(arrive('A', 'Alice', T(1)));
+  await h.settle();
+  expect(h.sink.playerJoined.mock.calls).toEqual([
+    [SRC, { steamId: 'A', displayName: 'Alice' }],
+  ]);
+  expect(h.sink.playerLeft.mock.calls).toEqual([]);
+});

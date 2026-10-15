@@ -81,6 +81,20 @@ export class ServerPresenceTracker {
     }
   }
 
+  /**
+   * Re-add any of `players` the tracker no longer holds, as never-seen
+   * (lastSeen 0, so a later low heartbeat evicts them first). Emits nothing.
+   * Used after a cold-start replay, whose history must not remove players
+   * the persisted roster says are present (ROK-1800 FB1).
+   */
+  restore(players: PresentPlayer[]): void {
+    for (const p of players) {
+      if (this.present.has(p.steamId)) continue;
+      this.pending.delete(p.steamId);
+      this.present.set(p.steamId, { name: p.name, lastSeen: 0 });
+    }
+  }
+
   private onJoin(steamId: string, now: number): PresenceChange[] {
     const entry = this.present.get(steamId);
     if (entry) entry.lastSeen = now;

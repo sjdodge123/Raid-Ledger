@@ -63,6 +63,8 @@ export class PelicanPresenceSession {
   private replay: Buffered[] | null = null;
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private emptiedOutage: number | null = null;
+  /** True until the first replay after `start()` has been flushed. */
+  private cold = true;
   private queue: Promise<void> = Promise.resolve();
 
   constructor(private readonly opts: PresenceSessionOptions) {
@@ -146,6 +148,9 @@ export class PelicanPresenceSession {
 
   private onReachable(): void {
     this.emptiedOutage = null;
+    // A re-auth inside the settle window: the buffered events already
+    // advanced the watermark, so apply them now rather than drop them.
+    this.flushReplay();
     this.watermark.beginPass();
     this.replay = [];
     this.armSettle();
@@ -164,6 +169,15 @@ export class PelicanPresenceSession {
     this.settleTimer = null;
   }
 
+  /**
+   * Applies a buffered replay and forwards only its net effect. The first
+   * replay after `start()` is hydration only: the watermark is empty, so it
+   * is history that predates this process and may sit before the persisted
+   * roster's state (an old low heartbeat would evict a current player). It
+   * can add or rename players but never removes a rehydrated one; a real
+   * departure during downtime is repaired by the next live heartbeat, which
+   * evicts never-seen players first. A false departure could not be repaired.
+   */
   private flushReplay(): void {
     this.clearSettle();
     const buffered = this.replay;
@@ -171,6 +185,8 @@ export class PelicanPresenceSession {
     if (!buffered) return;
     const before = this.tracker.snapshot();
     for (const { event, at } of buffered) this.tracker.apply(event, at);
+    if (this.cold) this.tracker.restore(before);
+    this.cold = false;
     const changes = netPresenceChanges(before, this.tracker.snapshot());
     this.opts.logger.log(
       `Presence replay for server ${this.serverId}: ${buffered.length} events, ${changes.length} changes`,
