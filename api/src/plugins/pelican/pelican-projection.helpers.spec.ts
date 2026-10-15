@@ -162,6 +162,35 @@ const WINDOW_CASES: [string, ProjectionSchedule[], string, string, string[]][] =
     ],
   ];
 
+describe('projectSchedules — Pelican crons are always UTC (ROK-1795)', () => {
+  const up = sched('0 0 * * 3,5', 'start', {
+    name: 'Valheim up',
+    nextRunAt: new Date('2026-10-16T00:00:00Z'),
+  });
+  const down = sched('0 4 * * 3,5', 'stop', {
+    name: 'Valheim down',
+    nextRunAt: new Date('2026-10-16T04:00:00Z'),
+  });
+
+  it('projects the Valheim Wed/Fri 00:00–04:00 cron as 00:00Z–04:00Z windows', () => {
+    expect(
+      briefs(project([up, down], '2026-10-12T00:00:00Z', '2026-10-19T00:00:00Z')),
+    ).toEqual([
+      'window 2026-10-14T00:00:00.000Z -> 2026-10-14T04:00:00.000Z Valheim up',
+      'window 2026-10-16T00:00:00.000Z -> 2026-10-16T04:00:00.000Z Valheim up',
+    ]);
+  });
+
+  it('does not follow US DST: after 2026-11-01 the windows stay 00:00Z–04:00Z', () => {
+    expect(
+      briefs(project([up, down], '2026-11-02T00:00:00Z', '2026-11-09T00:00:00Z')),
+    ).toEqual([
+      'window 2026-11-04T00:00:00.000Z -> 2026-11-04T04:00:00.000Z Valheim up',
+      'window 2026-11-06T00:00:00.000Z -> 2026-11-06T04:00:00.000Z Valheim up',
+    ]);
+  });
+});
+
 describe('projectSchedules — windows (D6/D7, ruling 2)', () => {
   it.each(WINDOW_CASES)('%s', (_label, schedules, from, to, expected) => {
     expect(briefs(project(schedules, from, to))).toEqual(expected);
