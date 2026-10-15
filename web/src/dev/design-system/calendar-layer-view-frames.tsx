@@ -2,14 +2,17 @@
  * ROK-1775 — the server-schedule layer where no bands are drawn, for
  * /dev/design-system (§4.22): the REAL Month date header (one muted glyph per day,
  * tooltip lists the day's items) and the REAL Schedule row (muted, wrapping,
- * interleaved with an event card). Check both colour families with the page's
+ * interleaved with an event card), plus the REAL Filters-panel "Layers" checkbox.
+ * Check both colour families with the page's
  * side-by-side toggle.
  */
-import { useMemo, useRef, type JSX } from 'react';
+import { useMemo, useRef, useState, type JSX } from 'react';
 import { LayerMonthDateHeader } from '../../components/calendar/layers/LayerMonthDateHeader';
 import { ScheduleLayerRow } from '../../components/calendar/layers/ScheduleLayerRow';
 import { CalendarLayerContext } from '../../components/calendar/layers/calendar-layer-context';
 import type { LayerDayEntry } from '../../components/calendar/layers/calendar-layer-days';
+import { CalendarLayerToggleList } from '../../pages/calendar/CalendarLayerToggleList';
+import type { CalendarLayerToggles } from '../../pages/calendar/use-calendar-layer-toggles';
 import { StateFrame } from './design-system-bits';
 
 const DAY = new Date(2026, 9, 14);
@@ -49,6 +52,27 @@ function ScheduleSample(): JSX.Element {
     );
 }
 
+const SAMPLE_LAYER_KEY = 'ds:server-schedule';
+
+/** The Filters panel's Layers group with local state — checked = the layer is shown. */
+function LayerToggleSample(): JSX.Element {
+    const [visible, setVisible] = useState(true);
+    const layers: CalendarLayerToggles = {
+        toggles: [{
+            key: SAMPLE_LAYER_KEY, label: 'Server schedules',
+            description: 'Restarts and up-windows from linked game servers', visible,
+        }],
+        toggleLayer: () => setVisible((v) => !v),
+        showAllLayers: () => setVisible(true),
+        hiddenCount: visible ? 0 : 1,
+    };
+    return (
+        <div className="max-w-[375px] rounded-md border border-edge bg-surface p-3" data-testid="ds-layer-toggle">
+            <CalendarLayerToggleList layers={layers} />
+        </div>
+    );
+}
+
 export function CalendarLayerViewFrames(): JSX.Element {
     return (
         <>
@@ -57,6 +81,9 @@ export function CalendarLayerViewFrames(): JSX.Element {
             </StateFrame>
             <StateFrame label="Schedule · ScheduleLayerRow" note="Muted text-dim rows between event cards; they wrap, never truncate.">
                 <ScheduleSample />
+            </StateFrame>
+            <StateFrame label="Filters · Layers checkbox" note="One Checkbox per layer with a filterLabel; unchecked hides the layer in every view and counts on the Filters badge.">
+                <LayerToggleSample />
             </StateFrame>
         </>
     );

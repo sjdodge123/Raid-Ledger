@@ -1077,6 +1077,9 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 - **Filter toggle:** gate in `useCalendarLayers` (a hidden layer's `useItems` gets `enabled=false`, so it
   never fetches), not in a view. Off, inactive plugin, or a game filter that excludes the items → the view
   draws nothing.
+  For a signed-in viewer, checkbox layers stay off until their saved preference has loaded (the store's
+  `hydrated` flag), so a hidden layer never flashes or fetches on a cold load; the set resets on logout
+  or a viewer change. Rendered: `/dev/design-system` → *Filters · Layers checkbox*.
 
 **DON'T**
 - Use the busy (§4.16), slot, heatmap or game colours for a layer — each already means something on
