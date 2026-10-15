@@ -23,6 +23,7 @@ import {
 } from './game-role-diff.helpers';
 import {
   addMemberRole,
+  cachedMemberLacksRole,
   fetchGuildMembers,
   fetchRoleState,
   type GuildMembers,
@@ -241,7 +242,11 @@ export class GameRoleReconcileService {
     const [row] = await loadEnabledGameRoles(this.db, gameId);
     if (!row) return false;
     const who = await loadGrantCandidate(this.db, userId, row.id);
-    if (!who || who.granted) return false;
+    if (!who) return false;
+    // A grant row only suppresses the add while the member still holds the
+    // role: one removed by hand is restored (cache read, no REST call).
+    if (who.granted && !cachedMemberLacksRole(guild, who.discordId, row.roleId))
+      return false;
     const holds = await memberHoldsRole(guild, who.discordId, row.roleId);
     if (holds !== false) return false;
     const reason = `played ${ymd(new Date())}`;

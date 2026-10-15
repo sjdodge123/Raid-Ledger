@@ -215,6 +215,19 @@ export async function memberHoldsRole(
   }
 }
 
+/**
+ * Cache-only (no REST call): true when the gateway-cached member exists and
+ * lacks the role — e.g. it was removed by hand. Uncached → false.
+ */
+export function cachedMemberLacksRole(
+  guild: Guild,
+  discordUserId: string,
+  roleId: string,
+): boolean {
+  const member = guild.members.cache.get(discordUserId);
+  return member !== undefined && !member.roles.cache.has(roleId);
+}
+
 function isUnknownMember(err: unknown): boolean {
   return (
     typeof err === 'object' &&
