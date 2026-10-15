@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
  * ROK-1767: auto-maintained per-game Discord @role. An admin links a game to
@@ -8,7 +8,7 @@ import { z } from 'zod';
  */
 
 /** User preference key: `true` opts the member out of auto game roles. */
-export const GAME_ROLES_OPT_OUT_PREF_KEY = 'discord_game_roles_opt_out';
+export const GAME_ROLES_OPT_OUT_PREF_KEY = "discord_game_roles_opt_out";
 
 /** Default inactivity window, in days. */
 export const GAME_ROLE_DEFAULT_WINDOW_DAYS = 14;
@@ -38,11 +38,11 @@ export const GameRoleSummarySchema = z.object({
 export type GameRoleSummaryDto = z.infer<typeof GameRoleSummarySchema>;
 
 export const GameRolePreflightProblemCodeSchema = z.enum([
-  'missing_manage_roles',
-  'role_above_bot',
-  'role_managed',
-  'role_not_found',
-  'bot_disconnected',
+  "missing_manage_roles",
+  "role_above_bot",
+  "role_managed",
+  "role_not_found",
+  "bot_disconnected",
 ]);
 export type GameRolePreflightProblemCode = z.infer<
   typeof GameRolePreflightProblemCodeSchema
@@ -59,7 +59,7 @@ export const GameRolePreflightSchema = z.object({
 });
 export type GameRolePreflightDto = z.infer<typeof GameRolePreflightSchema>;
 
-export const GameRoleAuditActionSchema = z.enum(['role_added', 'role_removed']);
+export const GameRoleAuditActionSchema = z.enum(["role_added", "role_removed"]);
 export type GameRoleAuditAction = z.infer<typeof GameRoleAuditActionSchema>;
 
 export const GameRoleAuditEntrySchema = z.object({

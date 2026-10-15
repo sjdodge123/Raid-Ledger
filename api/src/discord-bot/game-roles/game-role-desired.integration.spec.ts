@@ -1,0 +1,198 @@
+/**
+ * ROK-1767 — `findDesiredMembers` against a real DB: presence sessions inside
+ * and outside the window, scheduled-event voice attendance (no_show and
+ * zero-time rows excluded), opt-out, deactivated users and other games.
+ */
+import { GAME_ROLES_OPT_OUT_PREF_KEY } from '@raid-ledger/contract';
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import { truncateAllTables } from '../../common/testing/integration-helpers';
+import { nonEmpty } from '../../common/testing/narrow';
+import * as schema from '../../drizzle/schema';
+import { findDesiredMembers } from './game-role-desired.helpers';
+
+const NOW = new Date('2026-10-15T12:00:00Z');
+const daysAgo = (d: number): Date => new Date(NOW.getTime() - d * 86_400_000);
+
+let testApp: TestApp;
+let gameId: number;
+let seq = 0;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+});
+
+beforeEach(() => {
+  gameId = testApp.seed.game.id;
+});
+
+afterEach(async () => {
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+async function makeUser(
+  opts: { deactivated?: boolean; discordId?: string } = {},
+): Promise<{ id: number; discordId: string }> {
+  seq += 1;
+  const discordId = opts.discordId ?? `90000000000000${seq}`;
+  const [u] = nonEmpty(
+    await testApp.db
+      .insert(schema.users)
+      .values({
+        discordId,
+        username: `gr-user-${seq}`,
+        role: 'member',
+        deactivatedAt: opts.deactivated ? daysAgo(1) : null,
+      })
+      .returning(),
+    'user',
+  );
+  return { id: u.id, discordId };
+}
+
+async function makeGame(name: string): Promise<number> {
+  const [g] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({
+        name,
+        slug: name.toLowerCase().replace(/\s+/g, '-'),
+        igdbId: null,
+      })
+      .returning(),
+    'game',
+  );
+  return g.id;
+}
+
+async function presence(
+  userId: number,
+  gid: number,
+  startedAt: Date,
+): Promise<void> {
+  await testApp.db.insert(schema.gameActivitySessions).values({
+    userId,
+    gameId: gid,
+    discordActivityName: 'Some Game',
+    startedAt,
+    endedAt: new Date(startedAt.getTime() + 3_600_000),
+    durationSeconds: 3600,
+  });
+}
+
+async function attended(
+  user: { id: number; discordId: string },
+  o: { leftAt: Date | null; seconds: number; classification: string | null },
+): Promise<void> {
+  const [ev] = nonEmpty(
+    await testApp.db
+      .insert(schema.events)
+      .values({
+        title: `GR Raid ${++seq}`,
+        creatorId: testApp.seed.adminUser.id,
+        gameId,
+        duration: [daysAgo(3), daysAgo(2.9)] as [Date, Date],
+      })
+      .returning(),
+    'event',
+  );
+  await testApp.db.insert(schema.eventVoiceSessions).values({
+    eventId: ev.id,
+    userId: user.id,
+    discordUserId: user.discordId,
+    discordUsername: 'voice-user',
+    firstJoinAt: daysAgo(3),
+    lastLeaveAt: o.leftAt,
+    totalDurationSec: o.seconds,
+    classification: o.classification,
+  });
+}
+
+const desired = () => findDesiredMembers(testApp.db, gameId, 14, NOW);
+
+describe('findDesiredMembers window and sources (ROK-1767)', () => {
+  it('counts a presence session inside the window and ignores one outside it', async () => {
+    const recent = await makeUser();
+    const stale = await makeUser();
+    await presence(recent.id, gameId, daysAgo(2));
+    await presence(stale.id, gameId, daysAgo(20));
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([recent.id]);
+    expect(map.get(recent.id)?.discordUserId).toBe(recent.discordId);
+    expect(map.get(recent.id)?.lastPlayedAt.toISOString()).toBe(
+      daysAgo(2).toISOString(),
+    );
+  });
+
+  it('takes the latest play across presence and event voice attendance', async () => {
+    const u = await makeUser();
+    await presence(u.id, gameId, daysAgo(10));
+    await attended(u, {
+      leftAt: daysAgo(1),
+      seconds: 1800,
+      classification: 'full',
+    });
+
+    const map = await desired();
+
+    expect(map.get(u.id)?.lastPlayedAt.toISOString()).toBe(
+      daysAgo(1).toISOString(),
+    );
+  });
+
+  it('counts a member still in voice, but not a no_show or a zero-time row', async () => {
+    const inVoice = await makeUser();
+    const noShow = await makeUser();
+    const zero = await makeUser();
+    await attended(inVoice, { leftAt: null, seconds: 0, classification: null });
+    await attended(noShow, {
+      leftAt: daysAgo(1),
+      seconds: 600,
+      classification: 'no_show',
+    });
+    await attended(zero, {
+      leftAt: daysAgo(1),
+      seconds: 0,
+      classification: null,
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([inVoice.id]);
+    expect(map.get(inVoice.id)?.lastPlayedAt.toISOString()).toBe(
+      NOW.toISOString(),
+    );
+  });
+});
+
+describe('findDesiredMembers exclusions (ROK-1767)', () => {
+  it('excludes opted-out, deactivated and non-snowflake users', async () => {
+    const optedOut = await makeUser();
+    const deactivated = await makeUser({ deactivated: true });
+    const local = await makeUser({ discordId: 'local:someone' });
+    const keeper = await makeUser();
+    for (const u of [optedOut, deactivated, local, keeper]) {
+      await presence(u.id, gameId, daysAgo(1));
+    }
+    await testApp.db.insert(schema.userPreferences).values({
+      userId: optedOut.id,
+      key: GAME_ROLES_OPT_OUT_PREF_KEY,
+      value: true,
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([keeper.id]);
+  });
+
+  it("ignores another game's sessions", async () => {
+    const other = await makeGame('Other GR Game');
+    const u = await makeUser();
+    await presence(u.id, other, daysAgo(1));
+
+    const map = await desired();
+
+    expect(map.size).toBe(0);
+  });
+});

@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { GAME_ROLES_OPT_OUT_PREF_KEY } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
@@ -36,22 +36,8 @@ export async function findDesiredMembers(
 ): Promise<Map<number, DesiredMember>> {
   const since = new Date(now.getTime() - windowDays * DAY_MS).toISOString();
   const nowIso = now.toISOString();
-  const rows = await db.execute<DesiredRow>(sql`
-    WITH played AS (
-      SELECT s.user_id, s.started_at AS played_at
-        FROM game_activity_sessions s
-       WHERE s.game_id = ${gameId}
-         AND s.started_at >= ${since}::timestamp
-      UNION ALL
-      SELECT v.user_id, COALESCE(v.last_leave_at, ${nowIso}::timestamp)
-        FROM event_voice_sessions v
-        JOIN events e ON e.id = v.event_id
-       WHERE e.game_id = ${gameId}
-         AND v.user_id IS NOT NULL
-         AND v.classification IS DISTINCT FROM 'no_show'
-         AND (v.total_duration_sec > 0 OR v.last_leave_at IS NULL)
-         AND COALESCE(v.last_leave_at, ${nowIso}::timestamp) >= ${since}::timestamp
-    )
+  const rows = await db.execute<DesiredRow>(
+    sql`${playedCte(gameId, since, nowIso)}
     SELECT u.id AS user_id, u.discord_id,
            EXTRACT(EPOCH FROM MAX(p.played_at))::float8 AS last_played_epoch
       FROM played p
@@ -67,8 +53,30 @@ export async function findDesiredMembers(
             AND up.value = 'true'::jsonb
        )
      GROUP BY u.id, u.discord_id
-  `);
+  `,
+  );
   return toDesiredMap(rows);
+}
+
+/** Every play of `gameId` since `since`: presence starts + event voice. */
+function playedCte(gameId: number, since: string, nowIso: string): SQL {
+  return sql`
+    WITH played AS (
+      SELECT s.user_id, s.started_at AS played_at
+        FROM game_activity_sessions s
+       WHERE s.game_id = ${gameId}
+         AND s.started_at >= ${since}::timestamp
+      UNION ALL
+      SELECT v.user_id, COALESCE(v.last_leave_at, ${nowIso}::timestamp)
+        FROM event_voice_sessions v
+        JOIN events e ON e.id = v.event_id
+       WHERE e.game_id = ${gameId}
+         AND v.user_id IS NOT NULL
+         AND v.classification IS DISTINCT FROM 'no_show'
+         AND (v.total_duration_sec > 0 OR v.last_leave_at IS NULL)
+         AND COALESCE(v.last_leave_at, ${nowIso}::timestamp) >= ${since}::timestamp
+    )
+  `;
 }
 
 function toDesiredMap(rows: Iterable<DesiredRow>): Map<number, DesiredMember> {
