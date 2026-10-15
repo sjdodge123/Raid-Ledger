@@ -45,9 +45,16 @@ shard=""
 for arg in "$@"; do
     case "$arg" in --shard=*) shard="${arg#--shard=}"; shard="${shard%%/*}" ;; esac
 done
+# Not an integration shard (build/tsc/lint/unit under a whole-script run).
+[[ -z "$shard" ]] && exit 0
 ev="$STUB_STATE/events"
 echo "start ${shard} heap=${NODE_OPTIONS#--max-old-space-size=} redis=${REDIS_URL:-<unset>}" >>"$ev"
 : >"$STUB_STATE/started.${shard}"
+# A hung shard (bounded), so a test can prove its failing partner stops it.
+if [[ "${STUB_NPX_HANG_SHARD:-}" == "$shard" ]]; then
+    hang_end=$(( $(date +%s) + ${STUB_HANG_SECS:-20} ))
+    while (( $(date +%s) < hang_end )); do sleep 0.1; done
+fi
 if (( shard % 2 == 1 )); then partner=$((shard + 1)); else partner=$((shard - 1)); fi
 deadline=$(( $(date +%s) + ${STUB_BARRIER_SECS:-1} ))
 state="alone"
@@ -69,7 +76,14 @@ echo "end ${shard}" >>"$ev"
 [[ "${STUB_NPX_FAIL_SHARD:-}" == "$shard" ]] && exit 1
 exit 0
 EOF
-chmod +x "$STUB_BIN/docker" "$STUB_BIN/npx"
+for tool in npm curl node; do printf '#!/usr/bin/env bash\nexit 0\n' >"$STUB_BIN/$tool"; done
+REAL_GIT="$(command -v git)"
+cat >"$STUB_BIN/git" <<EOF
+#!/usr/bin/env bash
+[[ "\${1:-}" == "fetch" ]] && exit 0
+exec "$REAL_GIT" "\$@"
+EOF
+chmod +x "$STUB_BIN"/*
 
 SPEC_LIST="$WORK/specs"
 (cd "$REPO_ROOT/api" && find src -name '*.integration.spec.ts') | LC_ALL=C sort -u >"$SPEC_LIST"
@@ -153,10 +167,50 @@ run_case INTEGRATION_PARALLEL=abc STUB_BARRIER_SECS=0
 if [[ $(grep -c '^overlap' <<<"$EVENTS") -eq 0 && $RC -eq 0 ]] && grep -q 'not a positive integer' <<<"$OUT"; then pass; else
     fail "INTEGRATION_PARALLEL=abc must fall back to serial with a message, rc=$RC events: $(tr '\n' ',' <<<"$EVENTS")"; fi
 
+# ----- a failed shard stops its still-running partner (review m5) -----
+CURRENT_TEST_NAME="INTEGRATION_PARALLEL=2: shard 1 fails while shard 2 hangs -> shard 2 is stopped"
+t0=$(date +%s)
+run_case INTEGRATION_PARALLEL=2 STUB_BARRIER_SECS=0 STUB_NPX_FAIL_SHARD=1 STUB_NPX_HANG_SHARD=2 STUB_HANG_SECS=20
+elapsed=$(( $(date +%s) - t0 ))
+if [[ $RC -ne 0 ]]; then pass; else fail "a failed shard must fail the tier, got rc=0"; fi
+if [[ $elapsed -lt 15 ]]; then pass; else
+    fail "the hung partner must be killed, not waited out: took ${elapsed}s (hang is 20s)"; fi
+if ! grep -q -x -e 'end 2' <<<"$EVENTS"; then pass; else
+    fail "shard 2 must be stopped before it ends, events: $(tr '\n' ',' <<<"$EVENTS")"; fi
+if grep -q -x -e '=== Shard results: FAIL STOPPED ===' <<<"$OUT"; then pass; else
+    fail "expected 'Shard results: FAIL STOPPED', got: $(grep 'Shard results' <<<"$OUT" || echo '<none>')"; fi
+expected_missing=$((TOTAL_SPECS - 1))
+if grep -E -q -e "^${expected_missing} spec\(s\) never ran or did not finish:" <<<"$OUT"; then pass; else
+    fail "expected '${expected_missing} spec(s) never ran' (only shard 1 reported), got: $(grep -E 'never ran|reported a result' <<<"$OUT" || echo '<no report>')"; fi
+
+CURRENT_TEST_NAME="INTEGRATION_PARALLEL=2: shard 2 fails while shard 1 hangs -> shard 1 is stopped (wait -n)"
+if bash -c '(( BASH_VERSINFO[0] > 4 || (BASH_VERSINFO[0] == 4 && BASH_VERSINFO[1] >= 3) ))'; then
+    t0=$(date +%s)
+    run_case INTEGRATION_PARALLEL=2 STUB_BARRIER_SECS=0 STUB_NPX_FAIL_SHARD=2 STUB_NPX_HANG_SHARD=1 STUB_HANG_SECS=20
+    elapsed=$(( $(date +%s) - t0 ))
+    if [[ $RC -ne 0 && $elapsed -lt 15 ]] && ! grep -q -x -e 'end 1' <<<"$EVENTS"; then pass; else
+        fail "a later shard's failure must stop the earlier hung one: rc=$RC ${elapsed}s, events: $(tr '\n' ',' <<<"$EVENTS")"; fi
+    if grep -q -x -e '=== Shard results: STOPPED FAIL ===' <<<"$OUT"; then pass; else
+        fail "expected 'Shard results: STOPPED FAIL', got: $(grep 'Shard results' <<<"$OUT" || echo '<none>')"; fi
+else
+    echo "NOTE [$CURRENT_TEST_FILE] bash ${BASH_VERSION} has no wait -n; the runner's bash 5 covers this case."
+fi
+
 # ----- the fleet runner only inherits RL_SLOT/RL_TARGET, so a flag carries it -----
-CURRENT_TEST_NAME="--integration-parallel=N sets INTEGRATION_PARALLEL"
-if grep -E -q -e '--integration-parallel=\*\) export INTEGRATION_PARALLEL="\$\{1#--integration-parallel=\}"' "$VALIDATE_CI_PATH"; then pass; else
-    fail "main() must map --integration-parallel=N to INTEGRATION_PARALLEL (rl_validate_ci args reach the runner; laptop env does not)"; fi
+CURRENT_TEST_NAME="--integration-parallel=2 (flag, whole script) runs shards two at a time"
+rm -rf "$WORK/state"; mkdir -p "$WORK/state"
+OUT=$(
+    cd "$REPO_ROOT" && env -u INTEGRATION_PARALLEL -u INTEGRATION_SHARDS -u CI -u DATABASE_URL \
+        PATH="$STUB_BIN:$PATH" RL_TARGET=remote RL_TARGET_DISPATCHED=1 RL_SLOT=1 \
+        STUB_STATE="$WORK/state" STUB_SPEC_LIST="$SPEC_LIST" STUB_BARRIER_SECS=10 \
+        bash "$VALIDATE_CI_PATH" --only-integration --integration-parallel=2 2>&1
+)
+RC=$?
+EVENTS=$(cat "$WORK/state/events" 2>/dev/null || true)
+if grep -q -x -e 'overlap 1' <<<"$EVENTS" && grep -q -x -e 'overlap 2' <<<"$EVENTS"; then pass; else
+    fail "--integration-parallel=2 must run shards 1+2 together, rc=$RC events: $(tr '\n' ',' <<<"$EVENTS") tail: $(tail -4 <<<"$OUT" | tr '\n' '|')"; fi
+if grep -q -e '2 at a time' <<<"$OUT"; then pass; else
+    fail "--integration-parallel=2 must announce the parallel mode, got: $(grep -m1 '=== Integration' <<<"$OUT" || echo '<none>')"; fi
 
 rm -rf "$WORK"
 echo

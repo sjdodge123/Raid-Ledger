@@ -1352,8 +1352,9 @@ _integration_shard_redis_url() {
 # Parallel waves of $parallel shards. Each shard streams to the log with a
 # `[shard i/N]` prefix and keeps a raw copy, appended to $tmp in shard order
 # after the wave so _report_unrun_integration_specs reads clean jest lines.
-# Writes PASS/FAIL into the CALLER's shard_results (bash dynamic scope). Stops
-# after the first wave with a failure: later waves are never launched.
+# Writes PASS/FAIL/STOPPED into the CALLER's shard_results (bash dynamic
+# scope). A failed shard stops its still-running wave partner (STOPPED), and
+# later waves are never launched.
 # Heap per shard: INTEGRATION_PARALLEL_HEAP_MB (default 2560; 2 x 2.5 GB plus
 # the parent processes stays under 6 GB). UNMEASURED — opt-in until it is.
 _run_integration_shards_parallel() {
@@ -1376,13 +1377,32 @@ _run_integration_shards_parallel() {
       pids+=("$!")
     done
     wave_failed=0
+    local stopped=0 rc
+    # bash >= 4.3 (the fleet runner): `wait -n` notices the FIRST shard to end,
+    # so a failure stops its partner at once. bash 3.2 (macOS) falls back to
+    # the ordered waits below, which stop the rest once a waited shard fails.
+    if _have_wait_n; then
+      local live=$((last - first + 1))
+      while [ "$live" -gt 0 ]; do
+        rc=0; wait -n || rc=$?
+        live=$((live - 1))
+        if [ "$rc" -ne 0 ] && [ "$rc" -ne 127 ]; then
+          _stop_wave_shards "${pids[@]}"; stopped=1; break
+        fi
+      done
+    fi
     for ((i = first; i <= last; i++)); do
-      if wait "${pids[$((i - first))]}"; then
+      rc=0; wait "${pids[$((i - first))]}" || rc=$?
+      if [ "$rc" -eq 0 ]; then
         shard_results+=("PASS")
+      elif [ "$stopped" -eq 1 ] && [ "$rc" -eq 143 ]; then
+        shard_results+=("STOPPED")
+        echo "Shard ${i}/${shards} STOPPED — its wave partner failed"
       else
         shard_results+=("FAIL")
         wave_failed=1
         echo "Shard ${i}/${shards} FAILED"
+        if [ "$stopped" -eq 0 ]; then _stop_wave_shards "${pids[@]}"; stopped=1; fi
       fi
       cat "${tmp}.shard${i}" >>"$tmp" 2>/dev/null || true
       rm -f "${tmp}.shard${i}"
@@ -1391,6 +1411,28 @@ _run_integration_shards_parallel() {
       echo "Integration wave ${first}-${last} FAILED — stopping early"
       break
     fi
+  done
+}
+
+# `wait -n` exists from bash 4.3.
+_have_wait_n() {
+  [ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 3 ]; }
+}
+
+# SIGTERM a process and everything under it, children first (once the parent
+# dies its children reparent and `pgrep -P` can no longer find them).
+_kill_tree() {
+  local c
+  for c in $(pgrep -P "$1" 2>/dev/null); do _kill_tree "$c"; done
+  kill -TERM "$1" 2>/dev/null || true
+}
+
+# Stop every still-running shard of a wave (its pids as args). A stopped shard
+# prints no jest result, so _report_unrun_integration_specs lists its specs.
+_stop_wave_shards() {
+  local p
+  for p in "$@"; do
+    if kill -0 "$p" 2>/dev/null; then _kill_tree "$p"; fi
   done
 }
 
