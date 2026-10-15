@@ -21,6 +21,8 @@ export const UpsertGameRoleSchema = z.object({
   windowDays: GameRoleWindowDaysSchema.default(GAME_ROLE_DEFAULT_WINDOW_DAYS),
   /** Name for a bot-created role; defaults to the game name. */
   name: z.string().trim().min(1).max(100).optional(),
+  /** Pause/resume management without unlinking; omitted ⇒ enabled. */
+  enabled: z.boolean().optional(),
 });
 export type UpsertGameRoleDto = z.infer<typeof UpsertGameRoleSchema>;
 
@@ -78,3 +80,12 @@ export const GameRoleRunResultSchema = z.object({
   failedGames: z.array(z.number().int().positive()),
 });
 export type GameRoleRunResultDto = z.infer<typeof GameRoleRunResultSchema>;
+
+/** A guild role offered in the admin picker (`GET …/discord-bot/roles`). */
+export const DiscordRoleOptionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  /** False when the role sits at or above the bot's highest role. */
+  assignable: z.boolean(),
+});
+export type DiscordRoleOptionDto = z.infer<typeof DiscordRoleOptionSchema>;
