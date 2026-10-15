@@ -35,6 +35,12 @@ describe('getRaceIconUrl (ROK-1747)', () => {
         expect(getRaceIconUrl(null, 'male')).toBeNull();
     });
 
+    it('never resolves a prototype member as a race token', () => {
+        for (const race of ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty']) {
+            expect(getRaceIconUrl(race, 'male')).toBeNull();
+        }
+    });
+
     it('returns null for a missing or unknown gender', () => {
         expect(getRaceIconUrl('Human', null)).toBeNull();
         expect(getRaceIconUrl('Human', undefined)).toBeNull();

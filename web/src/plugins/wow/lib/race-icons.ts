@@ -12,26 +12,30 @@
  */
 const RACE_ICON_BASE = 'https://wow.zamimg.com/images/wow/icons/large';
 
-/** Armory display name OR addon token (normalised) → Wowhead game-file token. */
-const RACE_TOKENS: Readonly<Record<string, string>> = {
-    human: 'human',
-    dwarf: 'dwarf',
-    nightelf: 'nightelf',
-    gnome: 'gnome',
-    draenei: 'draenei',
-    orc: 'orc',
-    undead: 'scourge',
-    scourge: 'scourge',
-    tauren: 'tauren',
-    troll: 'troll',
-    bloodelf: 'bloodelf',
-};
+/**
+ * Armory display name OR addon token (normalised) → Wowhead game-file token.
+ * A Map, not an object literal: race is stored verbatim from the addon import, so
+ * `constructor` / `__proto__` / `toString` must not resolve to a prototype member.
+ */
+const RACE_TOKENS: ReadonlyMap<string, string> = new Map([
+    ['human', 'human'],
+    ['dwarf', 'dwarf'],
+    ['nightelf', 'nightelf'],
+    ['gnome', 'gnome'],
+    ['draenei', 'draenei'],
+    ['orc', 'orc'],
+    ['undead', 'scourge'],
+    ['scourge', 'scourge'],
+    ['tauren', 'tauren'],
+    ['troll', 'troll'],
+    ['bloodelf', 'bloodelf'],
+]);
 
 const GENDERS: ReadonlySet<string> = new Set(['male', 'female']);
 
 /** The race+gender icon URL, or null when either is missing or unmapped. */
 export function getRaceIconUrl(race: string | null | undefined, gender: string | null | undefined): string | null {
-    const token = RACE_TOKENS[(race ?? '').toLowerCase().replace(/[\s_-]/g, '')];
+    const token = RACE_TOKENS.get((race ?? '').toLowerCase().replace(/[\s_-]/g, ''));
     const g = (gender ?? '').trim().toLowerCase();
     if (!token || !GENDERS.has(g)) return null;
     return `${RACE_ICON_BASE}/race_${token}_${g}.jpg`;
