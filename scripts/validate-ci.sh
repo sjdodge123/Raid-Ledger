@@ -404,10 +404,43 @@ _fleet_skips() {
   $fleet_mode && [ "$fleet_test_scope" != "all" ] && [ "$fleet_test_scope" != "$1" ]
 }
 
+# ROK-1793 M1 — the --fleet unit/integration scope for a change set (newline-
+# separated paths on $1). Echoes api | web | all. It narrows ONLY when every
+# path is under api/ or web/ (no inert allowlist: the api guard
+# fleet-first-login-admin.prod-guard.spec.ts scans EVERY tracked file, and
+# others read README.md, .env.example and rl-infra/**, so no other path is
+# provably irrelevant to api jest). A web diff under web/src/{components,pages}/admin/
+# widens to all: discord-bot-permissions-literal.guard.spec.ts scans those dirs.
+# Empty -> all.
+_fleet_test_scope_for() {
+  local files="$1"
+  if [ -z "$(printf '%s' "$files" | tr -d '[:space:]')" ]; then echo all; return 0; fi
+  if printf '%s\n' "$files" | grep -v '^$' | grep -qvE '^(api|web)/'; then echo all; return 0; fi
+  local api=false web=false
+  printf '%s\n' "$files" | grep -qE '^api/' && api=true
+  printf '%s\n' "$files" | grep -qE '^web/' && web=true
+  if $api && $web; then echo all
+  elif $api; then echo api
+  elif printf '%s\n' "$files" | grep -qE '^web/src/(components|pages)/admin/'; then echo all
+  else echo web
+  fi
+}
+
+# api specs a web-only diff can still break: they read web/ files or scan every
+# tracked file. Derived at run time (a spec naming a 'web/ path or calling
+# `git ls-files`), so a new cross-workspace guard is picked up without editing
+# this list. Echoes paths relative to api/, one per line.
+_api_cross_workspace_specs() {
+  (cd "$REPO_ROOT/api" && grep -rlE "['\"]web/|'ls-files'" src \
+    --include='*.spec.ts' --exclude='*.integration.spec.ts' 2>/dev/null) | LC_ALL=C sort
+}
+
 # Step body for a suite --fleet skips on a single-workspace diff. The reason
-# lands on the summary row, so a scoped gate is never mistakable for a full one.
+# lands on the summary row, so a scoped gate is never mistakable for a full one,
+# and says what DID run: GitHub's api job does not fire on web/** either.
+# Args: $1 - optional detail appended to the reason.
 skip_by_fleet_scope() {
-  STEP_SKIP_REASON="${fleet_test_scope}-only diff (--fleet scope; GitHub CI runs it)"
+  STEP_SKIP_REASON="${fleet_test_scope}-only diff (--fleet scope): ${1:-not run by this gate}"
   echo -e "${YELLOW}Not run: ${STEP_SKIP_REASON}.${NC}"
   skip_step
 }
@@ -481,7 +514,10 @@ detect_scope() {
   git fetch origin --quiet 2>/dev/null || true
 
   local changed_files
-  changed_files="$(git diff --name-only origin/main 2>/dev/null || echo '')"
+  # Untracked (not ignored) files count too: a new, uncommitted spec must not
+  # be invisible to the scope a --fleet gate uses to skip suites (ROK-1793 m2).
+  changed_files="$( { git diff --name-only origin/main 2>/dev/null || true
+    git ls-files --others --exclude-standard 2>/dev/null || true; } | sort -u)"
 
   if echo "$changed_files" | grep -q 'drizzle/migrations'; then
     migrations_changed=true
@@ -548,8 +584,7 @@ detect_scope() {
   fi
   echo -e "  Detected workspace (for --scope=auto): ${YELLOW}${detected_workspace}${NC}"
 
-  fleet_test_scope="$detected_workspace"
-  if echo "$changed_files" | grep -qE '^scripts/'; then fleet_test_scope="all"; fi
+  fleet_test_scope=$(_fleet_test_scope_for "$changed_files")
   if $fleet_mode; then
     echo -e "  --fleet unit/integration scope: ${YELLOW}${fleet_test_scope}${NC}"
   fi
@@ -1013,6 +1048,16 @@ run_unit_tests_no_coverage() {
   if ! _fleet_skips api; then
     (cd api && NODE_OPTIONS="$node_opts" \
        npx jest --passWithNoTests ${jest_args[@]+"${jest_args[@]}"}) || return $?
+  else
+    # A web-only diff still runs the api specs that read web/ (M1).
+    local -a xws=()
+    local f
+    while IFS= read -r f; do [ -n "$f" ] && xws+=("$f"); done < <(_api_cross_workspace_specs)
+    if [ "${#xws[@]}" -gt 0 ]; then
+      echo "api jest narrowed to ${#xws[@]} cross-workspace spec(s): ${xws[*]}"
+      (cd api && NODE_OPTIONS="$node_opts" \
+         npx jest --runTestsByPath "${xws[@]}" ${jest_args[@]+"${jest_args[@]}"}) || return $?
+    fi
   fi
   if ! _fleet_skips web; then
     (cd "$REPO_ROOT/web" && NODE_OPTIONS="$node_opts" \
@@ -2399,7 +2444,10 @@ run_default_gate() {
     if ! $static_mode; then
       # ROK-1793 S1: --fleet on a single-workspace diff skips the other
       # workspace's suites, each with its own SKIPPED row naming the reason.
-      if _fleet_skips api; then run_step "Unit tests (api jest)" skip_by_fleet_scope; fi
+      if _fleet_skips api; then
+        run_step "Unit tests (api jest)" skip_by_fleet_scope \
+          "only the api specs that read web/ or every tracked file ran (in the unit step)"
+      fi
       if _fleet_skips web; then run_step "Unit tests (web vitest)" skip_by_fleet_scope; fi
       run_step "$unit_step_label" run_unit_tests
       run_step "Tools unit tests (mcp servers)" run_tools_tests

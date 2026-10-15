@@ -9,11 +9,16 @@
 #   S  scripts/** diff (the gate itself) widens a web diff back to everything.
 #   E  empty / undetectable diff: --fleet runs everything.
 #   F  --full on a web-only diff runs everything (scoping is --fleet only).
+#   M1 (review): narrowing needs EVERY path under api/ or web/. Deps-only,
+#      root tsconfig, web + README.md and web/src/components/admin/** run
+#      everything; an untracked api file counts as changed; a web-only diff
+#      still runs the api specs that read web/ (--runTestsByPath).
 #
 # Harness: npm/npx/docker/curl are stubbed and record argv (npx also records
 # its cwd, which is how web vitest is told apart from the root-config smoke
 # helper specs). git is real except `fetch` (no-op) and `diff --name-only`,
-# which prints $STUB_GIT_DIFF so each case controls the change set.
+# which prints $STUB_GIT_DIFF, and `ls-files --others` (untracked), which
+# prints $STUB_GIT_UNTRACKED, so each case controls the change set.
 
 set -uo pipefail
 
@@ -88,6 +93,10 @@ if [[ "${1:-}" == "diff" && "$*" == *"--name-only"* ]]; then
   [[ -n "${STUB_GIT_DIFF:-}" ]] && printf '%s\n' "$STUB_GIT_DIFF"
   exit 0
 fi
+if [[ "${1:-}" == "ls-files" && "$*" == *"--others"* ]]; then
+  [[ -n "${STUB_GIT_UNTRACKED:-}" ]] && printf '%s\n' "$STUB_GIT_UNTRACKED"
+  exit 0
+fi
 exec "$REAL_GIT" "$@"
 EOF
 cat >"$stub_bin/node" <<EOF
@@ -107,6 +116,7 @@ invoke() {
     INVOKE_RC=0
     INVOKE_OUT=$(
         PATH="$stub_bin:$PATH" REAL_GIT="$REAL_GIT" STUB_GIT_DIFF="$diff" \
+        STUB_GIT_UNTRACKED="${UNTRACKED:-}" \
         RL_TARGET=remote RL_TARGET_DISPATCHED=1 BASE_URL="$ENV_URL" \
         PERF_LOG_LOCAL="$perf_log" \
         STUB_NPX_ARGV_FILE="$npx_argv_file" STUB_NPM_ARGV_FILE="$npm_argv_file" \
@@ -126,6 +136,9 @@ API_INTEGRATION='jest .*--shard=1/4'
 WEB_VITEST='cwd=.*/web vitest run'
 # The summary row the skip must print (2-space gap, status, em-dash reason).
 skip_row() { echo "^$1 +SKIPPED — $2-only diff \(--fleet scope"; }
+# A web-only diff narrows api jest to the cross-workspace specs, by path.
+API_XWS_JEST='cwd=.*/api jest --runTestsByPath .*src/discord-bot/discord-bot-permissions-literal\.guard\.spec\.ts'
+
 
 # ===== W: web-only diff =====
 CURRENT_TEST_NAME="W: --fleet on a web-only diff skips api unit + integration"
@@ -138,6 +151,10 @@ assert_in "$(skip_row 'Unit tests \(api jest\)' web)" "$INVOKE_OUT" "summary row
 assert_in "$(skip_row 'Integration tests \(api\)' web)" "$INVOKE_OUT" "summary row: integration SKIPPED with reason"
 assert_in '^Unit tests \(api jest\): SKIPPED$' "$INVOKE_OUT" "run_step row stays parser-exact (no reason suffix)"
 assert_not_in 'Unit tests \(web vitest\)' "$INVOKE_OUT" "web vitest must not get a skip row on a web diff"
+assert_in "$API_XWS_JEST" "$NPX" "M1: a web-only diff still runs the api specs that read web/"
+assert_in 'src/auth/fleet-first-login-admin\.prod-guard\.spec\.ts' "$(grep -e '--runTestsByPath' <<<"$NPX")" \
+    "M1: the every-tracked-file guard runs on a web-only diff"
+assert_not_in 'GitHub CI runs it' "$INVOKE_OUT" "m1: the skip reason must not claim GitHub CI covers it"
 
 # ===== A: api-only diff =====
 CURRENT_TEST_NAME="A: --fleet on an api-only diff skips web vitest"
@@ -165,6 +182,26 @@ assert_runs_all "contract diff"
 CURRENT_TEST_NAME="S: a scripts/** change widens a web diff to every suite"
 invoke "web/src/pages/foo.tsx"$'\n'"scripts/validate-ci.sh" --fleet --no-e2e
 assert_runs_all "web + scripts diff"
+
+CURRENT_TEST_NAME="M1-D: a deps-only change (package-lock + web) runs every suite"
+invoke "package-lock.json"$'\n'"web/src/pages/foo.tsx" --fleet --no-e2e
+assert_runs_all "deps + web diff"
+
+CURRENT_TEST_NAME="M1-T: a root tsconfig change runs every suite"
+invoke "tsconfig.base.json" --fleet --no-e2e
+assert_runs_all "root tsconfig diff"
+
+CURRENT_TEST_NAME="M1-R: web + README.md runs every suite (api guards read README)"
+invoke "web/src/pages/foo.tsx"$'\n'"README.md" --fleet --no-e2e
+assert_runs_all "web + README diff"
+
+CURRENT_TEST_NAME="M1-AD: a web/src/components/admin diff runs api jest"
+invoke "web/src/components/admin/bot-panel.tsx" --fleet --no-e2e
+assert_runs_all "web admin diff"
+
+CURRENT_TEST_NAME="M1-U: an untracked api file counts as changed"
+UNTRACKED="api/src/events/new.spec.ts" invoke "web/src/pages/foo.tsx" --fleet --no-e2e
+assert_runs_all "committed web + untracked api"
 
 CURRENT_TEST_NAME="E: --fleet on an empty diff runs every suite"
 invoke "" --fleet --no-e2e
