@@ -213,7 +213,9 @@ export class PelicanPresenceSession {
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
       } else {
-        this.enqueue('playerLeft', (s, src) => s.playerLeft(src, player.steamId));
+        this.enqueue('playerLeft', (s, src) =>
+          s.playerLeft(src, player.steamId),
+        );
       }
     }
   }
@@ -221,7 +223,10 @@ export class PelicanPresenceSession {
   /** Serialised, per-call isolated: one failing sink call never stops the next. */
   private enqueue(
     method: string,
-    call: (sink: ServerPresenceSink, src: ServerPresenceSource) => Promise<void>,
+    call: (
+      sink: ServerPresenceSink,
+      src: ServerPresenceSource,
+    ) => Promise<void>,
   ): void {
     const { sink, source, logger } = this.opts;
     this.queue = this.queue.then(async () => {

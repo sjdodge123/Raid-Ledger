@@ -38,7 +38,9 @@ export function netPresenceChanges(
 }
 
 /** Rehydrated roster → tracker players (a SteamID-only label means "unnamed"). */
-export function toPresentPlayers(players: ServerPresencePlayer[]): PresentPlayer[] {
+export function toPresentPlayers(
+  players: ServerPresencePlayer[],
+): PresentPlayer[] {
   return players.map((p) => ({
     steamId: p.steamId,
     name: p.displayName === p.steamId ? null : p.displayName,

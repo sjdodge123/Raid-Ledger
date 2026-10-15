@@ -18,7 +18,8 @@ export class PelicanCronRegistrar implements CronRegistrar {
   constructor(
     private readonly sync: PelicanSyncService,
     private readonly status: PelicanStatusService,
-    @Optional() private readonly presence: PelicanPresenceSupervisor | null = null,
+    @Optional()
+    private readonly presence: PelicanPresenceSupervisor | null = null,
   ) {}
 
   getCronJobs(): CronJobDefinition[] {
