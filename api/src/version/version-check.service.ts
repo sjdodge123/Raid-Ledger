@@ -46,6 +46,10 @@ type FailedFetch =
  * (ROK-1527): left running, it fired after `app.close()` and its GitHub
  * fetch inherited the finished integration spec's async context, pinning
  * that spec file's whole Jest realm for the rest of the run.
+ *
+ * The startup check is skipped entirely when CRON_DISABLED=true (ROK-1777),
+ * mirroring CronJobService's bootstrap gate, so it never writes
+ * app_settings mid-test inside the integration realm.
  */
 @Injectable()
 export class VersionCheckService implements OnModuleInit, OnModuleDestroy {
@@ -78,6 +82,11 @@ export class VersionCheckService implements OnModuleInit, OnModuleDestroy {
   }
 
   onModuleInit() {
+    // ROK-1777: integration-setup.ts sets CRON_DISABLED. Without this gate the
+    // startup check fired mid-suite and wrote the version keys into
+    // app_settings while backup.integration.spec.ts asserted it was empty.
+    // Production never sets CRON_DISABLED.
+    if (process.env.CRON_DISABLED === 'true') return;
     // Run initial check after a short delay so it doesn't block startup
     this.initialCheckTimer = setTimeout(() => {
       this.initialCheckTimer = null;
