@@ -22,8 +22,19 @@ function createService(): VersionCheckService {
 }
 
 describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
-  beforeEach(() => jest.useFakeTimers());
-  afterEach(() => jest.useRealTimers());
+  let savedCronDisabled: string | undefined;
+
+  beforeEach(() => {
+    savedCronDisabled = process.env.CRON_DISABLED;
+    delete process.env.CRON_DISABLED;
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+    if (savedCronDisabled === undefined) delete process.env.CRON_DISABLED;
+    else process.env.CRON_DISABLED = savedCronDisabled;
+  });
 
   it('runs the initial check once the startup delay elapses', () => {
     const service = createService();
@@ -42,6 +53,18 @@ describe('VersionCheckService — startup timer lifecycle (ROK-1527)', () => {
       .mockResolvedValue(undefined);
     service.onModuleInit();
     service.onModuleDestroy();
+    jest.advanceTimersByTime(INITIAL_CHECK_DELAY_MS * 2);
+    expect(check).not.toHaveBeenCalled();
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('skips the startup check when CRON_DISABLED=true (ROK-1777)', () => {
+    process.env.CRON_DISABLED = 'true';
+    const service = createService();
+    const check = jest
+      .spyOn(service, 'checkForUpdates')
+      .mockResolvedValue(undefined);
+    service.onModuleInit();
     jest.advanceTimersByTime(INITIAL_CHECK_DELAY_MS * 2);
     expect(check).not.toHaveBeenCalled();
     expect(jest.getTimerCount()).toBe(0);
