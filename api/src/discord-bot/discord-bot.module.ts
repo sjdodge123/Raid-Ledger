@@ -16,6 +16,8 @@ import { DiscordBotSettingsController } from './discord-bot-settings.controller'
 import { DiscordBotInviteController } from './discord-bot-invite.controller';
 import { LfgBoardSettingsController } from './lfg-board-settings.controller';
 import { WeeklyDigestSettingsController } from './weekly-digest-settings.controller';
+import { JoinPostSettingsController } from './join-post-settings.controller';
+import { JoinPostService } from './join-post/join-post.service';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
 import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
@@ -139,6 +141,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     LfgBoardSettingsController,
     WeeklyDigestSettingsController,
     GameRolesSettingsController,
+    JoinPostSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
     DiscordMemberController,
@@ -151,6 +154,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
   ],
   providers: [
     DiscordBotService,
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,
@@ -226,6 +230,8 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
   ],
   exports: [
     DiscordBotService,
+    // ROK-1740: the DEMO join-post fixture reuses the service.
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,

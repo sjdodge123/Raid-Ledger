@@ -29,6 +29,7 @@ vi.mock('../../hooks/admin/use-lfg-board-settings', () => ({
 vi.mock('./ephemeral-voice-section', () => ({ EphemeralVoiceSection: () => null }));
 vi.mock('./weekly-digest-section', () => ({ WeeklyDigestSection: () => null }));
 vi.mock('./game-roles-section', () => ({ GameRolesSection: () => null }));
+vi.mock('./join-post-section', () => ({ JoinPostSection: () => null }));
 vi.mock('../../lib/toast', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
 const RAW_HUE = /\b(?:bg|text|border|ring)-(?:emerald|amber|red|blue|purple|slate)-\d{2,3}/;
