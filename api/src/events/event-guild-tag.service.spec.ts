@@ -20,13 +20,19 @@ const base = {
 function setup(opts: {
   tagger?: { pluginSlug: string; assertCanTag: jest.Mock } | undefined;
   active?: boolean;
-  existing?: { gameId: number | null; guildId: number | null };
+  existing?: {
+    gameId: number | null;
+    guildId: number | null;
+    creatorId?: number;
+  };
 }) {
   const getAdapter = jest.fn().mockReturnValue(opts.tagger);
   const registry = { getAdapter, isActive: () => opts.active ?? true };
   const limit = jest
     .fn()
-    .mockResolvedValue(opts.existing ? [opts.existing] : []);
+    .mockResolvedValue(
+      opts.existing ? [{ creatorId: actor.id, ...opts.existing }] : [],
+    );
   const chain = { from: () => chain, where: () => chain, limit };
   const db = { select: jest.fn(() => chain) };
   const svc = new EventGuildTagService(registry as never, db as never);
@@ -128,6 +134,25 @@ describe('EventGuildTagService.assertUpdate', () => {
     await expect(
       svc.assertUpdate(actor, 1, { gameId: 4 }),
     ).resolves.toBeUndefined();
+  });
+
+  it('leaves a non-owner to the event service owner 403 (no guild answer leaks)', async () => {
+    const t = tagger();
+    const existing = { gameId: 3, guildId: 9, creatorId: 99 };
+    const { svc } = setup({ tagger: t, existing });
+    await expect(
+      svc.assertUpdate(actor, 1, { guildId: 12, gameId: 4 }),
+    ).resolves.toBeUndefined();
+    expect(t.assertCanTag).not.toHaveBeenCalled();
+  });
+
+  it("still checks an admin editing someone else's event", async () => {
+    const t = tagger();
+    const admin = { id: 1, role: 'admin' as const };
+    const existing = { gameId: 3, guildId: null, creatorId: 99 };
+    const { svc } = setup({ tagger: t, existing });
+    await svc.assertUpdate(admin, 1, { guildId: 9 });
+    expect(t.assertCanTag).toHaveBeenCalledWith(admin, 9, 3);
   });
 
   it('leaves a missing event to the event service (no throw)', async () => {

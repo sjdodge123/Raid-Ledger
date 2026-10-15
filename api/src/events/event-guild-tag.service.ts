@@ -14,6 +14,7 @@ import {
   EXTENSION_POINTS,
   type EventGuildTagger,
 } from '../plugins/plugin-host/extension-points';
+import { isOperatorOrAdmin } from './controller.helpers';
 
 type Actor = { id: number; role: UserRole };
 
@@ -41,7 +42,9 @@ export class EventGuildTagService {
   /**
    * Update (single or series): a number re-checks rights against the
    * resulting game; null clears with no guild check; a game change that would
-   * leave the existing tag on another game is refused.
+   * leave the existing tag on another game is refused. A non-owner is left
+   * to the event service's owner 403, so the guild answer (existence, game,
+   * editor rights) never leaks to someone who may not edit the event.
    */
   async assertUpdate(
     actor: Actor,
@@ -52,6 +55,7 @@ export class EventGuildTagService {
     if (dto.guildId === undefined && dto.gameId === undefined) return;
     const existing = await this.loadTag(eventId);
     if (!existing) return; // the event service answers 404
+    if (!this.mayEdit(actor, existing.creatorId)) return; // owner 403 there
     const gameId = dto.gameId !== undefined ? dto.gameId : existing.gameId;
     if (dto.guildId !== undefined) {
       await this.assertCanTag(actor, dto.guildId, gameId);
@@ -79,11 +83,19 @@ export class EventGuildTagService {
     );
   }
 
+  private mayEdit(actor: Actor, creatorId: number): boolean {
+    return creatorId === actor.id || isOperatorOrAdmin(actor.role);
+  }
+
   private async loadTag(
     eventId: number,
-  ): Promise<{ gameId: number | null; guildId: number | null } | undefined> {
+  ): Promise<
+    | { creatorId: number; gameId: number | null; guildId: number | null }
+    | undefined
+  > {
     const [row] = await this.db
       .select({
+        creatorId: schema.events.creatorId,
         gameId: schema.events.gameId,
         guildId: schema.events.guildId,
       })
