@@ -22,8 +22,8 @@ type DesiredRow = {
  *
  * Played = a presence session that started in the window, OR attendance at a
  * scheduled event for the game (voice row not classified `no_show`, with
- * time in voice or still in voice; played-at = last leave, or `now` while
- * still in voice). Restricted to active users with a real Discord snowflake
+ * time in voice or still in voice; played-at = last leave, or `now` capped at
+ * the event's effective end while the row is open). Restricted to active users with a real Discord snowflake
  * (same predicate as `guild-reconciliation.service.ts::activeSnowflakeUser`)
  * who have not opted out. Guild membership is NOT checked here — the caller
  * intersects with the live member fetch.
@@ -60,6 +60,7 @@ export async function findDesiredMembers(
 
 /** Every play of `gameId` since `since`: presence starts + event voice. */
 function playedCte(gameId: number, since: string, nowIso: string): SQL {
+  const playedAt = voicePlayedAt(nowIso);
   return sql`
     WITH played AS (
       SELECT s.user_id, s.started_at AS played_at
@@ -67,16 +68,29 @@ function playedCte(gameId: number, since: string, nowIso: string): SQL {
        WHERE s.game_id = ${gameId}
          AND s.started_at >= ${since}::timestamp
       UNION ALL
-      SELECT v.user_id, COALESCE(v.last_leave_at, ${nowIso}::timestamp)
+      SELECT COALESCE(v.user_id, vu.id), ${playedAt}
         FROM event_voice_sessions v
         JOIN events e ON e.id = v.event_id
+        LEFT JOIN users vu
+          ON v.user_id IS NULL AND vu.discord_id = v.discord_user_id
        WHERE e.game_id = ${gameId}
-         AND v.user_id IS NOT NULL
+         AND COALESCE(v.user_id, vu.id) IS NOT NULL
          AND v.classification IS DISTINCT FROM 'no_show'
          AND (v.total_duration_sec > 0 OR v.last_leave_at IS NULL)
-         AND COALESCE(v.last_leave_at, ${nowIso}::timestamp) >= ${since}::timestamp
+         AND ${playedAt} >= ${since}::timestamp
     )
   `;
+}
+
+/**
+ * A voice row's played-at: its last leave, or — still open (in voice now, or
+ * never closed after a bot outage) — `now` capped at the event's effective
+ * end, so a stale open row cannot qualify forever. A start-of-event snapshot
+ * row has `user_id` NULL and is resolved through `discord_user_id` above.
+ */
+function voicePlayedAt(nowIso: string): SQL {
+  return sql`COALESCE(v.last_leave_at, LEAST(${nowIso}::timestamp,
+    COALESCE(e.extended_until, upper(e.duration))))`;
 }
 
 function toDesiredMap(rows: Iterable<DesiredRow>): Map<number, DesiredMember> {

@@ -81,7 +81,14 @@ async function presence(
 
 async function attended(
   user: { id: number; discordId: string },
-  o: { leftAt: Date | null; seconds: number; classification: string | null },
+  o: {
+    leftAt: Date | null;
+    seconds: number;
+    classification: string | null;
+    /** false = a start-of-event voice snapshot row (user_id NULL). */
+    linked?: boolean;
+    window?: [Date, Date];
+  },
 ): Promise<void> {
   const [ev] = nonEmpty(
     await testApp.db
@@ -90,14 +97,14 @@ async function attended(
         title: `GR Raid ${++seq}`,
         creatorId: testApp.seed.adminUser.id,
         gameId,
-        duration: [daysAgo(3), daysAgo(2.9)] as [Date, Date],
+        duration: o.window ?? ([daysAgo(3), daysAgo(2.9)] as [Date, Date]),
       })
       .returning(),
     'event',
   );
   await testApp.db.insert(schema.eventVoiceSessions).values({
     eventId: ev.id,
-    userId: user.id,
+    userId: o.linked === false ? null : user.id,
     discordUserId: user.discordId,
     discordUsername: 'voice-user',
     firstJoinAt: daysAgo(3),
@@ -145,7 +152,13 @@ describe('findDesiredMembers window and sources (ROK-1767)', () => {
     const inVoice = await makeUser();
     const noShow = await makeUser();
     const zero = await makeUser();
-    await attended(inVoice, { leftAt: null, seconds: 0, classification: null });
+    // The event is still running, so "still in voice" plays at `now`.
+    await attended(inVoice, {
+      leftAt: null,
+      seconds: 0,
+      classification: null,
+      window: [daysAgo(0.1), daysAgo(-0.1)],
+    });
     await attended(noShow, {
       leftAt: daysAgo(1),
       seconds: 600,
@@ -162,6 +175,46 @@ describe('findDesiredMembers window and sources (ROK-1767)', () => {
     expect([...map.keys()]).toEqual([inVoice.id]);
     expect(map.get(inVoice.id)?.lastPlayedAt.toISOString()).toBe(
       NOW.toISOString(),
+    );
+  });
+});
+
+describe('findDesiredMembers voice edge cases (ROK-1767 Codex)', () => {
+  it('resolves a snapshot voice row (user_id NULL) through discord_user_id', async () => {
+    const u = await makeUser();
+    await attended(u, {
+      leftAt: daysAgo(1),
+      seconds: 1800,
+      classification: 'full',
+      linked: false,
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([u.id]);
+    expect(map.get(u.id)?.discordUserId).toBe(u.discordId);
+  });
+
+  it('caps a never-closed voice row at the event end, not now', async () => {
+    const recentEnd = await makeUser();
+    const longAgo = await makeUser();
+    await attended(recentEnd, {
+      leftAt: null,
+      seconds: 1800,
+      classification: null,
+    });
+    await attended(longAgo, {
+      leftAt: null,
+      seconds: 1800,
+      classification: null,
+      window: [daysAgo(30), daysAgo(29.9)],
+    });
+
+    const map = await desired();
+
+    expect([...map.keys()]).toEqual([recentEnd.id]);
+    expect(map.get(recentEnd.id)?.lastPlayedAt.toISOString()).toBe(
+      daysAgo(2.9).toISOString(),
     );
   });
 });
