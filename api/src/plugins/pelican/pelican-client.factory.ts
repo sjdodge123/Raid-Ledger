@@ -24,6 +24,14 @@ export class PelicanClientFactory {
     return (await this.connect())?.client ?? null;
   }
 
+  /** The normalised panel base URL (console `Origin`), or `null`. Never logged. */
+  async panelUrl(): Promise<string | null> {
+    const rawUrl = await this.settings.get(SETTING_KEYS.PELICAN_PANEL_URL);
+    if (!rawUrl) return null;
+    const url = normalisePanelUrl(rawUrl);
+    return url.ok ? url.url : null;
+  }
+
   /** The configured client plus its host, or `null` when unconfigured. */
   async connect(): Promise<PelicanConnection | null> {
     const [rawUrl, apiKey] = await Promise.all([
