@@ -136,8 +136,13 @@ async function signup(
   return row.id;
 }
 
-async function rosterOn(eventId: number, who: Who, role: string) {
-  const signupId = await signup(eventId, who);
+async function rosterOn(
+  eventId: number,
+  who: Who,
+  role: string,
+  extra: { status?: string } = {},
+) {
+  const signupId = await signup(eventId, who, extra);
   await testApp.db
     .insert(schema.rosterAssignments)
     .values({ eventId, signupId, role, position: 1 });
@@ -146,10 +151,14 @@ async function rosterOn(eventId: number, who: Who, role: string) {
 async function seedEvents(): Promise<void> {
   const soon = await ev({ key: 'soon', startH: 24, slot: { type: 'generic' } });
   await signup(soon, 'member', { status: 'tentative' });
+  // Departed mid-raid: no longer counted as signed up on a live card.
+  await signup(soon, 'alt', { status: 'departed' });
   await ev({ key: 'b1', startH: 30, group: groups.b, rule: 'biweekly' });
   const mmo = await ev({ key: 'mmo', startH: 48, slot: MMO });
   await rosterOn(mmo, 'member', 'tank');
   await rosterOn(mmo, 'alt', 'bench');
+  // Departure moves the assignment to bench; they are not available.
+  await rosterOn(mmo, 'pug', 'bench', { status: 'departed' });
   await ev({ key: 'a1', startH: 72, group: groups.a, rule: 'weekly' });
   await ev({ key: 'a2', startH: 240, group: groups.a, rule: 'weekly' });
   await ev({ key: 'cancelled', startH: 12, cancelled: true });
@@ -234,7 +243,7 @@ describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
     expect(body.nextRaid?.id).toBe(ids.soon);
   });
 
-  it('carries the viewer status and signup count per card', () => {
+  it('carries the viewer status and signup count per card (departed excluded)', () => {
     const soon = body.upcoming.find((e) => e.id === ids.soon);
     expect(soon).toMatchObject({ viewerStatus: 'tentative', signupCount: 1 });
     const a1 = body.upcoming.find((e) => e.id === ids.a1);
@@ -270,7 +279,7 @@ describe('GET /plugins/wow/guilds/:id/raids — payload', () => {
     ]);
   });
 
-  it('builds composition from the next MMO event roster, with the bench', () => {
+  it('builds composition from the next MMO event roster, with the bench (departed excluded)', () => {
     expect(body.composition?.event.id).toBe(ids.mmo);
     expect(body.composition?.roles).toEqual([
       { role: 'tank', filled: 1, needed: 2 },

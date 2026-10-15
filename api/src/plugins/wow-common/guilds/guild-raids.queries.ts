@@ -6,6 +6,7 @@ import {
   inArray,
   isNotNull,
   isNull,
+  ne,
   sql,
   type SQL,
 } from 'drizzle-orm';
@@ -30,7 +31,16 @@ const { events, eventSignups, rosterAssignments, characters, users } = schema;
 /** Upcoming/recent list length (P6). */
 const LIST_LIMIT = 10;
 
-/** Signup states that count as "signed up" on a card. */
+/**
+ * Signup states that count as "signed up" on a live (upcoming/running) card.
+ * `departed` is excluded, matching the core event signup count.
+ */
+const LIVE_SIGNED = sql`('signed_up', 'tentative')`;
+
+/**
+ * Signup states that count as "signed up" on an ended card. A departed
+ * member did raid (attendance resolves `departed` → attended), so it stays.
+ */
 const SIGNED = sql`('signed_up', 'tentative', 'departed')`;
 
 /**
@@ -81,7 +91,7 @@ export async function loadUpcoming(
       duration: events.duration,
       slotConfig: events.slotConfig,
       maxAttendees: events.maxAttendees,
-      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${SIGNED})`,
+      signupCount: sql<number>`(select count(*)::int from ${eventSignups} s where s.event_id = ${outerEventId} and s.status in ${LIVE_SIGNED})`,
       viewerStatus: sql<
         string | null
       >`(select s.status from ${eventSignups} s where s.event_id = ${outerEventId} and s.user_id = ${viewerId} limit 1)`,
@@ -291,6 +301,7 @@ async function benchRows(
       and(
         eq(rosterAssignments.eventId, eventId),
         eq(rosterAssignments.role, 'bench'),
+        ne(eventSignups.status, 'departed'),
       ),
     )
     .orderBy(asc(rosterAssignments.position), asc(eventSignups.signedUpAt));
