@@ -17,6 +17,7 @@ CREATE TABLE "discord_game_roles" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "discord_game_roles_game_id_unique" UNIQUE("game_id"),
+	CONSTRAINT "discord_game_roles_role_id_unique" UNIQUE("role_id"),
 	CONSTRAINT "discord_game_roles_window_days_range" CHECK ("discord_game_roles"."window_days" BETWEEN 1 AND 365)
 );
 --> statement-breakpoint
