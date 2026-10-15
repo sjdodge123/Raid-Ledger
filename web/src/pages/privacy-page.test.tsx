@@ -52,7 +52,7 @@ describe('PrivacyPage', () => {
         const page = renderPage();
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
-        expect(page).toHaveTextContent('usernames, email addresses and IP addresses are removed first.');
+        expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
     });
 
     it('discloses error reports when the instance reports telemetry on (ROK-1779)', () => {
