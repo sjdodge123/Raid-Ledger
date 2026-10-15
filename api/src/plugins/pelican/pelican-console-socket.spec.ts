@@ -7,6 +7,7 @@ import {
   type PelicanConsoleSocketOptions,
 } from './pelican-console-socket';
 import {
+  CONSOLE_LIVENESS_MS,
   consoleBackoffMs,
   nodeWingsSocketFactory,
   type WingsSocketHandlers,
@@ -229,6 +230,22 @@ describe('PelicanConsoleSocket reconnect', () => {
     t.socket(0).handlers.onClose();
     expect(t.onLine).not.toHaveBeenCalled();
     expect(jest.getTimerCount()).toBe(0);
+  });
+});
+
+describe('PelicanConsoleSocket liveness watchdog (review m8)', () => {
+  it('reconnects a socket that goes silent past the liveness window', async () => {
+    const t = setup();
+    t.conn.start();
+    await connected(t);
+    await jest.advanceTimersByTimeAsync(CONSOLE_LIVENESS_MS - 1);
+    t.frame(0, 'stats'); // any frame proves the socket is alive
+    await jest.advanceTimersByTimeAsync(CONSOLE_LIVENESS_MS - 1);
+    expect(t.socket(0).closed).toBe(false);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(t.socket(0).closed).toBe(true);
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(t.sockets).toHaveLength(2);
   });
 });
 

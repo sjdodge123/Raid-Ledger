@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import type { PelicanResult } from './pelican-client';
 import type { PelicanWebsocketCredentials } from './pelican-api.schemas';
 import {
+  CONSOLE_LIVENESS_MS,
   consoleBackoffMs,
   firstStringArg,
   nodeWingsSocketFactory,
@@ -46,7 +47,8 @@ export interface PelicanConsoleSocketOptions {
  * opens the socket with `Origin`, sends `auth`, then `send logs` (≤150-line
  * replay) on `auth success`. Re-auths on `token expiring` on the same socket;
  * reconnects with backoff (1s→60s, jitter) on close / error / `token
- * expired` / `jwt error`. Logs only states and counts — never a line.
+ * expired` / `jwt error`, or after {@link CONSOLE_LIVENESS_MS} with no frame
+ * (a half-open socket never closes). Logs only states and counts — never a line.
  */
 export class PelicanConsoleSocket {
   private readonly logger = new Logger(PelicanConsoleSocket.name);
@@ -54,6 +56,7 @@ export class PelicanConsoleSocket {
   private readonly factory: WingsSocketFactory;
   private socket: WingsSocket | null = null;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
   /** Bumped per connection attempt and on stop — stale callbacks no-op. */
   private generation = 0;
   private attempt = 0;
@@ -83,6 +86,7 @@ export class PelicanConsoleSocket {
     this.running = false;
     this.generation += 1;
     this.clearTimer();
+    this.clearWatchdog();
     this.closeSocket();
   }
 
@@ -97,12 +101,30 @@ export class PelicanConsoleSocket {
       this.socket = this.factory(socket, this.origin, {
         onOpen: () => this.whenCurrent(gen, () => this.sendAuth(token)),
         onMessage: (data) =>
-          this.whenCurrent(gen, () => this.dispatch(gen, data)),
+          this.whenCurrent(gen, () => {
+            this.armWatchdog(gen);
+            this.dispatch(gen, data);
+          }),
         onClose: () => this.fail(gen, 'closed'),
       });
+      this.armWatchdog(gen);
     } catch {
       this.fail(gen, 'connect threw');
     }
+  }
+
+  /** (Re)start the liveness timer: silence past it means a half-open socket. */
+  private armWatchdog(gen: number): void {
+    this.clearWatchdog();
+    this.watchdog = setTimeout(() => {
+      this.watchdog = null;
+      this.fail(gen, 'silent');
+    }, CONSOLE_LIVENESS_MS);
+  }
+
+  private clearWatchdog(): void {
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = null;
   }
 
   private dispatch(gen: number, data: unknown): void {
@@ -162,6 +184,7 @@ export class PelicanConsoleSocket {
   private fail(gen: number, reason: string): void {
     if (!this.isCurrent(gen)) return;
     this.generation += 1;
+    this.clearWatchdog();
     this.closeSocket();
     const now = (this.opts.now ?? Date.now)();
     this.unreachableSince ??= now;

@@ -12,6 +12,12 @@ export const CONSOLE_BACKOFF_BASE_MS = 1_000;
 export const CONSOLE_BACKOFF_CAP_MS = 60_000;
 /** ± fraction applied to every backoff step. */
 export const CONSOLE_BACKOFF_JITTER = 0.2;
+/**
+ * No frame at all for this long → treat the socket as half-open and
+ * reconnect. Longer than the ~10-min token lifetime, whose `token expiring`
+ * frame a live socket always delivers (ROK-1800 review m8).
+ */
+export const CONSOLE_LIVENESS_MS = 11 * 60_000;
 
 /**
  * Delay before reconnect attempt `attempt` (0-based): 1s, 2s, 4s … capped at
