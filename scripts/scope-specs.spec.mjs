@@ -13,7 +13,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { join, dirname } from 'node:path';
+import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCOPE_SPECS = join(dirname(fileURLToPath(import.meta.url)), 'smoke', 'scope-specs.sh');
@@ -26,13 +28,14 @@ const REPO_ROOT = dirname(dirname(dirname(SCOPE_SPECS)));
  * are always set so no case reads the repo's git state: the fleet runner's
  * /workspace has no usable origin/main.
  */
-function scopeSpecs(files, diff = '', newFiles = []) {
+function scopeSpecs(files, diff = '', newFiles = [], specDir = undefined) {
   const env = {
     ...process.env,
     SCOPE_FILES: files.join('\n'),
     SCOPE_BASE: 'origin/main',
     SCOPE_DIFF: diff,
     SCOPE_NEW_FILES: newFiles.join('\n'),
+    ...(specDir === undefined ? {} : { SCOPE_SPEC_DIR: specDir }),
   };
   return execFileSync('bash', [SCOPE_SPECS], { encoding: 'utf8', cwd: REPO_ROOT, env })
     .trim()
@@ -160,22 +163,54 @@ test('a lazy export rendered only on a /dev route maps to NONE (ROK-1774 shape)'
   assert.deepEqual(scopeSpecs([ROUTES, LAZY], diff), ['NONE']);
 });
 
-test('an added /guilds/:id route + lazy page map to the guild spec (ROK-1785 shape)', () => {
-  const diff = [
-    diffFor(ROUTES, [
-      '-  GamesPage, CharacterDetailPage,',
-      '+  GamesPage, CharacterDetailPage, GuildPage,',
-      '+        <Route path="/guilds/:id" element={<GuildPage />} />',
-    ]),
-    diffFor(LAZY, [
-      '+/** ROK-1785: WoW-plugin-owned guild page. */',
-      '+export const GuildPage = lazyWithRetry(() =>',
-      "+    import('./plugins/wow/guild/guild-page').then((m) => ({ default: m.GuildPage })),",
-      '+);',
-    ]),
-  ].join('\n');
+const GUILD_ROUTE_DIFF = [
+  diffFor(ROUTES, [
+    '-  GamesPage, CharacterDetailPage,',
+    '+  GamesPage, CharacterDetailPage, GuildPage,',
+    '+        <Route path="/guilds/:id" element={<GuildPage />} />',
+  ]),
+  diffFor(LAZY, [
+    '+/** ROK-1785: WoW-plugin-owned guild page. */',
+    '+export const GuildPage = lazyWithRetry(() =>',
+    "+    import('./plugins/wow/guild/guild-page').then((m) => ({ default: m.GuildPage })),",
+    '+);',
+  ]),
+].join('\n');
 
-  assert.deepEqual(scopeSpecs([ROUTES, LAZY], diff), ['scripts/smoke/guild-page.smoke.spec.ts']);
+/**
+ * The /guilds mapping, stated as a property of the corpus instead of an exact
+ * list: the guild spec is in, and EVERY listed spec really visits /guilds. An
+ * exact list broke on any branch that adds another /guilds smoke spec (PR #1613
+ * added guild-content.smoke.spec.ts and this case went red in CI).
+ */
+function assertGuildRouteSpecs(out, specDir) {
+  assert.ok(!out.includes('ALL') && !out.includes('NONE'), JSON.stringify(out));
+  assert.ok(out.includes(`${specDir}/guild-page.smoke.spec.ts`), JSON.stringify(out));
+  for (const spec of out) {
+    const text = readFileSync(isAbsolute(spec) ? spec : join(REPO_ROOT, spec), 'utf8');
+    assert.match(text, /["'`}]\/guilds(["'`/?#]|$)/m, `${spec} does not visit /guilds`);
+  }
+}
+
+test('an added /guilds/:id route + lazy page map to the guild spec (ROK-1785 shape)', () => {
+  assertGuildRouteSpecs(scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF), 'scripts/smoke');
+});
+
+test('the /guilds mapping holds when a branch adds another /guilds smoke spec', () => {
+  // The corpus is the real smoke specs PLUS a new one, via SCOPE_SPEC_DIR, so
+  // the case is independent of which specs this checkout's branch adds.
+  const dir = mkdtempSync(join(tmpdir(), 'scope-specs-corpus-'));
+  try {
+    cpSync(join(REPO_ROOT, 'scripts', 'smoke'), dir, { recursive: true });
+    const added = join(dir, 'guild-content.smoke.spec.ts');
+    writeFileSync(added, "test('x', async ({ page }) => { await page.goto('/guilds/1/content'); });\n");
+    const out = scopeSpecs([ROUTES, LAZY], GUILD_ROUTE_DIFF, [], dir);
+
+    assert.ok(out.includes(added), `the new /guilds spec must be selected: ${JSON.stringify(out)}`);
+    assertGuildRouteSpecs(out, dir);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a changed nested (relative) route resolves through its parent path', () => {
