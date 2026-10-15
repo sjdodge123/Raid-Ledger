@@ -1071,6 +1071,9 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 - **Schedule:** interleave `ScheduleLayerRow`s with the day's events by time (`mergeScheduleRows`; a layer
   row comes first on a tie). `text-xs text-dim`, a 12px power icon, no fill, no border — quieter than any
   event card — and the text **wraps** (`break-words`) so the end time and server name stay visible.
+  A day with only layer rows (no events, not today) is still listed, with a muted `text-dim` day header
+  (`data-layer-only`), so a server window on an event-free day is visible (Lead ruling); it drops out again
+  when the layer is off or filtered out.
 - **Filter toggle:** gate in `useCalendarLayers` (a hidden layer's `useItems` gets `enabled=false`, so it
   never fetches), not in a view. Off, inactive plugin, or a game filter that excludes the items → the view
   draws nothing.
@@ -1081,8 +1084,6 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 - Make the band or tick interactive, or give a layer its own game filter: the page's game filter
   (§4.3 / `filter-entry.tsx`) applies client-side. The only per-layer control is the show/hide checkbox.
 - Draw bands in Month or Schedule, put more than one glyph in a month cell, or `truncate` a Schedule row.
-- Show Schedule rows on a day that has no events (and is not today): a daily up-window would turn the
-  three-month agenda into a list of server rows.
 - Import a plugin from core: `components/**`, `pages/**` and `plugins/calendar-layer*.ts` never import
   `plugins/pelican/**` (`pelican-core-boundary.guard.test.ts`).
 

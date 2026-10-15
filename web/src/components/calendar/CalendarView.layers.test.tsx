@@ -61,6 +61,14 @@ beforeEach(() => {
 
 afterEach(() => vi.useRealTimers());
 
+const scheduleDates = () => screen.queryAllByTestId('schedule-day').map((d) => d.dataset['date']);
+
+function scheduleDay(date: string): HTMLElement {
+    const day = screen.queryAllByTestId('schedule-day').find((d) => d.dataset['date'] === date);
+    if (!day) throw new Error(`schedule lists no ${date}; listed: ${scheduleDates().join(', ')}`);
+    return day;
+}
+
 describe('CalendarView month — layer glyph per day (ROK-1775)', () => {
     it('draws one glyph on each day an item touches, and no bands', () => {
         renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} />);
@@ -90,7 +98,7 @@ describe('CalendarView month — layer glyph per day (ROK-1775)', () => {
 describe('CalendarView schedule — muted layer rows (ROK-1775)', () => {
     it('interleaves wrapping layer rows with the day\'s events by time', () => {
         renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView="schedule" />);
-        const rows = screen.getAllByTestId('schedule-layer-row');
+        const rows = within(scheduleDay('2026-10-14')).getAllByTestId('schedule-layer-row');
         expect(rows.map((r) => r.textContent)).toEqual([RESTART, UP]);
         const text = document.body.textContent ?? '';
         expect(text.indexOf(RESTART)).toBeLessThan(text.indexOf('Valheim Night'));
@@ -99,6 +107,24 @@ describe('CalendarView schedule — muted layer rows (ROK-1775)', () => {
             expect(row.querySelector('.truncate')).toBeNull();
             expect(row.querySelector('.break-words')).not.toBeNull();
         }
+    });
+});
+
+describe('Schedule — server-only days (ROK-1775 Lead ruling)', () => {
+    it('lists an event-free day that has only server rows, with a muted header', () => {
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView="schedule" />);
+        const day = scheduleDay('2026-10-15'); // the 22:00–06:00 window runs into the 15th; no event that day
+        expect(day.dataset['layerOnly']).toBe('true');
+        expect(within(day).getAllByTestId('schedule-layer-row').map((r) => r.textContent)).toEqual([UP]);
+        expect(within(day).getByText('15').className).toContain('text-dim');
+        expect(scheduleDay('2026-10-14').dataset['layerOnly']).toBeUndefined();
+    });
+
+    it('drops the server-only day again when the layer is toggled OFF (today and event days stay)', () => {
+        renderCalendar(<CalendarView currentDate={new Date(2026, 9, 14)} calendarView="schedule" />);
+        expect(scheduleDates()).toEqual(['2026-10-14', '2026-10-15']);
+        act(() => useCalendarLayerFilterStore.setState({ hiddenLayers: new Set(['fake:sched']) }));
+        expect(scheduleDates()).toEqual(['2026-10-14']);
     });
 });
 

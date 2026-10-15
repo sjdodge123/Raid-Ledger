@@ -103,7 +103,7 @@ function ScheduleEventCard({ event, onSelect }: { event: CalendarEvent; onSelect
 }
 
 /**
- * Mobile schedule view — continuous scrollable agenda showing only days with events.
+ * Mobile schedule view — continuous scrollable agenda of days with events, today, and days with layer rows.
  * Features: sticky day headers, week range separators, now-line, auto-scroll to today.
  */
 function ScheduleEmpty() {
@@ -119,12 +119,19 @@ function ScheduleEmpty() {
     );
 }
 
-function DayLabel({ day, isToday, stickyTop }: { day: Date; isToday: boolean; stickyTop: string }) {
+/** `muted`: a day listed only for its server rows — its header is as quiet as the rows (ROK-1775). */
+function dayNumberClass(isToday: boolean, muted: boolean): string {
+    if (isToday) return 'w-8 h-8 mx-auto rounded-full bg-success text-white flex items-center justify-center text-base font-bold';
+    return muted ? 'text-base font-medium text-dim mt-0.5' : 'text-lg font-bold text-foreground mt-0.5';
+}
+
+function DayLabel({ day, isToday, muted, stickyTop }: { day: Date; isToday: boolean; muted: boolean; stickyTop: string }) {
+    const weekday = isToday ? 'text-emerald-400' : muted ? 'text-dim' : 'text-muted';
     return (
         <div className="w-11 flex-shrink-0">
             <div className="sticky z-10 bg-backdrop pt-3 pb-2 text-center transition-[top] duration-300" style={{ top: stickyTop }}>
-                <div className={`text-[10px] font-semibold uppercase tracking-wider ${isToday ? 'text-emerald-400' : 'text-muted'}`}>{format(day, 'EEE')}</div>
-                <div className={isToday ? 'w-8 h-8 mx-auto rounded-full bg-success text-white flex items-center justify-center text-base font-bold' : 'text-lg font-bold text-foreground mt-0.5'}>{format(day, 'd')}</div>
+                <div className={`text-[10px] font-semibold uppercase tracking-wider ${weekday}`}>{format(day, 'EEE')}</div>
+                <div className={dayNumberClass(isToday, muted)}>{format(day, 'd')}</div>
             </div>
         </div>
     );
@@ -181,7 +188,13 @@ function useSwipeNavigation(currentDate: Date, onDateChange: (d: Date) => void) 
     return { handleTouchStart, handleTouchEnd };
 }
 
-function useScheduleData(events: CalendarEvent[]) {
+/**
+ * Days the agenda lists: every day with an event, today, and (ROK-1775 Lead ruling)
+ * every day with a layer entry — so a server window on an event-free day is visible.
+ * `layerDays` is already empty when the layer is toggled off, its plugin is inactive
+ * or the game filter excludes it, so those days drop out again.
+ */
+function useScheduleData(events: CalendarEvent[], layerDays: LayerDayMap | undefined) {
     const eventsByDate = useMemo(() => {
         const map = new Map<string, CalendarEvent[]>();
         const sorted = [...events].sort((a, b) => a.start.getTime() - b.start.getTime());
@@ -198,8 +211,9 @@ function useScheduleData(events: CalendarEvent[]) {
         const todayKey = format(startOfDay(new Date()), 'yyyy-MM-dd');
         const keys = new Set(eventsByDate.keys());
         keys.add(todayKey);
+        for (const [k, entries] of layerDays ?? []) if (entries.length > 0) keys.add(k);
         return [...keys].sort().map((k) => parse(k, 'yyyy-MM-dd', new Date()));
-    }, [eventsByDate]);
+    }, [eventsByDate, layerDays]);
 
     return { eventsByDate, daysWithEvents };
 }
@@ -213,11 +227,13 @@ function ScheduleDayRow({ day, idx, daysWithEvents, eventsByDate, layerDays, now
     const isDayToday = isSameDay(day, now);
     const prevDay = idx > 0 ? daysWithEvents[idx - 1] : null;
     const isNewWeek = !prevDay || !isSameWeek(day, prevDay, { weekStartsOn: 0 });
+    const layerOnly = dayEvents.length === 0 && !isDayToday;
     return (
         <Fragment key={key}>
             {isNewWeek && <div className="week-separator pl-1 pr-2 py-2 text-xs font-medium text-muted tracking-wide">{formatWeekRange(day)}</div>}
-            <div ref={isDayToday ? todayRef : undefined} className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isDayToday ? 'scroll-mt-36' : ''}`}>
-                <DayLabel day={day} isToday={isDayToday} stickyTop={stickyTop} />
+            <div ref={isDayToday ? todayRef : undefined} data-testid="schedule-day" data-date={key} data-layer-only={layerOnly ? 'true' : undefined}
+                className={`flex gap-1.5 border-b border-edge/20 min-h-[48px] pl-1 ${isDayToday ? 'scroll-mt-36' : ''}`}>
+                <DayLabel day={day} isToday={isDayToday} muted={layerOnly} stickyTop={stickyTop} />
                 <DayEvents dayEvents={dayEvents} entries={layerDays?.get(key)} isToday={isDayToday} now={now} onSelectEvent={onSelectEvent} />
             </div>
         </Fragment>
@@ -228,7 +244,7 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
     const todayRef = useRef<HTMLDivElement>(null);
     const scrollDirection = useScrollDirection();
     const isHeaderHidden = scrollDirection === 'down';
-    const { eventsByDate, daysWithEvents } = useScheduleData(events);
+    const { eventsByDate, daysWithEvents } = useScheduleData(events, layerDays);
     const { handleTouchStart, handleTouchEnd } = useSwipeNavigation(currentDate, onDateChange);
 
     useEffect(() => {
@@ -236,7 +252,8 @@ export function ScheduleView({ events, currentDate, onDateChange, onSelectEvent,
         return () => clearTimeout(timer);
     }, []);
 
-    if (events.length === 0) {
+    const hasLayerRows = [...(layerDays?.values() ?? [])].some((entries) => entries.length > 0);
+    if (events.length === 0 && !hasLayerRows) {
         if (isFetching) return <div className="flex items-center justify-center py-16 gap-2 text-muted"><div className="loading-spinner" /><span>Loading events...</span></div>;
         return <ScheduleEmpty />;
     }
