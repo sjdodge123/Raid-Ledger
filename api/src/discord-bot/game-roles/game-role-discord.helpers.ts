@@ -3,7 +3,13 @@
  * `discord-bot-client.service.ts` (size cap); each function takes the guild
  * the caller already resolved, `null` meaning the bot is disconnected.
  */
-import { PermissionFlagsBits, type Guild, type Role } from 'discord.js';
+import {
+  PermissionFlagsBits,
+  type Collection,
+  type Guild,
+  type GuildMember,
+  type Role,
+} from 'discord.js';
 import type { GameRolePreflightDto } from '@raid-ledger/contract';
 
 type Problem = GameRolePreflightDto['problems'][number];
@@ -97,15 +103,23 @@ export async function deleteCreatedRole(
     .catch(() => undefined);
 }
 
+export type GuildMembers = Collection<string, GuildMember>;
+
+/** The full member list; a run fetches it once and shares it across games. */
+export function fetchGuildMembers(guild: Guild): Promise<GuildMembers> {
+  return guild.members.fetch();
+}
+
 /** Holders + member ids from ONE member fetch; null when the role is gone. */
 export async function fetchRoleState(
   guild: Guild | null,
   roleId: string,
+  prefetched?: GuildMembers,
 ): Promise<RoleState | null> {
   if (!guild) return null;
   const role = await fetchRole(guild, roleId);
   if (!role) return null;
-  const members = await guild.members.fetch();
+  const members = prefetched ?? (await guild.members.fetch());
   const holders = new Set<string>();
   for (const [id, m] of members) if (m.roles.cache.has(roleId)) holders.add(id);
   return { holders, memberIds: new Set(members.keys()) };

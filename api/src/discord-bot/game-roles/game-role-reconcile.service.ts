@@ -23,7 +23,9 @@ import {
 } from './game-role-diff.helpers';
 import {
   addMemberRole,
+  fetchGuildMembers,
   fetchRoleState,
+  type GuildMembers,
   memberHoldsRole,
   removeMemberRole,
   type RoleState,
@@ -48,6 +50,8 @@ export const GAME_ROLE_MUTATION_CAP = 200;
 
 interface RunState {
   budget: number;
+  /** ONE full member fetch (gateway op 8) per run, shared by every game. */
+  members?: Promise<GuildMembers | undefined>;
   result: GameRoleRunResultDto;
 }
 
@@ -120,11 +124,14 @@ export class GameRoleReconcileService {
     state: RunState,
   ): Promise<void> {
     const now = new Date();
-    const live = await fetchRoleState(guild, row.roleId);
+    state.members ??= fetchGuildMembers(guild);
+    const live = await fetchRoleState(guild, row.roleId, await state.members);
     if (!live) throw new Error(`Discord role ${row.roleId} not found`);
     const diff = await this.computeDiff(row, live, now);
-    for (const c of diff.add) await this.applyAdd(guild, row, c, state);
+    // Removals first: idle-member cleanup is the point, so a heavy-add day
+    // that hits the cap defers adds, not removals.
     for (const c of diff.remove) await this.applyRemove(guild, row, c, state);
+    for (const c of diff.add) await this.applyAdd(guild, row, c, state);
     for (const d of diff.dropGrant)
       await deleteGrant(this.db, row.id, d.userId);
     await stampReconciled(this.db, row.id, now);

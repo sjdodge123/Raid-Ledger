@@ -195,6 +195,26 @@ describe('GameRoleReconcileService (ROK-1767)', () => {
     expect(await grantsOf(roleRowId)).toHaveLength(2);
   });
 
+  it('spends the cap on removals before adds', async () => {
+    const gameId = await makeGame('Cap Order');
+    const roleRowId = await link(gameId, 'role-order');
+    const [player, idler] = [await makeUser(), await makeUser()];
+    await played(player.id, gameId, 1);
+    await grant(roleRowId, idler);
+    liveState([idler.discordId], [player.discordId, idler.discordId]);
+    service.mutationCap = 1;
+
+    const result = await service.runReconciliation();
+
+    expect(result).toEqual({
+      added: 0,
+      removed: 1,
+      skippedOverCap: 1,
+      failedGames: [],
+    });
+    expect(mocked.addMemberRole).not.toHaveBeenCalled();
+  });
+
   it('isolates a failing game: reports it to Sentry and still runs the next', async () => {
     const broken = await makeGame('Broken');
     const fine = await makeGame('Fine');
