@@ -8,7 +8,8 @@
  * embed + button rows as Discord API JSON. It is synchronous — nothing is
  * queued or sent — so no polling is needed.
  *
- * One case per state register (needs_you / announcing / cancelled). Each pins:
+ * One case per state register (needs_you / announcing / cancelled), plus a
+ * per-game `subscribed_game` case (ROK-1797). Each pins:
  *  - author line = the configured community name (read from /system/branding,
  *    not from the response under test)
  *  - footer = `<community> · <type label>`
@@ -16,6 +17,7 @@
  *  - the description carries no raw Discord tokens
  *  - button rows in the order `sendEmbedDM` sends them: type-specific rows
  *    first (event_reminder's Roach Out row), the primary row last
+ *  - the "Adjust Notifications" url (game page or the type's settings row)
  *  - the embed passes the shared render rules
  *
  * Plus one PUG fill-request case through `POST /admin/test/render-pug-invite-embed`,
@@ -67,7 +69,7 @@ interface RenderedDmEmbed {
     fields?: { name: string; value: string; inline?: boolean }[];
     timestamp?: string;
   };
-  components: { components?: { type?: number; label?: string }[] }[];
+  components: { components?: { type?: number; label?: string; url?: string }[] }[];
 }
 
 /** `POST /admin/test/render-pug-invite-embed` — `buildPugInviteEmbed` as JSON. */
@@ -89,19 +91,30 @@ const MAX_PERSONALIZED_FIELDS = 2;
 const PUG_ROW_LABELS = ['Accept', 'Decline', 'View Event'];
 
 interface RenderCase {
-  type: 'event_reminder' | 'new_event' | 'event_cancelled';
+  type: 'event_reminder' | 'new_event' | 'event_cancelled' | 'subscribed_game';
   /** `getTypeLabel` in api/src/notifications/notification-embed.helpers.ts. */
   label: string;
   color: number;
   register: string;
   /** A button on the type-specific row that must come BEFORE the primary row. */
   extraRowLabel?: string;
+  /** ROK-1797 `buildAdjustNotificationsUrl`: game page or the type's settings row. */
+  adjustUrl: RegExp;
+  payload?: Record<string, unknown>;
 }
 
+/** The type's own row on the settings page, never the legacy path. */
+const settingsRow = (type: string) =>
+  new RegExp(`/profile/notifications\\?type=${type}#notif-${type}$`);
+
+const RENDER_PAYLOAD = { eventId: 1, eventTitle: 'Render Raid', gameName: 'Render Game' };
+
 const CASES: RenderCase[] = [
-  { type: 'event_reminder', label: 'Event Reminder', color: REMINDER_AMBER, register: 'needs_you amber', extraRowLabel: 'Roach Out' },
-  { type: 'new_event', label: 'New Event', color: ANNOUNCEMENT_CYAN, register: 'announcing cyan' },
-  { type: 'event_cancelled', label: 'Event Cancelled', color: CANCELLED_RED, register: 'cancelled red' },
+  { type: 'event_reminder', label: 'Event Reminder', color: REMINDER_AMBER, register: 'needs_you amber', extraRowLabel: 'Roach Out', adjustUrl: settingsRow('event_reminder') },
+  { type: 'new_event', label: 'New Event', color: ANNOUNCEMENT_CYAN, register: 'announcing cyan', adjustUrl: settingsRow('new_event') },
+  { type: 'event_cancelled', label: 'Event Cancelled', color: CANCELLED_RED, register: 'cancelled red', adjustUrl: settingsRow('event_cancelled') },
+  // ROK-1797: a per-game DM's Adjust button opens the game page's bell.
+  { type: 'subscribed_game', label: 'Game Activity', color: ANNOUNCEMENT_CYAN, register: 'announcing cyan', adjustUrl: /\/games\/\d+\?action=notifications&notif=/, payload: { ...RENDER_PAYLOAD, gameId: 1 } },
 ];
 
 function fail(msg: string): never {
@@ -121,7 +134,7 @@ function renderDmEmbed(api: ApiClient, c: RenderCase): Promise<RenderedDmEmbed> 
     type: c.type,
     title: `render-dm-embed ${c.type}`,
     message: `Smoke render of the ${c.type} DM embed.`,
-    payload: { eventId: 1, eventTitle: 'Render Raid', gameName: 'Render Game' },
+    payload: c.payload ?? RENDER_PAYLOAD,
   });
 }
 
@@ -159,6 +172,15 @@ function rowLabels(res: RenderedDmEmbed): string[][] {
   );
 }
 
+/** The primary row's Adjust Notifications link (ROK-1797). */
+function assertAdjustUrl(res: RenderedDmEmbed, c: RenderCase) {
+  const primary = res.components[res.components.length - 1]?.components ?? [];
+  const url = primary.find((b) => b.label === ADJUST_LABEL)?.url ?? '';
+  if (!c.adjustUrl.test(url)) {
+    fail(`${c.type}: expected the "${ADJUST_LABEL}" url to match ${c.adjustUrl}, got "${url}"`);
+  }
+}
+
 /** Rows as `sendEmbedDM` sends them: type-specific rows first, primary last. */
 function assertButtonRows(res: RenderedDmEmbed, c: RenderCase) {
   const rows = rowLabels(res);
@@ -166,6 +188,7 @@ function assertButtonRows(res: RenderedDmEmbed, c: RenderCase) {
   if (!last.includes(ADJUST_LABEL)) {
     fail(`${c.type}: expected the last row to be the primary row with "${ADJUST_LABEL}", got ${JSON.stringify(rows)}`);
   }
+  assertAdjustUrl(res, c);
   if (c.extraRowLabel && !(rows.length > 1 && rows[0]?.includes(c.extraRowLabel))) {
     fail(`${c.type}: expected a first row with "${c.extraRowLabel}" before the primary row, got ${JSON.stringify(rows)}`);
   }
