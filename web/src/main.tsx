@@ -7,7 +7,7 @@ import './lib/magic-link-capture';
 import './lib/wowhead-tooltips-loader';
 // Sentry next — before any other modules.
 // ROK-306: Maintainer telemetry for error tracking.
-import { Sentry, bootTelemetry } from './sentry';
+import { Sentry, bootTelemetry, bufferBoundaryError, captureReactError } from './sentry';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -20,19 +20,16 @@ import { ErrorFallback } from './components/ErrorFallback';
 import { systemStatusQueryOptions } from './hooks/use-system-status';
 
 // ROK-1779: Sentry initialises only once /system/status allows it (runtime
-// opt-out). A failed fetch means no init — fail closed.
+// opt-out). A failed fetch means no init — fail closed. The mount below does
+// NOT wait for it: errors raised meanwhile are held by the boot buffer and
+// sent after init (ON) or dropped (OFF).
 void bootTelemetry(() => queryClient.fetchQuery(systemStatusQueryOptions));
-
-const reportToSentry = Sentry.reactErrorHandler();
-// React hands an absent componentStack as `undefined`; Sentry's ErrorInfo wants the key omitted.
-const forwardToSentry = (error: unknown, { componentStack }: { componentStack?: string | undefined }) =>
-  reportToSentry(error, componentStack === undefined ? {} : { componentStack });
 
 const root = createRoot(document.getElementById('root')!, {
   // React 19 error hooks — forward uncaught/caught/recoverable errors to Sentry.
-  onUncaughtError: forwardToSentry,
-  onCaughtError: forwardToSentry,
-  onRecoverableError: forwardToSentry,
+  onUncaughtError: captureReactError,
+  onCaughtError: captureReactError,
+  onRecoverableError: captureReactError,
 });
 
 // ROK-343: Web Vitals monitoring (FCP <1.8s, LCP <2.5s targets)
@@ -40,7 +37,10 @@ initPerformanceMonitoring();
 
 root.render(
   <StrictMode>
-    <Sentry.ErrorBoundary fallback={({ error }) => <ErrorFallback error={error} />}>
+    <Sentry.ErrorBoundary
+      fallback={({ error }) => <ErrorFallback error={error} />}
+      onError={bufferBoundaryError}
+    >
       <QueryClientProvider client={queryClient}>
         <App />
       </QueryClientProvider>

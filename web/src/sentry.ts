@@ -16,6 +16,16 @@ import './lib/magic-link-capture';
 import * as Sentry from '@sentry/react';
 import { buildSentryOptions, replaySampleRates } from './lib/sentry-options';
 import { shouldInitTelemetry } from './lib/telemetry-gate';
+import {
+    bufferCapture,
+    closeBootBuffer,
+    installBootErrorBuffer,
+    type PendingCapture,
+} from './lib/sentry-boot-buffer';
+
+// ROK-1779: errors thrown before the telemetry decision are held, then sent
+// after init (ON) or dropped (OFF) — see lib/sentry-boot-buffer.ts.
+installBootErrorBuffer();
 
 let initialised = false;
 let decided = false;
@@ -44,11 +54,44 @@ export function initSentry(serverEnabled: boolean | undefined): boolean {
     if (decided) return initialised;
     decided = true;
     const buildDisabled = import.meta.env.VITE_DISABLE_TELEMETRY === 'true';
-    if (!shouldInitTelemetry(serverEnabled, buildDisabled)) return false;
+    if (!shouldInitTelemetry(serverEnabled, buildDisabled)) {
+        closeBootBuffer(); // OFF: the held startup errors are dropped unsent
+        return false;
+    }
     initialised = true;
     Sentry.init(buildSentryOptions(() => { _lastTransportFailed = true; }));
+    closeBootBuffer().forEach(sendPending);
     loadReplayLazily();
     return true;
+}
+
+/** Send one startup error held while the decision was pending. */
+function sendPending({ error, source, componentStack }: PendingCapture): void {
+    Sentry.captureException(error, {
+        tags: { 'boot.buffered': source },
+        ...(componentStack === undefined ? {} : { contexts: { react: { componentStack } } }),
+    });
+}
+
+/**
+ * ROK-1779: React 19 root error hooks (main.tsx). Held while the decision is
+ * pending, forwarded once telemetry is ON, dropped when OFF.
+ */
+export function captureReactError(
+    error: unknown,
+    { componentStack }: { componentStack?: string | undefined },
+): void {
+    const stack = componentStack === undefined ? {} : { componentStack };
+    if (bufferCapture({ error, source: 'react-root', ...stack })) return;
+    if (initialised) Sentry.reactErrorHandler()(error, stack);
+}
+
+/**
+ * ROK-1779: Sentry.ErrorBoundary `onError`. The boundary reports by itself
+ * once Sentry is live; before the decision there is no client, so hold it.
+ */
+export function bufferBoundaryError(error: unknown, componentStack: string): void {
+    bufferCapture({ error, source: 'error-boundary', componentStack });
 }
 
 /**
