@@ -1499,6 +1499,13 @@
       "when": 1792026869916,
       "tag": "0214_guild_recommended_addons",
       "breakpoints": true
+    },
+    {
+      "idx": 215,
+      "version": "7",
+      "when": 1792076195361,
+      "tag": "0215_guild_events",
+      "breakpoints": true
     }
   ]
 }
