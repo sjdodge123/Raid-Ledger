@@ -2,6 +2,9 @@ import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { useAuth } from '../../hooks/use-auth';
 import { useSubmitFeedback } from '../../hooks/use-feedback';
 import { Button } from '../ui/button';
+// Eager, not via the lazy panel: console + uncaught-error capture must run from
+// page load, so the logs a bug report attaches include what led up to it.
+import './feedback-console-capture';
 
 /**
  * The dialog, its form state, the screenshot field and the submit flow load
