@@ -6,7 +6,7 @@
  * come from the game's voice-monitor binding when there is one, so a server
  * and a bound voice channel share one set of Quick Play settings.
  */
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
@@ -97,8 +97,8 @@ export async function resolveSteamIdentity(
   return rows[0] ?? null;
 }
 
-/** Steam-only rows still open on the event (the server's present players). */
-export async function listOpenSteamOnlyIds(
+/** SteamIDs of every row still on the server — merged voice rows included. */
+export async function listOnServerSteamIds(
   db: Db,
   eventId: number,
 ): Promise<string[]> {
@@ -108,8 +108,7 @@ export async function listOpenSteamOnlyIds(
     .where(
       and(
         eq(p.eventId, eventId),
-        isNotNull(p.steamId),
-        isNull(p.discordUserId),
+        eq(p.onServer, true),
         isNull(p.leftAt),
       ),
     );
@@ -117,7 +116,8 @@ export async function listOpenSteamOnlyIds(
 }
 
 /**
- * Whether any Steam-only row is still open — voice leave must not start grace.
+ * Whether anyone is still on the server — linked (merged) rows included —
+ * so a voice leave must not start grace.
  * An indexed read (`rows[0]`) on purpose: the voice-path unit specs' drizzle
  * chain mock resolves `limit` to a non-array, which reads as "none open".
  */
@@ -131,8 +131,7 @@ export async function hasOpenServerPlayers(
     .where(
       and(
         eq(p.eventId, eventId),
-        isNotNull(p.steamId),
-        isNull(p.discordUserId),
+        eq(p.onServer, true),
         isNull(p.leftAt),
       ),
     )
@@ -140,7 +139,7 @@ export async function hasOpenServerPlayers(
   return rows[0] !== undefined;
 }
 
-/** Open rows carrying a SteamID — the rehydrate set for the supervisor. */
+/** Open rows still on the server — the rehydrate set for the supervisor. */
 export async function listOpenServerPresence(
   db: Db,
   eventId: number,
@@ -148,7 +147,9 @@ export async function listOpenServerPresence(
   const rows = await db
     .select({ steamId: p.steamId, displayName: p.discordUsername })
     .from(p)
-    .where(and(eq(p.eventId, eventId), isNotNull(p.steamId), isNull(p.leftAt)));
+    .where(
+      and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)),
+    );
   return rows.flatMap((r) =>
     r.steamId ? [{ steamId: r.steamId, displayName: r.displayName }] : [],
   );

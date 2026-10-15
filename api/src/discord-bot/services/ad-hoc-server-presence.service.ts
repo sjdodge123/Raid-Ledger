@@ -33,7 +33,7 @@ import {
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
   listOpenServerPresence,
-  listOpenSteamOnlyIds,
+  listOnServerSteamIds,
   renameSteamOnlyRow,
   resolveSteamIdentity,
   serverSourceKey,
@@ -121,7 +121,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.pending.delete(source.pelicanServerId);
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (!live) return;
-      const open = await listOpenSteamOnlyIds(this.db, live.id);
+      const open = await listOnServerSteamIds(this.db, live.id);
       for (const steamId of open)
         await this.participantService.markServerLeave(live.id, steamId);
       if (open.length > 0) await this.afterLeave(live);
