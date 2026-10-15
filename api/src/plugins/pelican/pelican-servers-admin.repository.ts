@@ -109,6 +109,7 @@ function getServerColumns() {
     name: pelicanServers.name,
     gameId: pelicanServers.gameId,
     showOnCalendar: pelicanServers.showOnCalendar,
+    presenceTracking: pelicanServers.presenceTracking,
     currentState: pelicanServers.currentState,
     isSuspended: pelicanServers.isSuspended,
     statusCheckedAt: pelicanServers.statusCheckedAt,

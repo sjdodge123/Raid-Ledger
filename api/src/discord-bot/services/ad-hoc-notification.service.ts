@@ -250,7 +250,7 @@ export class AdHocNotificationService implements OnModuleDestroy {
       endTime: string;
     },
     _participants: Array<{
-      discordUserId: string;
+      discordUserId: string | null;
       discordUsername: string;
       totalDurationSeconds: number | null;
     }>,

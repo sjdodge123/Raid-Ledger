@@ -22,6 +22,7 @@ function makeRow(over: Partial<PelicanAdminServerRow> = {}) {
     gameId: 9,
     gameName: 'Valheim',
     showOnCalendar: true,
+    presenceTracking: false,
     currentState: 'running',
     isSuspended: false,
     statusCheckedAt: FRESH,
