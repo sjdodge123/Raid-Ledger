@@ -261,6 +261,33 @@ function describeSystemController() {
         activePlugins: expect.any(Array),
       });
     });
+
+    describe('ROK-1779: telemetryEnabled', () => {
+      let saved: string | undefined;
+      beforeEach(() => {
+        saved = process.env.DISABLE_TELEMETRY;
+        (mockUsersService.count as jest.Mock).mockResolvedValue(1);
+        (
+          mockSettingsService.isDiscordConfigured as jest.Mock
+        ).mockResolvedValue(false);
+      });
+      afterEach(() => {
+        if (saved === undefined) delete process.env.DISABLE_TELEMETRY;
+        else process.env.DISABLE_TELEMETRY = saved;
+      });
+
+      it('is true when DISABLE_TELEMETRY is unset (opt-out default)', async () => {
+        delete process.env.DISABLE_TELEMETRY;
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(true);
+      });
+
+      it("is false when DISABLE_TELEMETRY='true'", async () => {
+        process.env.DISABLE_TELEMETRY = 'true';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+    });
   }
   describe('getStatus', () => describeGetStatus());
 

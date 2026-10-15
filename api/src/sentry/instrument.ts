@@ -6,12 +6,15 @@
 import * as Sentry from '@sentry/nestjs';
 import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
+import { scrubPii } from './sentry-pii.helpers';
+import { isTelemetryEnabled } from './telemetry-policy';
 
 const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
 
 const isProduction = process.env.NODE_ENV === 'production';
-const telemetryDisabled = process.env.DISABLE_TELEMETRY === 'true';
+// ROK-1779: the default (opt-out vs opt-in) lives in telemetry-policy.ts.
+const telemetryDisabled = !isTelemetryEnabled();
 
 /** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
 const PII_HEADER_DENY = {
@@ -187,12 +190,13 @@ if (!telemetryDisabled && isProduction) {
       ) {
         event.fingerprint = ['discord-api-transient'];
       }
-      return scrubSecrets(event); // ROK-1592: redact tokens/secrets last
+      // ROK-1592: redact tokens/secrets last; ROK-1779: then personal data.
+      return scrubPii(scrubSecrets(event));
     },
     // ROK-1592: performance transactions (tracesSampleRate) carry request and
     // span URLs too — e.g. the OAuth callback's `?code=…&state=…`.
     beforeSendTransaction(event) {
-      return scrubSecrets(event);
+      return scrubPii(scrubSecrets(event));
     },
     // Filter out pg_catalog type introspection queries from the Postgres driver.
     // These are normal driver behavior (OID-to-JS type mapping) and trigger

@@ -27,7 +27,10 @@ describe('scrubPii (ROK-1779)', () => {
     expect(event.contexts).toEqual({
       app: { displayName: PII_REDACTED, ipAddress: PII_REDACTED },
     });
-    expect(event.tags).toEqual({ 'user.email': PII_REDACTED, deployment: 'nas' });
+    expect(event.tags).toEqual({
+      'user.email': PII_REDACTED,
+      deployment: 'nas',
+    });
     expect(event.request).toEqual({
       data: { user_name: PII_REDACTED, e_mail: 'nope' },
     });
@@ -35,22 +38,30 @@ describe('scrubPii (ROK-1779)', () => {
 
   it('redacts appSettings.communityName', () => {
     const event = scrubPii({
-      contexts: { appSettings: { communityName: 'Night Owls', demoMode: false } },
+      contexts: {
+        appSettings: { communityName: 'Night Owls', demoMode: false },
+      },
     });
     expect(event.contexts).toEqual({
       appSettings: { communityName: PII_REDACTED, demoMode: false },
     });
   });
+});
 
+describe('scrubPii strings (ROK-1779)', () => {
   it('replaces emails and IPs in message, exception value and breadcrumbs', () => {
     const event = scrubPii({
       message: 'login for bob@guild.example from 192.168.1.20',
-      exception: { values: [{ value: 'peer 2001:db8::8a2e:370:7334 refused' }] },
+      exception: {
+        values: [{ value: 'peer 2001:db8::8a2e:370:7334 refused' }],
+      },
       breadcrumbs: [{ message: 'GET from ::ffff:10.1.2.3 by a.b@c.co' }],
     });
     expect(event.message).toBe('login for [email] from [ip]');
     expect(event.exception?.values?.[0]?.value).toBe('peer [ip] refused');
-    expect(event.breadcrumbs).toEqual([{ message: 'GET from [ip] by [email]' }]);
+    expect(event.breadcrumbs).toEqual([
+      { message: 'GET from [ip] by [email]' },
+    ]);
   });
 
   it('replaces full and loopback IPv6 literals', () => {
@@ -63,7 +74,10 @@ describe('scrubPii (ROK-1779)', () => {
     const text =
       'node v18.19.0 ran 0001_init at 12:34:56 in Db::query (aa:bb:cc:dd:ee:ff)';
     expect(scrubPiiString(text)).toBe(text);
-    const event = scrubPii({ transaction: 'GET /events/:id', message: 'v1.2.3' });
+    const event = scrubPii({
+      transaction: 'GET /events/:id',
+      message: 'v1.2.3',
+    });
     expect(event.transaction).toBe('GET /events/:id');
     expect(event.message).toBe('v1.2.3');
   });
