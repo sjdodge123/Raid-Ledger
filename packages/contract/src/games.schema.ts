@@ -329,6 +329,8 @@ export const GameInterestResponseSchema = z.object({
     wishlistedCount: z.number().optional(),
     /** ROK-418: Whether the current user has wishlisted this game on Steam */
     wishlistedByMe: z.boolean().optional(),
+    /** ROK-1797: viewer muted per-game DMs */
+    notificationsMuted: z.boolean().optional(),
 });
 
 export type GameInterestResponseDto = z.infer<typeof GameInterestResponseSchema>;
