@@ -38,6 +38,13 @@ import {
 } from './bind.resolvers';
 import { confirmMultiMonitor } from './bind.confirmation';
 import { buildBindDefinition } from './bind.definition';
+import {
+  bindErrorReply,
+  parsePurposeOption,
+  PURPOSE_WITH_EVENT_ERROR,
+  resolvePurpose,
+  type ExplicitTextPurpose,
+} from './bind.purpose';
 
 @Injectable()
 export class BindCommand
@@ -68,6 +75,11 @@ export class BindCommand
     }
     const eventValue = interaction.options.getString('event');
     if (eventValue) {
+      // ROK-1768: the event path never reads `purpose`; ignoring it would mislead.
+      if (parsePurposeOption(interaction)) {
+        await interaction.editReply(PURPOSE_WITH_EVENT_ERROR);
+        return;
+      }
       await this.handleEventBind(interaction, guildId, eventValue);
       return;
     }
@@ -111,22 +123,36 @@ export class BindCommand
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
-    // ROK-1372: voice binds must NOT auto-derive a series game — a variety
-    // series would get locked to one arbitrary game (game-voice-monitor) and
-    // mislabel every quick-play. See shouldDeriveSeriesGame.
-    if (
-      series &&
-      shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
-    ) {
-      game = await findSeriesGame(this.db, series.id);
-    }
+    game = await this.deriveSeriesGame(resolved, game, series);
+    const purpose = await resolvePurpose(interaction, resolved, game, series);
+    if (purpose === false) return;
     await this.tryBindChannel(
       interaction,
       guildId,
       resolved as ResolvedChannel & { channelId: string },
       game,
       series,
+      purpose,
     );
+  }
+
+  /**
+   * ROK-1372: voice binds must NOT auto-derive a series game — a variety
+   * series would get locked to one arbitrary game (game-voice-monitor) and
+   * mislabel every quick-play. See shouldDeriveSeriesGame.
+   */
+  private async deriveSeriesGame(
+    resolved: ResolvedChannel,
+    game: { id: number; name: string } | null,
+    series: { id: string; title: string } | null,
+  ): Promise<{ id: number; name: string } | null> {
+    if (
+      !series ||
+      !shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
+    ) {
+      return game;
+    }
+    return findSeriesGame(this.db, series.id);
   }
 
   private async tryBindChannel(
@@ -135,11 +161,14 @@ export class BindCommand
     ch: ResolvedChannel & { channelId: string },
     game: { id: number; name: string } | null,
     series: { id: string; title: string } | null,
+    purpose: ExplicitTextPurpose | null,
   ): Promise<void> {
-    const behavior = this.channelBindingsService.detectBehavior(
-      ch.bindingChannelType,
-      game?.id ?? null,
-    );
+    const behavior =
+      purpose ??
+      this.channelBindingsService.detectBehavior(
+        ch.bindingChannelType,
+        game?.id ?? null,
+      );
     const confirmed = await confirmMultiMonitor(
       this.db,
       interaction,
@@ -163,11 +192,10 @@ export class BindCommand
       this.logger.error('Failed to create channel binding:', err);
       // ROK-1415: surface the guard's own sentence (e.g. "gameId: A Game Voice
       // Monitor binding must have a game…") so Discord and the web admin show
-      // the identical message from the identical classifier.
-      const body = (err as { getResponse?: () => unknown }).getResponse?.() as
-        { errors?: string[] } | undefined;
+      // the identical message from the identical classifier. ROK-1768: a 409
+      // QP-game-taken names the channel that already posts.
       await interaction.editReply(
-        body?.errors?.[0] ??
+        bindErrorReply(err) ??
           'Failed to bind channel. Please try again or use the web admin panel.',
       );
     }

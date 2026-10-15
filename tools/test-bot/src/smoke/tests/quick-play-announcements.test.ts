@@ -37,17 +37,13 @@ import {
   type LobbyPresenceMember,
   type LobbyPresenceRow,
 } from '../fixtures.js';
-import type { ApiClient } from '../api.js';
+import {
+  QP_PURPOSE,
+  nonPoolFixtures,
+  sweepQuickPlayBindings,
+} from '../quick-play-bindings.js';
 import type { DiscordChannel, SmokeTest, TestContext } from '../types.js';
 import { must } from './must.js';
-
-const QP_PURPOSE = 'quick-play-announcements';
-
-interface BindingRow {
-  id: string;
-  bindingPurpose: string;
-  gameId: number | null;
-}
 
 interface Channels {
   game: { id: number; name: string };
@@ -62,16 +58,8 @@ interface Channels {
  * cannot land where an assertion looks.
  */
 async function pickChannels(ctx: TestContext): Promise<Channels> {
-  const pool = ctx.channelPool ?? [];
-  const poolGames = new Set(pool.map((s) => s.gameId));
-  const poolChannels = new Set(pool.map((s) => s.channelId));
-  const res = await ctx.api.get<{ data: { id: number; name: string }[] }>(
-    '/admin/settings/games?limit=25',
-  );
-  const game = res.data.find((g) => !poolGames.has(g.id)) ?? res.data[0];
-  const texts = ctx.textChannels.filter(
-    (c) => c.id !== ctx.defaultChannelId && !poolChannels.has(c.id),
-  );
+  const { games, freeGames, texts } = await nonPoolFixtures(ctx);
+  const game = freeGames[0] ?? games[0];
   const voice = ctx.voiceChannels[1] ?? ctx.voiceChannels[0];
   const [qpText, lobbyText] = texts;
   if (!game || !qpText || !lobbyText || !voice) {
@@ -82,17 +70,6 @@ async function pickChannels(ctx: TestContext): Promise<Channels> {
     );
   }
   return { game, qpText, lobbyText, voice };
-}
-
-/** Drop a QP(G) row a crashed earlier run left in this env's DB (one per game). */
-async function sweepQuickPlayBindings(api: ApiClient, gameId: number) {
-  const res = await api.get<{ data: BindingRow[] }>('/admin/discord/bindings');
-  const rows = Array.isArray(res) ? (res as BindingRow[]) : (res.data ?? []);
-  for (const row of rows) {
-    if (row.bindingPurpose === QP_PURPOSE && row.gameId === gameId) {
-      await deleteBinding(api, row.id);
-    }
-  }
 }
 
 /** Create a binding, naming the fixture precondition if the API refuses it. */
