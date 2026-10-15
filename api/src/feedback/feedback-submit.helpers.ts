@@ -21,6 +21,7 @@ import {
 import * as schema from '../drizzle/schema';
 import { defined } from '../common/defined.helpers';
 import {
+  deleteScreenshotFiles,
   type ScreenshotExt,
   validateScreenshot,
   writeScreenshot,
@@ -86,9 +87,27 @@ export async function insertFeedbackRow(
   return defined(row, 'inserted feedback row');
 }
 
+/** Record the written file's path; throws when no row took it (e.g. the
+ * account was deleted concurrently), so the caller can drop the file. */
+async function recordScreenshotPath(
+  db: Db,
+  feedbackId: number,
+  relPath: string,
+): Promise<void> {
+  const updated = await db
+    .update(schema.feedback)
+    .set({ screenshotPath: relPath })
+    .where(eq(schema.feedback.id, feedbackId))
+    .returning({ id: schema.feedback.id });
+  if (updated.length === 0) {
+    throw new Error(`feedback ${feedbackId} is gone; screenshot not recorded`);
+  }
+}
+
 /**
  * Write the screenshot file and record its path. Failure is logged and sent
- * to Sentry but never thrown: the report itself is already saved.
+ * to Sentry but never thrown: the report itself is already saved. A file whose
+ * path never reached the row is removed — no cleanup could ever find it.
  */
 export async function storeScreenshot(
   db: Db,
@@ -96,13 +115,12 @@ export async function storeScreenshot(
   shot: ValidatedScreenshot,
   logger: Logger,
 ): Promise<void> {
+  let written: string | null = null;
   try {
-    const relPath = await writeScreenshot(feedbackId, shot.buf, shot.ext);
-    await db
-      .update(schema.feedback)
-      .set({ screenshotPath: relPath })
-      .where(eq(schema.feedback.id, feedbackId));
+    written = await writeScreenshot(feedbackId, shot.buf, shot.ext);
+    await recordScreenshotPath(db, feedbackId, written);
   } catch (err) {
+    if (written) await deleteScreenshotFiles([written]).catch(() => []);
     const code = err instanceof Error ? err.name : 'unknown';
     logger.warn(
       `Failed to store screenshot for feedback ${feedbackId} (${code})`,

@@ -4,7 +4,7 @@
  */
 import { Logger, PayloadTooLargeException } from '@nestjs/common';
 import * as Sentry from '@sentry/nestjs';
-import { mkdir, mkdtemp, rm } from 'fs/promises';
+import { access, mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import * as path from 'path';
 import { FEEDBACK_SCREENSHOT_MAX_BASE64_CHARS } from '@raid-ledger/contract';
@@ -49,5 +49,58 @@ describe('storeScreenshot', () => {
     );
     expect(Sentry.captureException).toHaveBeenCalledTimes(1);
     await rm(dir, { recursive: true, force: true });
+  });
+});
+
+describe('storeScreenshot when the path is not recorded', () => {
+  let dir: string;
+  beforeEach(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), 'rl-fb-unit-'));
+    process.env.RAID_LEDGER_FEEDBACK_DIR = dir;
+  });
+  afterEach(() => rm(dir, { recursive: true, force: true }));
+
+  function dbWhoseUpdateReturns(result: Promise<unknown[]>) {
+    const returning = jest.fn(() => result);
+    const where = jest.fn(() => ({ returning }));
+    const set = jest.fn(() => ({ where }));
+    const update = jest.fn(() => ({ set }));
+    return { update } as unknown as Parameters<typeof storeScreenshot>[0];
+  }
+
+  async function fileExists(name: string): Promise<boolean> {
+    return access(path.join(dir, name)).then(
+      () => true,
+      () => false,
+    );
+  }
+
+  it('removes the orphan file when the DB update throws', async () => {
+    const db = dbWhoseUpdateReturns(Promise.reject(new Error('db down')));
+    const logger = new Logger('spec');
+    jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    await storeScreenshot(db, 8, { buf: PNG, ext: 'png' }, logger);
+    expect({ orphanOnDisk: await fileExists('8.png') }).toEqual({
+      orphanOnDisk: false,
+    });
+  });
+
+  it('removes the orphan file when the update touches no row', async () => {
+    const db = dbWhoseUpdateReturns(Promise.resolve([]));
+    const logger = new Logger('spec');
+    const warn = jest.spyOn(logger, 'warn').mockImplementation(() => {});
+    await storeScreenshot(db, 9, { buf: PNG, ext: 'png' }, logger);
+    expect({ orphanOnDisk: await fileExists('9.png') }).toEqual({
+      orphanOnDisk: false,
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to store screenshot for feedback 9'),
+    );
+  });
+
+  it('keeps the file when the row records its path', async () => {
+    const db = dbWhoseUpdateReturns(Promise.resolve([{ id: 10 }]));
+    await storeScreenshot(db, 10, { buf: PNG, ext: 'png' }, new Logger('spec'));
+    expect(await fileExists('10.png')).toBe(true);
   });
 });
