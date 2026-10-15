@@ -42,6 +42,10 @@ burned 161k tokens and returned nothing; the Lead then did the same job in two `
    echoed, logged, or passed on a command line. If that line cannot be held, STOP and tell the Lead.
 8. `devedup-rl:*` agents have **no fleet, Linear or GitHub tools**. Never put an `rl_*` / `gh` /
    Linear call in their brief.
+9. **Spawned as `fleet-ops`** (this contract is preloaded) you have Bash, Read/Write/Edit, the rl-fleet
+   MCP, SendMessage and TaskStop — **no Agent, browser, Playwright or Linear tool**. If the work needs
+   one, report `BLOCKED: needs <tool>`; the Lead re-spawns that step as general-purpose. Never work
+   around it.
 
 ## Sub-agent budgeting — the 50-turn cap
 
