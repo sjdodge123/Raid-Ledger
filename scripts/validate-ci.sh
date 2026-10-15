@@ -108,6 +108,31 @@
 #                                        # instrumentation is what pushes the
 #                                        # unit suite past a 4 GiB cgroup cap.
 #                                        # Coverage stays the default elsewhere.
+#   E2E_SPECS="<spec> [<spec>...]" ./scripts/validate-ci.sh --only-e2e
+#                                        # ROK-1792 EXPLICIT SPEC LIST. Env var
+#                                        # (not a flag, and not a 4th E2E_SCOPE
+#                                        # value) so rl_validate_ci forwards it
+#                                        # the same way it forwards E2E_SCOPE,
+#                                        # and E2E_SCOPE stays a plain enum.
+#                                        # Space- or comma-separated paths, each
+#                                        # scripts/smoke/<name>.spec.ts, no `..`,
+#                                        # and present in the checkout — any bad
+#                                        # path exits 2 before a step runs. The
+#                                        # Playwright tier then runs EXACTLY those
+#                                        # specs, on every configured project
+#                                        # (desktop + mobile; never --project),
+#                                        # and REQUIRES the env: a down target
+#                                        # FAILs instead of skipping, and the
+#                                        # changed-files gate is bypassed. Row:
+#                                        # `Playwright (desktop + mobile,
+#                                        # explicit: N specs)` — same prefix, so a
+#                                        # PASS still writes the playwright-tier
+#                                        # pre-push sentinel. Conflicts (exit 2):
+#                                        # E2E_SCOPE other than auto, --static,
+#                                        # --no-e2e. Example (fleet env):
+#                                        #   BASE_URL=https://slot-2.gamernight.net \
+#                                        #   E2E_SPECS=scripts/smoke/games.smoke.spec.ts \
+#                                        #     ./scripts/validate-ci.sh --only-e2e
 #
 # Every conflicting flag combination (two --only-* flags, --static plus any
 # --only-*/--with-e2e, --only-e2e plus --no-e2e) exits 2 on stderr — an
@@ -212,6 +237,12 @@ GATE_DEFERRED_FAIL=0
 # _prepare_playwright_scope into these two globals.
 PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
 PLAYWRIGHT_SCOPED_SPECS=""
+# ROK-1792 — true when scope-specs.sh printed exactly NONE (the diff maps to no
+# smoke spec): the tier is SKIPPED, never run as `npx playwright test NONE`.
+PLAYWRIGHT_SCOPE_NONE=false
+# ROK-1792 — the validated E2E_SPECS list (space-separated), set by
+# _parse_e2e_specs in main. Non-empty overrides the scope-specs.sh mapping.
+E2E_SPECS_LIST=""
 # Memo for _resolve_e2e_scope; empty means "not resolved yet".
 E2E_SCOPE_RESOLVED=""
 # only_mode (--only-e2e | --only-integration | --only-unit): narrows the run to a
@@ -1732,7 +1763,9 @@ _resolve_e2e_scope() {
 }
 
 # Echo the specs scope-specs.sh maps the branch diff to, one per line — or
-# NOTHING, which every caller reads as "run the full suite".
+# NOTHING, which every caller reads as "run the full suite" — or exactly NONE
+# when the script says no spec covers the diff (ROK-1792), which the caller
+# reads as "skip the tier".
 _scoped_playwright_specs() {
   local script="$REPO_ROOT/scripts/smoke/scope-specs.sh" out
   if [ ! -f "$script" ]; then
@@ -1748,7 +1781,51 @@ _scoped_playwright_specs() {
   if [ -z "$out" ] || printf '%s\n' "$out" | grep -qx ALL; then
     return 0
   fi
+  # Exactly NONE, alone. NONE beside a spec path is not a shape the script
+  # emits; it is passed through as a list and would fail loudly, not skip.
+  if [ "$out" = NONE ]; then
+    echo NONE
+    return 0
+  fi
   printf '%s\n' "$out"
+}
+
+# ROK-1792 — parse and validate E2E_SPECS into E2E_SPECS_LIST. Returns 2 (with
+# every bad path named on stderr) on any invalid entry, so main can exit 2 before
+# a step runs: a typo in an explicit list must never silently run nothing or,
+# worse, fall back to a different selection.
+_parse_e2e_specs() {
+  E2E_SPECS_LIST=""
+  local raw="${E2E_SPECS:-}" spec bad=0 out="" specs=()
+  raw="${raw//,/ }"
+  # `read -a` stops at the first newline, so fold newlines/CRs into spaces first:
+  # a multi-line E2E_SPECS must not silently drop every spec after line one.
+  raw="${raw//$'\n'/ }"
+  raw="${raw//$'\r'/ }"
+  # Split with `read -a`, NOT an unquoted `for spec in $raw`: that would
+  # pathname-expand `scripts/smoke/*.smoke.spec.ts` into real files before the
+  # check below ever saw the wildcard (Codex P2, ROK-1792).
+  IFS=$' \t\n' read -r -a specs <<<"$raw" || true
+  for spec in ${specs[@]+"${specs[@]}"}; do
+    case "$spec" in
+      *[\*\?\[]*)
+        echo -e "${RED}E2E_SPECS: '${spec}' contains a glob character — name each spec file${NC}" >&2
+        bad=1; continue ;;
+    esac
+    # playwright.config.ts: testDir ./scripts/smoke, testMatch /\.smoke\.spec\.ts$/.
+    # A plain *.spec.ts there is a Vitest file Playwright never selects.
+    if ! [[ "$spec" =~ ^scripts/smoke/[A-Za-z0-9_./-]+\.smoke\.spec\.ts$ ]] || [[ "/$spec/" == */../* ]]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' is not a scripts/smoke/<name>.smoke.spec.ts path${NC}" >&2
+      bad=1
+    elif [ ! -f "$REPO_ROOT/$spec" ]; then
+      echo -e "${RED}E2E_SPECS: '${spec}' does not exist in this checkout${NC}" >&2
+      bad=1
+    else
+      case " $out " in *" $spec "*) ;; *) out="${out:+$out }$spec" ;; esac
+    fi
+  done
+  if [ "$bad" = 1 ]; then return 2; fi
+  E2E_SPECS_LIST="$out"
 }
 
 # Resolve the scope ONCE, before run_step is called, because the summary row
@@ -1763,13 +1840,37 @@ _scoped_playwright_specs() {
 _prepare_playwright_scope() {
   PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile)"
   PLAYWRIGHT_SCOPED_SPECS=""
+  PLAYWRIGHT_SCOPE_NONE=false
   _resolve_e2e_scope >/dev/null
   if [ "$E2E_SCOPE_RESOLVED" != "auto" ] || [ "$e2e_mode" = "off" ]; then
     return 0
   fi
   local specs count
+  # ROK-1792: an explicit E2E_SPECS list wins over the diff mapping.
+  if [ -n "${E2E_SPECS_LIST:-}" ]; then
+    # shellcheck disable=SC2086
+    count=$(printf '%s\n' $E2E_SPECS_LIST | grep -c .)
+    PLAYWRIGHT_SCOPED_SPECS="$E2E_SPECS_LIST"
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, explicit: ${count} specs)"
+    echo -e "${YELLOW}Playwright limited to ${count} spec(s) named by E2E_SPECS${NC}"
+    return 0
+  fi
   specs=$(_scoped_playwright_specs)
   if [ -z "$specs" ]; then
+    return 0
+  fi
+  if [ "$specs" = NONE ] && [ "${e2e_explicit:-false}" = true ]; then
+    # --with-e2e is an explicit request; NONE is a diff inference. Run the
+    # full suite rather than skip (Codex P2, ROK-1792).
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec, but --with-e2e forces the full Playwright suite${NC}"
+    return 0
+  fi
+  if [ "$specs" = NONE ]; then
+    # Same `Playwright (desktop + mobile` prefix as every other label, so the
+    # sentinel parser still finds the row — and reads its SKIPPED as "no
+    # playwright-tier sentinel" (only a PASS writes one).
+    PLAYWRIGHT_SCOPE_NONE=true
+    PLAYWRIGHT_STEP_LABEL="Playwright (desktop + mobile, no specs in scope)"
     return 0
   fi
   count=$(printf '%s\n' "$specs" | grep -c .)
@@ -1796,7 +1897,22 @@ run_playwright_e2e() {
       return 0
     fi
   fi
-  case "$e2e_mode" in
+  # ROK-1792: scope-specs.sh mapped the diff to zero smoke specs (a /dev/**
+  # wireframe route, a new ui file nothing imports yet). E2E_SPECS and
+  # E2E_SCOPE=all never reach here — _prepare_playwright_scope leaves the flag
+  # false for both.
+  # An explicit --with-e2e still wins (as it does over E2E_SCOPE=none):
+  # _prepare_playwright_scope already left the full suite selected for it.
+  if [ "${PLAYWRIGHT_SCOPE_NONE:-false}" = true ] && [ "${e2e_explicit:-false}" != true ]; then
+    echo -e "${YELLOW}scripts/smoke/scope-specs.sh maps this diff to no smoke spec — skipping Playwright (E2E_SCOPE=all forces the full suite; GitHub CI still runs it)${NC}"
+    skip_step
+    return 0
+  fi
+  # ROK-1792: an explicit E2E_SPECS list is a request, not a diff inference —
+  # it bypasses the changed-files gate and FAILs (never skips) on a down env.
+  local mode="$e2e_mode"
+  if [ -n "${E2E_SPECS_LIST:-}" ] && [ "$mode" = "auto" ]; then mode="on"; fi
+  case "$mode" in
     off)
       echo -e "${YELLOW}--no-e2e passed — skipping Playwright${NC}"
       skip_step
@@ -2258,6 +2374,28 @@ main() {
   if $static_mode && [ "$e2e_mode" = "on" ]; then
     echo -e "${RED}--static and --with-e2e are mutually exclusive (static skips all e2e).${NC}" >&2
     exit 2
+  fi
+
+  # ROK-1792 — an explicit spec list. Validated up front (exit 2, invocation
+  # error) and checked against everything that would leave it unrun.
+  _parse_e2e_specs || exit 2
+  if [ -n "$E2E_SPECS_LIST" ]; then
+    local specs_conflict=""
+    case "${E2E_SCOPE:-auto}" in
+      auto|"") ;;
+      *) specs_conflict="E2E_SCOPE=${E2E_SCOPE}" ;;
+    esac
+    # Every mode that never reaches run_playwright_e2e (Codex P2, ROK-1792):
+    # --static, --no-e2e, --only-unit, --only-integration, and --contrast-audit
+    # (which swaps the Playwright tier for the sweep under --only-e2e).
+    if $static_mode; then specs_conflict="--static"; fi
+    if [ "$e2e_mode" = "off" ]; then specs_conflict="--no-e2e"; fi
+    case "$only_mode" in unit|integration) specs_conflict="--only-${only_mode}" ;; esac
+    if $contrast_audit; then specs_conflict="--contrast-audit"; fi
+    if [ -n "$specs_conflict" ]; then
+      echo -e "${RED}E2E_SPECS and ${specs_conflict} are mutually exclusive.${NC}" >&2
+      exit 2
+    fi
   fi
 
   echo -e "${GREEN}Starting local CI validation...${NC}"

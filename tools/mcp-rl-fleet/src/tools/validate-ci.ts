@@ -22,6 +22,7 @@ import {
 import { execFileP, ensureRunnerGit, resolveSlot } from './runner-git.js';
 import { seedEnvAdminPassword } from './env-admin-seed.js';
 import {
+  checkE2eSpecs,
   envForSlug,
   resolveInnerEnv,
   sanitizeBaseUrl,
@@ -37,6 +38,9 @@ import { resolveValidateCiTimeout } from './validate-ci-timeout.js';
 // Re-exported so `rl_validate_ci`'s target helpers stay importable from this
 // module (and its spec) after the ROK-1466 W1 split kept it under 300 lines.
 export {
+  checkE2eSpecs,
+  E2E_SPEC_PATTERN,
+  MAX_E2E_SPECS,
   envForSlug,
   resolveInnerEnv,
   sanitizeBaseUrl,
@@ -46,7 +50,7 @@ export type { E2eScope } from './validate-ci-target.js';
 
 export const TOOL_NAME = 'rl_validate_ci';
 export const TOOL_DESCRIPTION =
-  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier), so a web branch does NOT need a Playwright tier before you push. TDB:1452: timeout_seconds (the watchdog budget) defaults to 5400 for fleet:true / --only-e2e / --with-e2e and for an un-narrowed full run (no args, --full, --no-e2e), and to 1800 once --static / --only-unit / --only-integration narrows it; a run the watchdog kills ends failed with script_exit_code 143 and exit_reason set.";
+  "Run the full validate-ci.sh pipeline (build, typecheck, lint, unit tests, integration tests, optional e2e) inside the agent's claimed runner — NOT on the operator's laptop. ASYNC BY DEFAULT (wait:false): returns {task_id, log_url, started_at} within 1s; poll via rl_task_status (cheap one-shot) or rl_task_wait (each call blocks ≤120s then returns a still_running progress snapshot — re-call with the SAME task_id to keep watching). Common args: --no-e2e (skip Playwright + Discord smoke), --only-e2e (only run them), --with-e2e (force-run). Booleans only_integration / only_unit / no_coverage forward --only-integration / --only-unit / --no-coverage: use only_integration when --full dies in the unit step on a memory-capped runner (it runs the sharded integration suite with the same Redis sidecar + shard count), and no_coverage to run jest/vitest without coverage at a 3 GB heap. ROK-1466: fleet:true forwards --fleet — the WHOLE gate in one dispatch (static steps + unit without coverage + sharded integration + e2e), replacing the old three-call dance; it REQUIRES a target, so pass base_url — use the SLOT HTTPS URL https://slot-N.gamernight.net (N = your claimed slot), NEVER the plain-http http://rl-env-<slug>-allinone host: its CSP upgrade-insecure-requests makes the SPA load blank in a browser (curl/health never see CSP), and validate-ci refuses it. Pass against_env_slug ALONGSIDE base_url so the env admin password is still seeded. base_url alone (without fleet) also works and exports BASE_URL + API_URL + HEALTH_URL so Playwright, global setup and the companion bot all drive the same host. Password seeding: a base_url naming an rl-env-<slug>-allinone host seeds automatically; for a slot URL or any other target pass against_env_slug (seeds) or admin_password, else global setup logs in with the literal 'password' and 401s. Pass worktree_path if you claimed from a worktree. Pass against_env_slug to point Playwright + companion bot at a spun fleet env. wait:true blocks ≤120s inline (still_running on cap-expiry); it does NOT block longer — never use it as a walk-away call. ROK-1565: e2e_scope ('auto' | 'all' | 'none', default auto) sizes the Playwright tier — auto runs ONLY the specs scripts/smoke/scope-specs.sh maps your branch diff to (the whole suite when it prints ALL), 'all' forces the full desktop+mobile suite, 'none' skips it. ROK-1792: e2e_specs (≤20 repo-relative paths, each scripts/smoke/<name>.spec.ts) runs EXACTLY those specs on desktop + mobile, forwarded as E2E_SPECS — the CLAUDE.md gate is args:['--only-e2e'] + e2e_specs:[<the branch's new/changed specs>] + against_env_slug + base_url (slot URL); it bypasses the changed-files gate, FAILs (never skips) on a down env, writes the playwright-tier sentinel on PASS, and is rejected with e2e_scope other than 'auto' and with --static / --no-e2e. A green --static run is now enough to write the pre-push sentinel (results carry gate_verified / gate_sentinel / gate_tier), so a web branch does NOT need a Playwright tier before you push. TDB:1452: timeout_seconds (the watchdog budget) defaults to 5400 for fleet:true / --only-e2e / --with-e2e and for an un-narrowed full run (no args, --full, --no-e2e), and to 1800 once --static / --only-unit / --only-integration narrows it; a run the watchdog kills ends failed with script_exit_code 143 and exit_reason set.";
 
 export interface ValidateCiParams {
   /** Extra args to pass to validate-ci.sh. */
@@ -94,6 +98,11 @@ export interface ValidateCiParams {
    * `all` = the full desktop+mobile suite; `none` = skip the tier.
    */
   e2e_scope?: E2eScope;
+  /**
+   * ROK-1792: run exactly these smoke specs (desktop + mobile), forwarded as
+   * E2E_SPECS. Mutually exclusive with e2e_scope other than `auto`.
+   */
+  e2e_specs?: string[];
 }
 
 /**
@@ -182,6 +191,10 @@ export async function execute(
     };
   }
 
+  // ROK-1792: refuse a spec list validate-ci.sh would exit 2 on.
+  const specsError = checkE2eSpecs(params.e2e_specs, params.e2e_scope, resolveArgs(params));
+  if (specsError) return { ok: false, error: 'invalid_e2e_specs', message: specsError };
+
   // ROK-1368 + ROK-1466 W1: re-seed + thread the env's admin password so
   // Playwright global-setup authenticates (else it 401s on the literal
   // 'password'). An explicit admin_password wins; otherwise seed for whatever
@@ -197,6 +210,7 @@ export async function execute(
     baseUrl,
     adminPassword: adminPw,
     e2eScope: params.e2e_scope,
+    e2eSpecs: params.e2e_specs,
   });
   // Bug D: validate-ci.sh lives inside the runner container at /workspace —
   // task-start runs its target on the HOST, so route through

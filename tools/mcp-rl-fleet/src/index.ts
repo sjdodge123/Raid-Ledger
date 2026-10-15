@@ -196,6 +196,12 @@ const validateCiSchema: Shape = {
   admin_password: z.string().min(1).optional(),
   // ROK-1565 — how much of the Playwright tier to run. Forwarded as E2E_SCOPE.
   e2e_scope: z.enum(['auto', 'all', 'none']).optional(),
+  // ROK-1792 — explicit spec list, forwarded as E2E_SPECS. Exclusive with a
+  // non-auto e2e_scope (checked in execute; a Shape cannot cross-refine).
+  e2e_specs: z
+    .array(z.string().regex(validateCi.E2E_SPEC_PATTERN))
+    .max(validateCi.MAX_E2E_SPECS)
+    .optional(),
   ...waitFragment,
 };
 registerTool(validateCi.TOOL_NAME, validateCi.TOOL_DESCRIPTION, validateCiSchema, async (p) =>
