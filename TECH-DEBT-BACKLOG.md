@@ -2693,3 +2693,6 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-15 — feat/rok-1775-pelican-month-schedule (surfaced during fleet UI verify, plan `2026-10-15-0244-1a80` step 8)
 - **low** — calendar game filter: choosing **None** saves an empty selection (`[]`), but on reload `[]` is read as "all games" (53/53 selected), so the None choice does not survive a reload and plugin-layer rows come back. Seen on env rok-1775. The game-filter persistence code is not touched by ROK-1775, so this is believed to predate it; that has not been confirmed on main. Suggested: persist an explicit `none` sentinel (or store hidden games instead of selected games) so empty ≠ all.
+
+### 2026-10-15 — fix/calendar-layer-toggle-smoke (surfaced while root-causing main CI run 38679452253)
+- **med** — `web/src/lib/api/preferences-api.ts`: preference writes go through an 800 ms debounced batcher that is never flushed on unload, so a user who reloads or navigates away within 800 ms of a change (calendar view, Server schedules toggle, any debounced pref) loses the write silently. Found because the ROK-1775 smoke test reloaded inside that window. Not caused by ROK-1775: every debounced preference is affected. Suggested: flush the pending batch on `pagehide`/`visibilitychange:hidden` with `fetch(..., {keepalive: true})` (Bearer token in memory, so not `sendBeacon`), plus a unit test.
