@@ -9,7 +9,8 @@
  * request), so core's slot context needs no WoW field. ROK-1751: the game
  * slug (from the cached game registry) resolves LedgerLink Forever characters
  * whose ruleset is null; while the registry is still loading, neutral
- * panels render instead of variant-specific copy.
+ * panels render instead of variant-specific copy. ROK-1743: Forever saved
+ * instances (`character.lockouts`, addon snapshot) render after Quests.
  */
 import { lazy, Suspense, useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
@@ -20,6 +21,7 @@ import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import { CharacterQuestsSection } from '../components/character-quests-section';
+import { CharacterLockoutsSection } from '../components/character-lockouts-section';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
@@ -111,6 +113,7 @@ export function CharacterDetailSections({
                 characterClass={characterClass} gameVariant={variant} />}
             <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
             <CharacterQuestsSection characterId={characterId} variant={variant} />
+            <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>
