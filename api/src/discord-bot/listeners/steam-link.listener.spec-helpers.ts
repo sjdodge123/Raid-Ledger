@@ -18,7 +18,9 @@ export type SteamLinkDbMock = Record<
   | 'onConflictDoNothing'
   | 'onConflictDoUpdate'
   | 'select'
-  | 'orderBy',
+  | 'orderBy'
+  | 'delete'
+  | 'transaction',
   jest.Mock
 >;
 
@@ -34,7 +36,13 @@ export function buildSteamLinkDbMock(): SteamLinkDbMock {
     onConflictDoUpdate: jest.fn().mockResolvedValue(undefined),
     select: jest.fn(),
     orderBy: jest.fn(),
+    delete: jest.fn(),
+    transaction: jest.fn(),
   };
+  // addDiscordInterest runs insert + suppression delete in one tx (ROK-1796)
+  chain.transaction.mockImplementation((cb: (tx: unknown) => unknown) =>
+    cb(chain),
+  );
   for (const method of [
     chain.from,
     chain.where,
@@ -42,6 +50,7 @@ export function buildSteamLinkDbMock(): SteamLinkDbMock {
     chain.values,
     chain.select,
     chain.orderBy,
+    chain.delete,
   ]) {
     method.mockReturnValue(chain);
   }
