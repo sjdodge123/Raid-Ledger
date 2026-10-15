@@ -33,10 +33,13 @@
 #   SCOPE_DIFF       the unified diff text of the route files, instead of git diff.
 #   SCOPE_NEW_FILES  newline list of files absent at the base (set, even empty,
 #                    = authoritative), instead of `git cat-file -e $BASE:<file>`.
+#   SCOPE_SPEC_DIR   the smoke-spec corpus to map against (default scripts/smoke),
+#                    so a test can pin a mapping without depending on which
+#                    specs the checkout's branch happens to add.
 # Real runs use git; any git failure (no repo, no base) falls back to ALL.
 set -euo pipefail
 BASE="${SCOPE_BASE:-origin/main}"
-SPEC_DIR="scripts/smoke"
+SPEC_DIR="${SCOPE_SPEC_DIR:-scripts/smoke}"
 changed="${SCOPE_FILES:-$(git diff --name-only "$BASE...HEAD" 2>/dev/null || true)}"
 [ -z "$changed" ] && { echo ALL; exit 0; }
 shared='^(web/src/components/layout/|web/src/index\.css|web/src/App\.tsx|web/src/routes|playwright\.config|scripts/smoke/base\.ts|scripts/smoke/[^/]*helpers)'
