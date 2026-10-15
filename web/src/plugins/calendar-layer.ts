@@ -9,6 +9,7 @@
 import { useMemo } from 'react';
 import { usePluginStore } from '../stores/plugin-store';
 import { useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-store';
+import { getAuthToken } from '../hooks/use-auth';
 import { freezeCalendarLayers, getCalendarLayerRegistrations } from './plugin-registry';
 
 /** ISO 8601 with offset — exactly what computeDateRange yields. */
@@ -90,6 +91,9 @@ const NO_ITEMS: readonly CalendarLayerItem[] = Object.freeze([]);
  * items are discarded. The merged array
  * keeps its identity while every layer's result does (the empty result is a
  * stable constant), so downstream memos and day columns skip re-rendering.
+ * A signed-in viewer's checkbox layers (those with a `filterLabel`) also stay
+ * off until their saved preference has loaded (`hydrated`), so a layer they
+ * hid never flashes or fetches on a cold load; signed-out viewers are not held.
  * The first call freezes the registration list (stable hook order).
  */
 export function useCalendarLayers(
@@ -99,9 +103,12 @@ export function useCalendarLayers(
 ): readonly CalendarLayerItem[] {
     const activeSlugs = usePluginStore((s) => s.activeSlugs);
     const hiddenLayers = useCalendarLayerFilterStore((s) => s.hiddenLayers);
+    const notHydrated = useCalendarLayerFilterStore((s) => !s.hydrated);
+    const awaitingPrefs = notHydrated && getAuthToken() !== null;
     freezeCalendarLayers();
     const parts = getCalendarLayerRegistrations().map(({ pluginSlug, layer }) => {
-        const enabled = viewEnabled && activeSlugs.has(pluginSlug) && !hiddenLayers.has(layer.key);
+        const held = awaitingPrefs && layer.filterLabel !== undefined;
+        const enabled = viewEnabled && activeSlugs.has(pluginSlug) && !hiddenLayers.has(layer.key) && !held;
         const items = layer.useItems(range, selectedGames, enabled);
         return enabled && items.length > 0 ? items : NO_ITEMS;
     });

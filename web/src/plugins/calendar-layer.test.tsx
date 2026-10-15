@@ -7,6 +7,10 @@ import { useCalendarLayerFilterStore } from '../stores/calendar-layer-filter-sto
 import { useCalendarLayers } from './calendar-layer';
 import type { CalendarLayer, CalendarLayerItem, CalendarLayerRange } from './calendar-layer';
 
+/** Signed-out (null) by default, as before ROK-1775's hydration gate. */
+const session = vi.hoisted(() => ({ token: null as string | null }));
+vi.mock('../hooks/use-auth', () => ({ getAuthToken: () => session.token }));
+
 const RANGE: CalendarLayerRange = { from: '2026-10-12T00:00:00-04:00', to: '2026-10-19T00:00:00-04:00' };
 const BADGE = { icon: 'x', color: 'gray', label: 'X' };
 
@@ -15,10 +19,11 @@ function windowItem(id: string): CalendarLayerItem {
 }
 
 /** A fake layer whose `useItems` is a REAL hook (useState), so a hook-order change would throw. */
-function fakeLayer(key: string, items: readonly CalendarLayerItem[]) {
+function fakeLayer(key: string, items: readonly CalendarLayerItem[], filterLabel?: string) {
     const spy = vi.fn<CalendarLayer['useItems']>();
     const layer: CalendarLayer = {
         key,
+        ...(filterLabel !== undefined ? { filterLabel } : {}),
         useItems(range, selectedGames, enabled) {
             const [stable] = useState(items);
             spy(range, selectedGames, enabled);
@@ -181,5 +186,53 @@ describe('useCalendarLayers — viewer-hidden layers (ROK-1775)', () => {
         act(() => useCalendarLayerFilterStore.getState()._reset());
         expect(b.spy).toHaveBeenLastCalledWith(RANGE, undefined, true);
         expect(result.current.map((i) => i.id)).toEqual(['a1', 'b1', 'b2']);
+    });
+});
+
+describe('useCalendarLayers — cold-load hydration gate (ROK-1775)', () => {
+    /** `a` is a checkbox layer (has a filterLabel); `b` has none. */
+    function setupGated() {
+        clearRegistry();
+        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false });
+        const a = fakeLayer('a:layer', [windowItem('a1')], 'Server schedules');
+        const b = fakeLayer('b:layer', [windowItem('b1')]);
+        registerPlugin('a', BADGE).registerCalendarLayer(a.layer);
+        registerPlugin('b', BADGE).registerCalendarLayer(b.layer);
+        return { a, b };
+    }
+
+    beforeEach(() => {
+        session.token = null;
+        useCalendarLayerFilterStore.getState()._reset();
+    });
+
+    it('a signed-in viewer\'s checkbox layer makes no request before hydration', () => {
+        session.token = 'token';
+        const { a, b } = setupGated();
+        setActive(['a', 'b']);
+        const { result } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        expect(a.spy).not.toHaveBeenCalledWith(RANGE, undefined, true);
+        expect(b.spy).toHaveBeenLastCalledWith(RANGE, undefined, true); // no checkbox → not held
+        expect(result.current.map((i) => i.id)).toEqual(['b1']);
+    });
+
+    it('after hydration a hidden layer still makes no request and a visible one fetches', () => {
+        session.token = 'token';
+        const { a } = setupGated();
+        const c = fakeLayer('c:layer', [windowItem('c1')], 'Other');
+        registerPlugin('c', BADGE).registerCalendarLayer(c.layer);
+        setActive(['a', 'c']);
+        const { result } = renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        act(() => useCalendarLayerFilterStore.getState().loadHiddenLayers(['c:layer']));
+        expect(a.spy).toHaveBeenLastCalledWith(RANGE, undefined, true);
+        expect(c.spy).not.toHaveBeenCalledWith(RANGE, undefined, true);
+        expect(result.current.map((i) => i.id)).toEqual(['a1']);
+    });
+
+    it('a signed-out viewer is not held: checkbox layers fetch without hydration', () => {
+        const { a } = setupGated();
+        setActive(['a']);
+        renderHook(() => useCalendarLayers(RANGE, undefined, true));
+        expect(a.spy).toHaveBeenLastCalledWith(RANGE, undefined, true);
     });
 });
