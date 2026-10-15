@@ -1195,10 +1195,22 @@ run_integration_tests() {
   # bits (M9 Redis sidecar, --verbose progress) keep their own guards above.
   # Override the count with INTEGRATION_SHARDS=N; INTEGRATION_SHARDS=1 is the
   # old single-process behaviour if you ever need it.
+  # ROK-1793 S1(ii): INTEGRATION_PARALLEL=2 runs the shards two at a time, in
+  # waves (shards 1+2, then 3+4). Default 1 = the serial loop below, unchanged.
+  # Isolation (verified 2026-10-15): jest.integration.config.js's globalSetup
+  # starts ONE Postgres Testcontainer per jest process, so each shard has its
+  # own DB; the app's REDIS_CLIENT is an in-memory mock per process; the only
+  # real Redis user is BullMQ, keyed under BULLMQ_KEY_PREFIX=test-<pid>-<ts>-.
+  # Parallel shards additionally get their own Redis db index on the sidecar.
   {
     local shards="${INTEGRATION_SHARDS:-4}"
+    local parallel
+    parallel=$(_integration_parallelism "$shards")
     local shard_results=()
     local i
+    if [ "$parallel" -gt 1 ]; then
+      _run_integration_shards_parallel "$shards" "$parallel" "$tmp"
+    else
     for i in $(seq 1 "$shards"); do
       echo "=== Integration shard ${i}/${shards} ==="
       # `npx jest` directly so each shard is its own Node process. We `cd api`
@@ -1216,11 +1228,7 @@ run_integration_tests() {
       # ROK-1331 M11 — JEST_SHARD_ID + JEST_TOTAL_SHARDS feed the perf
        # reporter so jest.suite.end events carry shard labels.
        # --logHeapUsage feeds the reporter's heap_used_mb sample.
-      if (cd api && NODE_OPTIONS="--max-old-space-size=4096" \
-         JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${shards}" \
-         npx jest --config ./jest.integration.config.js \
-                  --runInBand --verbose --logHeapUsage --shard="${i}/${shards}" \
-                  2>&1 | tee -a "$tmp"); then
+      if _integration_shard_jest "$i" "$shards" 4096 "" 2>&1 | tee -a "$tmp"; then
         shard_results+=("PASS")
       else
         shard_results+=("FAIL")
@@ -1228,6 +1236,7 @@ run_integration_tests() {
         break
       fi
     done
+    fi
     echo "=== Shard results: ${shard_results[*]} ==="
     local r
     for r in "${shard_results[@]}"; do
@@ -1239,6 +1248,102 @@ run_integration_tests() {
     done
     rm -f "$tmp"
   }
+}
+
+# One integration shard: its own jest process. Args: shard total heap_mb
+# redis_url ("" = inherit). The `cd api` keeps the jest config's relative paths
+# right (ROK-1331 Probe 1 attempt 6, TS5103); JEST_SHARD_ID/JEST_TOTAL_SHARDS
+# label the perf reporter's events (ROK-1331 M11).
+_integration_shard_jest() {
+  local i="$1" n="$2" heap="$3" redis_url="${4:-}"
+  (
+    cd api || exit 1
+    if [ -n "$redis_url" ]; then export REDIS_URL="$redis_url"; fi
+    NODE_OPTIONS="--max-old-space-size=${heap}" \
+      JEST_SHARD_ID="${i}" JEST_TOTAL_SHARDS="${n}" \
+      npx jest --config ./jest.integration.config.js \
+               --runInBand --verbose --logHeapUsage --shard="${i}/${n}"
+  )
+}
+
+# ROK-1793 S1(ii): how many shards run at once. INTEGRATION_PARALLEL defaults
+# to 1 (serial). Capped at 2: two shards at the parallel heap fit the runner's
+# 6 GB ceiling, three do not. Forced back to 1 when CI=true + DATABASE_URL,
+# because the globalSetup then skips its per-process Testcontainer and every
+# shard would truncate the SAME database.
+_integration_parallelism() {
+  local shards="$1" p="${INTEGRATION_PARALLEL:-1}"
+  case "$p" in
+    '' | *[!0-9]*)
+      echo "INTEGRATION_PARALLEL='${p}' is not a positive integer — running shards serially" >&2
+      p=1 ;;
+  esac
+  if [ "$p" -lt 1 ]; then p=1; fi
+  if [ "$p" -gt 2 ]; then
+    echo "INTEGRATION_PARALLEL=${p} capped at 2 (2 x heap must stay under the runner's 6 GB)" >&2
+    p=2
+  fi
+  if [ "$p" -gt 1 ] && [ "${CI:-}" = "true" ] && [ -n "${DATABASE_URL:-}" ]; then
+    echo "INTEGRATION_PARALLEL ignored: CI=true + DATABASE_URL means every shard shares one DB — running shards serially" >&2
+    p=1
+  fi
+  if [ "$p" -gt "$shards" ]; then p="$shards"; fi
+  echo "$p"
+}
+
+# Per-shard Redis db index for parallel shards: redis://host:6379 -> .../<i>.
+# Only a bare TCP URL (no db path, no socket) is rewritten; anything else, or
+# an unset REDIS_URL (laptop: deploy_dev's Redis), is inherited unchanged.
+_integration_shard_redis_url() {
+  local i="$1" url="${REDIS_URL:-}"
+  if [[ "$url" =~ ^redis://[^/]+/?$ ]]; then
+    echo "${url%/}/${i}"
+  fi
+}
+
+# Parallel waves of $parallel shards. Each shard streams to the log with a
+# `[shard i/N]` prefix and keeps a raw copy, appended to $tmp in shard order
+# after the wave so _report_unrun_integration_specs reads clean jest lines.
+# Writes PASS/FAIL into the CALLER's shard_results (bash dynamic scope). Stops
+# after the first wave with a failure: later waves are never launched.
+# Heap per shard: INTEGRATION_PARALLEL_HEAP_MB (default 2560; 2 x 2.5 GB plus
+# the parent processes stays under 6 GB). UNMEASURED — opt-in until it is.
+_run_integration_shards_parallel() {
+  local shards="$1" parallel="$2" tmp="$3"
+  local heap="${INTEGRATION_PARALLEL_HEAP_MB:-2560}"
+  local first last i wave_failed
+  echo "=== Integration: ${shards} shards, ${parallel} at a time, ${heap} MB heap each ==="
+  for ((first = 1; first <= shards; first += parallel)); do
+    last=$((first + parallel - 1))
+    if [ "$last" -gt "$shards" ]; then last="$shards"; fi
+    local pids=()
+    for ((i = first; i <= last; i++)); do
+      echo "=== Integration shard ${i}/${shards} (parallel) ==="
+      (
+        set -o pipefail
+        _integration_shard_jest "$i" "$shards" "$heap" "$(_integration_shard_redis_url "$i")" 2>&1 \
+          | tee "${tmp}.shard${i}" \
+          | awk -v p="[shard ${i}/${shards}] " '{ print p $0; fflush() }'
+      ) &
+      pids+=("$!")
+    done
+    wave_failed=0
+    for ((i = first; i <= last; i++)); do
+      if wait "${pids[$((i - first))]}"; then
+        shard_results+=("PASS")
+      else
+        shard_results+=("FAIL")
+        wave_failed=1
+        echo "Shard ${i}/${shards} FAILED"
+      fi
+      cat "${tmp}.shard${i}" >>"$tmp" 2>/dev/null || true
+      rm -f "${tmp}.shard${i}"
+    done
+    if [ "$wave_failed" -eq 1 ]; then
+      echo "Integration wave ${first}-${last} FAILED — stopping early"
+      break
+    fi
+  done
 }
 
 # TDB:330 — after a failed shard, list the integration specs that never printed
