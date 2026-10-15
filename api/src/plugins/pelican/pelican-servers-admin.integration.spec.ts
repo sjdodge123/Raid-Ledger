@@ -321,10 +321,7 @@ describe('Quick Play detection switch (ROK-1800)', () => {
       point === EXTENSION_POINTS.GAME_LOG_PARSER && slug === game.slug
         ? parser
         : real(point, slug);
-    // getAdapter<T> is generic; the fake answers for the one point it fakes.
-    jest
-      .spyOn(registry(), 'getAdapter')
-      .mockImplementation(fake as PluginRegistryService['getAdapter']);
+    jest.spyOn(registry(), 'getAdapter').mockImplementation(fake);
     return gameId;
   }
 
@@ -341,7 +338,9 @@ describe('Quick Play detection switch (ROK-1800)', () => {
     });
     expect(await reload(mapped.id)).toMatchObject({ presenceTracking: true });
 
-    const list = PelicanServerListResponseSchema.parse((await getServers()).body);
+    const list = PelicanServerListResponseSchema.parse(
+      (await getServers()).body,
+    );
     const byId = new Map(list.data.map((r) => [r.id, r]));
     expect(byId.get(mapped.id)).toMatchObject({
       presenceTracking: true,
