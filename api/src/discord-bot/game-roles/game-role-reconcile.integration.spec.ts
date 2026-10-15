@@ -3,8 +3,14 @@
  * helpers mocked: adds/removes applied and audited, grants only for bot adds,
  * the mutation cap, per-game failure isolation (Sentry), and grantNow's
  * opt-out gate.
+ *
+ * Mocks are `jest.spyOn` on the live module objects, NOT `jest.mock`: the
+ * integration `setupFilesAfterEnv` imports AppModule → this service → the
+ * real helpers before a spec's hoisted `jest.mock` registers, so a module
+ * mock never reaches the service (same trap as ROK-1307's steam-auth spec).
  */
-import * as Sentry from '@sentry/nestjs';
+import type * as SentryModule from '@sentry/nestjs';
+import { Collection, type GuildMember } from 'discord.js';
 import { eq } from 'drizzle-orm';
 import { GAME_ROLES_OPT_OUT_PREF_KEY } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
@@ -16,11 +22,11 @@ import type { DiscordBotClientService } from '../discord-bot-client.service';
 import * as discord from './game-role-discord.helpers';
 import { GameRoleReconcileService } from './game-role-reconcile.service';
 
-jest.mock('@sentry/nestjs', () => ({ captureException: jest.fn() }));
-jest.mock('./game-role-discord.helpers');
-const mocked = jest.mocked(discord);
+/** The raw CJS module the service's `import * as Sentry` reads through. */
+const sentry = jest.requireActual<typeof SentryModule>('@sentry/nestjs');
 
 const GUILD = { id: 'guild-1' };
+const MEMBERS = new Collection<string, GuildMember>();
 let testApp: TestApp;
 let service: GameRoleReconcileService;
 let seq = 0;
@@ -29,13 +35,32 @@ beforeAll(async () => {
   testApp = await getTestApp();
 });
 
+const mocked = {
+  fetchGuildMembers: jest.spyOn(discord, 'fetchGuildMembers'),
+  fetchRoleState: jest.spyOn(discord, 'fetchRoleState'),
+  memberHoldsRole: jest.spyOn(discord, 'memberHoldsRole'),
+  addMemberRole: jest.spyOn(discord, 'addMemberRole'),
+  removeMemberRole: jest.spyOn(discord, 'removeMemberRole'),
+};
+const captureException = jest.spyOn(sentry, 'captureException');
+
 beforeEach(() => {
   jest.clearAllMocks();
+  // Every Discord boundary is stubbed so no case can fall through to a real
+  // `guild.members.fetch` on the fake guild.
+  mocked.fetchGuildMembers.mockResolvedValue(MEMBERS);
+  mocked.fetchRoleState.mockRejectedValue(new Error('fetchRoleState unset'));
+  mocked.memberHoldsRole.mockRejectedValue(new Error('memberHoldsRole unset'));
   mocked.addMemberRole.mockResolvedValue(true);
   mocked.removeMemberRole.mockResolvedValue(true);
+  captureException.mockReturnValue('event-id');
   const bot = { getGuild: () => GUILD } as unknown as DiscordBotClientService;
   const cron = {} as CronJobService;
   service = new GameRoleReconcileService(testApp.db, cron, bot);
+});
+
+afterAll(() => {
+  jest.restoreAllMocks();
 });
 
 afterEach(async () => {
@@ -239,9 +264,16 @@ describe('GameRoleReconcileService (ROK-1767)', () => {
       skippedOverCap: 0,
       failedGames: [broken],
     });
-    expect(Sentry.captureException).toHaveBeenCalledWith(expect.any(Error), {
+    expect(captureException).toHaveBeenCalledWith(expect.any(Error), {
       tags: { gameId: String(broken) },
     });
+    // One member fetch per run, shared by both games.
+    expect(mocked.fetchGuildMembers).toHaveBeenCalledTimes(1);
+    expect(mocked.fetchRoleState).toHaveBeenCalledWith(
+      GUILD,
+      'role-fine',
+      MEMBERS,
+    );
     expect(await grantsOf(fineRowId)).toEqual([u.id]);
   });
 
