@@ -1037,7 +1037,10 @@ toggle is §4.3.
 A plugin draws **non-event time** on the Week/Day grid through `PluginHandle.registerCalendarLayer`
 (`web/src/plugins/calendar-layer.ts`): it supplies items (`window` spans and `marker` instants with
 pre-formatted text), the host draws them. First user: Pelican game-server schedules
-(`web/src/plugins/pelican/calendar/`). Month and Schedule views draw nothing from layers yet (ROK-1775).
+(`web/src/plugins/pelican/calendar/`). Month and Schedule draw **no bands** (ROK-1775): Month shows one
+muted glyph per day with any item, Schedule shows muted one-line rows between the event cards. The viewer
+can switch a layer off from the calendar Filters panel (**Layers** → a `Checkbox` per layer that declares
+a `filterLabel`; the Filters badge counts hidden layers; persisted as the `calendarHiddenLayers` preference).
 
 **Tokens.** Band: a 135° hatch of `color-mix(in oklab, var(--color-edge-strong) 25%, transparent)` 6px
 stripes over transparent, a 1px `--color-edge` left edge, no radius, label `text-[11px] leading-tight
@@ -1060,12 +1063,30 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
   Markers at the same local minute share one glyph whose tooltip lists each one. The glyph's
   `aria-label` carries the tooltip lines.
 - Zone every item with `useTimezoneStore.resolved`, the same as events.
+- **Month:** render the glyph through react-big-calendar's `components.month.dateHeader`
+  (`LayerMonthDateHeader`) so events are untouched; one glyph per local day that has ANY window or marker
+  (a window crossing midnight counts on each day it touches), tooltip opens **below** the glyph and lists
+  the day's items by time (`groupLayerItemsByDay`). While it is open the row and month view stop clipping
+  (`calendar-layers.css`).
+- **Schedule:** interleave `ScheduleLayerRow`s with the day's events by time (`mergeScheduleRows`; a layer
+  row comes first on a tie). `text-xs text-dim`, a 12px power icon, no fill, no border — quieter than any
+  event card — and the text **wraps** (`break-words`) so the end time and server name stay visible.
+  A day with only layer rows (no events, not today) is still listed, with a muted `text-dim` day header
+  (`data-layer-only`), so a server window on an event-free day is visible (Lead ruling); it drops out again
+  when the layer is off or filtered out.
+- **Filter toggle:** gate in `useCalendarLayers` (a hidden layer's `useItems` gets `enabled=false`, so it
+  never fetches), not in a view. Off, inactive plugin, or a game filter that excludes the items → the view
+  draws nothing.
+  For a signed-in viewer, checkbox layers stay off until their saved preference has loaded (the store's
+  `hydrated` flag), so a hidden layer never flashes or fetches on a cold load; the set resets on logout
+  or a viewer change. Rendered: `/dev/design-system` → *Filters · Layers checkbox*.
 
 **DON'T**
 - Use the busy (§4.16), slot, heatmap or game colours for a layer — each already means something on
   this grid. A layer is neutral `edge`/`edge-strong` only.
-- Make the band or tick interactive, or give a layer its own filter: the page's game filter
-  (§4.3 / `filter-entry.tsx`) applies client-side.
+- Make the band or tick interactive, or give a layer its own game filter: the page's game filter
+  (§4.3 / `filter-entry.tsx`) applies client-side. The only per-layer control is the show/hide checkbox.
+- Draw bands in Month or Schedule, put more than one glyph in a month cell, or `truncate` a Schedule row.
 - Import a plugin from core: `components/**`, `pages/**` and `plugins/calendar-layer*.ts` never import
   `plugins/pelican/**` (`pelican-core-boundary.guard.test.ts`).
 
@@ -1073,7 +1094,8 @@ text-muted ring-1 ring-edge-strong` button with a power icon, `focus-visible:rin
 tick z-order), `LayerWindowLabel.tsx`, `LayerMarkerTick.tsx`, `LayerGlyph.tsx` (tooltip + flip),
 `LayerDayColumnWrapper.tsx` (ticks per day column), `CalendarLayerGrid.tsx` + `calendar-layer-context.ts`
 (grid ref for the flip), `calendar-layer-events.ts` (zoning, midnight split), `layer-tip-placement.ts` (`placeTip`),
-`use-calendar-layer-data.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
+`use-calendar-layer-data.ts`; ROK-1775 adds `calendar-layer-days.ts`, `LayerMonthDateHeader.tsx`,
+`schedule-layer-rows.ts`, `ScheduleLayerRow.tsx`, `use-zoned-layer-range.ts`. Rendered: `/dev/design-system` → *Pattern — server-schedule layer*
 (`calendar-layer-section.tsx`). Smoke: `scripts/smoke/calendar-server-layer.smoke.spec.ts`.
 
 ---

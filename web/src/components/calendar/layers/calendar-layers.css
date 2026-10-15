@@ -53,3 +53,18 @@
 .rl-layer-tick {
     z-index: 5;
 }
+
+/*
+ * ROK-1775 — Month glyph tooltip. RBC clips each month row (and our month view)
+ * with overflow: hidden; while a month glyph's tooltip is open, let that row and
+ * the view overflow and lift the row above its siblings so the list is never cut.
+ */
+.calendar-container .rbc-month-view:has(.rl-layer-month-day [aria-expanded='true']),
+.calendar-container .rbc-month-row:has(.rl-layer-month-day [aria-expanded='true']) {
+    overflow: visible;
+}
+
+.calendar-container .rbc-month-row:has(.rl-layer-month-day [aria-expanded='true']) {
+    position: relative;
+    z-index: 6;
+}
