@@ -229,7 +229,11 @@ describe('PelicanConsoleSocket reconnect', () => {
     t.frame(0, 'console output', ['stale']);
     t.socket(0).handlers.onClose();
     expect(t.onLine).not.toHaveBeenCalled();
-    expect(jest.getTimerCount()).toBe(0);
+    // Only socket 1's liveness watchdog is pending — the stale close
+    // scheduled no reconnect.
+    expect(jest.getTimerCount()).toBe(1);
+    await jest.advanceTimersByTimeAsync(60_000);
+    expect(t.sockets).toHaveLength(2);
   });
 });
 
