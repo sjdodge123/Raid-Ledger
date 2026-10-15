@@ -40,4 +40,40 @@ describe('backfillStepDurations', () => {
     expect(backfillStepDurations(steps, TAIL)[0]?.duration_s).toBeNull();
     expect(backfillStepDurations(steps, undefined)[0]?.duration_s).toBeNull();
   });
+
+  const LINT = 'Lint (all)';
+  const nullLint = { name: LINT, status: 'PASS' as const, duration_s: null };
+
+  it('aligns repeated names from the END when the tail lost the first run (Codex P3)', () => {
+    const tail = ['[step-time] Lint (all) 22.2', 'Lint (all): PASS'].join('\n');
+    const out = backfillStepDurations([nullLint, nullLint], tail);
+    expect(out.map((s) => s.duration_s)).toEqual([null, 22.2]);
+  });
+
+  it('matches repeated names by occurrence order when every line is in the tail', () => {
+    const tail = [
+      '[step-time] Lint (all) 10.5', 'Lint (all): FAIL',
+      '[step-time] Lint (all) 22.2', 'Lint (all): PASS',
+    ].join('\n');
+    const out = backfillStepDurations([{ ...nullLint, status: 'FAIL' as const }, nullLint], tail);
+    expect(out.map((s) => s.duration_s)).toEqual([10.5, 22.2]);
+  });
+
+  it('a populated duration keeps its slot and does not shift the next match', () => {
+    const tail = [
+      '[step-time] Lint (all) 10.5', 'Lint (all): FAIL',
+      '[step-time] Lint (all) 22.2', 'Lint (all): PASS',
+    ].join('\n');
+    const out = backfillStepDurations([{ ...nullLint, duration_s: 9.9 }, nullLint], tail);
+    expect(out.map((s) => s.duration_s)).toEqual([9.9, 22.2]);
+  });
+
+  it('ignores a trailing [step-time] whose row has not been printed yet', () => {
+    const tail = [
+      '[step-time] Lint (all) 10.5', '\u001b[0;32mLint (all): PASS\u001b[0m',
+      '[step-time] Lint (all) 22.2',
+    ].join('\n');
+    const out = backfillStepDurations([nullLint], tail);
+    expect(out.map((s) => s.duration_s)).toEqual([10.5]);
+  });
 });
