@@ -58,10 +58,13 @@ function fakeChannel(opts: {
     send: jest.fn(),
     messages: {
       fetch,
-      fetchPins: jest.fn(async () => {
-        if (opts.pinsError) throw opts.pinsError;
-        return { items: (opts.pins ?? []).map((message) => ({ message })) };
-      }),
+      fetchPins: jest.fn(() =>
+        opts.pinsError
+          ? Promise.reject(opts.pinsError)
+          : Promise.resolve({
+              items: (opts.pins ?? []).map((message) => ({ message })),
+            }),
+      ),
       delete: jest.fn(),
     },
   };
