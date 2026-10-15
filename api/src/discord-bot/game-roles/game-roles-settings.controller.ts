@@ -1,5 +1,6 @@
 import {
   Body,
+  ConflictException,
   Controller,
   DefaultValuePipe,
   Delete,
@@ -34,6 +35,7 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { handleValidationError } from '../validation.util';
 import {
   createGameRole,
+  deleteCreatedRole,
   listAssignableRoles,
   preflightGameRole,
 } from './game-role-discord.helpers';
@@ -42,6 +44,7 @@ import { GameRoleReconcileService } from './game-role-reconcile.service';
 import {
   deleteGameRole,
   findGameName,
+  findGameRoleLink,
   listGameRoleAudit,
   listGameRoleSummaries,
   saveGameRole,
@@ -112,13 +115,17 @@ export class GameRolesSettingsController {
     const dto = parseOrThrow(UpsertGameRoleSchema, body);
     const gameName = await findGameName(this.db, gameId);
     if (gameName === null) throw new NotFoundException('Game not found');
-    const { roleId, botCreated } = await this.resolveRole(dto, gameName);
+    const enabled = dto.enabled ?? true;
+    const existing = await findGameRoleLink(this.db, gameId);
+    const { roleId, botCreated } = existing
+      ? await this.keepRole(existing, dto.roleId, enabled)
+      : await this.resolveRole(dto, gameName);
     await saveGameRole(this.db, {
       gameId,
       roleId,
       botCreated,
       windowDays: dto.windowDays,
-      enabled: dto.enabled ?? true,
+      enabled,
     });
     const [summary] = await listGameRoleSummaries(
       this.db,
@@ -127,6 +134,30 @@ export class GameRolesSettingsController {
     );
     if (!summary) throw new NotFoundException('Game role not saved');
     return summary;
+  }
+
+  /**
+   * Edit of an existing link: the role never changes here (a new role would
+   * orphan every member the bot gave the old one). `roleId: null` means "keep
+   * the current role". Preflight runs only when the link ends up enabled, so
+   * a link whose role broke can still be paused.
+   */
+  private async keepRole(
+    existing: { roleId: string; botCreated: boolean },
+    requested: string | null,
+    enabled: boolean,
+  ): Promise<{ roleId: string; botCreated: boolean }> {
+    if (requested !== null && requested !== existing.roleId) {
+      throw new ConflictException(
+        'This game is already linked to another role. Unlink it first.',
+      );
+    }
+    if (enabled) {
+      const guild = this.botClient.getGuild();
+      assertPreflight(await preflightGameRole(guild, null));
+      assertPreflight(await preflightGameRole(guild, existing.roleId));
+    }
+    return existing;
   }
 
   private async resolveRole(
@@ -141,7 +172,9 @@ export class GameRolesSettingsController {
     }
     if (!guild) throw new ServiceUnavailableException('Bot is not connected');
     const created = await createGameRole(guild, dto.name ?? gameName);
-    assertPreflight(await preflightGameRole(guild, created.id));
+    const check = await preflightGameRole(guild, created.id);
+    if (!check.ok) await deleteCreatedRole(guild, created.id);
+    assertPreflight(check);
     return { roleId: created.id, botCreated: true };
   }
 

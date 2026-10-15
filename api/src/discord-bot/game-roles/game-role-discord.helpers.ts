@@ -87,6 +87,16 @@ export async function createGameRole(
   return { id: role.id, name: role.name };
 }
 
+/** Best-effort delete of a role the bot just created (orphan cleanup). */
+export async function deleteCreatedRole(
+  guild: Guild,
+  roleId: string,
+): Promise<void> {
+  await guild.roles
+    .delete(roleId, 'Raid Ledger: game role link failed preflight')
+    .catch(() => undefined);
+}
+
 /** Holders + member ids from ONE member fetch; null when the role is gone. */
 export async function fetchRoleState(
   guild: Guild | null,

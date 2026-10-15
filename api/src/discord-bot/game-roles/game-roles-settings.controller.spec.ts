@@ -64,6 +64,7 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     s.findGameName.mockResolvedValue('Valheim');
+    s.findGameRoleLink.mockResolvedValue(null);
     s.saveGameRole.mockResolvedValue(undefined);
     s.listGameRoleSummaries.mockResolvedValue([SUMMARY]);
   });
@@ -106,5 +107,79 @@ describe('GameRolesSettingsController (ROK-1767)', () => {
         enabled: true,
       },
     );
+  });
+
+  describe('editing an existing link', () => {
+    const LINKED = { roleId: 'old-role', botCreated: true };
+    const FAIL: GameRolePreflightDto = {
+      ok: false,
+      problems: [{ code: 'role_not_found', message: 'Role not found' }],
+    };
+
+    beforeEach(() => s.findGameRoleLink.mockResolvedValue(LINKED));
+
+    it('roleId null keeps the current role instead of creating a second one', async () => {
+      d.preflightGameRole.mockResolvedValue(OK);
+
+      const res = await put({ roleId: null, windowDays: 30 });
+
+      expect(res.status).toBe(200);
+      expect(d.createGameRole).not.toHaveBeenCalled();
+      expect(s.saveGameRole).toHaveBeenCalledWith(
+        {},
+        {
+          gameId: 7,
+          roleId: 'old-role',
+          botCreated: true,
+          windowDays: 30,
+          enabled: true,
+        },
+      );
+    });
+
+    it('refuses a different role with 409 and saves nothing', async () => {
+      d.preflightGameRole.mockResolvedValue(OK);
+
+      const res = await put({ roleId: 'other-role', windowDays: 14 });
+
+      expect(res.status).toBe(409);
+      expect(s.saveGameRole).not.toHaveBeenCalled();
+    });
+
+    it('can be disabled even while its preflight fails', async () => {
+      d.preflightGameRole.mockResolvedValue(FAIL);
+
+      const res = await put({
+        roleId: 'old-role',
+        windowDays: 14,
+        enabled: false,
+      });
+
+      expect(res.status).toBe(200);
+      expect(s.saveGameRole).toHaveBeenCalledWith(
+        {},
+        expect.objectContaining({ roleId: 'old-role', enabled: false }),
+      );
+    });
+  });
+
+  it('deletes the role it just created when the post-create preflight fails', async () => {
+    d.preflightGameRole.mockImplementation((_g, roleId) =>
+      Promise.resolve(
+        roleId === 'new-role'
+          ? {
+              ok: false,
+              problems: [{ code: 'role_above_bot', message: 'nope' }],
+            }
+          : OK,
+      ),
+    );
+    d.createGameRole.mockResolvedValue({ id: 'new-role', name: 'Valheim' });
+
+    const res = await put({ roleId: null, windowDays: 14 });
+
+    expect(res.status).toBe(422);
+    expect(d.deleteCreatedRole).toHaveBeenCalledWith(guild, 'new-role');
+    expect(s.saveGameRole).not.toHaveBeenCalled();
   });
 });

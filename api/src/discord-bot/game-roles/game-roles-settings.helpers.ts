@@ -62,22 +62,29 @@ export interface SaveGameRoleInput {
   enabled: boolean;
 }
 
-/** Upsert the link; a changed role id forgets the old role's grants. */
+/** The game's current link, if any. */
+export async function findGameRoleLink(
+  db: GameRoleDb,
+  gameId: number,
+): Promise<{ roleId: string; botCreated: boolean } | null> {
+  const r = schema.discordGameRoles;
+  const [row] = await db
+    .select({ roleId: r.roleId, botCreated: r.botCreated })
+    .from(r)
+    .where(eq(r.gameId, gameId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Upsert the link. The controller refuses a role change on an existing link
+ * (unlink first), so the grant rows always belong to the saved role.
+ */
 export async function saveGameRole(
   db: GameRoleDb,
   input: SaveGameRoleInput,
 ): Promise<void> {
   const r = schema.discordGameRoles;
-  const [prev] = await db
-    .select({ id: r.id, roleId: r.roleId })
-    .from(r)
-    .where(eq(r.gameId, input.gameId))
-    .limit(1);
-  if (prev && prev.roleId !== input.roleId) {
-    await db
-      .delete(schema.discordGameRoleGrants)
-      .where(eq(schema.discordGameRoleGrants.gameRoleId, prev.id));
-  }
   const { gameId, ...rest } = input;
   await db
     .insert(r)
