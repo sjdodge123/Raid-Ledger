@@ -2,7 +2,8 @@
  * ROK-1779: strip personal data from a browser Sentry event before it leaves.
  *
  * A port of `api/src/sentry/sentry-pii.helpers.ts` (web cannot import api
- * code) — keep the two rule sets in step. Mutates in place, returns the event.
+ * code) — keep the two rule sets in step. Never writes to the objects it is
+ * handed: each scrubbed field is replaced by a scrubbed copy.
  *
  * - `event.user` keeps only its internal `id` (triage needs it).
  * - Any username / display name / email / IP / community-name key, at any
@@ -69,40 +70,76 @@ export function scrubPiiString(value: string): string {
         .replace(IPV4, '[ip]');
 }
 
-function scrubPiiValue(value: unknown, seen: WeakSet<object>, depth: number): unknown {
-    if (typeof value === 'string') return scrubPiiString(value);
-    if (!value || typeof value !== 'object' || depth > MAX_DEPTH) return value;
-    if (seen.has(value)) return value;
-    seen.add(value);
-    if (Array.isArray(value)) {
-        value.forEach((v: unknown, i) => {
-            value[i] = scrubPiiValue(v, seen, depth + 1);
-        });
-        return value;
+const CIRCULAR = '[circular]';
+const TRUNCATED = '[truncated]';
+type ScrubField = 'request' | 'spans' | 'extra' | 'contexts' | 'breadcrumbs' | 'tags';
+const EVENT_FIELDS: readonly ScrubField[] = ['request', 'spans', 'extra', 'contexts', 'breadcrumbs', 'tags'];
+
+/** Copy an object's own keys (plus an Error's message/stack), scrubbing each. */
+function copyEntries(obj: object, ancestors: Set<object>, depth: number): Record<string, unknown> {
+    const out: Record<string, unknown> = {};
+    if (obj instanceof Error) {
+        out['name'] = obj.name;
+        out['message'] = scrubPiiString(obj.message);
+        if (typeof obj.stack === 'string') out['stack'] = scrubPiiString(obj.stack);
     }
-    const obj = value as Record<string, unknown>;
     for (const key of Object.keys(obj)) {
-        if (VERSION_KEY.test(key) && typeof obj[key] === 'string') continue;
-        obj[key] = isPiiKey(key) ? PII_REDACTED : scrubPiiValue(obj[key], seen, depth + 1);
+        const raw: unknown = Reflect.get(obj, key);
+        if (VERSION_KEY.test(key) && typeof raw === 'string') out[key] = raw;
+        else out[key] = isPiiKey(key) ? PII_REDACTED : scrubPiiValue(raw, ancestors, depth + 1);
     }
-    return obj;
+    return out;
+}
+
+/**
+ * Return a scrubbed COPY: the objects reach us by reference from app code
+ * (console.log(user) puts `user` in a breadcrumb), so they are never written
+ * to — a frozen one would throw. Cycles and depth are bounded.
+ */
+function scrubPiiValue(value: unknown, ancestors: Set<object>, depth: number): unknown {
+    if (typeof value === 'string') return scrubPiiString(value);
+    if (!value || typeof value !== 'object' || value instanceof Date) return value;
+    if (ancestors.has(value)) return CIRCULAR;
+    if (depth > MAX_DEPTH) return TRUNCATED;
+    ancestors.add(value);
+    try {
+        if (Array.isArray(value)) {
+            return value.map((v: unknown) => scrubPiiValue(v, ancestors, depth + 1));
+        }
+        return copyEntries(value, ancestors, depth);
+    } finally {
+        ancestors.delete(value);
+    }
+}
+
+/** Run a copy; report failure (a throwing getter or proxy) instead of throwing. */
+function tryCopy<R>(make: () => R): { ok: true; value: R } | { ok: false } {
+    try {
+        return { ok: true, value: make() };
+    } catch {
+        return { ok: false };
+    }
+}
+
+/** Replace `target[key]` with its scrubbed copy; drop the field if that fails. */
+function replaceField<K extends string>(target: Partial<Record<K, unknown>>, key: K): void {
+    if (target[key] === undefined) return;
+    const value = target[key];
+    const copy = tryCopy(() => scrubPiiValue(value, new Set<object>(), 0));
+    if (copy.ok) target[key] = copy.value;
+    else Reflect.deleteProperty(target, key);
 }
 
 /** Keep only `id` on the user object (internal numeric id, no PII). */
-function reduceUser(user: object | undefined): void {
-    if (!user) return;
-    for (const key of Object.keys(user)) {
-        if (key !== 'id') Reflect.deleteProperty(user, key);
-    }
+function reduceUser(user: object): object {
+    const id: unknown = Reflect.get(user, 'id');
+    return id === undefined ? {} : { id };
 }
 
 export function scrubPiiEvent<T extends PiiScrubbableEvent>(event: T): T {
-    reduceUser(event.user);
-    const seen = new WeakSet<object>();
-    const parts = [event.request, event.spans, event.extra, event.contexts];
-    for (const part of [...parts, event.breadcrumbs, event.tags]) {
-        scrubPiiValue(part, seen, 0);
-    }
+    const target: PiiScrubbableEvent = event;
+    if (target.user) target.user = reduceUser(target.user);
+    for (const field of EVENT_FIELDS) replaceField(target, field);
     for (const ex of event.exception?.values ?? []) {
         if (typeof ex.value === 'string') ex.value = scrubPiiString(ex.value);
     }
@@ -113,9 +150,16 @@ export function scrubPiiEvent<T extends PiiScrubbableEvent>(event: T): T {
     return event;
 }
 
-/** Breadcrumb hook variant: the message and every value under `data`. */
+/** Breadcrumb hook variant: the message and a scrubbed copy of `data`. */
 export function scrubPiiBreadcrumb<T extends PiiScrubbableBreadcrumb>(crumb: T): T {
     if (typeof crumb.message === 'string') crumb.message = scrubPiiString(crumb.message);
-    if (crumb.data) scrubPiiValue(crumb.data, new WeakSet<object>(), 0);
+    const data = crumb.data;
+    if (data === undefined) return crumb;
+    const copy = tryCopy(() => copyEntries(data, new Set<object>([data]), 0));
+    if (copy.ok) {
+        crumb.data = copy.value;
+    } else {
+        Reflect.deleteProperty(crumb, 'data');
+    }
     return crumb;
 }

@@ -121,7 +121,7 @@ describe('scrubPiiEvent — identity and cycles (ROK-1779)', () => {
         extra['self'] = extra;
         const event: PiiScrubbableEvent = { extra };
         expect(() => scrubPiiEvent(event)).not.toThrow();
-        expect(extra['email']).toBe(PII_REDACTED);
+        expect(event.extra).toEqual({ email: PII_REDACTED, self: '[circular]' });
     });
 
     it('returns the same event object (beforeSend identity)', () => {
@@ -173,5 +173,56 @@ describe('scrubPiiString — percent-encoded e-mails (ROK-1779 Codex P2)', () =>
         expect(event.breadcrumbs).toEqual([{ data: { url: '/api?e=[email]' } }]);
         const crumb = scrubPiiBreadcrumb({ message: 'GET /u?e=carol%40example.com' });
         expect(crumb.message).toBe('GET /u?e=[email]');
+    });
+});
+
+describe('caller-owned objects are never mutated (ROK-1779 Codex P2 round 3)', () => {
+    const deepChain = (levels: number): Record<string, unknown> => {
+        let node: Record<string, unknown> = { note: 'deep carol@x.io' };
+        for (let i = 0; i < levels; i += 1) node = { child: node };
+        return node;
+    };
+
+    it('leaves a console argument untouched while the crumb is scrubbed', () => {
+        const user = { id: 7, username: 'bob', profile: { email: 'bob@x.io' } };
+        const crumb = scrubPiiBreadcrumb({ category: 'console', data: { arguments: [user] } });
+        expect(user).toEqual({ id: 7, username: 'bob', profile: { email: 'bob@x.io' } });
+        expect(crumb.data?.['arguments']).toEqual([
+            { id: 7, username: PII_REDACTED, profile: { email: PII_REDACTED } },
+        ]);
+    });
+
+    it('scrubs a frozen argument without throwing', () => {
+        const user = Object.freeze({ username: 'bob', note: 'ping bob@x.io' });
+        const crumb = scrubPiiBreadcrumb({ data: { arguments: [user] } });
+        expect(crumb.data?.['arguments']).toEqual([{ username: PII_REDACTED, note: 'ping [email]' }]);
+        expect(user.username).toBe('bob');
+    });
+
+    it('copes with a cyclic argument and leaves it intact', () => {
+        const node: Record<string, unknown> = { email: 'b@x.io' };
+        node['self'] = node;
+        const crumb = scrubPiiBreadcrumb({ data: { arguments: [node] } });
+        expect(node['email']).toBe('b@x.io');
+        expect(node['self']).toBe(node);
+        expect(crumb.data?.['arguments']).toEqual([{ email: PII_REDACTED, self: '[circular]' }]);
+    });
+
+    it('never ships a value deeper than the depth bound unscrubbed', () => {
+        const crumb = scrubPiiBreadcrumb({ data: { arguments: [deepChain(30)] } });
+        expect(JSON.stringify(crumb.data)).not.toContain('carol@x.io');
+        expect(JSON.stringify(crumb.data)).toContain('[truncated]');
+    });
+
+    it('scrubs an event without touching the objects its extras reference', () => {
+        const owned = { username: 'bob', email: 'bob@x.io' };
+        const frozenUser = Object.freeze({ id: 3, email: 'u@x.io' });
+        const event: PiiScrubbableEvent = { extra: { owned }, contexts: { app: owned }, user: frozenUser };
+        expect(() => scrubPiiEvent(event)).not.toThrow();
+        expect(owned).toEqual({ username: 'bob', email: 'bob@x.io' });
+        expect(frozenUser).toEqual({ id: 3, email: 'u@x.io' });
+        expect(event.extra).toEqual({ owned: { username: PII_REDACTED, email: PII_REDACTED } });
+        expect(event.contexts).toEqual({ app: { username: PII_REDACTED, email: PII_REDACTED } });
+        expect(event.user).toEqual({ id: 3 });
     });
 });
