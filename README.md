@@ -134,7 +134,8 @@ Every variable has a working default. Set these only if you need them.
 | `RESET_PASSWORD` | `false` | Set to `true` for **one** start to reset the admin password (with `ADMIN_PASSWORD` to choose it, otherwise a new random one is printed to the log). Remove it afterwards. |
 | `PORT` | `80` | The port the container listens on. You normally leave this alone and change the **host** side of the port mapping instead. |
 | `DEBUG` | `false` | Verbose logging (query details, startup diagnostics). |
-| `DISABLE_TELEMETRY` | `false` | `true` disables anonymous error reporting to the maintainers (Sentry). |
+| `ENABLE_TELEMETRY` | `false` | Error reporting is **opt-in**: set `true` to send error reports to the Raid Ledger maintainers' Sentry from the API **and** the web app. Unset means nothing is sent. Read at startup — no rebuild needed. The maintainers' own production instance must set `ENABLE_TELEMETRY=true` to keep reporting. |
+| `DISABLE_TELEMETRY` | `false` | `true` forces error reporting off, even when `ENABLE_TELEMETRY=true`. |
 
 **Updates.** Pull the `:main` tag and recreate the container; migrations run on start and a pre-migration snapshot is taken first. Watchtower works.
 

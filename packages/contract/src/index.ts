@@ -22,6 +22,9 @@ export * from './signups.schema.js';
 // Characters
 export * from './characters.schema.js';
 
+// Character saved instances (ROK-1743)
+export * from './character-lockouts.schema.js';
+
 // Availability
 export * from './availability.schema.js';
 
@@ -216,3 +219,6 @@ export * from './guilds.schema.js';
 
 // Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
 export * from './discord-join-post.schema.js';
+
+// Guild page content — GM post, rules, links, recommended addons (ROK-1786).
+export * from './guild-content.schema.js';

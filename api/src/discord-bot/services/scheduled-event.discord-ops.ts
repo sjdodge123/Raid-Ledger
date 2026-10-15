@@ -95,7 +95,15 @@ export interface DeleteOutcome {
   retryAfter?: number;
 }
 
-function discordErrorCode(error: unknown): number | undefined {
+/** What a completion attempt got through before it stopped (ROK-944). */
+export interface CompletionProgress {
+  from: GuildScheduledEventStatus | null;
+  to: GuildScheduledEventStatus | null;
+  /** Discord said 10070 — the SE no longer exists. */
+  unknownEvent?: boolean;
+}
+
+export function discordErrorCode(error: unknown): number | undefined {
   return error instanceof DiscordAPIError && typeof error.code === 'number'
     ? error.code
     : undefined;
@@ -136,6 +144,7 @@ export async function activateAndComplete(
   eventId: number,
   seId: string,
   currentStatus: GuildScheduledEventStatus,
+  progress?: CompletionProgress,
 ): Promise<void> {
   if (currentStatus === GuildScheduledEventStatus.Scheduled) {
     await timedDiscordCall(
@@ -146,6 +155,7 @@ export async function activateAndComplete(
         }),
       { eventId, op: 'complete-activate' },
     );
+    if (progress) progress.to = GuildScheduledEventStatus.Active;
   }
 
   await timedDiscordCall(
@@ -156,12 +166,14 @@ export async function activateAndComplete(
       }),
     { eventId, op: 'complete' },
   );
+  if (progress) progress.to = GuildScheduledEventStatus.Completed;
 }
 
 export async function tryCompleteEvent(
   guild: Guild,
   eventId: number,
   seId: string,
+  progress?: CompletionProgress,
 ): Promise<void> {
   try {
     const se = await timedDiscordCall(
@@ -169,11 +181,13 @@ export async function tryCompleteEvent(
       () => guild.scheduledEvents.fetch(seId),
       { eventId, op: 'complete' },
     );
+    if (progress) progress.from = progress.to = se.status;
 
     if (isTerminalStatus(se.status)) return;
-    await activateAndComplete(guild, eventId, seId, se.status);
+    await activateAndComplete(guild, eventId, seId, se.status, progress);
   } catch (error) {
     if (!isUnknownEventError(error)) throw error;
+    if (progress) progress.unknownEvent = true;
   }
 }
 

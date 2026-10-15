@@ -14,6 +14,7 @@ import { Button } from '../../components/ui/button';
 import { LoadingSpinner } from '../../components/ui/loading-spinner';
 import { NewBadge } from '../../components/ui/new-badge';
 import { RoleBadge } from '../../components/ui/role-badge';
+import { StatusChip } from '../../components/ui/status-chip';
 import { ModalSearchInput, ModalEmptyState } from '../../components/ui/modal-helpers';
 import { LineupEmptyState } from '../../components/lineups/LineupEmptyState';
 import { Section, StateFrame, StateGrid } from './design-system-bits';
@@ -84,6 +85,18 @@ function ChipStates(): JSX.Element {
             </StateFrame>
             <RemovableChipDemo />
         </>
+    );
+}
+
+/** Read-only §4.21 status chip — the four tones (ROK-1776). */
+function StatusChipStates(): JSX.Element {
+    return (
+        <StateFrame label="Status chip — read-only tones" note="StatusChip (§4.21): title required; event page adds 'checked N min ago'.">
+            <StatusChip tone="success" title="Valheim Main: Online">Server online</StatusChip>
+            <StatusChip tone="warning" title="Valheim Main: Starting">Server starting</StatusChip>
+            <StatusChip tone="danger" title="Alpha: Online, Beta: Offline">1 of 2 servers offline</StatusChip>
+            <StatusChip tone="neutral" title="Valheim Main: Unknown">Server status unknown</StatusChip>
+        </StateFrame>
     );
 }
 
@@ -167,6 +180,7 @@ export function PrimitivesSection(): JSX.Element {
             <StateGrid>
                 <BadgeStates />
                 <ChipStates />
+                <StatusChipStates />
                 <ButtonStates />
                 <InputStates />
                 <EmptyAndLoading />

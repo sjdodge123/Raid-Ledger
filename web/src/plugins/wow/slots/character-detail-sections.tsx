@@ -9,9 +9,10 @@
  * request), so core's slot context needs no WoW field. ROK-1751: the game
  * slug (from the cached game registry) resolves LedgerLink Forever characters
  * whose ruleset is null; while the registry is still loading, neutral
- * panels render instead of variant-specific copy.
+ * panels render instead of variant-specific copy. ROK-1743: Forever saved
+ * instances (`character.lockouts`, addon snapshot) render after Quests.
  */
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { useCharacterDetail } from '../../../hooks/use-character-detail';
 import { FOREVER_ADDON_HINT_EQUIPMENT, getWowVariantIntegrations } from '../lib/wow-variant-config';
 import { useCharacterWowVariant } from '../hooks/use-character-wow-variant';
@@ -20,14 +21,20 @@ import { ItemDetailModal } from '../components/item-detail-modal';
 import { TalentDisplay } from '../components/talent-display';
 import { CharacterProfessionsPanel } from '../components/CharacterProfessionsPanel';
 import { CharacterQuestsSection } from '../components/character-quests-section';
+import { CharacterLockoutsSection } from '../components/character-lockouts-section';
 import { formatAddonSourceLine } from '../lib/addon-source-line';
 import { EquipmentGrid } from './equipment-grid';
 import { buildOrderedItems } from './equipment-constants';
+import { selectForeverPortrait, type ForeverPortrait } from '../lib/forever-portrait';
+import type { WowVariant } from '../lib/wow-era';
 import type {
     CharacterEquipmentDto,
     CharacterProfessionsDto,
     EquipmentItemDto,
 } from '@raid-ledger/contract';
+
+/** ROK-1786: lazy so the guild addons card stays out of the entry chunk. */
+const CharacterAddonsCard = lazy(() => import('./character-addons-card').then((m) => ({ default: m.CharacterAddonsCard })));
 
 /** Props passed via PluginSlot context from character-detail-page */
 interface CharacterDetailSectionsProps {
@@ -44,8 +51,9 @@ interface CharacterDetailSectionsProps {
 }
 
 /** Equipment panel with items and item detail modal */
-function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImported }: {
-    equipment: CharacterEquipmentDto; gameVariant: string | null; renderUrl: string | null; isArmoryImported: boolean;
+function EquipmentWithItems({ equipment, gameVariant, renderUrl, portrait, isArmoryImported }: {
+    equipment: CharacterEquipmentDto; gameVariant: string | null; renderUrl: string | null;
+    portrait: ForeverPortrait; isArmoryImported: boolean;
 }) {
     const [selectedItemIndex, setSelectedItemIndex] = useState<number | null>(null);
     const orderedItems = buildOrderedItems(equipment);
@@ -62,7 +70,7 @@ function EquipmentWithItems({ equipment, gameVariant, renderUrl, isArmoryImporte
                 <EquipmentSourceLine equipment={equipment} />
                 {equipment.items.length > 0 ? (
                     <EquipmentGrid equipment={equipment} gameVariant={gameVariant}
-                        renderUrl={renderUrl} onItemClick={handleItemClick} />
+                        renderUrl={renderUrl} portrait={portrait} onItemClick={handleItemClick} />
                 ) : (
                     <EquipmentEmptyMessage isArmoryImported={isArmoryImported} gameVariant={gameVariant} />
                 )}
@@ -89,6 +97,7 @@ export function CharacterDetailSections({
     useWowheadTooltips(equipment ? [equipment] : []);
     const { data: character } = useCharacterDetail(characterId);
     const { variant, isResolving } = useCharacterWowVariant({ gameVariant, ruleset: character?.ruleset, gameId });
+    const portrait = renderSlotPortrait(character, variant, renderUrl);
 
     return (
         <>
@@ -96,17 +105,33 @@ export function CharacterDetailSections({
                 <VariantPendingSections />
             ) : equipment ? (
                 <EquipmentWithItems equipment={equipment} gameVariant={variant}
-                    renderUrl={renderUrl} isArmoryImported={isArmoryImported} />
+                    renderUrl={renderUrl} portrait={portrait} isArmoryImported={isArmoryImported} />
             ) : (
                 <EquipmentEmptyState isArmoryImported={isArmoryImported} gameVariant={variant} />
             )}
             {!isResolving && <TalentSection talents={talents} isArmoryImported={isArmoryImported}
                 characterClass={characterClass} gameVariant={variant} />}
+            <Suspense fallback={null}><CharacterAddonsCard characterId={characterId} /></Suspense>
             <CharacterQuestsSection characterId={characterId} variant={variant} />
+            <CharacterLockoutsSection lockouts={character?.lockouts} />
             <CharacterProfessionsPanel professions={professions}
                 isOwner={isOwner} characterId={characterId} gameId={gameId} />
         </>
     );
+}
+
+type PortraitCharacter = { race: string | null; gender?: string | null | undefined; class: string | null; name: string };
+
+/**
+ * ROK-1747: the Forever fallback portrait for the equipment render slot.
+ * `renderUrl` stands in for the avatar so a Blizzard render always wins here.
+ */
+function renderSlotPortrait(character: PortraitCharacter | undefined, variant: WowVariant | null, renderUrl: string | null): ForeverPortrait {
+    if (!character) return { kind: 'none' };
+    return selectForeverPortrait({
+        variant, avatarUrl: renderUrl, race: character.race, gender: character.gender,
+        characterClass: character.class, name: character.name,
+    });
 }
 
 /**

@@ -13,6 +13,7 @@ import type { PluginRegistryService } from '../plugin-host/plugin-registry.servi
 import { PelicanAdapterRegistration } from './pelican-adapters';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
+import type { PelicanClientFactory } from './pelican-client.factory';
 import type { PelicanConfigService } from './pelican-config.service';
 import type { PelicanSchedulesRepository } from './pelican-schedules.repository';
 import type { PelicanServersRepository } from './pelican-servers.repository';
@@ -31,6 +32,9 @@ function cronRegistrar() {
 }
 
 function provider(rows = [pelicanRow(1)]) {
+  const clients = {
+    connect: jest.fn(() => Promise.resolve({ host: 'panel' })),
+  };
   const repo = { listPollable: jest.fn(() => Promise.resolve(rows)) };
   const schedules = { listServable: jest.fn(() => Promise.resolve([])) };
   const config = {
@@ -40,6 +44,7 @@ function provider(rows = [pelicanRow(1)]) {
     repo as unknown as PelicanServersRepository,
     schedules as unknown as PelicanSchedulesRepository,
     config as unknown as PelicanConfigService,
+    clients as unknown as PelicanClientFactory,
   );
 }
 

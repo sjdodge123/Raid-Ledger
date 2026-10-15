@@ -75,7 +75,7 @@ export function buildBindSuccessEmbed(
     authorLine: COMMAND_REPLY_AUTHORS.BIND_SAVED,
   });
   // AC2: `#channel → Purpose` owns the TITLE slot on every binding reply.
-  embed.setTitle(bindingTitle(channelName, purpose));
+  embed.setTitle(bindingTitle(channelName, purpose, resolvedGameName));
   const description = buildBindDescription(replacedChannelIds, otherSlot);
   if (description) embed.setDescription(description);
   embed.addFields(

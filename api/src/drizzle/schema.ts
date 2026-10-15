@@ -70,6 +70,8 @@ export * from './schema/wow-item-meta';
 export * from './schema/guilds';
 export * from './schema/guild-members';
 export * from './schema/guild-editors';
+export * from './schema/guild-profiles';
+export * from './schema/guild-recommended-addons';
 export * from './schema/calendar-connections';
 export * from './schema/calendar-busy-blocks';
 export * from './schema/calendar-ignored-days';

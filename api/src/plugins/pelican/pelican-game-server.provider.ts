@@ -6,6 +6,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { GameServerProvider } from '../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
+import { PelicanClientFactory } from './pelican-client.factory';
 import { PelicanConfigService } from './pelican-config.service';
 import {
   projectSchedules,
@@ -31,6 +32,7 @@ export class PelicanGameServerProvider implements GameServerProvider {
     private readonly repo: PelicanServersRepository,
     private readonly schedules: PelicanSchedulesRepository,
     private readonly config: PelicanConfigService,
+    private readonly clients: PelicanClientFactory,
   ) {}
 
   /** Windows + markers overlapping `[from, to)` for servable servers (D14). */
@@ -52,8 +54,13 @@ export class PelicanGameServerProvider implements GameServerProvider {
     return result.items.map((item) => GameServerCalendarItemSchema.parse(item));
   }
 
-  /** Polled servers that have been checked at least once; never-checked are omitted. */
+  /**
+   * Polled servers that have been checked at least once; never-checked are
+   * omitted. Nothing while unconfigured — the poll stops, so stored rows would
+   * only go stale and read `unknown` (ROK-1776).
+   */
   async getStatuses(gameIds?: number[]): Promise<GameServerStatusDto[]> {
+    if ((await this.clients.connect()) === null) return [];
     const rows = await this.repo.listPollable();
     const wanted = gameIds === undefined ? null : new Set(gameIds);
     const now = new Date();

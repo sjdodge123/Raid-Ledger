@@ -5,11 +5,12 @@
  */
 import type { JSX, ReactNode } from 'react';
 
-type PillTone = 'neutral' | 'success';
+type PillTone = 'neutral' | 'success' | 'warning';
 
 const PILL_TONE: Record<PillTone, string> = {
     neutral: 'border-edge bg-panel text-secondary',
     success: 'border-success/30 bg-success/10 text-success',
+    warning: 'border-warning/30 bg-warning/10 text-warning',
 };
 
 /** Read-only status pill, design-system §4.3. */
