@@ -60,6 +60,8 @@ The `git push` hook in `.claude/settings.json` runs `scripts/smoke/push-gate.sh`
 
 **A green fleet `--static` run is enough (ROK-1565):** terminal + `succeeded` with `Build`, `TypeScript` and `Lint` all PASS and **no `FAIL` row anywhere** writes the sentinel with `gate_tier: static`. A Playwright PASS writes it with `gate_tier: playwright`. A **FAILED** Playwright tier (or any other `FAIL` row) writes nothing. A **SKIPPED** one no longer blocks the sentinel — GitHub runs the full suite before the merge.
 
+**`--fleet` skips the unchanged workspace's suites (ROK-1793).** A web-only diff skips api jest and the api integration suite; an api-only diff skips web vitest. The workspace comes from `detect_scope`'s `detected_workspace`, widened to everything when the diff touches `scripts/**`. A `packages/**`, dependency or root-config change, a diff that crosses workspaces, or an empty diff runs every suite. Each skip is its own summary row, `Unit tests (api jest)  SKIPPED — web-only diff (--fleet scope; GitHub CI runs it)`. `--full` and `--static` never scope this way.
+
 ## Scoping the Playwright tier
 
 `rl_validate_ci({e2e_scope})` — `auto` (default) / `all` / `none` — forwards `E2E_SCOPE` to `validate-ci.sh`. Under `auto` it runs only the specs `scripts/smoke/scope-specs.sh` maps the branch diff to.

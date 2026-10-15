@@ -96,6 +96,12 @@
 #                                        # E2E_SCOPE=none skips Playwright
 #                                        # here too; only an explicit
 #                                        # --with-e2e overrides it.
+#                                        # ROK-1793: a web-only diff skips api
+#                                        # unit + integration, an api-only diff
+#                                        # skips web vitest (SKIPPED rows name
+#                                        # the reason). packages/**, scripts/**,
+#                                        # deps/root config or an empty diff
+#                                        # run everything. --full never skips.
 #                                        # Example:
 #                                        #   BASE_URL=http://rl-env-<slug>-allinone \
 #                                        #     ./scripts/validate-ci.sh --fleet --with-e2e
