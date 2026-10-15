@@ -259,8 +259,11 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       WOW_COMMON_MANIFEST.id,
       this.cronRegistrar,
     );
+    this.registerGuildTagger();
+  }
 
-    // ROK-1787: guild editors tag events to their guild (core resolves it).
+  /** ROK-1787: guild editors tag events to their guild (core resolves it). */
+  private registerGuildTagger(): void {
     this.pluginRegistry.registerAdapter(
       EXTENSION_POINTS.EVENT_GUILD_TAGGER,
       EVENT_GUILD_TAGGER_KEY,

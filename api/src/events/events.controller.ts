@@ -20,7 +20,6 @@ import { NotDeactivatedGuard } from '../auth/not-deactivated.guard';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
 import { EventsService } from './events.service';
-import { EventSeriesService } from './event-series.service';
 import { EventGuildTagService } from './event-guild-tag.service';
 import { SignupsService } from './signups.service';
 import { ShareService } from './share.service';
@@ -30,9 +29,6 @@ import {
   EventListQuerySchema,
   RescheduleEventSchema,
   CancelEventSchema,
-  UpdateSeriesSchema,
-  CancelSeriesSchema,
-  SeriesScopeSchema,
   EventResponseDto,
   EventListResponseDto,
   DashboardResponseDto,
@@ -64,7 +60,6 @@ export class EventsController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly eventsService: EventsService,
-    private readonly seriesService: EventSeriesService,
     private readonly signupsService: SignupsService,
     private readonly shareService: ShareService,
     private readonly activityLog: ActivityLogService,
@@ -240,72 +235,6 @@ export class EventsController {
       isOperatorOrAdmin(req.user.role),
       body.discordId,
     );
-  }
-
-  @Patch(':id/series')
-  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
-  async updateSeries(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<{ message: string }> {
-    try {
-      const dto = UpdateSeriesSchema.parse(body);
-      await this.guildTag.assertUpdate(req.user, id, dto.data);
-      await this.seriesService.update(
-        id,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        dto.scope,
-        dto.data,
-      );
-      return { message: 'Series updated successfully' };
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  @Delete(':id/series')
-  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
-  async deleteSeries(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: AuthenticatedRequest,
-    @Query('scope') scope: string,
-  ): Promise<{ message: string }> {
-    try {
-      const parsed = SeriesScopeSchema.parse(scope);
-      await this.seriesService.delete(
-        id,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        parsed,
-      );
-      return { message: 'Series deleted successfully' };
-    } catch (error) {
-      handleValidationError(error);
-    }
-  }
-
-  @Patch(':id/series/cancel')
-  @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
-  async cancelSeries(
-    @Param('id', ParseIntPipe) id: number,
-    @Request() req: AuthenticatedRequest,
-    @Body() body: unknown,
-  ): Promise<{ message: string }> {
-    try {
-      const dto = CancelSeriesSchema.parse(body);
-      await this.seriesService.cancel(
-        id,
-        req.user.id,
-        isOperatorOrAdmin(req.user.role),
-        dto.scope,
-        dto,
-      );
-      return { message: 'Series cancelled successfully' };
-    } catch (error) {
-      handleValidationError(error);
-    }
   }
 
   @Post(':id/share')
