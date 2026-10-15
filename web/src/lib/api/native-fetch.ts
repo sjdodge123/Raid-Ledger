@@ -46,11 +46,13 @@ const xhrSend = xhrProto.send;
 export const nativeXhr = {
   open(xhr: XMLHttpRequest, method: string, url: string): void {
     xhrOpen.call(xhr, method, url, true);
+    noteXhrOpen(xhr, method, url);
   },
   setRequestHeader(xhr: XMLHttpRequest, name: string, value: string): void {
     xhrSetRequestHeader.call(xhr, name, value);
   },
   send(xhr: XMLHttpRequest, body: XMLHttpRequestBodyInit | null): void {
+    traceXhrSend(xhr);
     xhrSend.call(xhr, body);
   },
 };

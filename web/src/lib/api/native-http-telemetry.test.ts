@@ -77,8 +77,12 @@ describe('native client telemetry (ROK-1779 r5)', () => {
         expect(original).toHaveBeenCalledTimes(1);
     });
 
+});
+
+const fakeXhr = () => Object.assign(new EventTarget(), { status: 200 }) as unknown as XMLHttpRequest;
+
+describe('native XHR telemetry (ROK-1779 r5)', () => {
     it('records a scrubbed xhr breadcrumb on loadend when ON, nothing when OFF', () => {
-        const fakeXhr = () => Object.assign(new EventTarget(), { status: 200 }) as unknown as XMLHttpRequest;
         sentry.getClient.mockReturnValue(undefined);
         const off = fakeXhr();
         telemetry.noteXhrOpen(off, 'POST', URL_WITH_PII);
