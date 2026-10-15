@@ -34,6 +34,8 @@ export function buildBaseValues(
     ephemeralVoiceEnabled: dto.ephemeralVoiceEnabled ?? null,
     // ROK-1386: lock the ephemeral channel to rostered members only.
     privateVoice: dto.privateVoice ?? null,
+    // ROK-1787: guild tag — recurring instances inherit it.
+    guildId: dto.guildId ?? null,
   };
 }
 

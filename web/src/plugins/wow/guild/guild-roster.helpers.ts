@@ -14,13 +14,14 @@ export const ROLE_ORDER: readonly CharacterRole[] = ['tank', 'healer', 'dps'];
 
 /**
  * Every tab the approved prototype has. S1 shows Overview + Roster; S2
- * (ROK-1786) adds Resources when it has content or the viewer can edit it.
- * The rest stay hidden until the story that fills them ships (spec Q3).
+ * (ROK-1786) adds Resources when it has content or the viewer can edit it;
+ * S3 (ROK-1787) adds Raids. The rest stay hidden until the story that fills
+ * them ships (spec Q3).
  */
 export const GUILD_TABS = [
     { id: 'overview', label: 'Overview', hidden: false },
     { id: 'roster', label: 'Roster', hidden: false },
-    { id: 'raids', label: 'Raids', hidden: true },
+    { id: 'raids', label: 'Raids', hidden: false },
     { id: 'progression', label: 'Progression', hidden: true },
     { id: 'loot', label: 'Loot', hidden: true },
     { id: 'resources', label: 'Resources', hidden: true },
