@@ -119,7 +119,12 @@ describe('/bind purpose (ROK-1768)', () => {
       undefined,
       true,
     );
-    expect(reply(interaction)).toMatch(/Quick Play Announcements/);
+    expect(reply(interaction)).toBe(
+      "A voice channel cannot use the 'quick-play-announcements' purpose. " +
+        'Text channels use Announcements or Quick Play Announcements; ' +
+        'voice channels use Game Voice Monitor or General Lobby; ' +
+        'forum channels use LFG board.',
+    );
     expect(bindMock).not.toHaveBeenCalled();
   });
 

@@ -123,15 +123,7 @@ export class BindCommand
     if (game === false) return;
     const series = await resolveSeries(this.db, interaction);
     if (series === false) return;
-    // ROK-1372: voice binds must NOT auto-derive a series game — a variety
-    // series would get locked to one arbitrary game (game-voice-monitor) and
-    // mislabel every quick-play. See shouldDeriveSeriesGame.
-    if (
-      series &&
-      shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
-    ) {
-      game = await findSeriesGame(this.db, series.id);
-    }
+    game = await this.deriveSeriesGame(resolved, game, series);
     const purpose = await resolvePurpose(interaction, resolved, game, series);
     if (purpose === false) return;
     await this.tryBindChannel(
@@ -142,6 +134,25 @@ export class BindCommand
       series,
       purpose,
     );
+  }
+
+  /**
+   * ROK-1372: voice binds must NOT auto-derive a series game — a variety
+   * series would get locked to one arbitrary game (game-voice-monitor) and
+   * mislabel every quick-play. See shouldDeriveSeriesGame.
+   */
+  private async deriveSeriesGame(
+    resolved: ResolvedChannel,
+    game: { id: number; name: string } | null,
+    series: { id: string; title: string } | null,
+  ): Promise<{ id: number; name: string } | null> {
+    if (
+      !series ||
+      !shouldDeriveSeriesGame(resolved.bindingChannelType, game !== null)
+    ) {
+      return game;
+    }
+    return findSeriesGame(this.db, series.id);
   }
 
   private async tryBindChannel(
