@@ -12,7 +12,7 @@
  */
 import type { Page } from '@playwright/test';
 import { test, expect } from './base';
-import { apiDelete, apiPost, apiPut, getAdminToken } from './api-helpers';
+import { API_BASE, apiDelete, apiPost, apiPut, getAdminToken } from './api-helpers';
 import { signInOnboardedMember } from './browser-session';
 import { isPhoneLayout } from './helpers';
 
@@ -237,6 +237,49 @@ test('no read grant: the read section is the "Grant read access" CTA, not the co
         await card.getByTestId('calendar-manage').click();
         await expect(page.getByTestId('calendar-disconnect').filter({ visible: true })).toBeVisible();
         await expect(page.getByTestId('calendar-sync-now').filter({ visible: true })).toHaveCount(0);
+    } finally {
+        await removeMember(member.userId);
+    }
+});
+
+// ---------------------------------------------------------------------------
+// ROK-1599 — K6 subscribe link: Get link → Copy → Reset → confirm → a new link.
+// A fresh member, so the two projects never reset each other's feed.
+// ---------------------------------------------------------------------------
+
+const FEED_URL = /\/api\/cal\/u\/([A-Za-z0-9_-]{43})\.ics$/;
+
+/** The token in the card's link field; fails loudly on any other shape. */
+async function feedToken(page: Page): Promise<string> {
+    const value = await page.getByTestId('calendar-feed-url').inputValue();
+    const token = FEED_URL.exec(value)?.[1];
+    if (!token) throw new Error(`subscribe link has no feed token: ${value}`);
+    return token;
+}
+
+const feedStatus = async (t: string): Promise<number> => (await fetch(`${API_BASE}/cal/u/${t}.ics`)).status;
+
+test('subscribe link: Get link → Copy → Reset → confirm swaps the link; the old one 404s', async ({ page }, testInfo) => {
+    const member = await seedMemberWithConnection(testInfo.project.name);
+    try {
+        await signInOnboardedMember(page, member.userId);
+        await page.goto(PAGE);
+        await page.getByTestId('calendar-feed-get').click();
+        await expect(page.getByTestId('calendar-feed-url')).toHaveValue(FEED_URL, { timeout: 15_000 });
+        const first = await feedToken(page);
+        expect(await feedStatus(first), 'the issued link serves the feed').toBe(200);
+        await expect(page.getByTestId('calendar-feed-open')).toHaveText('Open in calendar app');
+        await page.getByTestId('calendar-feed-copy').click();
+        await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Link copied' })).toBeVisible({ timeout: 10_000 });
+        await page.getByTestId('calendar-feed-reset').click();
+        await expect(page.getByTestId('calendar-feed-reset-dialog')).toBeVisible();
+        await page.getByTestId('calendar-feed-reset-confirm').click();
+        await expect(page.getByTestId('calendar-feed-reset-dialog')).toHaveCount(0);
+        await expect(page.getByTestId('calendar-feed-url')).not.toHaveValue(new RegExp(`/${first}\\.ics$`));
+        const second = await feedToken(page);
+        expect(second, 'Reset issues a different token').not.toBe(first);
+        expect(await feedStatus(first), 'the old link stops working at once').toBe(404);
+        expect(await feedStatus(second), 'the new link serves the feed').toBe(200);
     } finally {
         await removeMember(member.userId);
     }
