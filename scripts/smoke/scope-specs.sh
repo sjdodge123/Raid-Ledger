@@ -21,8 +21,10 @@
 # Route files (ROK-1792): a change to web/src/app-routes.tsx or lazy-routes.ts
 # is read as a diff. Each added/changed `<Route path="...">` (and each changed
 # lazy export, via the route that renders it) maps to the specs that visit that
-# path; a `/dev/**` (DEMO_MODE wireframe) route maps to none. A removed or
-# renamed route, a guard, a pathless layout route or any other code -> ALL.
+# path; so does each import / identifier-list edit, via the routes rendering
+# that component; a `/dev/**` (DEMO_MODE wireframe) route maps to none. A removed
+# or renamed route, a dropped import, a guard, a pathless layout route, a moved
+# `</Route>` (re-nesting) or any other code -> ALL.
 # components/ui/**: a NEW file maps through the files that import it (none when
 # nothing outside ui/ does yet); an edit to an existing primitive -> ALL.
 # When every changed web file maps to zero specs the output is NONE.
@@ -90,8 +92,11 @@ file_diff() {
 }
 
 # Changed lines of an app-routes.tsx diff -> `+ <path>` / `- <path>` per
-# <Route path="..."> line; ALL for a guard, a pathless (layout) route or any
-# other code. Imports, identifier lists, comments and `</Route>` are inert.
+# <Route path="..."> line, and `+I <Name>` / `-I <Name>` per identifier on an
+# identifier-list line, `+M <Name>` / `-M <Name>` per binding of a one-line
+# `import ... from` (its module may have changed). ALL for a guard, a pathless
+# (layout) route, a moved `</Route>` (re-nesting), a side-effect import, a
+# changed `} from` (the whole list's module) or any other code. Comments are inert.
 classify_route_lines() {
   awk '
     /^(\+\+\+|---) / || !/^[-+]/ { next }
@@ -99,12 +104,25 @@ classify_route_lines() {
       s = substr($0, 1, 1); b = substr($0, 2)
       if (b ~ /^[[:space:]]*$/ || b ~ /^[[:space:]]*(\/\/|\/\*|\*|\{\/\*)/) next
       if (b ~ /Guard/) { print "ALL"; exit }
-      if (b ~ /^[[:space:]]*import[[:space:]]/ || b ~ /^[[:space:]]*\}[[:space:]]*from[[:space:]]/) next
+      if (b ~ /^[[:space:]]*import[[:space:]]/) {
+        if (b ~ /^[[:space:]]*import[[:space:]]+(type[[:space:]]+)?\{[[:space:]]*$/) next
+        if (b !~ /[[:space:]]from[[:space:]]/) { print "ALL"; exit }
+        t = b; sub(/[[:space:]]from[[:space:]].*$/, "", t); sub(/^[[:space:]]*import[[:space:]]+/, "", t)
+        gsub(/[{},]/, " ", t); n = split(t, w)
+        for (i = 1; i <= n; i++) {
+          if (w[i] == "type" || w[i] == "*") continue
+          if (i + 2 <= n && w[i + 1] == "as") { print s "M " w[i + 2]; i += 2; continue }
+          print s "M " w[i]
+        }
+        next
+      }
       # Identifier list (`A, B, C,`). Commas are normalised first: mawk 1.3.4
       # (the awk on the fleet runner) fails the nested `(ws , ws X+)*` form at 2+ reps.
       t = b; gsub(/[[:space:]]*,[[:space:]]*/, ",", t); gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
-      if (t ~ /^[A-Za-z0-9_]+(,[A-Za-z0-9_]+)*,?$/) next
-      if (b ~ /^[[:space:]]*<\/Route>[[:space:]]*$/) next
+      if (t ~ /^[A-Za-z0-9_]+(,[A-Za-z0-9_]+)*,?$/) {
+        n = split(t, w, ","); for (i = 1; i <= n; i++) if (w[i] != "") print s "I " w[i]
+        next
+      }
       if (b ~ /<Route[[:space:]>]/ && match(b, /path="[^"]*"/)) {
         print s " " substr(b, RSTART + 6, RLENGTH - 7); next
       }
@@ -186,12 +204,32 @@ changed_route_paths() {
   added=$(echo "$cls" | sed -n 's/^+ //p')
   removed=$(echo "$cls" | sed -n 's/^- //p')
   for x in $removed; do echo "$added" | grep -qxF "$x" || return 1; done
+  if [ "$f" = "$ROUTES_FILE" ]; then route_identifier_paths "$d" "$cls" || return 1; fi
   for x in $added; do
     if [ "$f" = "$ROUTES_FILE" ]; then
       case "$x" in /*) echo "$x" ;; *) resolve_routes "path=\"$x\"" || return 1 ;; esac
     else
       resolve_routes "<$x " || resolve_routes "<$x>" || return 1
     fi
+  done
+}
+
+# Routes whose component an app-routes.tsx import / identifier-list edit can
+# change (Codex P2, ROK-1792: an import-only diff can swap what a route renders).
+# Each identifier added, or rebound by a one-line import, maps to the route(s)
+# rendering it — skipped when only reflowed within a list, or when a route this
+# same diff adds renders it (that route maps itself). Returns 1 (-> ALL) for an
+# identifier dropped outright or one no route renders.
+route_identifier_paths() {
+  local d="$1" cls="$2" ids_add ids_rm mods x
+  ids_add=$(echo "$cls" | sed -n 's/^+[IM] //p')
+  ids_rm=$(echo "$cls" | sed -n 's/^-[IM] //p')
+  mods=$(echo "$cls" | sed -n 's/^[-+]M //p')
+  for x in $ids_rm; do echo "$ids_add" | grep -qxF "$x" || return 1; done
+  for x in $ids_add $mods; do
+    if echo "$ids_rm" | grep -qxF "$x" && ! echo "$mods" | grep -qxF "$x"; then continue; fi
+    echo "$d" | grep -qE "^[+].*<Route[[:space:]].*<$x([[:space:]/>]|\$)" && continue
+    resolve_routes "<$x " || resolve_routes "<$x>" || resolve_routes "<$x/" || return 1
   done
 }
 

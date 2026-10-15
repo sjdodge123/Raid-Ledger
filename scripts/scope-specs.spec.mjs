@@ -247,3 +247,45 @@ test('a changed EXISTING components/ui primitive stays ALL', () => {
     assert.deepEqual(scopeSpecs([f]), ['ALL'], f);
   }
 });
+
+// ---- Codex P2: structural and import-only route edits keep coverage ---------
+
+test('an import-only swap of a routed component maps to that route, never NONE', () => {
+  const diff = diffFor(ROUTES, [
+    "-import { EventsPage } from './pages/events-page';",
+    "+import { EventsPage } from './pages/events-page-v2';",
+  ]);
+  const out = scopeSpecs([ROUTES], diff);
+
+  assert.ok(!out.includes('NONE'), `an import swap must not skip Playwright: ${JSON.stringify(out)}`);
+  assert.ok(out.includes('scripts/smoke/events.smoke.spec.ts'), JSON.stringify(out));
+});
+
+test('a lazy-import module change without a path change maps to the route rendering it', () => {
+  const diff = diffFor(LAZY, [
+    "-    import('./pages/players-page').then((m) => ({ default: m.PlayersPage })),",
+    "+    import('./pages/players-page-v2').then((m) => ({ default: m.PlayersPage })),",
+  ]);
+  const out = scopeSpecs([LAZY], diff);
+
+  assert.ok(!out.includes('NONE') && !out.includes('ALL'), JSON.stringify(out));
+  assert.ok(out.includes('scripts/smoke/players.smoke.spec.ts'), JSON.stringify(out));
+});
+
+test('a moved </Route> (re-nesting, e.g. out of AuthGuard) escalates to ALL', () => {
+  const diff = diffFor(ROUTES, ['-      </Route>', '+        <Route path="/dev/wireframes/x" element={<XPage />} />', '+      </Route>']);
+
+  assert.deepEqual(scopeSpecs([ROUTES], diff), ['ALL']);
+});
+
+test('an import no route renders, a dropped identifier, or a changed module of a list -> ALL', () => {
+  const cases = [
+    ["+import { useZqxwv } from './hooks/use-zqxwv';"],
+    ['-  GamesPage, CharacterDetailPage,', '+  CharacterDetailPage,'],
+    ["-} from './lazy-routes';", "+} from './lazy-routes-v2';"],
+    ["+import './zqxwv.css';"],
+  ];
+  for (const lines of cases) {
+    assert.deepEqual(scopeSpecs([ROUTES], diffFor(ROUTES, lines)), ['ALL'], JSON.stringify(lines));
+  }
+});
