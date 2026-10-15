@@ -272,9 +272,13 @@ test('subscribe link: Get link → Copy → Reset → confirm swaps the link; th
         await page.getByTestId('calendar-feed-copy').click();
         await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Link copied' })).toBeVisible({ timeout: 10_000 });
         await page.getByTestId('calendar-feed-reset').click();
-        await expect(page.getByTestId('calendar-feed-reset-dialog')).toBeVisible();
+        // Below 1024px the confirm is a BottomSheet, which stays mounted off-screen when
+        // closed — its body keeps its testid, so track the dialog role (dropped on close).
+        const confirm = page.getByRole('dialog', { name: 'Reset your subscribe link?' });
+        await expect(confirm).toBeVisible();
+        await expect(confirm.getByTestId('calendar-feed-reset-dialog')).toBeVisible();
         await page.getByTestId('calendar-feed-reset-confirm').click();
-        await expect(page.getByTestId('calendar-feed-reset-dialog')).toHaveCount(0);
+        await expect(confirm).toBeHidden();
         await expect(page.getByTestId('calendar-feed-url')).not.toHaveValue(new RegExp(`/${first}\\.ics$`));
         const second = await feedToken(page);
         expect(second, 'Reset issues a different token').not.toBe(first);
