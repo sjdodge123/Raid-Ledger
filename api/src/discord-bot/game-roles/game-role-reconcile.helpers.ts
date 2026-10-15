@@ -104,15 +104,23 @@ export async function upsertGrant(
     });
 }
 
+/**
+ * Drop the user's grant row. With `discordUserId` the delete only matches a
+ * row still pointing at THAT account — an overlapping grantNow may already
+ * have rewritten it to the new account, and that row must survive.
+ */
 export async function deleteGrant(
   db: GameRoleDb,
   gameRoleId: number,
   userId: number,
+  discordUserId?: string,
 ): Promise<void> {
   const t = schema.discordGameRoleGrants;
-  await db
-    .delete(t)
-    .where(and(eq(t.gameRoleId, gameRoleId), eq(t.userId, userId)));
+  const match = [eq(t.gameRoleId, gameRoleId), eq(t.userId, userId)];
+  if (discordUserId !== undefined) {
+    match.push(eq(t.discordUserId, discordUserId));
+  }
+  await db.delete(t).where(and(...match));
 }
 
 export interface GameRoleAuditInput {

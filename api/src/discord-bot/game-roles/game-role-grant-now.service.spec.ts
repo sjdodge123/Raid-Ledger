@@ -103,6 +103,9 @@ describe('GameRoleReconcileService.grantNow after a Discord relink', () => {
       removed: spies.remove.mock.calls.map((c) => c[1]),
       added: spies.add.mock.calls.map((c) => c[1]),
       upserted: spies.upsert.mock.calls.map((c) => c[3]),
+      // Only the OLD account's grant row: an overlapping grantNow may already
+      // have written the new account's row, which this delete must not drop.
+      deleted: spies.deleteGrant.mock.calls.map((c) => c.slice(1)),
       audits: spies.audit.mock.calls.map((c) => [
         c[1].action,
         c[1].discordUserId,
@@ -113,6 +116,7 @@ describe('GameRoleReconcileService.grantNow after a Discord relink', () => {
       removed: [OLD_ID],
       added: [DISCORD_ID],
       upserted: [DISCORD_ID],
+      deleted: [[3, 1, OLD_ID]],
       audits: [
         ['role_removed', OLD_ID, 'discord account relinked'],
         ['role_added', DISCORD_ID, 'played'],

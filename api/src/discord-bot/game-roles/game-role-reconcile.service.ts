@@ -288,7 +288,7 @@ export class GameRoleReconcileService {
         row.roleId,
         reason,
       );
-      await deleteGrant(this.db, row.id, userId);
+      await deleteGrant(this.db, row.id, userId, oldDiscordId);
       if (!ok) return;
       await writeAudit(this.db, {
         gameRoleId: row.id,
