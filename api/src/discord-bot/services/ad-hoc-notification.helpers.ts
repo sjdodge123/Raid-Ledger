@@ -151,13 +151,13 @@ function rosterMentions(
   return participants
     .filter((p) => !p.anonymousOnServer)
     .map((p) => ({
-    discordId: null,
-    username: p.discordUsername,
-    role: null,
-    preferredRoles: null,
-    ...(p.isActive ? {} : { status: 'left' }),
-    ...(p.rosterSuffix ? { rosterSuffix: p.rosterSuffix } : {}),
-  }));
+      discordId: null,
+      username: p.discordUsername,
+      role: null,
+      preferredRoles: null,
+      ...(p.isActive ? {} : { status: 'left' }),
+      ...(p.rosterSuffix ? { rosterSuffix: p.rosterSuffix } : {}),
+    }));
 }
 
 /** Assemble EmbedEventData from resolved components. */

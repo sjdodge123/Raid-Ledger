@@ -151,6 +151,20 @@ describe('eventedRoster — anonymous server players (ROK-1801 Q4)', () => {
     ]);
   });
 
+  it('withServerAnonymous stamps the count only when there is one', () => {
+    const data = { id: 1 } as unknown as Parameters<
+      typeof withServerAnonymous
+    >[0];
+    expect(withServerAnonymous(data, 2)).toEqual({
+      id: 1,
+      serverAnonymousCount: 2,
+    });
+    expect(withServerAnonymous(data, 0)).toBe(data);
+    expect(withServerAnonymous(null, 3)).toBeNull();
+  });
+});
+
+describe('eventedRoster — SteamID-named rows (review MAJOR 2, Q4)', () => {
   it('renders a SteamID-named row (unnamed, unlinked) as +N on server, never the SteamID (review MAJOR 2)', async () => {
     const steam = '76561198000000001';
     const db = dbReturning([
@@ -176,18 +190,6 @@ describe('eventedRoster — anonymous server players (ROK-1801 Q4)', () => {
     const roster = await eventedRoster(db, 77, { memberIds: [] }, SOURCE);
     expect(roster.participants).toEqual([]);
     expect(roster.anonymousOnServer).toBe(0);
-  });
-
-  it('withServerAnonymous stamps the count only when there is one', () => {
-    const data = { id: 1 } as unknown as Parameters<
-      typeof withServerAnonymous
-    >[0];
-    expect(withServerAnonymous(data, 2)).toEqual({
-      id: 1,
-      serverAnonymousCount: 2,
-    });
-    expect(withServerAnonymous(data, 0)).toBe(data);
-    expect(withServerAnonymous(null, 3)).toBeNull();
   });
 });
 
