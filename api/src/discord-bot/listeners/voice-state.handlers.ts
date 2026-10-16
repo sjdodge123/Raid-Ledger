@@ -6,6 +6,7 @@ import {
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
+  detectLobbyMemberGame,
   humanMembers,
   isBotMember,
   lobbyGroupSize,
@@ -183,7 +184,7 @@ async function resolveSwitchTarget(
   binding: ResolvedBinding,
   guildMember: GuildMember,
 ): Promise<{ gameId: number | null; gameName: string } | null> {
-  const detected = await deps.presenceDetector.detectGameForMember(guildMember);
+  const detected = await detectLobbyMemberGame(deps, guildMember);
   if (detected.gameId !== null) return detected;
   if (binding.config?.allowJustChatting ?? false)
     return { gameId: null, gameName: 'Just Chatting' };

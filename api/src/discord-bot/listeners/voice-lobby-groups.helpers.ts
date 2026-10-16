@@ -29,6 +29,7 @@ import type { ServerRosterEntry } from '../services/server-presence-roster.helpe
 import {
   groupSize,
   mergeServerPresence,
+  serverGameOf,
 } from './voice-lobby-server-merge.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
 
@@ -120,6 +121,23 @@ export function partitionLobbyGroups(
  */
 export function undetectedMemberIds(detected: LobbyGameGroup[]): string[] {
   return detected.find((g) => g.gameId === null)?.memberIds ?? [];
+}
+
+/**
+ * One lobby member's game with server presence winning over rich presence
+ * (ROK-1801 Q3) — the join / switch paths must agree with the group merge.
+ */
+export async function detectLobbyMemberGame(
+  deps: VoiceHandlerDeps,
+  member: GuildMember,
+): Promise<{ gameId: number | null; gameName: string }> {
+  const detected = await deps.presenceDetector.detectGameForMember(member);
+  if (!deps.serverRoster) return detected;
+  const roster = await deps.serverRoster.snapshot();
+  const serverGame = serverGameOf(roster, member.id);
+  if (serverGame === null || serverGame === detected.gameId) return detected;
+  const gameName = roster.gameNames.get(serverGame) ?? detected.gameName;
+  return { gameId: serverGame, gameName };
 }
 
 /**

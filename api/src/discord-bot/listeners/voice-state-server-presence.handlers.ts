@@ -7,7 +7,8 @@
  * threshold is re-run for that game: a monitor bound to the game re-checks
  * (or joins its members into an event the server path just spawned); a
  * general lobby re-checks that game's group with the unchanged immediate /
- * 15-minute rules (Q6).
+ * 15-minute rules (Q6), joining new voice members into a running event and
+ * cancelling the pending spawn when departures drop the group below threshold.
  */
 import type { ServerPresenceChangedPayload } from '../../plugins/pelican/presence/server-presence.reader';
 import {
@@ -19,8 +20,14 @@ import {
 import { markLobbyDirty, shouldSpawnImmediately } from './voice-state.handlers';
 import { suppressOrCheckThreshold } from './voice-state-gate.handlers';
 import { handleGameBindingJoin } from './voice-state-join.handlers';
-import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
-import { lobbyGroupSize } from './voice-lobby-groups.helpers';
+import {
+  addDetectedMembers,
+  handleGeneralLobbyGroupDetection,
+} from './voice-state-recovery.handlers';
+import {
+  lobbyGroupSize,
+  resolveLobbyGroups,
+} from './voice-lobby-groups.helpers';
 import {
   lobbySpawnFns,
   monitorSpawnFns,
@@ -81,7 +88,11 @@ async function reevaluateMonitor(
   }
 }
 
-/** Card refresh, then that game's group threshold with the Q6 rules. */
+/**
+ * Card refresh, then that game's group threshold with the Q6 rules. An event
+ * already running → join the group's new voice members (Codex P2). Below the
+ * threshold → cancel this game's pending spawn, as a voice departure would.
+ */
 async function reevaluateLobby(
   ctx: JoinHandlerCtx,
   chId: string,
@@ -89,13 +100,32 @@ async function reevaluateLobby(
   gameId: number,
 ): Promise<void> {
   markLobbyDirty(ctx.deps, b, chId);
-  if (ctx.deps.adHocEventService.getActiveState(b.bindingId, gameId)) return;
-  const size = await lobbyGroupSize(ctx.deps, chId, b, gameId);
-  if (size < (b.config?.minPlayers ?? 2)) return;
+  const state = ctx.deps.adHocEventService.getActiveState(b.bindingId, gameId);
+  if (state) return joinNewLobbyMembers(ctx, chId, b, gameId, state.memberSet);
   const fns = lobbySpawnFns(ctx, chId, b);
+  const size = await lobbyGroupSize(ctx.deps, chId, b, gameId);
+  if (size < (b.config?.minPlayers ?? 2)) return fns.cancelSpawn(gameId);
   if (await shouldSpawnImmediately(ctx.deps, chId, b)) {
     fns.cancelSpawn(gameId);
     return handleGeneralLobbyGroupDetection(ctx.deps, chId, b, gameId);
   }
   fns.scheduleSpawn(gameId);
+}
+
+/** Join the game group's voice members not yet in its running lobby event. */
+async function joinNewLobbyMembers(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gameId: number,
+  joined: ReadonlySet<string>,
+): Promise<void> {
+  const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
+  if (!channel) return;
+  const { qualifying, dropped } = await resolveLobbyGroups(ctx.deps, chId, b);
+  const group = [...qualifying, ...dropped].find((g) => g.gameId === gameId);
+  const fresh = group?.memberIds.filter((id) => !joined.has(id)) ?? [];
+  if (!group || fresh.length === 0) return;
+  const pending = [{ ...group, memberIds: fresh }];
+  await addDetectedMembers(ctx.deps, channel, pending, b, chId);
 }
