@@ -38,6 +38,7 @@ import {
 import { Cron } from '@nestjs/schedule';
 import { OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import { ModuleRef } from '@nestjs/core';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
@@ -178,12 +179,18 @@ export class ChannelPresenceEmbedService
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
-    // ROK-1801: `@Inject` beside `@Optional` — a `T | null` param alone emits
-    // `Object` metadata and silently resolves to null (the ROK-1800 bug).
+    // ROK-1801: the roster is resolved LAZILY. Constructor-injecting it closes
+    // a provider cycle (roster → Pelican reader → presence sink → notification
+    // service → this) that Nest does not reject but awaits forever, hanging
+    // `app.init()`. `@Inject` beside `@Optional`: a `T | null` param alone
+    // emits `Object` metadata and silently resolves to null (ROK-1800).
     @Optional()
-    @Inject(ServerPresenceRosterService)
-    private readonly serverRoster: ServerPresenceRosterService | null = null,
+    @Inject(ModuleRef)
+    private readonly moduleRef: ModuleRef | null = null,
   ) {}
+
+  /** `undefined` = not looked up yet; `null` = no roster in this app. */
+  private serverRoster: ServerPresenceRosterService | null | undefined;
 
   /** Start the 5 s drain (D5). */
   onModuleInit(): void {
@@ -495,7 +502,19 @@ export class ChannelPresenceEmbedService
       settingsService: this.settingsService,
       clientService: this.clientService,
       presenceDetector: this.presenceDetector,
-      serverRoster: this.serverRoster,
+      serverRoster: this.roster(),
     };
+  }
+
+  private roster(): ServerPresenceRosterService | null {
+    if (this.serverRoster !== undefined) return this.serverRoster;
+    try {
+      this.serverRoster =
+        this.moduleRef?.get(ServerPresenceRosterService, { strict: false }) ??
+        null;
+    } catch {
+      this.serverRoster = null;
+    }
+    return this.serverRoster;
   }
 }
