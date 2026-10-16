@@ -15,6 +15,10 @@ import { DiscordBotClientService } from '../discord-bot-client.service';
 import { EmbedSyncQueueService } from '../queues/embed-sync.queue';
 import { ScheduledEventService } from './scheduled-event.service';
 import { findEmbedOnlyCompletionCandidates } from './scheduled-event.embed-completion';
+import {
+  insertDecidedLineup,
+  insertSchedulingMatch,
+} from '../../lineups/standalone-poll/standalone-poll-query.helpers';
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
@@ -115,6 +119,23 @@ async function seedEvent(opts: EventOpts): Promise<number> {
   return row.id;
 }
 
+/** A real standalone-poll scheduling match — a valid events.reschedulingPollId. */
+async function seedPollMatch(): Promise<number> {
+  const lineup = await insertDecidedLineup(
+    app.db,
+    app.seed.adminUser.id,
+    undefined,
+    null,
+  );
+  const match = await insertSchedulingMatch(
+    app.db,
+    lineup.id,
+    app.seed.game.id,
+    undefined,
+  );
+  return match.id;
+}
+
 function enqueuedIds(): unknown[] {
   return enqueueSpy.mock.calls.map((call: unknown[]) => call[0]);
 }
@@ -188,7 +209,10 @@ describe('findEmbedOnlyCompletionCandidates (ROK-1818)', () => {
       endedAgoMs: HOUR_MS,
       extendedUntil: new Date(Date.now() + HOUR_MS),
     });
-    await seedEvent({ endedAgoMs: HOUR_MS, reschedulingPollId: 1818 });
+    await seedEvent({
+      endedAgoMs: HOUR_MS,
+      reschedulingPollId: await seedPollMatch(),
+    });
     // Tracked for a guild the processor never syncs.
     await seedEvent({ endedAgoMs: HOUR_MS, guildId: 'other-guild' });
 
