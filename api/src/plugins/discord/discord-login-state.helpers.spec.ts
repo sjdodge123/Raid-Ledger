@@ -212,6 +212,22 @@ describe('DiscordLoginStateStore (ROK-1808)', () => {
   });
   afterEach(() => jest.restoreAllMocks());
 
+  it('fails closed with no JWT_SECRET: store errors, verify rejects (m2)', () => {
+    const keyless = new DiscordLoginStateStore(() => undefined, logger);
+    const b = browser();
+    const onStore = jest.fn();
+    keyless.store(b.req, META, onStore);
+    expect(onStore).toHaveBeenCalledWith(expect.any(Error), undefined);
+    expect(b.res.cookie).not.toHaveBeenCalled();
+    const state = signOAuthState(
+      { action: 'login', timestamp: Date.now(), r: 'x' },
+      '',
+    );
+    const onVerify = jest.fn();
+    keyless.verify(b.req, state, META, onVerify);
+    expect(onVerify).toHaveBeenCalledWith(expect.any(Error), false, undefined);
+  });
+
   it('has the arities passport-oauth2 dispatches on (store 3, verify 4)', () => {
     expect(store.store.length).toBe(3);
     expect(store.verify.length).toBe(4);

@@ -18,7 +18,6 @@ import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../../notifications/discord-notification.service';
 import { discordFetch } from './discord-http.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
-import * as crypto from 'crypto';
 import type Redis from 'ioredis';
 import type { Response, Request } from 'express';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
@@ -26,7 +25,6 @@ import type { UserRole } from '@raid-ledger/contract';
 import {
   DiscordAuthGuard,
   signOAuthState,
-  verifyOAuthState,
   getOriginUrl,
   exchangeCodeForToken,
   fetchDiscordProfile,
@@ -42,6 +40,8 @@ import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
 import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
 import { verifyDiscordLinkState } from './discord-link-state.helpers';
 import { signBrowserBoundLoginState } from './discord-login-state.helpers';
+import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
+import { verifiedLoginStateOf } from './discord-verified-login-state';
 
 interface RequestWithUser extends Request {
   user: {
@@ -96,26 +96,23 @@ export class DiscordAuthController {
   ) {
     if (res.headersSent) return;
     const { access_token } = this.authService.login(req.user);
-    const authCode = crypto.randomBytes(32).toString('hex');
+    // ROK-1808: the code is bound to this browser (cookie of its hash).
+    const authCode = mintBrowserBoundAuthCode(res);
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
     const clientUrl = this.getClientUrl(req);
     // ROK-1353: mint a refresh family + set the httpOnly cookie before the
     // browser redirect so the SPA has a long-lived session post-login.
     await issueDiscordRefreshCookie(this.refreshService, req, res, req.user.id);
 
-    const stateParam = (req.query as Record<string, string>).state;
-    if (stateParam) {
-      const stateData = verifyOAuthState(
-        stateParam,
-        this.getSecret(),
-        this.logger,
+    // ROK-1808: route on the state the login store already verified.
+    const stateData = verifiedLoginStateOf(req);
+    const inviteCode =
+      stateData?.action === 'invite' ? stateData.inviteCode : undefined;
+    if (typeof inviteCode === 'string' && inviteCode) {
+      res.redirect(
+        `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(inviteCode)}`,
       );
-      if (stateData?.action === 'invite' && stateData.inviteCode) {
-        res.redirect(
-          `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(stateData.inviteCode as string)}`,
-        );
-        return;
-      }
+      return;
     }
     res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
   }

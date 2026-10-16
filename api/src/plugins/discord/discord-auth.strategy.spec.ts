@@ -8,6 +8,7 @@ jest.mock('passport', () => ({
 }));
 
 import { Logger } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const passport = require('passport') as {
   use: jest.Mock;
@@ -41,7 +42,9 @@ describe('DiscordAuthStrategy', () => {
     strategy = new DiscordAuthStrategy(
       mockAuthService as any,
       mockSettingsService as any,
-      { get: jest.fn().mockReturnValue('jwt-secret') } as any,
+      {
+        get: jest.fn().mockReturnValue('jwt-secret'),
+      } as unknown as ConfigService,
     );
 
     // Suppress logger output in tests

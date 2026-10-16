@@ -29,7 +29,7 @@ import {
 export const DISCORD_LOGIN_STATE_PROVIDER = 'discord-login';
 
 /** State actions the login callback accepts (a `link` state never is). */
-const LOGIN_ACTIONS: ReadonlySet<unknown> = new Set([
+const LOGIN_ACTIONS: ReadonlySet<string> = new Set([
   'login',
   'invite',
   'silent',
@@ -60,7 +60,7 @@ export function verifyBrowserBoundLoginState(
   }
   const data = verifyOAuthState(state, secret, logger);
   if (!data) return { ok: false, reason: 'invalid or expired state' };
-  if (!LOGIN_ACTIONS.has(data.action)) {
+  if (typeof data.action !== 'string' || !LOGIN_ACTIONS.has(data.action)) {
     return { ok: false, reason: 'not a login state' };
   }
   try {
@@ -83,9 +83,15 @@ export function verifyBrowserBoundLoginState(
  */
 export class DiscordLoginStateStore implements StateStore {
   constructor(
-    private readonly getSecret: () => string,
+    private readonly getSecret: () => string | undefined,
     private readonly logger: Logger,
   ) {}
+
+  /** Fail closed (review m2): never sign or verify with an empty key. */
+  private secretOrError(): string | Error {
+    const secret = this.getSecret();
+    return secret ? secret : new Error('Discord login state: no JWT_SECRET');
+  }
 
   store(req: Request, callback: StateStoreStoreCallback): void;
   store(req: Request, meta: Metadata, callback: StateStoreStoreCallback): void;
@@ -100,12 +106,12 @@ export class DiscordLoginStateStore implements StateStore {
       cb(new Error('Discord login state: no response to bind'), undefined);
       return;
     }
-    const state = signBrowserBoundLoginState(
-      req.res,
-      { action: 'login' },
-      this.getSecret(),
-    );
-    cb(null, state);
+    const secret = this.secretOrError();
+    if (secret instanceof Error) {
+      cb(secret, undefined);
+      return;
+    }
+    cb(null, signBrowserBoundLoginState(req.res, { action: 'login' }, secret));
   }
 
   verify(req: Request, state: string, callback: StateStoreVerifyCallback): void;
@@ -127,8 +133,13 @@ export class DiscordLoginStateStore implements StateStore {
       cb(null, false, { message: 'no response to clear the state cookie' });
       return;
     }
+    const secret = this.secretOrError();
+    if (secret instanceof Error) {
+      cb(secret, false, undefined);
+      return;
+    }
     const check = verifyBrowserBoundLoginState(req, req.res, state, {
-      secret: this.getSecret(),
+      secret,
       logger: this.logger,
     });
     if (!check.ok) {

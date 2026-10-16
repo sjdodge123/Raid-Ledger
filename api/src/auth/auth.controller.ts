@@ -4,6 +4,7 @@ import {
   Post,
   Body,
   Req,
+  Res,
   UseGuards,
   Logger,
   BadRequestException,
@@ -16,7 +17,7 @@ import { IntentTokenService } from './intent-token.service';
 import { UsersService } from '../users/users.service';
 import { PreferencesService } from '../users/preferences.service';
 import { SignupsService } from '../events/signups.service';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { RateLimit } from '../throttler/rate-limit.decorator';
 import { CharactersService } from '../characters/characters.service';
 import { REDIS_CLIENT } from '../redis/redis.module';
@@ -25,6 +26,10 @@ import { RedeemIntentSchema } from '@raid-ledger/contract';
 import type { RedeemIntentResponseDto } from '@raid-ledger/contract';
 
 import type { AuthenticatedExpressRequest } from './types';
+import {
+  authCodeBoundToBrowser,
+  clearAuthCodeCookie,
+} from './auth-code-cookie.helpers';
 
 @Controller('auth')
 export class AuthController {
@@ -49,9 +54,17 @@ export class AuthController {
   @Post('exchange-code')
   async exchangeCode(
     @Body() body: { code: string },
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<{ access_token: string }> {
     if (!body.code) {
       throw new BadRequestException('Auth code is required');
+    }
+    // ROK-1808: only the browser that finished the login may exchange its
+    // code. Checked BEFORE the consume so a forwarded code is not burned, and
+    // with the unknown-code message so the 401 is no oracle.
+    if (!authCodeBoundToBrowser(req, body.code)) {
+      throw new UnauthorizedException('Invalid or expired auth code');
     }
 
     // ROK-1755: atomic read-and-consume — two concurrent exchanges of the
@@ -60,6 +73,7 @@ export class AuthController {
     if (!token) {
       throw new UnauthorizedException('Invalid or expired auth code');
     }
+    clearAuthCodeCookie(res);
     return { access_token: token };
   }
 

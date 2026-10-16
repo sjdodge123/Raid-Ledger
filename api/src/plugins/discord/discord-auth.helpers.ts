@@ -9,6 +9,7 @@ import type { Response, Request } from 'express';
 import { getRequestOrigin } from '../../common/request-origin.helpers';
 import type { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
 import { setRefreshCookie } from '../../auth/refresh/refresh-cookie.helpers';
+import { rememberVerifiedLoginState } from './discord-verified-login-state';
 
 /**
  * ROK-1353: mint a Discord refresh family for `userId` and set the httpOnly
@@ -70,6 +71,10 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
       );
       return undefined as unknown as TUser;
     }
+    rememberVerifiedLoginState(
+      context.switchToHttp().getRequest<Request>(),
+      info,
+    );
     return user;
   }
 }

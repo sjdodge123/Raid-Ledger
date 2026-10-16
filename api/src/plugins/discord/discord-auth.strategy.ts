@@ -82,7 +82,7 @@ export class DiscordAuthStrategy
         // ROK-1808: browser-bound, single-use state; verified before the
         // code exchange, so a forwarded callback never logs anyone in.
         store: new DiscordLoginStateStore(
-          () => this.configService.get<string>('JWT_SECRET') ?? '',
+          () => this.configService.get<string>('JWT_SECRET'),
           this.logger,
         ),
       },

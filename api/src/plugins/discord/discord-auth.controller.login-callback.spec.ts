@@ -10,6 +10,7 @@
  * /login?error=oauth_failed before any code exchange, auth_code write or
  * `rl_rt` cookie.
  */
+import * as crypto from 'crypto';
 import { Test } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -26,6 +27,7 @@ import { SettingsService } from '../../settings/settings.service';
 import { REDIS_CLIENT } from '../../redis/redis.module';
 import { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
 import { LinkNonceService } from '../../auth/link-nonce.service';
+import { AUTH_CODE_COOKIE } from '../../auth/auth-code-cookie.helpers';
 
 const SECRET = 'jwt-secret';
 const CLIENT_URL = 'https://raid.test';
@@ -168,9 +170,20 @@ async function startPlainLogin(b: Browser): Promise<string> {
   return stateOf(b.res.location());
 }
 
-function refreshCookieSet(b: Browser): boolean {
+function cookieSet(b: Browser, name: string): boolean {
   const calls = (b.res.cookie as jest.Mock).mock.calls as unknown[][];
-  return calls.some((c) => c[0] === 'rl_rt');
+  return calls.some((c) => c[0] === name);
+}
+
+function refreshCookieSet(b: Browser): boolean {
+  return cookieSet(b, 'rl_rt');
+}
+
+/** The `?code=` of the success redirect. */
+function authCodeOf(b: Browser): string {
+  const code = new URL(b.res.location()).searchParams.get('code');
+  if (!code) throw new Error(`no code in ${b.res.location()}`);
+  return code;
 }
 
 function expectRejected(h: Harness, b: Browser): void {
@@ -179,6 +192,7 @@ function expectRejected(h: Harness, b: Browser): void {
   expect(h.validate).not.toHaveBeenCalled();
   expect(h.setex).not.toHaveBeenCalled();
   expect(refreshCookieSet(b)).toBe(false);
+  expect(cookieSet(b, AUTH_CODE_COOKIE)).toBe(false);
 }
 
 describe('Discord login callback state binding (ROK-1808)', () => {
@@ -215,6 +229,18 @@ describe('Discord login callback state binding (ROK-1808)', () => {
     expect(h.setex).toHaveBeenCalledTimes(1);
     expect(refreshCookieSet(cb)).toBe(true);
     expect(cb.jar[STATE_COOKIE]).toBeUndefined();
+  });
+
+  it('binds the handed-out auth code to this browser (rl_auth_code)', async () => {
+    const start = browser();
+    const state = await startPlainLogin(start);
+    const cb = browser({ code: 'c', state }, start.jar);
+    await callback(h, cb);
+    const code = authCodeOf(cb);
+    expect(h.setex).toHaveBeenCalledWith(`auth_code:${code}`, 30, 'jwt');
+    expect(cb.jar[AUTH_CODE_COOKIE]).toBe(
+      crypto.createHash('sha256').update(code).digest('hex'),
+    );
   });
 
   it('rejects a callback with no state at all', async () => {
