@@ -64,6 +64,29 @@ interface EventOpts {
   isAdHoc?: boolean;
   cancelled?: boolean;
   extendedUntil?: Date;
+  reschedulingPollId?: number;
+  guildId?: string;
+}
+
+/** Track a posted embed for the event in `guildId` (default: the bot's). */
+async function trackEmbed(
+  eventId: number,
+  embedState: string,
+  guildId: string = mockGuild.id,
+): Promise<void> {
+  await app.db.insert(schema.discordEventMessages).values({
+    eventId,
+    guildId,
+    channelId: 'channel-1818',
+    messageId: `message-${eventId}-${embedState}`,
+    embedState,
+  });
+}
+
+/** The bot is connected to `mockGuild` (no SE fetch needed). */
+function connectBot(): void {
+  isConnectedSpy.mockReturnValue(true);
+  getGuildSpy.mockReturnValue(mockGuild);
 }
 
 /** Insert an event that ended `endedAgoMs` ago (negative = still running). */
@@ -80,17 +103,14 @@ async function seedEvent(opts: EventOpts): Promise<number> {
       isAdHoc: opts.isAdHoc ?? false,
       ...(opts.cancelled ? { cancelledAt: new Date() } : {}),
       ...(opts.extendedUntil ? { extendedUntil: opts.extendedUntil } : {}),
+      ...(opts.reschedulingPollId
+        ? { reschedulingPollId: opts.reschedulingPollId }
+        : {}),
     })
     .returning({ id: schema.events.id });
   if (!row) throw new Error('event insert returned no row');
   if (opts.embedState !== null) {
-    await app.db.insert(schema.discordEventMessages).values({
-      eventId: row.id,
-      guildId: mockGuild.id,
-      channelId: 'channel-1818',
-      messageId: `message-${row.id}`,
-      embedState: opts.embedState ?? 'live',
-    });
+    await trackEmbed(row.id, opts.embedState ?? 'live', opts.guildId);
   }
   return row.id;
 }
@@ -100,17 +120,30 @@ function enqueuedIds(): unknown[] {
 }
 
 describe('completion cron — events without a Discord scheduled event (ROK-1818)', () => {
-  it('enqueues cron-complete for an ended event with no SE, even with the bot disconnected', async () => {
+  it('enqueues cron-complete for an ended event with no SE, even when the SE pass has no candidates', async () => {
+    connectBot();
     const id = await seedEvent({ endedAgoMs: HOUR_MS });
 
     const run = await service.completeExpiredEventsDetailed();
 
-    expect(run.reason).toBe('bot-not-connected');
+    expect(run.reason).toBe('no-candidates');
     expect(enqueueSpy).toHaveBeenCalledWith(id, 'cron-complete');
     expect(run.embedOnlyEventIds).toEqual([id]);
   });
 
+  it('enqueues nothing while the bot is disconnected, and the cron reports a no-op', async () => {
+    await seedEvent({ endedAgoMs: HOUR_MS });
+
+    const run = await service.completeExpiredEventsDetailed();
+
+    expect(run.reason).toBe('bot-not-connected');
+    expect(enqueuedIds()).toEqual([]);
+    expect(run.embedOnlyEventIds).toBeUndefined();
+    expect(await service.completeExpiredEvents()).toBe(false);
+  });
+
   it('does not re-enqueue an event whose embed is already COMPLETED or CANCELLED', async () => {
+    connectBot();
     await seedEvent({ endedAgoMs: HOUR_MS, embedState: 'completed' });
     await seedEvent({ endedAgoMs: HOUR_MS, embedState: 'cancelled' });
 
@@ -121,8 +154,7 @@ describe('completion cron — events without a Discord scheduled event (ROK-1818
   });
 
   it('enqueues an event WITH an SE exactly once (the SE pass, not the sweep)', async () => {
-    isConnectedSpy.mockReturnValue(true);
-    getGuildSpy.mockReturnValue(mockGuild);
+    connectBot();
     mockGuild.scheduledEvents.fetch.mockResolvedValue({
       id: 'se-1818',
       status: GuildScheduledEventStatus.Completed,
@@ -156,10 +188,49 @@ describe('findEmbedOnlyCompletionCandidates (ROK-1818)', () => {
       endedAgoMs: HOUR_MS,
       extendedUntil: new Date(Date.now() + HOUR_MS),
     });
+    await seedEvent({ endedAgoMs: HOUR_MS, reschedulingPollId: 1818 });
+    // Tracked for a guild the processor never syncs.
+    await seedEvent({ endedAgoMs: HOUR_MS, guildId: 'other-guild' });
 
-    expect(await findEmbedOnlyCompletionCandidates(app.db)).toEqual([eligible]);
-    expect(await findEmbedOnlyCompletionCandidates(app.db, [eligible])).toEqual(
-      [],
-    );
+    expect(
+      await findEmbedOnlyCompletionCandidates(app.db, {
+        guildId: mockGuild.id,
+      }),
+    ).toEqual([eligible]);
+    expect(
+      await findEmbedOnlyCompletionCandidates(app.db, {
+        guildId: mockGuild.id,
+        excludeIds: [eligible],
+      }),
+    ).toEqual([]);
+  });
+
+  it('returns an event with one COMPLETED and one live tracked embed', async () => {
+    const id = await seedEvent({
+      endedAgoMs: HOUR_MS,
+      embedState: 'completed',
+    });
+    await trackEmbed(id, 'live');
+
+    expect(
+      await findEmbedOnlyCompletionCandidates(app.db, {
+        guildId: mockGuild.id,
+      }),
+    ).toEqual([id]);
+  });
+
+  it('puts a freshly ended event ahead of a full batch of older stuck ones', async () => {
+    const stale: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      stale.push(await seedEvent({ endedAgoMs: 3 * DAY_MS + i * HOUR_MS }));
+    }
+    const fresh = await seedEvent({ endedAgoMs: HOUR_MS });
+
+    expect(
+      await findEmbedOnlyCompletionCandidates(app.db, {
+        guildId: mockGuild.id,
+        limit: 2,
+      }),
+    ).toEqual([fresh, stale[0]]);
   });
 });
