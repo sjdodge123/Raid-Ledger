@@ -2765,3 +2765,6 @@ same day (#1278, #1279, #1280).
 ### 2026-10-16 — fix/rok-1811-logout-clears-caches (review MINOR left out of ROK-1811)
 
 - **low** `web/src/hooks/use-notifications.ts:122-124` — an optimistic mutation still in flight at logout can run its `onError` rollback after the identity drop and write the previous user's notification list back into the cache. ROK-1811 clears the mutation cache, but closures already running still call `setQueryData`. The window is narrow (a failed mark-read racing a logout). Suggested: have rollbacks check the current identity (or a generation counter bumped by `dropViewerPrivateCaches`) before writing.
+
+### 2026-10-16 — fix/rok-1811-logout-clears-caches (surfaced during Codex r3–r5)
+- **med** `web/src/hooks/viewer-private-caches.ts` `VIEWER_INDEPENDENT_PREFIXES` — a hand-kept allowlist of token-less public query keys (public lineup, system status, poll-share preview). Codex found one missing key per round; any future public query left off the list sits pending after a cross-tab logout until reload (no leak, a stuck page). Suggested: tag public queries with `meta: { viewerIndependent: true }` at their `useQuery` and add a guard test that every query hook used by an un-authed route (`/p/*`, `/privacy`) carries the tag.
