@@ -41,6 +41,7 @@ describe('DiscordAuthStrategy', () => {
     strategy = new DiscordAuthStrategy(
       mockAuthService as any,
       mockSettingsService as any,
+      { get: jest.fn().mockReturnValue('jwt-secret') } as any,
     );
 
     // Suppress logger output in tests

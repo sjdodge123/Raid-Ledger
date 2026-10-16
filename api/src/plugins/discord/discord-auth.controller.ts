@@ -41,6 +41,7 @@ import {
 import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
 import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
 import { verifyDiscordLinkState } from './discord-link-state.helpers';
+import { signBrowserBoundLoginState } from './discord-login-state.helpers';
 
 interface RequestWithUser extends Request {
   user: {
@@ -141,12 +142,14 @@ export class DiscordAuthController {
       return;
     }
 
-    const state = signOAuthState(
-      { action: 'invite', inviteCode, timestamp: Date.now() },
+    // ROK-1808: bound to this browser; the callback's strategy checks it.
+    const state = signBrowserBoundLoginState(
+      res,
+      { action: 'invite', inviteCode },
       this.getSecret(),
     );
     res.redirect(
-      `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`,
+      this.buildOAuthUrl(oauthConfig.clientId, oauthConfig.callbackUrl, state),
     );
   }
 
@@ -177,7 +180,8 @@ export class DiscordAuthController {
     res.redirect(
       buildSilentLoginRedirect({
         oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
-        secret: this.getSecret(),
+        signState: (p) =>
+          signBrowserBoundLoginState(res, p, this.getSecret()),
         returnTo: returnTo ?? '/',
         clientUrl: this.getClientUrl(req),
       }),
