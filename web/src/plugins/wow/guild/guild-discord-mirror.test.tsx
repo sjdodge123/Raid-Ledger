@@ -34,6 +34,20 @@ describe('GuildDiscordMirror — ok', () => {
         expect(screen.getByRole('heading', { name: '#announcements' })).toBeInTheDocument();
     });
 
+    it('names the bot\'s server in the blurb (approved copy)', async () => {
+        serve(okMirror([discordMessage(1)], undefined, 'Keepers HQ'));
+        renderCard(false);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the Keepers HQ Discord');
+    });
+
+    it('falls back to "the community Discord" when the server name is unknown', async () => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(false);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.getByText(/^Latest from/).textContent).toBe('Latest from the community Discord');
+    });
+
     it('links out to the channel in a new tab and says it is read-only', async () => {
         serve(okMirror([discordMessage(1)]));
         renderCard(false);

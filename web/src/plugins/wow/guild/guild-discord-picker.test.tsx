@@ -76,6 +76,20 @@ describe('GuildDiscordPicker — private channels', () => {
     });
 });
 
+describe('GuildDiscordPicker — server name', () => {
+    it('the hint names the bot\'s server (Q7)', async () => {
+        await openPicker({ state: 'unset' }, { ...LIST, serverName: 'Keepers HQ' });
+        await screen.findByTestId('guild-discord-channel-select');
+        expect(screen.getByText(/^Channels in/).textContent).toBe('Channels in the Keepers HQ Discord that Raid Ledger can read.');
+    });
+
+    it('falls back to "the community Discord" when the server name is unknown', async () => {
+        await openPicker();
+        await screen.findByTestId('guild-discord-channel-select');
+        expect(screen.getByText(/^Channels in/).textContent).toBe('Channels in the community Discord that Raid Ledger can read.');
+    });
+});
+
 describe('GuildDiscordPicker — server refusals show inline', () => {
     it.each([
         [400, 'Raid Ledger can’t read that channel'],

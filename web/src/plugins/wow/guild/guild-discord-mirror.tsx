@@ -13,7 +13,7 @@ import { ThreadMessageRow } from '../../../components/discord/ThreadMessageRow';
 import { Button } from '../../../components/ui/button';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { Card, SectionTitle } from './guild-bits';
-import { boundChannelId, latestMessages, mirrorTitle } from './guild-discord.helpers';
+import { boundChannelId, latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { GuildDiscordPicker } from './guild-discord-picker';
 import { useGuildDiscord } from './use-guild-discord';
 
@@ -111,7 +111,7 @@ export function GuildDiscordMirror({ guildId, canEdit }: { guildId: number; canE
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
-                blurb="Latest from the community Discord" action={change} />
+                blurb={mirrorBlurb(mirror)} action={change} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
             {canEdit && picking && (
                 <GuildDiscordPicker guildId={guildId} currentId={boundChannelId(mirror)} onClose={() => setPicking(false)} />

@@ -51,3 +51,19 @@ export function canSaveChoice(choice: GuildDiscordChannelOptionDto | undefined, 
     if (!choice) return false;
     return choice.visibility === 'public' || ack;
 }
+
+/** "the <server> Discord", or "the community Discord" when the server is unknown. */
+function serverPhrase(serverName: string | undefined): string {
+    return serverName ? `the ${serverName} Discord` : 'the community Discord';
+}
+
+/** Card blurb (approved copy "Latest from the <server> Discord"). */
+export function mirrorBlurb(mirror: GuildDiscordMirrorDto | undefined): string {
+    const serverName = mirror?.state === 'ok' ? mirror.channel.serverName : undefined;
+    return `Latest from ${serverPhrase(serverName)}`;
+}
+
+/** Picker hint naming the bot's server (operator ruling Q7). */
+export function pickerHint(serverName: string | undefined): string {
+    return `Channels in ${serverPhrase(serverName)} that Raid Ledger can read.`;
+}

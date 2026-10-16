@@ -15,7 +15,7 @@ import { Select } from '../../../components/ui/select';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
-import { canSaveChoice, channelOptionLabel, visibleChannels } from './guild-discord.helpers';
+import { canSaveChoice, channelOptionLabel, pickerHint, visibleChannels } from './guild-discord.helpers';
 import { useClearGuildDiscordChannel, useGuildDiscordChannels, useSetGuildDiscordChannel } from './use-guild-discord';
 
 interface PickerProps { guildId: number; currentId: string | null; onClose: () => void }
@@ -57,7 +57,7 @@ function ListStatus({ data, isError }: { data: GuildDiscordChannelListDto | unde
 
 function ChannelSelect({ form, options }: { form: PickerForm; options: GuildDiscordChannelOptionDto[] }): JSX.Element {
     return (
-        <Field label="Channel" hint="Channels in the community Discord that Raid Ledger can read." error={form.errorText}>
+        <Field label="Channel" hint={pickerHint(form.channels.data?.serverName)} error={form.errorText}>
             <Select value={form.choiceId} placeholder="Choose a channel" data-testid="guild-discord-channel-select"
                 onChange={(e) => form.choose(e.target.value)}>
                 {options.map((c) => <option key={c.id} value={c.id}>{channelOptionLabel(c)}</option>)}

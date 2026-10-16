@@ -24,10 +24,13 @@ export function discordMessage(n: number, overrides: Partial<GuildDiscordMessage
     };
 }
 
-export function okMirror(messages: GuildDiscordMessageDto[], channel = PUBLIC_CHANNEL): GuildDiscordMirrorDto {
+export function okMirror(messages: GuildDiscordMessageDto[], channel = PUBLIC_CHANNEL, serverName?: string): GuildDiscordMirrorDto {
     return {
         state: 'ok',
-        channel: { ...channel, url: `https://discord.com/channels/333333333333333333/${channel.id}` },
+        channel: {
+            ...channel, url: `https://discord.com/channels/333333333333333333/${channel.id}`,
+            ...(serverName === undefined ? {} : { serverName }),
+        },
         messages,
         fetchedAt: '2026-10-15T12:00:00.000Z',
     };
