@@ -65,9 +65,9 @@ describe('quickPlayHint (ROK-1800, ROK-1819)', () => {
         expect(quickPlayHint(row)).toBe('Map a game first');
         expect(quickPlayPluginToActivate(row)).toBeNull();
     });
-    it('names the plugin to activate when the game parser is suspended', () => {
+    it('names the plugin to turn on when the game parser is suspended', () => {
         const row = { gameId: 9, presenceSupported: false, presencePluginInactive: valheim };
-        expect(quickPlayHint(row)).toBe('Activate the Valheim plugin to detect Quick Play');
+        expect(quickPlayHint(row)).toBe('Turn on the Valheim plugin to detect Quick Play');
         expect(quickPlayPluginToActivate(row)).toBe('Valheim');
     });
     it('says not available when the game has no parser at all', () => {

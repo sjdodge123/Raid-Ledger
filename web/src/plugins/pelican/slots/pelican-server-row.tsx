@@ -11,7 +11,7 @@ import { Switch } from '../../../components/ui/switch';
 import { GameSearchInput } from '../../../components/events/game-search-input';
 import { PelicanStateChip } from './pelican-state-chip';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { INTEGRATIONS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
+import { PLUGINS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
 
 export type ServerUpdateHandler = (id: number, patch: PelicanServerUpdate, gameName?: string | null) => void;
 
@@ -114,14 +114,14 @@ function QuickPlaySwitch({ row, onUpdate, inline = false }: ControlProps<'row' |
     );
 }
 
-/** The switch's helper line; an inactive parser plugin links to Integrations to activate it (ROK-1819). */
+/** The switch's helper line; an inactive parser plugin links to the Plugins panel to turn it on (ROK-1819). */
 function QuickPlayHint({ row, id, hint }: { row: PelicanServerRowDto; id: string; hint: string }) {
     const plugin = quickPlayPluginToActivate(row);
     if (plugin === null) return <p id={id} className="text-xs text-muted">{hint}</p>;
     return (
         <p id={id} className="text-xs text-muted">
-            <Link to={INTEGRATIONS_HREF} className={`rounded-sm text-success hover:underline ${FOCUS_RING}`}>
-                Activate the {plugin} plugin
+            <Link to={PLUGINS_HREF} className={`rounded-sm text-success underline underline-offset-2 ${FOCUS_RING}`}>
+                Turn on the {plugin} plugin
             </Link>{' '}to detect Quick Play
         </p>
     );

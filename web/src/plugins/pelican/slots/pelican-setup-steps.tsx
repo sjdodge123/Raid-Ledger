@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { INTEGRATIONS_HREF } from './pelican-servers.helpers';
+import { PLUGINS_HREF } from './pelican-servers.helpers';
 
 /**
  * How to make a least-privilege Pelican client key (ROK-121 ruling Q5).
@@ -31,8 +31,8 @@ export function PelicanSetupSteps() {
                 <li>Set the key&apos;s Allowed IPs to this Raid Ledger host</li>
                 <li>Paste the panel URL and the key below, save, then Test Connection</li>
                 <li>
-                    For Quick Play detection, also activate the game&apos;s plugin (Valheim today) under{' '}
-                    <Link to={INTEGRATIONS_HREF} className={`rounded-sm text-success hover:underline ${FOCUS_RING}`}>Integrations</Link>,
+                    For Quick Play detection, also turn on the game&apos;s plugin under{' '}
+                    <Link to={PLUGINS_HREF} className={`rounded-sm text-success underline underline-offset-2 ${FOCUS_RING}`}>Plugins</Link>,
                     then turn on Detect Quick Play for its servers below
                 </li>
             </ol>
