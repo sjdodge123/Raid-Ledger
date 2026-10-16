@@ -98,7 +98,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     @Optional()
     @Inject(ServerPathVoiceTally)
     private readonly voiceTally: ServerPathVoiceTally | null = null,
+    // Codex r2 P1: a `| null` union emits `Object` as design:paramtypes, so
+    // without an explicit token Nest never injects ModuleRef (reader = null).
     @Optional()
+    @Inject(ModuleRef)
     private readonly moduleRef: ModuleRef | null = null,
   ) {}
 
