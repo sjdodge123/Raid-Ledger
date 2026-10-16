@@ -648,6 +648,86 @@ describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
     expect(clientService.deleteMessage).not.toHaveBeenCalled();
   });
 
+  it('deletes the bump when the completion cron syncs an ended, not-full event (ROK-1812)', async () => {
+    // The real COMPLETED entry point: ScheduledEventService's completion pass
+    // enqueues a `cron-complete` sync, and the end time puts it in COMPLETED.
+    const endedEvent = {
+      ...fullEvent,
+      maxAttendees: 10,
+      duration: [
+        new Date(Date.now() - 4 * 60 * 60 * 1000),
+        new Date(Date.now() - 60 * 60 * 1000),
+      ],
+    };
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([recordWithBump]))
+      .mockReturnValueOnce(makeSelectChain([endedEvent]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(3)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    const job = {
+      data: { eventId: 42, reason: 'cron-complete' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      'channel-789',
+      'bump-msg-001',
+    );
+  });
+
+  it('edits the bump with the live count when state is not FULL (ROK-1812)', async () => {
+    const fillingEvent = { ...fullEvent, maxAttendees: 10 };
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([recordWithBump]))
+      .mockReturnValueOnce(makeSelectChain([fillingEvent]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(3)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+    // The bump's "View Event" button needs a client URL (the default mock is null).
+    (
+      processor as unknown as { settingsService: { getClientUrl: jest.Mock } }
+    ).settingsService.getClientUrl.mockResolvedValue(
+      'https://raid.example.com',
+    );
+
+    // The bump currently reads a stale 1/10; the fetched message is edited.
+    const bumpEdit = jest.fn().mockResolvedValue({ id: 'bump-msg-001' });
+    const fetchBumpChannel = jest.fn().mockResolvedValue({
+      send: jest.fn(),
+      messages: {
+        fetch: jest.fn().mockResolvedValue({
+          embeds: [
+            { title: 'stale', description: '1/10 spots filled', fields: [] },
+          ],
+          edit: bumpEdit,
+        }),
+      },
+    });
+    (clientService as unknown as Record<string, jest.Mock>).getClient = jest
+      .fn()
+      .mockReturnValue({
+        isReady: () => true,
+        channels: { fetch: fetchBumpChannel },
+      });
+
+    const job = {
+      data: { eventId: 42, reason: 'signup' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(fetchBumpChannel).toHaveBeenCalledWith('channel-789');
+    const payload = bumpEdit.mock.calls[0] as
+      [{ embeds: EmbedBuilder[] }] | undefined;
+    if (!payload) throw new Error('expected the bump to be edited, it was not');
+    const [embed] = payload[0].embeds;
+    if (!embed) throw new Error('bump edit carried no embed');
+    expect(embed.toJSON().description).toContain('3/10 spots filled');
+  });
+
   it('does not throw when bump message deletion fails (graceful)', async () => {
     setupDbForFullSync(recordWithBump);
     (clientService.deleteMessage as jest.Mock).mockRejectedValue(

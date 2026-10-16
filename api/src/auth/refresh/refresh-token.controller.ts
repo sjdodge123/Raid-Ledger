@@ -25,6 +25,7 @@ import { hashToken } from './refresh-token.helpers';
 import { SameOriginCookiePostGuard } from './same-origin-cookie-post.guard';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
+import { TokenBlocklistService } from '../token-blocklist.service';
 
 /**
  * ROK-1353: POST /auth/refresh (rotate) + POST /auth/logout (revoke).
@@ -40,11 +41,16 @@ export class RefreshTokenController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly impersonation: ImpersonationSessionService,
+    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**
    * Rotate the refresh cookie → fresh access JWT + new cookie. ROK-1754: the
-   * JWT impersonates while the family's marker is live (§3.4.4).
+   * JWT impersonates while the family's marker is live (§3.4.4). Codex r3:
+   * the rotated cookie is set only AFTER the access token is minted; a
+   * concurrent revoke + block (null mint) 401s with NO cookie mutation, so a
+   * late rejection can never delete a cookie a parallel password change just
+   * installed.
    */
   @RateLimit('refresh')
   @Post('refresh')
@@ -58,11 +64,17 @@ export class RefreshTokenController {
     if (!rawToken) throw new UnauthorizedException('No refresh token');
     const rotated = await this.refreshService.rotate(rawToken);
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
-    setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
     const access_token = await mintRefreshAccessToken(
-      { db: this.db, jwt: this.jwtService, impersonation: this.impersonation },
+      {
+        db: this.db,
+        jwt: this.jwtService,
+        blocklist: this.blocklist,
+        impersonation: this.impersonation,
+      },
       rotated,
     );
+    if (!access_token) throw new UnauthorizedException('Invalid refresh token');
+    setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
     return { access_token };
   }
 

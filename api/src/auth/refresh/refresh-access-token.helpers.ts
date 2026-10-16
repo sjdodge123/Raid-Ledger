@@ -11,25 +11,49 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { secondsUntil } from '../impersonation/impersonation-session.helpers';
+import type { TokenBlocklistService } from '../token-blocklist.service';
+import { signAccessToken } from '../access-token-mint.helpers';
+import { hashToken } from './refresh-token.helpers';
 
 export interface RefreshAccessTokenDeps {
   db: PostgresJsDatabase<typeof schema>;
-  jwt: JwtService;
-  impersonation: ImpersonationSessionService;
+  jwt: Pick<JwtService, 'sign'>;
+  /** ROK-1810: the block floor, so a same-second mint is not born revoked. */
+  blocklist: Pick<TokenBlocklistService, 'minIatFor'>;
+  impersonation: Pick<ImpersonationSessionService, 'resolveForRefresh'>;
 }
 
-/** Mint the access token for a just-rotated refresh row. */
+/** The just-rotated refresh row the access token is minted for. */
+export interface RotatedRow {
+  userId: number;
+  familyId: string;
+  /** The child's raw token — locates the row for the revoke re-check. */
+  rawToken: string;
+}
+
+/**
+ * Mint the access token for a just-rotated refresh row. Resolves `null` when
+ * that row was revoked after the rotation committed (a concurrent
+ * revokeFamily/revokeAllForUser) — the caller answers 401 like any invalid
+ * refresh.
+ */
 export async function mintRefreshAccessToken(
   deps: RefreshAccessTokenDeps,
-  rotated: { userId: number; familyId: string },
-): Promise<string> {
+  rotated: RotatedRow,
+): Promise<string | null> {
+  const pinned = await pinHolderFloor(deps, rotated);
+  if (!pinned) return null;
+  const { floors, nowMs } = pinned;
   const live = await deps.impersonation.resolveForRefresh(
     rotated.familyId,
     rotated.userId,
+    (targetId) => pinFloor(deps, floors, targetId),
   );
-  if (!live) return signOwnAccessToken(deps, rotated.userId);
+  const mintDeps = { ...deps, blocklist: pinnedBlocklist(floors) };
+  if (!live) return signOwnAccessToken(mintDeps, rotated.userId, nowMs);
   const { target, expiresAt } = live;
-  return deps.jwt.sign(
+  return signAccessToken(
+    mintDeps,
     {
       sub: target.id,
       username: target.username,
@@ -37,13 +61,81 @@ export async function mintRefreshAccessToken(
       impersonatedBy: rotated.userId,
     },
     { expiresIn: secondsUntil(expiresAt, new Date()) },
+    nowMs,
   );
+}
+
+/** Block floors read once, before anything they guard was validated. */
+type PinnedFloors = Map<number, number | undefined>;
+
+/**
+ * Codex r2 revoke race + Codex r4 promotion race. Every floor the mint signs
+ * with is read ONCE, against the clock pinned at (1), and never re-read at
+ * sign time. ORDER MATTERS — revokeFamily/revokeAllForUser commit the revoke
+ * in Postgres BEFORE `blockUser` writes Redis, and `setRole` commits the role
+ * BEFORE it blocks, so:
+ *   1. take the clock, 2. read the holder's floor, 3. only when a floor
+ *   exists, re-read the rotated row; then, for an impersonation family,
+ *   4. read the TARGET's floor (`pinFloor`, via `resolveForRefresh`'s
+ *   `beforeValidate`), 5. only then load + validate the target's role.
+ * A block visible at (2) implies its revoke is visible at (3); a promotion
+ * block visible at (4) implies the admin role is visible at (5), which ends
+ * the impersonation. A block written after (2) or (4) stamps `>= floor(clock)`
+ * (monotonic `blockUser`), which is `>=` the iat signed here — so the token
+ * stays revocable by both ids.
+ */
+async function pinHolderFloor(
+  deps: RefreshAccessTokenDeps,
+  rotated: RotatedRow,
+): Promise<{ floors: PinnedFloors; nowMs: number } | null> {
+  const nowMs = Date.now();
+  const floor = await deps.blocklist.minIatFor(rotated.userId);
+  if (floor !== undefined && (await rowIsGone(deps.db, rotated.rawToken))) {
+    return null;
+  }
+  return { floors: new Map([[rotated.userId, floor]]), nowMs };
+}
+
+/** Read and keep one user's floor; a floor already pinned is never re-read. */
+async function pinFloor(
+  deps: RefreshAccessTokenDeps,
+  floors: PinnedFloors,
+  userId: number,
+): Promise<void> {
+  if (floors.has(userId)) return;
+  floors.set(userId, await deps.blocklist.minIatFor(userId));
+}
+
+/** Serves only pinned floors; an unpinned id fails closed (no late read). */
+function pinnedBlocklist(
+  floors: PinnedFloors,
+): RefreshAccessTokenDeps['blocklist'] {
+  return {
+    minIatFor: (id: number) =>
+      floors.has(id)
+        ? Promise.resolve(floors.get(id))
+        : Promise.reject(new Error(`block floor for user ${id} not pinned`)),
+  };
+}
+
+/** The rotated row is revoked (or no longer exists). */
+async function rowIsGone(
+  db: RefreshAccessTokenDeps['db'],
+  rawToken: string,
+): Promise<boolean> {
+  const [row] = await db
+    .select({ revokedAt: schema.refreshTokens.revokedAt })
+    .from(schema.refreshTokens)
+    .where(eq(schema.refreshTokens.tokenHash, hashToken(rawToken)))
+    .limit(1);
+  return !row || row.revokedAt != null;
 }
 
 /** The cookie holder's own 1h access token (module default `expiresIn`). */
 async function signOwnAccessToken(
   deps: RefreshAccessTokenDeps,
   userId: number,
+  nowMs: number,
 ): Promise<string> {
   const [user] = await deps.db
     .select({
@@ -55,9 +147,10 @@ async function signOwnAccessToken(
     .where(eq(schema.users.id, userId))
     .limit(1);
   if (!user) throw new UnauthorizedException('User not found');
-  return deps.jwt.sign({
-    username: user.username,
-    sub: user.id,
-    role: user.role,
-  });
+  return signAccessToken(
+    deps,
+    { username: user.username, sub: user.id, role: user.role },
+    undefined,
+    nowMs,
+  );
 }

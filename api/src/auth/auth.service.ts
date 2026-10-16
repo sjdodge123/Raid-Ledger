@@ -11,6 +11,8 @@ import {
 } from './auth-status.helpers';
 import type { UserRole } from '@raid-ledger/contract';
 import { promoteFirstDiscordLogin } from './fleet-first-login-admin.helpers';
+import { TokenBlocklistService } from './token-blocklist.service';
+import { signAccessToken } from './access-token-mint.helpers';
 
 /** Event name emitted after Discord OAuth login/link (ROK-292). */
 export const AUTH_EVENTS = {
@@ -33,6 +35,7 @@ export class AuthService {
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
     private readonly eventEmitter: EventEmitter2,
+    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   async validateDiscordUser(
@@ -92,14 +95,11 @@ export class AuthService {
     } satisfies DiscordLoginPayload);
   }
 
-  login(user: { id: number; username: string; role: UserRole }) {
-    const payload = {
-      username: user.username,
-      sub: user.id,
-      role: user.role,
-    };
-    return {
-      access_token: this.jwtService.sign(payload),
-    };
+  async login(user: { id: number; username: string; role: UserRole }) {
+    const access_token = await signAccessToken(
+      { jwt: this.jwtService, blocklist: this.blocklist },
+      { username: user.username, sub: user.id, role: user.role },
+    );
+    return { access_token };
   }
 }

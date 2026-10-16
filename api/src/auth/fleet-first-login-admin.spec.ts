@@ -89,6 +89,7 @@ function makeService(db: Db, row = { id: 5, role: 'member' as const }) {
     {} as JwtService,
     db,
     { emit: jest.fn() } as unknown as EventEmitter2,
+    { minIatFor: jest.fn() } as unknown as TokenBlocklistService,
   );
 }
 

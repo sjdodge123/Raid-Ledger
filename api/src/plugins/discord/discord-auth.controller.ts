@@ -95,7 +95,7 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     if (res.headersSent) return;
-    const { access_token } = this.authService.login(req.user);
+    const { access_token } = await this.authService.login(req.user);
     // ROK-1808: the code is bound to this browser (cookie of its hash).
     const authCode = mintBrowserBoundAuthCode(req, res);
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);

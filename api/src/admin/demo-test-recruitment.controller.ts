@@ -10,19 +10,26 @@
  * 15-minute schedule.
  */
 import {
+  BadRequestException,
+  Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   HttpCode,
   HttpStatus,
+  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { z } from 'zod';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AdminGuard } from '../auth/admin.guard';
 import { DemoModeGuard } from './demo-mode.guard';
 import { SettingsService } from '../settings/settings.service';
 import { RecruitmentReminderService } from '../notifications/recruitment-reminder.service';
+
+const PostBumpSchema = z.object({ eventId: z.number().int().positive() });
 
 @Controller('admin/test')
 @SkipThrottle()
@@ -48,6 +55,35 @@ export class DemoTestRecruitmentController {
   async triggerReminders(): Promise<{ success: boolean }> {
     await this.assertDemoMode();
     await this.recruitmentReminderService.checkAndSendReminders();
+    return { success: true };
+  }
+
+  /**
+   * Post the "Spots still available" bump for one event right now, skipping
+   * the grace period + dedup (ROK-1812 smoke: the bump's count must follow
+   * later sign-ups). 404 when the event is not bump-eligible; 409 when it
+   * was eligible but nothing was posted (bot offline, channel unresolved,
+   * Discord error), so a smoke fails on the real cause, not a poll timeout.
+   */
+  @Post('post-recruitment-bump')
+  @HttpCode(HttpStatus.OK)
+  async postBump(@Body() body: unknown): Promise<{ success: boolean }> {
+    await this.assertDemoMode();
+    const parsed = PostBumpSchema.safeParse(body ?? {});
+    if (!parsed.success) throw new BadRequestException(parsed.error.issues);
+    const { eventId } = parsed.data;
+    const outcome =
+      await this.recruitmentReminderService.postBumpNowForEvent(eventId);
+    if (outcome === 'not-eligible') {
+      throw new NotFoundException(
+        `Event ${eventId} is not eligible for a recruitment bump`,
+      );
+    }
+    if (outcome === 'not-posted') {
+      throw new ConflictException(
+        `Event ${eventId} is eligible but no bump was posted (bot offline, channel unresolved or Discord error — see the API warn log)`,
+      );
+    }
     return { success: true };
   }
 }

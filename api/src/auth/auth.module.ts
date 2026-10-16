@@ -27,6 +27,7 @@ import { RefreshTokenService } from './refresh/refresh-token.service';
 import { RefreshTokenController } from './refresh/refresh-token.controller';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
+import { PasswordChangeSessionService } from './password-change/password-change-session.service';
 
 /**
  * Auth module — core authentication logic (JWT, local auth, intent tokens).
@@ -77,6 +78,7 @@ import { ImpersonationSessionService } from './impersonation/impersonation-sessi
     RefreshTokenService,
     RefreshTokenCleanupService,
     ImpersonationSessionService,
+    PasswordChangeSessionService,
   ],
   exports: [
     AuthService,
@@ -86,6 +88,7 @@ import { ImpersonationSessionService } from './impersonation/impersonation-sessi
     LinkNonceService,
     TokenBlocklistService,
     RefreshTokenService,
+    PasswordChangeSessionService,
   ],
 })
 export class AuthModule {}

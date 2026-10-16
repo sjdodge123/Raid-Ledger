@@ -37,6 +37,24 @@ export interface EligibleEvent {
   notificationChannelOverride: string | null;
 }
 
+/**
+ * The fields the bump card renders. A Pick (not the whole EligibleEvent) so
+ * the embed-sync job can rebuild the card from its own projection when the
+ * roster changes (ROK-1812).
+ */
+export type BumpEmbedEvent = Pick<
+  EligibleEvent,
+  | 'id'
+  | 'title'
+  | 'gameName'
+  | 'startTime'
+  | 'maxAttendees'
+  | 'signupCount'
+  | 'guildId'
+  | 'channelId'
+  | 'messageId'
+>;
+
 /** Raw row shape returned by the eligible events query. */
 interface EligibleEventRow {
   id: number;
@@ -151,14 +169,18 @@ export async function findAbsentUsers(
 }
 
 /** Build signup summary string. */
-export function buildSignupSummary(event: EligibleEvent): string {
+export function buildSignupSummary(
+  event: Pick<EligibleEvent, 'signupCount' | 'maxAttendees'>,
+): string {
   return event.maxAttendees
     ? `${event.signupCount}/${event.maxAttendees} spots filled`
     : `${event.signupCount} signed up`;
 }
 
 /** Build the Discord embed URL for an event. */
-export function buildDiscordUrl(event: EligibleEvent): string {
+export function buildDiscordUrl(
+  event: Pick<EligibleEvent, 'guildId' | 'channelId' | 'messageId'>,
+): string {
   return `https://discord.com/channels/${event.guildId}/${event.channelId}/${event.messageId}`;
 }
 
@@ -330,7 +352,7 @@ export function formatBumpLog(
 
 /** Build the bump embed and action row for a recruitment reminder. ROK-1335. */
 export function buildBumpEmbed(
-  event: EligibleEvent,
+  event: BumpEmbedEvent,
   clientUrl: string,
   defaultTimezone: string,
   communityName?: string | null,
@@ -358,7 +380,7 @@ export function buildBumpEmbed(
 
 /** Build the action row (View Event + View in Discord buttons). */
 export function buildBumpRow(
-  event: EligibleEvent,
+  event: BumpEmbedEvent,
   clientUrl: string,
 ): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
