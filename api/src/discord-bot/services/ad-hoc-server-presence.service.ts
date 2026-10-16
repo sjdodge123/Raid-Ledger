@@ -278,8 +278,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
    * Attach `players` plus everyone this server held below the threshold — a
    * live event that appeared meanwhile (e.g. voice-born) takes them all, and
    * then every player the tracker reports for the game (ROK-1821). A player
-   * already open in a live event of the game (enrolled by an earlier
-   * `enrolGame` of this replay) is not attached again (Codex r3).
+   * already open on this server in a live event of the game (enrolled by an
+   * earlier `enrolGame` of this replay) is not attached again (Codex r3); one
+   * open on another server moves here (Codex r4).
    */
   private async attachWithPending(
     live: LiveGameEvent,

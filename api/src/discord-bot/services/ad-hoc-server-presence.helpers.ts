@@ -258,12 +258,24 @@ export async function listOpenServerPresence(
 export async function listOpenGameServerSteamIds(
   db: Db,
   gameId: number,
+  pelicanServerId?: number,
 ): Promise<string[]> {
+  const onThatServer =
+    pelicanServerId === undefined
+      ? undefined
+      : eq(p.pelicanServerId, pelicanServerId);
   const rows = await db
     .selectDistinct({ steamId: p.steamId })
     .from(p)
     .innerJoin(e, eq(p.eventId, e.id))
-    .where(and(liveGameWhere(gameId), eq(p.onServer, true), isNull(p.leftAt)));
+    .where(
+      and(
+        liveGameWhere(gameId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+        onThatServer,
+      ),
+    );
   return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
 }
 

@@ -115,9 +115,12 @@ export async function enrolTracked(
 }
 
 /**
- * Attach `players` of `source` to `live`, skipping any already open in a live
- * event of the game — e.g. enrolled by an earlier `enrolGame` of the same
- * replay — so a queued join never opens a second session (Codex r3).
+ * Attach `players` of `source` to `live`, skipping any already open on THIS
+ * server in a live event of the game — e.g. enrolled by an earlier
+ * `enrolGame` of the same replay — so a queued join never opens a second
+ * session (Codex r3). A player open on ANOTHER server is attached: an
+ * explicit join on B moves their row to B, so A's late leave is ignored
+ * (Codex r4). Only the tracker path (`enrolTracked`) skips game-wide.
  */
 export async function attachUnenrolled(
   fx: PresenceEffectsDeps,
@@ -125,7 +128,13 @@ export async function attachUnenrolled(
   source: ServerPresenceSource,
   players: ServerPresencePlayer[],
 ): Promise<void> {
-  const open = new Set(await listOpenGameServerSteamIds(fx.db, source.gameId));
+  const open = new Set(
+    await listOpenGameServerSteamIds(
+      fx.db,
+      source.gameId,
+      source.pelicanServerId,
+    ),
+  );
   for (const pl of players)
     if (!open.has(pl.steamId))
       await attachServerPlayer(fx, live, source.pelicanServerId, pl);

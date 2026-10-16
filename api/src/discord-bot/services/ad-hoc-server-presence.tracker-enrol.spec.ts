@@ -163,6 +163,23 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     expect(attachedB).toHaveLength(1);
   });
 
+  it('an explicit join on server 2 moves a player still open on server 1 (Codex r4)', async () => {
+    // Open on server 1 only: the game-wide read sees them, server 2's does not.
+    jest
+      .mocked(listOpenGameServerSteamIds)
+      .mockImplementation((_db, _game, serverId) =>
+        Promise.resolve(serverId === 2 ? [] : [ROK]),
+      );
+    const svc = serviceWith([{ ...ON_SERVER, pelicanServerId: 2 }]);
+    await svc.playerJoined(
+      { ...SOURCE, pelicanServerId: 2 },
+      { steamId: ROK, displayName: 'rok' },
+    );
+    expect(jest.mocked(attachServerPlayer).mock.calls).toEqual([
+      [expect.anything(), LIVE, 2, { steamId: ROK, displayName: 'rok' }],
+    ]);
+  });
+
   it('a held player left unconfirmed by a re-auth is still enrolled while the tracker reports them', async () => {
     jest.mocked(findLiveGameAdHocEvent).mockResolvedValueOnce(null);
     const svc = serviceWith([ON_SERVER]);
