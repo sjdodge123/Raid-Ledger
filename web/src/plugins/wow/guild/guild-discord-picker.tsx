@@ -39,10 +39,13 @@ function usePickerForm({ guildId, currentId, onClose }: PickerProps) {
     };
     const remove = (): void => clear.mutate(undefined, { onSuccess: onClose });
     const error = set.error ?? clear.error;
+    const changed = choiceId !== (currentId ?? '');
+    // An unchanged private channel can be re-saved with the acknowledgement:
+    // a bound channel that turned private reads `no-access` until it is (Codex P2).
     return {
         channels, list, choice, choiceId, choose, showPrivate, setShowPrivate, ack, setAck, save, remove,
         saving: set.isPending, removing: clear.isPending, errorText: error ? error.message : undefined,
-        dirty: choiceId !== (currentId ?? ''), canSave: canSaveChoice(choice, ack) && choiceId !== (currentId ?? ''),
+        dirty: changed, canSave: canSaveChoice(choice, ack) && (changed || choice?.visibility === 'private'),
     };
 }
 type PickerForm = ReturnType<typeof usePickerForm>;

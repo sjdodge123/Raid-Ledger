@@ -124,6 +124,16 @@ describe('GuildDiscordPicker — binding and bot state', () => {
         expect(screen.getByTestId('guild-discord-save'), 'nothing changed yet').toBeDisabled();
     });
 
+    it('a bound channel that turned private re-saves once the acknowledgement is ticked (Codex P2)', async () => {
+        await openPicker({ state: 'no-access', channelId: PRIVATE_CHANNEL.id, channelName: PRIVATE_CHANNEL.name });
+        expect(await screen.findByTestId('guild-discord-channel-select')).toHaveValue(PRIVATE_CHANNEL.id);
+        expect(screen.getByTestId('guild-discord-save'), 'unchanged private channel waits for the acknowledgement').toBeDisabled();
+        await userEvent.click(screen.getByTestId('guild-discord-private-ack'));
+        expect(screen.getByTestId('guild-discord-save'), 'ticking the acknowledgement must enable Save for the same channel').toBeEnabled();
+        await userEvent.click(screen.getByTestId('guild-discord-save'));
+        await waitFor(() => expect(calls).toEqual([{ method: 'PUT', body: { channelId: PRIVATE_CHANNEL.id, privateAck: true } }]));
+    });
+
     it('bot down → the picker says so and offers no channel select', async () => {
         await openPicker({ state: 'unset' }, { connected: false, channels: [] });
         expect(await screen.findByTestId('guild-discord-picker-disconnected')).toBeInTheDocument();
