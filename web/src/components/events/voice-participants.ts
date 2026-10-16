@@ -3,13 +3,20 @@ import type { AdHocParticipantDto } from '@raid-ledger/contract';
 /**
  * ROK-1821 — true when an ad-hoc participant row belongs in the voice panel.
  *
- * A row is voice when it came from Discord voice, or is in voice right now.
- * A row with no `source` is a legacy (pre-ROK-1800) voice row. A game-server
- * row (`source: 'steam'`, not in voice) — linked to a Raid Ledger user or not —
- * stays on the event roster but is never shown as voice.
+ * A row is voice when it came from Discord voice, is in voice right now, or
+ * carries a Discord identity — a server row that later joined voice is merged
+ * (`attachDiscordToUserRow`) but keeps `source: 'steam'`, and must still show
+ * under Left once it leaves voice (Codex r3). A row with no `source` is a
+ * legacy (pre-ROK-1800) voice row. A game-server row with no Discord identity,
+ * not in voice — linked to a Raid Ledger user or not — stays on the event
+ * roster but is never shown as voice.
  */
 export function isVoiceParticipant(participant: AdHocParticipantDto): boolean {
-  return participant.source !== 'steam' || participant.inVoice === true;
+  return (
+    participant.source !== 'steam' ||
+    participant.inVoice === true ||
+    participant.discordUserId !== null
+  );
 }
 
 /** ROK-1821 — the voice rows of an ad-hoc roster, in their original order. */

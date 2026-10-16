@@ -37,6 +37,11 @@ describe('isVoiceParticipant (ROK-1821)', () => {
     expect(isVoiceParticipant(row({ userId: 7, discordUserId: null, source: 'steam', inVoice: false, onServer: true }))).toBe(false);
   });
 
+  it('a merged steam row (Discord identity) that left voice stays a voice row (shown under Left)', () => {
+    const merged = row({ userId: 7, discordUserId: 'discord-7', source: 'steam', inVoice: false, onServer: false, leftAt: '2026-10-16T18:30:00Z' });
+    expect(isVoiceParticipant(merged)).toBe(true);
+  });
+
   it('a steam row that is also in voice is a voice row', () => {
     expect(isVoiceParticipant(row({ source: 'steam', inVoice: true, onServer: true }))).toBe(true);
   });
@@ -46,7 +51,7 @@ describe('voiceParticipants (ROK-1821)', () => {
   it('keeps only voice rows, preserving order', () => {
     const rows = [
       row({ id: 'a', source: 'discord' }),
-      row({ id: 'b', source: 'steam', inVoice: false, onServer: true }),
+      row({ id: 'b', discordUserId: null, source: 'steam', inVoice: false, onServer: true }),
       row({ id: 'c' }),
     ];
     expect(voiceParticipants(rows).map((p) => p.id)).toEqual(['a', 'c']);
