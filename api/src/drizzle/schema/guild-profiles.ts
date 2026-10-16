@@ -2,6 +2,8 @@ import {
   pgTable,
   integer,
   text,
+  varchar,
+  boolean,
   jsonb,
   timestamp,
   index,
@@ -32,6 +34,22 @@ export const guildProfiles = pgTable(
     rules: jsonb('rules').$type<GuildRuleSection[]>(),
     /** Ordered link groups; null = never edited. */
     links: jsonb('links').$type<GuildLinkGroup[]>(),
+    /**
+     * ROK-1788 (S4): the ONE Discord channel mirrored on the guild page. Only
+     * the binding is stored — message content never is (fetch-on-read).
+     */
+    discordChannelId: varchar('discord_channel_id', { length: 32 }),
+    /** An editor acknowledged that a private channel is shown to every viewer. */
+    discordChannelPrivateAck: boolean('discord_channel_private_ack')
+      .default(false)
+      .notNull(),
+    discordChannelSetBy: integer('discord_channel_set_by').references(
+      () => users.id,
+      { onDelete: 'set null' },
+    ),
+    discordChannelSetAt: timestamp('discord_channel_set_at', {
+      withTimezone: true,
+    }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -46,6 +64,9 @@ export const guildProfiles = pgTable(
     ),
     // ROK-1157: FK backing index (guild_id is the PK).
     index('idx_guild_profiles_gm_post_updated_by').on(table.gmPostUpdatedBy),
+    index('idx_guild_profiles_discord_channel_set_by').on(
+      table.discordChannelSetBy,
+    ),
   ],
 );
 

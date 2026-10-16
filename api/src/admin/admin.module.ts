@@ -32,6 +32,8 @@ import { DemoTestBackupController } from './demo-test-backup.controller';
 import { DemoTestSignInLinkController } from './demo-test-sign-in-link.controller';
 import { DemoTestBrowserSessionController } from './demo-test-browser-session.controller';
 import { DemoTestGuildController } from './demo-test-guild.controller';
+import { DemoTestGuildDiscordController } from './demo-test-guild-discord.controller';
+import { ChannelMirrorModule } from '../discord-bot/channel-mirror/channel-mirror.module';
 import { DemoTestGameRolesController } from './demo-test-game-roles.controller';
 import { DemoTestJoinPostController } from './demo-test-join-post.controller';
 import { SlashCommandTestController } from './slash-command-test.controller';
@@ -99,6 +101,10 @@ import { UsersModule } from '../users/users.module';
     // and hands UsersService to the listener's own LFG-now voice helpers.
     // forwardRef: UsersModule → DiscordBotModule → … → AdminModule.
     forwardRef(() => UsersModule),
+    // ROK-1788 L4: DemoTestGuildDiscordController registers fabricated
+    // channels in the mirror. forwardRef: ChannelMirrorModule → DiscordBotModule
+    // → … → AdminModule is the same cycle as above.
+    forwardRef(() => ChannelMirrorModule),
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
   controllers: [
@@ -132,6 +138,7 @@ import { UsersModule } from '../users/users.module';
     DemoTestSignInLinkController,
     DemoTestBrowserSessionController,
     DemoTestGuildController,
+    DemoTestGuildDiscordController,
     DemoTestGameRolesController,
     DemoTestJoinPostController,
     AiChatTestController,
