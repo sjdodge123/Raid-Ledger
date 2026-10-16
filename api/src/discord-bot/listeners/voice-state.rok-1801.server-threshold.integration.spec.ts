@@ -30,12 +30,14 @@ import {
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { AdHocNotificationService } from '../services/ad-hoc-notification.service';
 import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
 import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
 import { VoiceStateListener } from './voice-state.listener';
 import { handleChannelJoin } from './voice-state-join-dispatch.handlers';
 import { buildDiscordMember } from './voice-state.helpers';
+import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 import { __resetTraceState } from './voice-gate-trace';
 
 const GUILD_ID = 'guild-1801';
@@ -148,21 +150,21 @@ const serverPlayer = (steamId: string): ServerRosterPlayer => ({
   name: `Viking-${steamId.slice(-2)}`,
 });
 
-/** Put a member in the fake voice channel, playing Valheim. */
-function seatInVoice(id: string): GuildMember {
+/** Put a member in the fake voice channel, playing `game` (Valheim). */
+function seatInVoice(id: string, game = VALHEIM): GuildMember {
   const m: FakeMember = {
     id,
     displayName: id,
     user: { id, username: id, avatar: null, bot: false },
-    presence: { activities: [{ type: ActivityType.Playing, name: VALHEIM }] },
+    presence: { activities: [{ type: ActivityType.Playing, name: game }] },
     voice: { channelId: CHANNEL_ID },
   };
   voiceMembers.set(id, m);
   return m as unknown as GuildMember;
 }
 
-async function joinVoice(id: string): Promise<void> {
-  const gm = seatInVoice(id);
+async function joinVoice(id: string, game = VALHEIM): Promise<void> {
+  const gm = seatInVoice(id, game);
   await handleChannelJoin(
     listener['joinCtx'],
     CHANNEL_ID,
@@ -268,5 +270,69 @@ describe('general lobby — CHANGED marks the card dirty and re-checks (Q6)', ()
       });
     expect(markDirty).toHaveBeenCalledWith(CHANNEL_ID);
     expect(await valheimQuickPlays()).toBe(1);
+  });
+});
+
+describe('general lobby — a server-driven join leaves the prior game event (Codex r2 P2)', () => {
+  const VOICE_B = '1801000000000000102';
+  const VOICE_C = '1801000000000000103';
+  const VOICE_D = '1801000000000000104';
+
+  /** Seed Rust, seat A+B on Rust and C+D on Valheim, and spawn both events. */
+  async function twoRunningEvents(): Promise<{
+    bindingId: string;
+    rust: number;
+  }> {
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Rust', slug: 'rust', coverUrl: null, igdbId: null })
+        .returning({ id: schema.games.id }),
+      'rust',
+    );
+    for (const [id, game] of [
+      [VOICE_A, 'Rust'],
+      [VOICE_B, 'Rust'],
+      [VOICE_C, VALHEIM],
+      [VOICE_D, VALHEIM],
+    ] as const)
+      await joinVoice(id, game);
+    const ctx = listener['joinCtx'];
+    const [binding] = nonEmpty(
+      await ctx.resolveAllBindings(CHANNEL_ID),
+      'binding',
+    );
+    // Mixed games → the 15-min timers; fire their spawns directly.
+    for (const gameId of [row.id, valheim])
+      await handleGeneralLobbyGroupDetection(
+        ctx.deps,
+        CHANNEL_ID,
+        binding,
+        gameId,
+      );
+    return { bindingId: binding.bindingId, rust: row.id };
+  }
+
+  it('A (Rust event, presence unchanged) joins the Valheim server → moved, not in both', async () => {
+    await linkVoiceAToSteamA();
+    await useGeneralLobby();
+    const { bindingId, rust } = await twoRunningEvents();
+    const svc = testApp.app.get(AdHocEventService);
+    expect(svc.getActiveState(bindingId, rust)?.memberSet.has(VOICE_A)).toBe(
+      true,
+    );
+    onServer = [serverPlayer(STEAM_A)];
+    await testApp.app
+      .get(EventEmitter2)
+      .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
+        pelicanServerId: serverSeq,
+        gameId: valheim,
+      });
+    expect(svc.getActiveState(bindingId, valheim)?.memberSet.has(VOICE_A)).toBe(
+      true,
+    );
+    expect(svc.getActiveState(bindingId, rust)?.memberSet.has(VOICE_A)).toBe(
+      false,
+    );
   });
 });
