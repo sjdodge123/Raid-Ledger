@@ -9,7 +9,7 @@ import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { discordMessage, okMirror } from '../../../test/mocks/guild-discord-handlers';
+import { PRIVATE_CHANNEL, discordMessage, okMirror } from '../../../test/mocks/guild-discord-handlers';
 import { GuildDiscordMirror } from './guild-discord-mirror';
 
 const URL = 'http://localhost:3000/plugins/wow/guilds/7/discord';
@@ -127,5 +127,23 @@ describe('GuildDiscordMirror — degraded states stay inside the card', () => {
         renderCard(false);
         const error = await screen.findByTestId('guild-discord-error');
         expect(screen.getByTestId('guild-discord-mirror')).toContainElement(error);
+    });
+});
+
+describe('GuildDiscordMirror — private tag (spec: Pill/StatusChip on a private bound channel)', () => {
+    it('tags a private bound channel "Private" on the card, for a non-editor too', async () => {
+        serve(okMirror([discordMessage(1)], PRIVATE_CHANNEL));
+        renderCard(false);
+        await screen.findByRole('heading', { name: '#officers' });
+        const tag = screen.queryByTestId('guild-discord-private');
+        expect(tag?.textContent?.trim(), 'a private bound channel must show a "Private" tag on the card').toBe('Private');
+    });
+
+    it('shows no Private tag on a public bound channel', async () => {
+        serve(okMirror([discordMessage(1)]));
+        renderCard(true);
+        await screen.findByRole('heading', { name: '#announcements' });
+        expect(screen.queryByTestId('guild-discord-private')).toBeNull();
+        expect(screen.getByTestId('guild-discord-change')).toBeInTheDocument();
     });
 });

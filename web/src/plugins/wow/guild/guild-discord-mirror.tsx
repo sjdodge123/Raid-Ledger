@@ -12,7 +12,7 @@ import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDt
 import { ThreadMessageRow } from '../../../components/discord/ThreadMessageRow';
 import { Button } from '../../../components/ui/button';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { Card, SectionTitle } from './guild-bits';
+import { Card, Pill, SectionTitle } from './guild-bits';
 import { boundChannelId, latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
 
@@ -99,6 +99,24 @@ function MirrorError(): JSX.Element {
     return <p role="alert" className="text-sm text-danger" data-testid="guild-discord-error">Couldn’t load the Discord channel. Try again later.</p>;
 }
 
+/** Spec D8/§UI: a private bound channel carries a "Private" tag on the card itself, for every viewer. */
+function PrivateTag(): JSX.Element {
+    return (
+        <span data-testid="guild-discord-private" title="Private Discord channel — everyone who can open this guild page sees it here">
+            <Pill><LockClosedIcon className="h-3 w-3" aria-hidden="true" /> Private</Pill>
+        </span>
+    );
+}
+
+function headerAction({ mirror, canEdit, onChange }: { mirror: GuildDiscordMirrorDto | undefined; canEdit: boolean; onChange: () => void }): JSX.Element | undefined {
+    const isPrivate = mirror?.state === 'ok' && mirror.channel.visibility === 'private';
+    const change = canEdit && mirror && mirror.state !== 'unset'
+        ? <Button variant="ghost" size="sm" onClick={onChange} data-testid="guild-discord-change">Change channel</Button>
+        : null;
+    if (!isPrivate && !change) return undefined;
+    return <div className="flex items-center gap-2">{isPrivate && <PrivateTag />}{change}</div>;
+}
+
 /** Hidden while loading (no layout jump) and for non-editors while nothing is bound. */
 export function GuildDiscordMirror({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element | null {
     const [picking, setPicking] = useState(false);
@@ -106,14 +124,12 @@ export function GuildDiscordMirror({ guildId, canEdit }: { guildId: number; canE
     const mirror = query.data;
     if (query.isPending || (mirror?.state === 'unset' && !canEdit)) return null;
     const open = (): void => setPicking(true);
-    const change = canEdit && mirror && mirror.state !== 'unset'
-        ? <Button variant="ghost" size="sm" onClick={open} data-testid="guild-discord-change">Change channel</Button>
-        : undefined;
+    const action = headerAction({ mirror, canEdit, onChange: open });
     return (
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
-                blurb={mirrorBlurb(mirror)} action={change} />
+                blurb={mirrorBlurb(mirror)} action={action} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
             {canEdit && picking && (
                 <Suspense fallback={null}>
