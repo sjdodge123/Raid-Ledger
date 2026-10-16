@@ -46,6 +46,8 @@ export class PendingServerPlayers {
       source,
       players: new Map<string, Held>(),
     };
+    // Codex r2: a remapped server's holds route to its CURRENT game.
+    entry.source = source;
     entry.players.set(player.steamId, { player, state: 'confirmed' });
     this.held.set(source.pelicanServerId, entry);
     return this.players(source.pelicanServerId).length;
@@ -67,6 +69,7 @@ export class PendingServerPlayers {
 
   remove(pelicanServerId: number, steamId: string): void {
     this.held.get(pelicanServerId)?.players.delete(steamId);
+    this.prune(pelicanServerId);
   }
 
   clear(pelicanServerId: number): void {
@@ -115,7 +118,14 @@ export class PendingServerPlayers {
       out.push(h.player);
       entry.players.delete(steamId);
     }
+    this.prune(pelicanServerId);
     return out;
+  }
+
+  /** Codex r2: an empty entry must not keep a stale `source` alive. */
+  private prune(pelicanServerId: number): void {
+    if (this.held.get(pelicanServerId)?.players.size === 0)
+      this.held.delete(pelicanServerId);
   }
 
   hasGame(gameId: number): boolean {
