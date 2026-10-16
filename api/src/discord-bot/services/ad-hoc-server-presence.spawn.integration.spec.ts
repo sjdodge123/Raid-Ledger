@@ -216,3 +216,110 @@ describe('renames (n1)', () => {
     expect(await steamIdsOf(event.id)).toEqual([STEAM_A, STEAM_B]);
   });
 });
+
+/** A live ad-hoc event for the seeded game, inserted directly (newest id). */
+async function insertLiveEvent(): Promise<number> {
+  const now = Date.now();
+  const inserted = await testApp.db
+    .insert(e)
+    .values({
+      title: 'Valheim — Quick Play (other binding)',
+      creatorId: testApp.seed.adminUser.id,
+      gameId: testApp.seed.game.id,
+      duration: [new Date(now - 60_000), new Date(now + 3_600_000)],
+      isAdHoc: true,
+      adHocStatus: 'live',
+    })
+    .returning();
+  return nonEmpty(inserted, 'live event')[0].id;
+}
+
+/** Bounded poll for an async listener's write; the caller asserts after. */
+async function until(cond: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 100 && !(await cond()); i++)
+    await new Promise((r) => setTimeout(r, 30));
+}
+
+const openRow = async (eventId: number, steamId: string) =>
+  nonEmpty(
+    await testApp.db
+      .select()
+      .from(t)
+      .where(and(eq(t.eventId, eventId), eq(t.steamId, steamId))),
+    `row ${steamId}`,
+  )[0];
+
+describe('Codex r2 — leaves route to the enrolled event', () => {
+  it('a server departure closes the row on its own event, not the newest', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    await sink.playerJoined(src, player(STEAM_B));
+    const [serverEvent] = nonEmpty(await adHocEvents(), 'server event');
+    const newer = await insertLiveEvent();
+    expect(newer).toBeGreaterThan(serverEvent.id);
+
+    await sink.playerLeft(src, STEAM_A);
+
+    const row = await openRow(serverEvent.id, STEAM_A);
+    expect({ closed: row.leftAt !== null, onServer: row.onServer }).toEqual({
+      closed: true,
+      onServer: false,
+    });
+    expect(await sink.openPresence(src)).toEqual([player(STEAM_B)]);
+  });
+});
+
+describe('Codex r2 — held players drain when any source spawns', () => {
+  it('a voice-born Quick Play takes a player held below minPlayers', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    const bindingId = await bindGame();
+
+    await adHoc.handleVoiceJoin(
+      bindingId,
+      voiceMember('fc-voice-drain'),
+      { gameId: testApp.seed.game.id, config: null },
+      testApp.seed.game.id,
+    );
+    const [event] = nonEmpty(await adHocEvents(), 'voice-born event');
+    await until(async () => (await steamIdsOf(event.id)).includes(STEAM_A));
+
+    expect(await steamIdsOf(event.id)).toEqual(
+      [STEAM_A, 'fc-voice-drain'].sort(),
+    );
+  });
+
+  it("another server's spawn takes a player held on this server", async () => {
+    const one = source();
+    const two = { ...source(), gameId: one.gameId };
+    await sink.playerJoined(one, player(STEAM_A));
+    await sink.playerJoined(two, player(STEAM_B));
+    await sink.playerJoined(two, player(STEAM_C));
+    const [event] = nonEmpty(await adHocEvents(), 'spawned event');
+
+    expect(await steamIdsOf(event.id)).toEqual([STEAM_A, STEAM_B, STEAM_C]);
+    expect(await sink.openPresence(one)).toEqual([player(STEAM_A)]);
+  });
+});
+
+describe('Codex r2 — a raced voice spawn keeps its first joiner', () => {
+  it("the first joiner's voice leave still closes their row", async () => {
+    const bindingId = await bindGame();
+    const gameId = testApp.seed.game.id;
+    const binding = { gameId, config: null };
+    await Promise.all([
+      adHoc.handleVoiceJoin(bindingId, voiceMember('fc-v1'), binding, gameId),
+      adHoc.handleVoiceJoin(bindingId, voiceMember('fc-v2'), binding, gameId),
+    ]);
+    const [event] = nonEmpty(await adHocEvents(), 'raced event');
+    expect((await steamIdsOf(event.id)).sort()).toEqual(['fc-v1', 'fc-v2']);
+
+    await adHoc.handleVoiceLeave(bindingId, 'fc-v1');
+
+    const rows = await testApp.db
+      .select()
+      .from(t)
+      .where(and(eq(t.eventId, event.id), eq(t.discordUserId, 'fc-v1')));
+    expect(nonEmpty(rows, 'fc-v1 row')[0].leftAt).not.toBeNull();
+  });
+});
