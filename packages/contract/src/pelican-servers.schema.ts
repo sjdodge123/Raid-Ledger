@@ -55,11 +55,6 @@ export type PelicanSyncResult = z.infer<typeof PelicanSyncResultSchema>;
 
 const isoOrNull = z.iso.datetime({ offset: true }).nullable();
 
-/**
- * One row of `GET /admin/plugins/pelican/servers`. `.strict()` so a leaked
- * `panelUuid` / `identifier` fails the server's own response parse — no
- * uuid, identifier, node or address ever leaves the API.
- */
 /** A plugin named in an admin hint: its id and display name (ROK-1819). */
 export const PelicanPresencePluginRefSchema = z
   .object({ pluginId: z.string().min(1), pluginName: z.string().min(1) })
@@ -68,6 +63,11 @@ export type PelicanPresencePluginRef = z.infer<
   typeof PelicanPresencePluginRefSchema
 >;
 
+/**
+ * One row of `GET /admin/plugins/pelican/servers`. `.strict()` so a leaked
+ * `panelUuid` / `identifier` fails the server's own response parse — no
+ * uuid, identifier, node or address ever leaves the API.
+ */
 export const PelicanServerRowSchema = z
   .object({
     id: z.number().int().positive(),
