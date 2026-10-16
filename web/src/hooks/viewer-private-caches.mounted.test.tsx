@@ -99,3 +99,92 @@ describe('ROK-1811 Codex r3 P2: a mounted public lineup across a cross-tab logou
         expect(fetchPrefs).toHaveBeenCalledTimes(1);
     });
 });
+
+/** Stands in for `useCalendarsOverview`: reads the token at render without subscribing to it. */
+const fetchCalendars = vi.fn(async (): Promise<string> => {
+    const token = getAccessToken();
+    if (token === null) throw new Error('unauthenticated request');
+    return `calendars for ${String(readClaims(token)?.sub)}`;
+});
+
+function Calendars() {
+    const { data } = useQuery({
+        queryKey: ['calendars', 'overview'],
+        queryFn: fetchCalendars,
+        enabled: getAccessToken() !== null,
+        staleTime: Infinity,
+        retry: false,
+    });
+    return <p>{data ?? 'no calendars'}</p>;
+}
+
+describe('ROK-1811 Codex r4 P2a: a mounted token-gated query across a cross-tab re-mint', () => {
+    let queryClient: QueryClient;
+    let uninstall: () => void;
+
+    beforeEach(async () => {
+        fetchCalendars.mockClear();
+        setAccessToken(jwt({ sub: 9 }));
+        queryClient = new QueryClient();
+        uninstall = installViewerPrivateCacheGuard(queryClient);
+        render(<QueryClientProvider client={queryClient}><Calendars /></QueryClientProvider>);
+        expect(await screen.findByText('calendars for 9')).toBeTruthy();
+        // followIdentityChange: clear the token and drop BEFORE awaiting the refresh.
+        act(() => {
+            clearAccessToken();
+            dropViewerPrivateCaches(queryClient);
+        });
+        expect(await screen.findByText('no calendars')).toBeTruthy();
+        // Precondition: the hook re-rendered with no token, so its observer is now disabled.
+        expect(queryClient.getQueryCache().find({ queryKey: ['calendars', 'overview'] })?.isActive()).toBe(false);
+    });
+    afterEach(() => {
+        uninstall();
+        clearAccessToken();
+    });
+
+    it.each([9, 2])('a re-mint as sub %i fetches it again although it re-rendered disabled', async (sub) => {
+        act(() => { setAccessToken(jwt({ sub })); });
+        await waitFor(() => { expect(fetchCalendars).toHaveBeenCalledTimes(2); });
+        expect(await screen.findByText(`calendars for ${String(sub)}`)).toBeTruthy();
+        await waitFor(() => { expect(queryClient.isFetching()).toBe(0); });
+        expect(fetchCalendars).toHaveBeenCalledTimes(2);
+    });
+});
+
+/** Stands in for `getSystemStatus` (PrivacyPage's community name/contact): token-less, viewer-free. */
+const fetchSystemStatus = vi.fn(async (): Promise<string> => 'community Raiders, contact privacy@example.test');
+
+function PrivacyStatus() {
+    const { data, isPending } = useQuery({ queryKey: ['system', 'status'], queryFn: fetchSystemStatus, retry: false });
+    return <p>{isPending ? 'status pending' : data}</p>;
+}
+
+describe('ROK-1811 Codex r4 P2b: a mounted system status across a cross-tab logout', () => {
+    let queryClient: QueryClient;
+
+    beforeEach(async () => {
+        fetchPrefs.mockClear();
+        fetchSystemStatus.mockClear();
+        setAccessToken(jwt({ sub: 9 }));
+        queryClient = new QueryClient();
+        render(<QueryClientProvider client={queryClient}><PrivacyStatus /><Prefs /></QueryClientProvider>);
+        expect(await screen.findByText('community Raiders, contact privacy@example.test')).toBeTruthy();
+        expect(await screen.findByText('preferences for 9')).toBeTruthy();
+    });
+    afterEach(() => { clearAccessToken(); });
+
+    it('keeps the community data on screen while the private query empties without firing', async () => {
+        act(() => {
+            clearAccessToken();
+            dropViewerPrivateCaches(queryClient);
+        });
+        await waitFor(() => { expect(screen.queryByText('preferences for 9')).toBeNull(); });
+        expect(screen.queryByText('status pending')).toBeNull();
+        expect(screen.getByText('community Raiders, contact privacy@example.test')).toBeTruthy();
+        expect(queryClient.getQueryData(['system', 'status'])).toBe('community Raiders, contact privacy@example.test');
+        await waitFor(() => { expect(queryClient.isFetching()).toBe(0); });
+        expect(fetchPrefs).toHaveBeenCalledTimes(1);
+        expect(fetchSystemStatus).toHaveBeenCalledTimes(1);
+    });
+});
