@@ -5,11 +5,13 @@
  */
 import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { formatDistanceToNow } from 'date-fns';
+import { Link } from 'react-router-dom';
 import type { IgdbGameDto, PelicanServerRowDto, PelicanServerUpdate } from '@raid-ledger/contract';
 import { Switch } from '../../../components/ui/switch';
 import { GameSearchInput } from '../../../components/events/game-search-input';
 import { PelicanStateChip } from './pelican-state-chip';
-import { quickPlayHint } from './pelican-servers.helpers';
+import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { PLUGINS_HREF, quickPlayHint, quickPlayPluginToActivate } from './pelican-servers.helpers';
 
 export type ServerUpdateHandler = (id: number, patch: PelicanServerUpdate, gameName?: string | null) => void;
 
@@ -107,8 +109,21 @@ function QuickPlaySwitch({ row, onUpdate, inline = false }: ControlProps<'row' |
                 testId={`pelican-server-${row.id}-quick-play`} disabled={hint !== null && !row.presenceTracking}
                 {...(hint === null ? {} : { 'aria-describedby': hintId })}
                 onChange={(presenceTracking) => onUpdate(row.id, { presenceTracking })} />
-            {hint !== null && <p id={hintId} className="text-xs text-muted">{hint}</p>}
+            {hint !== null && <QuickPlayHint row={row} id={hintId} hint={hint} />}
         </div>
+    );
+}
+
+/** The switch's helper line; an inactive parser plugin links to the Plugins panel to turn it on (ROK-1819). */
+function QuickPlayHint({ row, id, hint }: { row: PelicanServerRowDto; id: string; hint: string }) {
+    const plugin = quickPlayPluginToActivate(row);
+    if (plugin === null) return <p id={id} className="text-xs text-muted">{hint}</p>;
+    return (
+        <p id={id} className="text-xs text-muted">
+            <Link to={PLUGINS_HREF} className={`rounded-sm text-success underline underline-offset-2 ${FOCUS_RING}`}>
+                Turn on the {plugin} plugin
+            </Link>{' '}to detect Quick Play
+        </p>
     );
 }
 
