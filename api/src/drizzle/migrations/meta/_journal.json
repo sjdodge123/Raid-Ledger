@@ -1534,6 +1534,13 @@
       "when": 1792109595724,
       "tag": "0219_valheim_presence",
       "breakpoints": true
+    },
+    {
+      "idx": 220,
+      "version": "7",
+      "when": 1792134054427,
+      "tag": "0220_calendar_feeds",
+      "breakpoints": true
     }
   ]
 }
