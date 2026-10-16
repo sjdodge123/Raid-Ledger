@@ -17,6 +17,7 @@ import { checkSuppression } from './ad-hoc-spawn-clearance';
 import { getEventById } from './ad-hoc-event.helpers';
 import {
   findLiveGameAdHocEvent,
+  hasOpenServerPlayers,
   listOnServerSteamIds,
   listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
@@ -30,6 +31,7 @@ jest.mock('./ad-hoc-event.helpers', () => ({
 jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findLiveGameAdHocEvent: jest.fn(),
+  hasOpenServerPlayers: jest.fn(),
   listServerEnrolledEvents: jest.fn(),
   listOnServerSteamIds: jest.fn(),
 }));
@@ -119,11 +121,39 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   });
 
   it('the voice-leave safety net enrols tracked players and answers true', async () => {
+    jest.mocked(hasOpenServerPlayers).mockResolvedValue(true);
     const svc = serviceWith([ON_SERVER]);
     await expect(
       svc.onTrackerEnrol({ eventId: 278, gameId: 10 }),
     ).resolves.toBe(true);
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it('the safety net answers false when the event is no longer live', async () => {
+    jest.mocked(hasOpenServerPlayers).mockResolvedValue(true);
+    jest
+      .mocked(getEventById)
+      .mockResolvedValue(eventRow({ adHocStatus: 'ended' }));
+    const svc = serviceWith([ON_SERVER]);
+    await expect(
+      svc.onTrackerEnrol({ eventId: 278, gameId: 10 }),
+    ).resolves.toBe(false);
+    expect(attachServerPlayer).not.toHaveBeenCalled();
+  });
+
+  it('the safety net answers false when the tracked player left before the enrol ran', async () => {
+    const players = [ON_SERVER];
+    jest.mocked(getEventById).mockImplementation(() => {
+      players.length = 0; // the leave landed while the enrol waited its turn
+      return Promise.resolve(eventRow());
+    });
+    jest.mocked(hasOpenServerPlayers).mockResolvedValue(false);
+    const svc = serviceWith(players);
+    await expect(
+      svc.onTrackerEnrol({ eventId: 278, gameId: 10 }),
+    ).resolves.toBe(false);
+    expect(attachServerPlayer).not.toHaveBeenCalled();
+    expect(hasOpenServerPlayers).toHaveBeenCalledWith(expect.anything(), 278);
   });
 
   it('an unbound reader (ModuleRef.get throws) reads as nobody tracked', async () => {

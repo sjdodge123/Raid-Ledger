@@ -8,9 +8,13 @@
  * a player already open on that server is skipped (no second
  * PARTICIPANT_JOINED, no duplicate row).
  */
+import type { ModuleRef } from '@nestjs/core';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import type { ServerPresenceReader } from '../../plugins/pelican/presence/server-presence.reader';
+import {
+  SERVER_PRESENCE_READER,
+  type ServerPresenceReader,
+} from '../../plugins/pelican/presence/server-presence.reader';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
 import { getEventById } from './ad-hoc-event.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
@@ -19,6 +23,7 @@ import {
   type PresenceEffectsDeps,
 } from './ad-hoc-server-presence.effects';
 import {
+  hasOpenServerPlayers,
   listOnServerSteamIds,
   listOpenServerPresence,
   listServerEnrolledEvents,
@@ -30,6 +35,26 @@ export interface EnrolDeps {
   fx: PresenceEffectsDeps;
   pending: PendingServerPlayers;
   reader: ServerPresenceReader | null;
+}
+
+/**
+ * The tracker, resolved at call time (review BLOCKER 1): the sink must not
+ * constructor-inject it — sink -> reader -> supervisor -> sink is a DI cycle
+ * that hangs Nest boot. Unbound (plugin absent) reads as no reader.
+ */
+export function lazyReader(
+  moduleRef: ModuleRef | null,
+): ServerPresenceReader | null {
+  try {
+    const opts = { strict: false };
+    const r = moduleRef?.get<ServerPresenceReader>(
+      SERVER_PRESENCE_READER,
+      opts,
+    );
+    return r ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** The tracker's players for `gameId`, grouped by Pelican server. */
@@ -135,4 +160,20 @@ export async function liveEventFor(
   const { id, channelBindingId, adHocStatus } = event;
   if (adHocStatus !== 'live' && adHocStatus !== 'grace_period') return null;
   return { id, channelBindingId, adHocStatus };
+}
+
+/**
+ * ROK-1821 voice-leave safety net: enrol the tracked players into `eventId`.
+ * True only when it is still live and someone is open on a server afterwards
+ * (review MAJOR 2: a player who left before this ran enrolled nobody).
+ */
+export async function enrolTrackerInto(
+  deps: EnrolDeps,
+  eventId: number,
+  gameId: number,
+): Promise<boolean> {
+  const live = await liveEventFor(deps.fx.db, eventId, gameId);
+  if (!live) return false;
+  await enrolGame(deps, gameId, live);
+  return hasOpenServerPlayers(deps.fx.db, live.id);
 }

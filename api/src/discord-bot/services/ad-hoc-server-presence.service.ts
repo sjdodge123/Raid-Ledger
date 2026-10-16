@@ -4,10 +4,7 @@ import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
-import {
-  SERVER_PRESENCE_READER,
-  type ServerPresenceReader,
-} from '../../plugins/pelican/presence/server-presence.reader';
+import type { ServerPresenceReader } from '../../plugins/pelican/presence/server-presence.reader';
 import type {
   ServerPresencePlayer,
   ServerPresenceSink,
@@ -34,9 +31,10 @@ import {
 import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   enrolGame,
+  enrolTrackerInto,
   hasAnyoneToEnrol,
   hasTrackedPlayers,
-  liveEventFor,
+  lazyReader,
   openServerRows,
   type EnrolDeps,
 } from './ad-hoc-server-enrol.helpers';
@@ -221,37 +219,23 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
 
   /**
    * ROK-1821 safety net: a voice leave found nobody open on the server while
-   * the tracker reports players — enrol them into that event now.
+   * the tracker reports players — enrol them into that event now. True only
+   * when the event (still live) has someone open on a server afterwards.
    */
   @OnEvent(SERVER_TRACKER_ENROL)
   onTrackerEnrol(p: ServerTrackerEnrolPayload): Promise<boolean> {
     if (!hasTrackedPlayers(this.reader, p.gameId))
       return Promise.resolve(false);
-    return this.serial<boolean>(p.gameId, async () => {
-      const live = await liveEventFor(this.db, p.eventId, p.gameId);
-      if (live) await enrolGame(this.enrol, p.gameId, live);
-      return true;
-    });
+    return this.serial<boolean>(p.gameId, () =>
+      enrolTrackerInto(this.enrol, p.eventId, p.gameId),
+    );
   }
 
   // ─── Private ──────────────────────────────────────────
 
-  /**
-   * The tracker, resolved at call time (review BLOCKER 1): a constructor
-   * inject closes sink -> reader -> supervisor -> sink and hangs Nest boot.
-   * Unbound (plugin absent) reads as no reader.
-   */
+  /** The tracker, resolved per call (review BLOCKER 1 — see `lazyReader`). */
   private get reader(): ServerPresenceReader | null {
-    try {
-      const opts = { strict: false };
-      const r = this.moduleRef?.get<ServerPresenceReader>(
-        SERVER_PRESENCE_READER,
-        opts,
-      );
-      return r ?? null;
-    } catch {
-      return null;
-    }
+    return lazyReader(this.moduleRef);
   }
 
   private get enrol(): EnrolDeps {
