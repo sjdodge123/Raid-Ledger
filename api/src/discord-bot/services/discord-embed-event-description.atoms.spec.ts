@@ -21,7 +21,7 @@ describe('eventDescriptionExcerpt — atomic chunks (ROK-1804)', () => {
     const text = [
       `Bring ${EMOJI} <a:hype_train:42> and read ${URL}`,
       'or <https://example.com/a_b> or [the_guide](https://example.com/x_y)',
-      'at <t:1700000000:R> with <@123> in <#456>; my snake_case note, ~~maybe',
+      'at <t:1700000000:R> with <@123> in <#456>; my snake_case note, ~~maybe~~',
     ].join('\n');
     expect(eventDescriptionExcerpt(text)).toBe(text);
   });
@@ -55,5 +55,15 @@ describe('eventDescriptionExcerpt — atomic chunks (ROK-1804)', () => {
     const long = `https://example.com/${'p'.repeat(60)}`;
     const text = `${'a'.repeat(250)} ${short} ${long}`;
     expect(eventDescriptionExcerpt(text)).toBe(`${'a'.repeat(250)} ${short} …`);
+  });
+
+  it.each([
+    ['a trailing _', 'https://example.com/file_'],
+    ['a trailing )', '(https://example.com/raid_guide)'],
+    ['a trailing _)', '(https://example.com/a_b_)'],
+  ])('keeps the … out of a URL ending in %s (ROK-1806)', (_, tail) => {
+    const long = `https://example.com/${'p'.repeat(60)}`;
+    const text = `${'a'.repeat(250)} ${tail} ${long}`;
+    expect(eventDescriptionExcerpt(text)).toBe(`${'a'.repeat(250)} ${tail} …`);
   });
 });
