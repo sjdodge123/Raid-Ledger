@@ -25,6 +25,7 @@ A discord.js v14 bot. CI-compatible, stable, uses official Discord APIs.
   - Voice: `joinVoice(channelId)`, `leaveVoice()`, `moveToChannel(channelId)`, `getVoiceMembers(channelId)`
   - Interactions: `clickButton()`, `selectDropdownOption()` (limited — bots can't click other bots' buttons via Discord API)
   - Deterministic polling (replaces `sleep()`): `pollForEmbed(channelId, predicate, timeout)`, `waitForEmbedUpdate(channelId, predicate, timeout)`, `waitForDM(userId, predicate, timeout)`, `pollForCondition(check, timeout)` — see `tools/test-bot/src/helpers/polling.ts`
+- **Voice threshold allowlist (ROK-1711):** the API skips bots in the voice game-filtered count, so the companion bot only counts toward `minPlayers` when its user id is in the API's `VOICE_THRESHOLD_BOT_ALLOWLIST` under `DEMO_MODE` (CI derives it from `TEST_BOT_TOKEN`, fleet envs from `RL_TEST_BOT_USER_ID` on the VM, local from root `.env`).
 - **Key limitation:** bots cannot interact with other bots' message components. Test button/interaction handlers directly in NestJS integration tests instead.
 
 ## MCP Discord tools (`tools/mcp-discord/`) — UI-level verification
