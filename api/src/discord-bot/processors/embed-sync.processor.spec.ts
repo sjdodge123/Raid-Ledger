@@ -664,18 +664,38 @@ describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
       'https://raid.example.com',
     );
 
+    // The bump currently reads a stale 1/10; the fetched message is edited.
+    const bumpEdit = jest.fn().mockResolvedValue({ id: 'bump-msg-001' });
+    const fetchBumpChannel = jest.fn().mockResolvedValue({
+      send: jest.fn(),
+      messages: {
+        fetch: jest.fn().mockResolvedValue({
+          embeds: [
+            { title: 'stale', description: '1/10 spots filled', fields: [] },
+          ],
+          edit: bumpEdit,
+        }),
+      },
+    });
+    (clientService as unknown as Record<string, jest.Mock>).getClient = jest
+      .fn()
+      .mockReturnValue({
+        isReady: () => true,
+        channels: { fetch: fetchBumpChannel },
+      });
+
     const job = {
       data: { eventId: 42, reason: 'signup' },
     } as Job<EmbedSyncJobData>;
     await processor.process(job);
 
-    const bumpEdit = (clientService.editEmbed as jest.Mock).mock.calls.find(
-      (c: unknown[]) => c[1] === 'bump-msg-001',
-    ) as unknown[] | undefined;
-    expect(bumpEdit?.[0]).toBe('channel-789');
-    const description = (bumpEdit?.[2] as EmbedBuilder | undefined)?.toJSON()
-      .description;
-    expect(description).toContain('3/10 spots filled');
+    expect(fetchBumpChannel).toHaveBeenCalledWith('channel-789');
+    const payload = bumpEdit.mock.calls[0] as
+      [{ embeds: EmbedBuilder[] }] | undefined;
+    if (!payload) throw new Error('expected the bump to be edited, it was not');
+    const [embed] = payload[0].embeds;
+    if (!embed) throw new Error('bump edit carried no embed');
+    expect(embed.toJSON().description).toContain('3/10 spots filled');
   });
 
   it('does not throw when bump message deletion fails (graceful)', async () => {

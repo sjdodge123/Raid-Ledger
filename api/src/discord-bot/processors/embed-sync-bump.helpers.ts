@@ -5,19 +5,28 @@
  * carries an "N/M spots filled" snapshot. Every embed sync brings it in line
  * with the event, piggybacking the existing job (no timer of its own):
  *
- * - FULL → the bump is deleted and its ids cleared (ROK-728).
+ * - FULL / CANCELLED / COMPLETED → the bump is deleted and its ids cleared
+ *   (ROK-728; a cancelled or finished event has no spots to advertise either).
  * - otherwise → the card is rebuilt with the SAME builder the reminder used
  *   and edited in place, so its count tracks the event embed (ROK-1812).
+ *   The edit is skipped when the posted card already reads the same: the
+ *   message is fetched anyway (an edit needs it), so comparing against it
+ *   costs no extra Discord call and saves the PATCH on every sync that did
+ *   not move the count (title edits, role moves, state transitions).
  *
  * Nothing here throws: a bump is a side-car to the event embed, and a fault
  * on it must never fail (or retry) the sync. A deleted bump (Discord 10008)
  * clears the stored ids so later syncs stop chasing it.
  */
 import { eq } from 'drizzle-orm';
+import type { EmbedBuilder, Message } from 'discord.js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
-import { isUnknownMessage } from '../discord-bot-client.messages.helpers';
+import {
+  fetchMessageOrNull,
+  isUnknownMessage,
+} from '../discord-bot-client.messages.helpers';
 import { EMBED_STATES, type EmbedState } from '../discord-bot.constants';
 import type {
   EmbedContext,
@@ -32,7 +41,7 @@ type EventMessageRow = typeof schema.discordEventMessages.$inferSelect;
 
 export interface BumpSyncDeps {
   db: PostgresJsDatabase<typeof schema>;
-  clientService: Pick<DiscordBotClientService, 'editEmbed' | 'deleteMessage'>;
+  clientService: Pick<DiscordBotClientService, 'getClient' | 'deleteMessage'>;
   logger: { log(message: string): void; warn(message: string): void };
 }
 
@@ -43,7 +52,14 @@ export interface BumpSyncInput {
   context: EmbedContext;
 }
 
-/** Delete (FULL) or re-count (any other state) the record's bump. Never throws. */
+/** States in which a "Spots still available" card is wrong — delete it. */
+const BUMP_DELETE_STATES: ReadonlySet<EmbedState> = new Set<EmbedState>([
+  EMBED_STATES.FULL,
+  EMBED_STATES.CANCELLED,
+  EMBED_STATES.COMPLETED,
+]);
+
+/** Delete (FULL/CANCELLED/COMPLETED) or re-count the record's bump. Never throws. */
 export async function reconcileBumpMessage(
   deps: BumpSyncDeps,
   input: BumpSyncInput,
@@ -53,7 +69,7 @@ export async function reconcileBumpMessage(
   // Legacy rows predating the column fall back to the embed's channel (ROK-1335).
   const channelId = record.bumpChannelId ?? record.channelId;
   const target = { channelId, messageId: record.bumpMessageId };
-  if (newState === EMBED_STATES.FULL) {
+  if (BUMP_DELETE_STATES.has(newState)) {
     await deleteBump(deps, record.id, target, eventData.id);
     return;
   }
@@ -65,7 +81,7 @@ interface BumpTarget {
   messageId: string;
 }
 
-/** ROK-728: the event filled up — the "spots available" card is now wrong. */
+/** ROK-728: the event filled up (or ended) — the "spots available" card is now wrong. */
 async function deleteBump(
   deps: BumpSyncDeps,
   recordId: string,
@@ -102,12 +118,17 @@ async function refreshBumpCount(
       input.context.timezone ?? 'UTC',
       input.context.communityName ?? null,
     );
-    await deps.clientService.editEmbed(
+    const message = await fetchMessageOrNull(
+      deps.clientService.getClient(),
       target.channelId,
       target.messageId,
-      embed,
-      row,
     );
+    if (!message) {
+      await forgetMissingBump(deps, input.record.id, eventId);
+      return;
+    }
+    if (cardUnchanged(message, embed)) return;
+    await message.edit({ embeds: [embed], components: [row] });
   } catch (err) {
     await handleEditFailure(deps, input.record.id, target, eventId, err);
   }
@@ -127,6 +148,15 @@ async function handleEditFailure(
     );
     return;
   }
+  await forgetMissingBump(deps, recordId, eventId);
+}
+
+/** The bump is gone (10008) — clear its ids so later syncs stop chasing it. */
+async function forgetMissingBump(
+  deps: BumpSyncDeps,
+  recordId: string,
+  eventId: number,
+): Promise<void> {
   try {
     await clearBumpIds(deps.db, recordId);
     deps.logger.log(
@@ -137,6 +167,26 @@ async function handleEditFailure(
       `Failed to clear missing bump ids for event ${eventId}: ${errorText(clearErr)}`,
     );
   }
+}
+
+/**
+ * Does the posted card already show what we would render? Compares every
+ * text slot the builder fills (title, description, fields); the buttons
+ * depend only on ids and the client URL, never on the count.
+ */
+function cardUnchanged(message: Message, embed: EmbedBuilder): boolean {
+  const current = message.embeds[0];
+  if (!current) return false;
+  const next = embed.data;
+  return (
+    current.title === (next.title ?? null) &&
+    current.description === (next.description ?? null) &&
+    fieldsKey(current.fields) === fieldsKey(next.fields ?? [])
+  );
+}
+
+function fieldsKey(fields: readonly { name: string; value: string }[]): string {
+  return JSON.stringify(fields.map((f) => [f.name, f.value]));
 }
 
 /**
