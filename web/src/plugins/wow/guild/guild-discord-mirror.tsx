@@ -77,13 +77,13 @@ function Quiet({ testId, children }: { testId: string; children: ReactNode }): J
 interface BodyProps { mirror: GuildDiscordMirrorDto; canEdit: boolean; onChoose: () => void }
 
 function MirrorBody({ mirror, canEdit, onChoose }: BodyProps): JSX.Element {
-    const name = mirrorTitle(mirror);
+    const name = 'channelName' in mirror && mirror.channelName ? `#${mirror.channelName}` : null;
     const editorHint = canEdit ? ' Choose another channel, or give the bot access again in Discord.' : '';
     switch (mirror.state) {
         case 'ok': return <OkBody mirror={mirror} />;
         case 'disconnected': return <Quiet testId="guild-discord-state-disconnected">Discord isn’t connected right now. Messages will be back once it is.</Quiet>;
-        case 'no-access': return <WarningBanner testId="guild-discord-state-no-access">Raid Ledger can no longer read {name}.{editorHint}</WarningBanner>;
-        case 'gone': return <WarningBanner testId="guild-discord-state-gone">{name} no longer exists in Discord.{canEdit ? ' Choose another channel.' : ''}</WarningBanner>;
+        case 'no-access': return <WarningBanner testId="guild-discord-state-no-access">Raid Ledger can no longer read {name ?? 'this channel'}.{editorHint}</WarningBanner>;
+        case 'gone': return <WarningBanner testId="guild-discord-state-gone">{name ?? 'The channel'} no longer exists in Discord.{canEdit ? ' Choose another channel.' : ''}</WarningBanner>;
         case 'unset': return (
             <div className="flex flex-col items-start gap-2" data-testid="guild-discord-state-unset">
                 <p className="text-sm text-muted">Pick a Discord channel to show its latest messages here, read-only.</p>
