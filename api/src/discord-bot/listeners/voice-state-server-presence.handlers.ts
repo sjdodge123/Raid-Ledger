@@ -29,6 +29,7 @@ import {
   type LobbyGameGroup,
 } from './voice-lobby-groups.helpers';
 import { groupSize } from './voice-lobby-server-merge.helpers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import {
   lobbySpawnFns,
   monitorSpawnFns,
@@ -68,8 +69,10 @@ async function reevaluateRoom(
 }
 
 /**
- * No event yet → the threshold check (immediate or 15-min). An event exists
- * (e.g. the server path just spawned it) → join the room's members into it.
+ * No event yet → the threshold check (immediate or 15-min), after cancelling
+ * a pending spawn that a server departure dropped below `minPlayers` (the
+ * monitor twin of the lobby cancel below). An event exists (e.g. the server
+ * path just spawned it) → join the room's members into it.
  */
 async function reevaluateMonitor(
   ctx: JoinHandlerCtx,
@@ -79,7 +82,10 @@ async function reevaluateMonitor(
   const svc = ctx.deps.adHocEventService;
   const spawnFns = monitorSpawnFns(ctx, chId, b);
   const active = svc.getActiveBindingEventGameId(b.bindingId);
-  if (!active) return suppressOrCheckThreshold(ctx.deps, chId, b, spawnFns);
+  if (!active) {
+    if (await monitorBelowThreshold(ctx, chId, b)) spawnFns.cancelSpawn();
+    return suppressOrCheckThreshold(ctx.deps, chId, b, spawnFns);
+  }
   const state = svc.getActiveState(b.bindingId, active.gameId);
   const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
   for (const id of [...(ctx.channelMembers.get(chId) ?? [])]) {
@@ -87,6 +93,20 @@ async function reevaluateMonitor(
     const dm = buildDiscordMember(id, channel?.members.get(id));
     await handleGameBindingJoin(ctx.deps, chId, b, dm, spawnFns);
   }
+}
+
+/**
+ * Voice + server tally below `minPlayers`? An unresolvable channel is never
+ * "below" — the departure path owns occupancy-only cancels.
+ */
+async function monitorBelowThreshold(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+): Promise<boolean> {
+  if (!resolveVoiceChannel(ctx.deps.clientService, chId)) return false;
+  const { counted } = await serverAwareGameCount(ctx.deps, chId, b);
+  return counted < (b.config?.minPlayers ?? 2);
 }
 
 /**

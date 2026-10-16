@@ -9,7 +9,12 @@ import type { ResolvedBinding } from './voice-state.helpers';
 import type { LobbyGameGroup } from './voice-lobby-groups.helpers';
 import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
 import { addDetectedMembers } from './voice-state-recovery.handlers';
-import { lobbySpawnFns } from './voice-state-join-dispatch.handlers';
+import {
+  lobbySpawnFns,
+  monitorSpawnFns,
+} from './voice-state-join-dispatch.handlers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
+import { suppressOrCheckThreshold } from './voice-state-gate.handlers';
 
 jest.mock('./voice-state.handlers', () => ({
   markLobbyDirty: jest.fn(),
@@ -31,6 +36,9 @@ jest.mock('./voice-lobby-groups.helpers', () => ({
 jest.mock('./voice-state-join-dispatch.handlers', () => ({
   lobbySpawnFns: jest.fn(),
   monitorSpawnFns: jest.fn(),
+}));
+jest.mock('./voice-threshold-server-count.helpers', () => ({
+  serverAwareGameCount: jest.fn(),
 }));
 jest.mock('./voice-state.helpers', () => ({
   ...jest.requireActual<object>('./voice-state.helpers'),
@@ -121,5 +129,57 @@ describe('handleServerPresenceChanged — general lobby (ROK-1801)', () => {
     });
     expect(fns.scheduleSpawn).not.toHaveBeenCalled();
     expect(fns.cancelSpawn).not.toHaveBeenCalled();
+  });
+});
+
+const MONITOR = {
+  bindingId: 'mon',
+  gameId: G,
+  bindingPurpose: 'game-voice-monitor',
+  config: { minPlayers: 3 },
+} as unknown as ResolvedBinding;
+
+function monitorCtx(): JoinHandlerCtx {
+  return {
+    channelMembers: new Map([['vc', new Set(['a', 'b'])]]),
+    resolveAllBindings: () => Promise.resolve([MONITOR]),
+    logger: { warn: jest.fn() },
+    deps: {
+      clientService: {},
+      adHocEventService: { getActiveBindingEventGameId: jest.fn(() => null) },
+    },
+  } as unknown as JoinHandlerCtx;
+}
+
+function mockTally(counted: number): void {
+  jest.mocked(serverAwareGameCount).mockResolvedValue({
+    counted,
+    confirmedCount: counted,
+    allConfirmed: true,
+  });
+}
+
+describe('handleServerPresenceChanged — game monitor (ROK-1801)', () => {
+  const mfns = { scheduleSpawn: jest.fn(), cancelSpawn: jest.fn() };
+  beforeEach(() => jest.mocked(monitorSpawnFns).mockReturnValue(mfns));
+
+  it('a server player leaving drops voice + server below minPlayers → the pending timer is cancelled', async () => {
+    mockTally(2); // two voice members, the third (server) player just left
+    await handleServerPresenceChanged(monitorCtx(), {
+      pelicanServerId: 1,
+      gameId: G,
+    });
+    expect(mfns.cancelSpawn).toHaveBeenCalledTimes(1);
+    expect(suppressOrCheckThreshold).toHaveBeenCalledTimes(1);
+  });
+
+  it('voice + server still at minPlayers → the pending timer is kept', async () => {
+    mockTally(3);
+    await handleServerPresenceChanged(monitorCtx(), {
+      pelicanServerId: 1,
+      gameId: G,
+    });
+    expect(mfns.cancelSpawn).not.toHaveBeenCalled();
+    expect(suppressOrCheckThreshold).toHaveBeenCalledTimes(1);
   });
 });
