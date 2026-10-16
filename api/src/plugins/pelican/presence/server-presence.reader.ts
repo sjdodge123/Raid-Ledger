@@ -1,4 +1,5 @@
 import type { ServerPresenceSource } from './server-presence.sink';
+import type { PresentPlayer } from './server-presence.tracker';
 
 /**
  * ROK-1801 — the read side of game-server presence: who is on each tracked
@@ -33,4 +34,13 @@ export interface ServerPresenceReader {
   playersOnGames(): ServerRosterPlayer[];
   /** Every player on every tracked server of `gameId` — not deduped across servers. */
   playersForGame(gameId: number): ServerRosterPlayer[];
+}
+
+/** A tracker snapshot tagged with the server it came from. */
+export function rosterOf(
+  source: ServerPresenceSource,
+  players: PresentPlayer[],
+): ServerRosterPlayer[] {
+  const { pelicanServerId, gameId } = source;
+  return players.map((p) => ({ pelicanServerId, gameId, ...p }));
 }

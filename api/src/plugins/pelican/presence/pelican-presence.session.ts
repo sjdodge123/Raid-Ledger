@@ -14,7 +14,7 @@ import {
   toPresentPlayers,
 } from './pelican-presence.helpers';
 import type { GamePresenceEvent } from './presence-events';
-import type { ServerRosterPlayer } from './server-presence.reader';
+import { rosterOf, type ServerRosterPlayer } from './server-presence.reader';
 import type {
   ServerPresenceSink,
   ServerPresenceSource,
@@ -80,10 +80,7 @@ export class PelicanPresenceSession {
 
   /** Who is on this server now, tagged with its source (ROK-1801 read port). */
   players(): ServerRosterPlayer[] {
-    const { pelicanServerId, gameId } = this.opts.source;
-    return this.tracker
-      .snapshot()
-      .map((p) => ({ pelicanServerId, gameId, ...p }));
+    return rosterOf(this.opts.source, this.tracker.snapshot());
   }
 
   async start(): Promise<void> {
@@ -255,25 +252,11 @@ export class PelicanPresenceSession {
     if (changes.length > 0) this.notify();
   }
 
-  /**
-   * Queued behind the sink calls, so a reader reacting to the signal sees
-   * the sink's own spawn/attach outcome. One signal per net change batch.
-   */
+  /** Queued behind the sink calls, so a listener sees their outcome. */
   private notify(): void {
-    const { onChanged, source, logger } = this.opts;
-    if (!onChanged) return;
-    this.queue = this.queue.then(() => {
-      try {
-        onChanged({
-          pelicanServerId: source.pelicanServerId,
-          gameId: source.gameId,
-        });
-      } catch (err) {
-        logger.error(
-          `Presence change signal failed for server ${this.serverId}: ${errName(err)}`,
-        );
-      }
-    });
+    const cb = this.opts.onChanged;
+    if (cb)
+      this.enqueue('onChanged', (_s, src) => Promise.resolve(cb({ ...src })));
   }
 
   /** Serialised, per-call isolated: one failing sink call never stops the next. */
