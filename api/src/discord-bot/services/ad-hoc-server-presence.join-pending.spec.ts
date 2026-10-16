@@ -122,29 +122,61 @@ describe('AdHocServerPresenceService — held players across a session restart (
     steamId: '76561198000000002',
     displayName: 'Freya',
   } satisfies ServerPresencePlayer;
+  const THIRD = {
+    steamId: '76561198000000003',
+    displayName: 'Sigrid',
+  } satisfies ServerPresencePlayer;
 
-  it('a fresh session (openPresence) drops the held set, so a stale hold never counts toward a spawn', async () => {
+  beforeEach(() => {
     jest
       .mocked(checkSuppression)
       .mockResolvedValue(
         CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
       );
+  });
+
+  /** The steamIds of the players handed to each spawn attempt. */
+  const spawned = () =>
+    jest
+      .mocked(buildServerSpawnInput)
+      .mock.calls.map(([, , , players]) => players.map((p) => p.steamId));
+
+  it('a held player whose join fell outside the replay counts once a heartbeat covers the count', async () => {
     const { svc } = serviceWith(0);
     await svc.playerJoined(SOURCE, PLAYER);
     await svc.openPresence(SOURCE);
     await svc.playerJoined(SOURCE, OTHER);
-    expect(buildServerSpawnInput).not.toHaveBeenCalled();
+    expect(spawned()).toEqual([]); // unconfirmed: no count vouches yet
+    await svc.playerCount(SOURCE, 2);
+    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
+  });
+
+  it('a held player who left while the plugin was stopped is never enrolled (the count excludes them)', async () => {
+    const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.openPresence(SOURCE);
+    await svc.playerJoined(SOURCE, OTHER);
+    await svc.playerCount(SOURCE, 1);
+    expect(spawned()).toEqual([]);
+    // A later heartbeat cannot bring the dropped hold back.
+    await svc.playerCount(SOURCE, 5);
+    await svc.playerJoined(SOURCE, THIRD);
+    expect(spawned()).toEqual([[OTHER.steamId, THIRD.steamId]]);
+  });
+
+  it('a replay that re-reports the held player re-confirms them without a heartbeat', async () => {
+    const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.openPresence(SOURCE);
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.playerJoined(SOURCE, OTHER);
+    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
   });
 
   it('a hold that survives (no session restart) still reaches the threshold', async () => {
-    jest
-      .mocked(checkSuppression)
-      .mockResolvedValue(
-        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
-      );
     const { svc } = serviceWith(0);
     await svc.playerJoined(SOURCE, PLAYER);
     await svc.playerJoined(SOURCE, OTHER);
-    expect(buildServerSpawnInput).toHaveBeenCalledTimes(1);
+    expect(spawned()).toEqual([[PLAYER.steamId, OTHER.steamId]]);
   });
 });

@@ -202,23 +202,19 @@ export class ServerPresenceTracker {
    * The present player a character line belongs to: same name and, when the
    * line carries one, same owner id (ROK-1802). A same-named player whose
    * owner is not yet known (hydrated after a restart, or re-handshaken)
-   * adopts it when no other present player has that name.
+   * adopts it.
    */
   private findCharacter(
     name: string,
     ownerId: string | undefined,
   ): Entry | undefined {
     let unowned: Entry | undefined;
-    let named = 0;
     for (const entry of this.present.values()) {
       if (entry.name !== name) continue;
       if (ownerId === undefined || entry.owner === ownerId) return entry;
-      named += 1;
       if (entry.owner === null) unowned ??= entry;
     }
-    // Adopt only an unambiguous name: binding the wrong same-named player
-    // would mis-pair every later respawn of the right one (review MINOR).
-    if (unowned && ownerId !== undefined && named === 1) unowned.owner = ownerId;
+    if (unowned && ownerId !== undefined) unowned.owner = ownerId;
     return unowned;
   }
 

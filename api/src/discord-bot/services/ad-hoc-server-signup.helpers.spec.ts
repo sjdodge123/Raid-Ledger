@@ -20,9 +20,11 @@ jest.mock('./ad-hoc-event.helpers', () => ({
   createAdHocEventRow: jest.fn(),
   findAdminFallback: jest.fn(),
 }));
+/** The handle the spawn lock hands its callback — distinct from `db`. */
+const mockLock: { tx: unknown } = { tx: null };
 jest.mock('./ad-hoc-game-spawn-lock', () => ({
-  withGameSpawnLock: (db: unknown, _g: number, fn: (tx: unknown) => unknown) =>
-    fn(db),
+  withGameSpawnLock: (_db: unknown, _g: number, fn: (tx: unknown) => unknown) =>
+    fn(mockLock.tx),
 }));
 jest.mock('./ad-hoc-server-presence.helpers', () => ({
   findLiveGameAdHocEvent: jest.fn(),
@@ -74,10 +76,11 @@ describe('spawnOrFindServerQuickPlay — signups at spawn', () => {
     jest.mocked(findLiveGameAdHocEvent).mockResolvedValue(null);
     jest.mocked(createAdHocEventRow).mockResolvedValue(77);
     jest.mocked(upsertSteamParticipant).mockResolvedValue('inserted');
-    const db = dbReturning([
+    const tx = dbReturning([
       { discordId: 'd-42', username: 'Linked', avatar: null },
     ]);
-    await spawnOrFindServerQuickPlay(db, {
+    mockLock.tx = tx;
+    await spawnOrFindServerQuickPlay(dbReturning([]), {
       gameId: 1,
       pelicanServerId: 2,
       bindingId: null,
@@ -90,7 +93,7 @@ describe('spawnOrFindServerQuickPlay — signups at spawn', () => {
     });
     expect(autoSignupParticipant).toHaveBeenCalledTimes(1);
     expect(autoSignupParticipant).toHaveBeenCalledWith(
-      db,
+      tx,
       77,
       expect.objectContaining({ userId: 42, discordUserId: 'd-42' }),
     );

@@ -146,6 +146,20 @@ describe('ServerPresenceTracker — duplicate character names (ROK-1802)', () =>
   });
 });
 
+describe('ServerPresenceTracker — a repeat handshake rebinds the owner (ROK-1802 Codex P2)', () => {
+  it('a reconnect whose disconnect was missed respawns as itself, never taking a stranger’s handshake', () => {
+    run(tracker, [join(A), characterOf('Bjorn', '111')]);
+    // A's disconnect is lost in a socket outage; A logs back in (new owner),
+    // and B's handshake is pending behind it.
+    run(tracker, [join(A), join(B)], 10);
+    expect(run(tracker, [characterOf('Bjorn', '333')], 20)).toEqual([]);
+    expect(run(tracker, [characterOf('Bjorn', '333')], 30)).toEqual([]);
+    expect(run(tracker, [characterOf('Freya', '444')], 40)).toEqual([
+      { kind: 'joined', steamId: B, name: 'Freya' },
+    ]);
+  });
+});
+
 describe('ServerPresenceTracker — auth-failed', () => {
   it('retracts the pending handshake with no joined/left churn', () => {
     expect(run(tracker, [join(B), authFailed(B), character('X')])).toEqual([]);

@@ -321,6 +321,20 @@ describe('AdHocServerPresenceService — held players across a session restart (
     const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
     expect(steamIds).toEqual([STEAM_B, STEAM_C]);
   });
+
+  it('a held player still on the server is enrolled once a heartbeat covers the count', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    // Reactivated; STEAM_A's join is older than the replay, so only a count vouches for them.
+    await sink.openPresence(src);
+    await sink.playerJoined(src, player(STEAM_B));
+    expect(await adHocEvents()).toHaveLength(0);
+
+    await sink.playerCount(src, 2);
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+    const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
+    expect(steamIds).toEqual([STEAM_A, STEAM_B]);
+  });
 });
 
 describe('AdHocServerPresenceService — linked players are signed up (ROK-1802)', () => {

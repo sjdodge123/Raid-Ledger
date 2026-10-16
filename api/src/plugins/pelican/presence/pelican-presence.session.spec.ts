@@ -84,6 +84,8 @@ it('forwards live joins, renames and leaves to the sink', async () => {
     [SRC, { steamId: 'B', displayName: 'Bob' }],
   ]);
   expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  // ROK-1802: a live heartbeat's count reaches the sink too.
+  expect(h.sink.playerCount.mock.calls).toEqual([[SRC, 2]]);
 });
 
 it('server-stopping empties the server once instead of per-player leaves', async () => {
@@ -217,6 +219,8 @@ it('a cold-start replay never removes a rehydrated player (FB1 #1)', async () =>
   // A live heartbeat that disagrees still evicts the never-seen player.
   await h.live([line({ kind: 'heartbeat', count: 2, loggedAt: T(4) })]);
   expect(h.sink.playerLeft.mock.calls).toEqual([[SRC, 'A']]);
+  // ROK-1802: only the live count is forwarded — replay history is not.
+  expect(h.sink.playerCount.mock.calls).toEqual([[SRC, 2]]);
 });
 
 it('a re-auth inside the settle window keeps the buffered replay (FB1 #2)', async () => {
