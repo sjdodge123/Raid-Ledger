@@ -10,6 +10,7 @@
 import type { GuildMember } from 'discord.js';
 import type { ServerRoster } from '../services/server-presence-roster.helpers';
 import type { VoiceHandlerDeps } from './voice-handler-deps';
+import { isBotMember } from './voice-lobby-groups.helpers';
 import { serverGameOf } from './voice-lobby-server-merge.helpers';
 import {
   resolveVoiceChannel,
@@ -58,8 +59,8 @@ function serverOnlyCount(
 }
 
 /**
- * Game-bound threshold tally: voice members (bots included, as before) plus
- * the bound game's server players, each person once (Q9).
+ * Game-bound threshold tally: human voice members plus the bound game's
+ * server players, each person once (Q9). Bots never count.
  */
 export async function serverAwareGameCount(
   deps: VoiceHandlerDeps,
@@ -69,7 +70,10 @@ export async function serverAwareGameCount(
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   if (!channel || binding.gameId == null)
     return { counted: 0, allConfirmed: false, confirmedCount: 0 };
-  const voice = await detectAll(deps, [...channel.members.values()]);
+  // TODO(ROK-1711): once main is merged in, filter with `countsTowardThreshold`
+  // (voice-threshold-count.helpers.ts) so the DEMO_MODE bot allowlist applies.
+  const humans = [...channel.members.values()].filter((m) => !isBotMember(m));
+  const voice = await detectAll(deps, humans);
   const tally = tallyOf(binding.gameId, voice);
   if (!deps.serverRoster) return tally;
   const roster = await deps.serverRoster.snapshot();
