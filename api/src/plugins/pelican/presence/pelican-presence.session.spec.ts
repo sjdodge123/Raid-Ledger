@@ -23,8 +23,9 @@ const T = (s: number) => `2026-10-15T10:00:${String(s).padStart(2, '0')}`;
 function harness(
   open: ServerPresencePlayer[] = [],
   getCredentials: ConsoleCredentialsSource = okCredentials,
+  held: ServerPresencePlayer[] = [],
 ) {
-  const sink = fakeSink(open);
+  const sink = fakeSink(open, held);
   const logger = fakeLogger();
   const wings = fakeWings();
   const onChanged = jest.fn();
@@ -336,4 +337,58 @@ it('a stop during rehydrate cancels the pending start — no socket opens (Codex
   await starting;
   await jest.advanceTimersByTimeAsync(0);
   expect(h.wings.sockets).toHaveLength(0);
+});
+
+describe('players the sink held before this session (ROK-1802 Codex r4)', () => {
+  const A = { steamId: 'A', displayName: 'Alice' };
+  const C = { steamId: 'C', displayName: 'C' };
+  const beat = (count: number, s: number) =>
+    line({ kind: 'heartbeat', count, loggedAt: T(s) });
+  const left = (...ids: string[]) => ids.map((id) => [SRC, id]);
+
+  it('a held player a heartbeat covered reports their disconnect line', async () => {
+    const h = harness([], okCredentials, [A]);
+    await h.connect();
+    expect(h.sink.heldPresence).toHaveBeenCalledWith(SRC);
+    await h.live([beat(1, 1)]); // covers A: the sink may enrol them
+    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+  });
+
+  it('a zero-count heartbeat reports every tracked and held player gone', async () => {
+    const h = harness([{ steamId: 'B', displayName: 'Bob' }], okCredentials, [
+      A,
+    ]);
+    await h.connect();
+    await h.live([beat(2, 1)]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left());
+    await h.live([beat(0, 2)]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left('B', 'A'));
+  });
+
+  it('a lower count drops the oldest held player once tracked ones fill it', async () => {
+    const h = harness([], okCredentials, [A, C]);
+    await h.connect();
+    await h.live([beat(2, 1)]);
+    await h.live([beat(1, 2)]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+  });
+
+  it("a held player who re-joins is the tracker's from then on — one leave, not two", async () => {
+    const h = harness([], okCredentials, [A]);
+    await h.connect();
+    await h.live(arrive('A', 'Alice', T(1)));
+    expect(h.sink.playerJoined.mock.calls).toEqual([[SRC, A]]);
+    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
+    await h.live([beat(0, 3)]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+  });
+
+  it('an already-enrolled player is never also reported as held', async () => {
+    const h = harness([A], okCredentials, [A]);
+    await h.connect();
+    await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([beat(0, 2)]);
+    expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+  });
 });

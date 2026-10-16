@@ -335,6 +335,23 @@ describe('AdHocServerPresenceService — held players across a session restart (
     const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
     expect(steamIds).toEqual([STEAM_A, STEAM_B]);
   });
+
+  it('reports a held player to the new session, and their leave after a heartbeat enrolled them starts grace (Codex r4)', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    await sink.openPresence(src);
+    // The session seeds its departure tracking from this.
+    expect(await sink.heldPresence(src)).toEqual([player(STEAM_A)]);
+    await sink.playerJoined(src, player(STEAM_B));
+    await sink.playerCount(src, 2);
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+
+    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, STEAM_B);
+    const open = (await rowsOf(event.id)).filter((r) => r.leftAt === null);
+    expect(open).toEqual([]);
+    expect(enqueue).toHaveBeenCalledWith(event.id, 5 * 60 * 1000);
+  });
 });
 
 describe('AdHocServerPresenceService — linked players are signed up (ROK-1802)', () => {
