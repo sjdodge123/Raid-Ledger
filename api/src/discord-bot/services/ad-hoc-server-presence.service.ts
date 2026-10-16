@@ -21,11 +21,7 @@ import {
 } from './ad-hoc-spawn-clearance';
 import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
 import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
-import {
-  findAdminFallback,
-  getEventById,
-  restoreFromGracePeriod,
-} from './ad-hoc-event.helpers';
+import { getEventById, restoreFromGracePeriod } from './ad-hoc-event.helpers';
 import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
@@ -34,11 +30,13 @@ import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   afterServerLeave,
   announceServerSpawn,
+  closeServerRows,
   refreshLive,
   type PresenceEffectsDeps,
   type SpawnPlan,
 } from './ad-hoc-server-presence.effects';
 import {
+  buildServerSpawnInput,
   spawnOrFindServerQuickPlay,
   type ServerSpawnInput,
 } from './ad-hoc-server-spawn.helpers';
@@ -49,7 +47,6 @@ import {
   findServerEnrolledEvent,
   listOpenServerPresence,
   listServerEnrolledEvents,
-  listOnServerSteamIds,
   renameSteamOnlyRow,
   resolveSteamIdentity,
   serverSourceKey,
@@ -132,7 +129,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     return this.serial(source.gameId, async () => {
       this.pending.clear(source.pelicanServerId);
       for (const live of await this.enrolledEvents(source))
-        await this.emptyServerOn(live, source.pelicanServerId);
+        await closeServerRows(this.fx, live, source.pelicanServerId);
     });
   }
 
@@ -192,17 +189,6 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       source.gameId,
       source.pelicanServerId,
     );
-  }
-
-  /** Close this server's open rows on one event; grace if it emptied. */
-  private async emptyServerOn(
-    live: LiveGameEvent,
-    pelicanServerId: number,
-  ): Promise<void> {
-    const open = await listOnServerSteamIds(this.db, live.id, pelicanServerId);
-    for (const steamId of open)
-      await this.participantService.markServerLeave(live.id, steamId);
-    if (open.length > 0) await afterServerLeave(this.fx, live);
   }
 
   /** Attach every server's held players for `gameId` to `live`. */
@@ -300,20 +286,13 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     const key = serverSourceKey(source.pelicanServerId);
     if (!clearance.matches(key, source.gameId) || !clearance.consume())
       return false;
-    const ids = await Promise.all(
-      players.map((pl) => resolveSteamIdentity(this.db, pl.steamId)),
-    );
-    const creatorId =
-      ids.find((i) => i !== null)?.userId ?? (await findAdminFallback(this.db));
-    if (!creatorId) return false;
-    const input: ServerSpawnInput = {
-      gameId: source.gameId,
-      pelicanServerId: source.pelicanServerId,
-      bindingId: binding?.id ?? null,
-      creatorId,
+    const input = await buildServerSpawnInput(
+      this.db,
+      source,
+      binding?.id ?? null,
       players,
-      ids,
-    };
+    );
+    if (!input) return false;
     const result = await spawnOrFindServerQuickPlay(this.db, input);
     if (result.kind === 'existing') {
       await this.attachWithPending(result.live, source, players);

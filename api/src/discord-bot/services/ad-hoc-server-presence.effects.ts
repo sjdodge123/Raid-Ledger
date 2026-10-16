@@ -18,10 +18,11 @@ import type { ChannelBindingsService } from './channel-bindings.service';
 import { startGracePeriod } from './ad-hoc-event.handlers';
 import { getEventById, resolveGameName } from './ad-hoc-event.helpers';
 import { spawnRoster } from './ad-hoc-server-spawn.helpers';
-import type {
-  GameQuickPlayBinding,
-  LiveGameEvent,
-  SteamIdentity,
+import {
+  listOnServerSteamIds,
+  type GameQuickPlayBinding,
+  type LiveGameEvent,
+  type SteamIdentity,
 } from './ad-hoc-server-presence.helpers';
 
 export interface PresenceEffectsDeps {
@@ -79,6 +80,18 @@ export async function afterServerLeave(
     live.id,
     live.channelBindingId,
   );
+}
+
+/** Close one server's open rows on `live`; grace if that emptied it. */
+export async function closeServerRows(
+  deps: PresenceEffectsDeps,
+  live: LiveGameEvent,
+  pelicanServerId: number,
+): Promise<void> {
+  const open = await listOnServerSteamIds(deps.db, live.id, pelicanServerId);
+  for (const steamId of open)
+    await deps.participantService.markServerLeave(live.id, steamId);
+  if (open.length > 0) await afterServerLeave(deps, live);
 }
 
 /** The bound game's Quick Play channel when one exists, else web only. */
