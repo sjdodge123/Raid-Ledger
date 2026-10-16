@@ -69,6 +69,8 @@ export class PelicanPresenceSession {
   /** True until the first replay after `start()` has been flushed. */
   private cold = true;
   private queue: Promise<void> = Promise.resolve();
+  /** Set by `stop()`; a `start()` still rehydrating then never opens a socket. */
+  private stopped = false;
 
   constructor(private readonly opts: PresenceSessionOptions) {
     this.now = opts.now ?? Date.now;
@@ -85,6 +87,9 @@ export class PelicanPresenceSession {
 
   async start(): Promise<void> {
     await this.rehydrate();
+    // Stopped while rehydrating (e.g. Pelican deactivated): the supervisor
+    // no longer tracks this session, so a socket opened now would never close.
+    if (this.stopped) return;
     const o = this.opts;
     this.socket = new PelicanConsoleSocket({
       serverIdentifier: o.serverIdentifier,
@@ -102,6 +107,7 @@ export class PelicanPresenceSession {
 
   /** Close the socket; `empty` reports everyone present as gone. */
   async stop(empty: boolean): Promise<void> {
+    this.stopped = true;
     this.socket?.stop();
     this.socket = null;
     this.clearSettle();
@@ -120,6 +126,7 @@ export class PelicanPresenceSession {
   private async rehydrate(): Promise<void> {
     try {
       const open = await this.opts.sink.openPresence(this.opts.source);
+      if (this.stopped) return;
       this.tracker.hydrate(toPresentPlayers(open));
       if (open.length > 0) this.notify();
     } catch (err) {

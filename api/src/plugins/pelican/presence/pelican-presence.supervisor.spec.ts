@@ -323,3 +323,17 @@ describe('ROK-1801 read port', () => {
     expect(h.events.emit.mock.calls).toEqual([changed(1)]);
   });
 });
+
+it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', async () => {
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  const h = harness({
+    rows: [row(1, { currentState: 'offline' })],
+    open: [{ steamId: 'A', displayName: 'Alice' }],
+  });
+  h.sink.serverEmptied.mockRejectedValueOnce(new Error('db down'));
+  await h.reconcile();
+  await h.reconcile();
+  await h.reconcile();
+  // Fails once, succeeds on the retry, then is done for this offline spell.
+  expect(h.sink.serverEmptied).toHaveBeenCalledTimes(2);
+});

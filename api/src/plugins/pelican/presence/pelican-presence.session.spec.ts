@@ -307,3 +307,20 @@ it('ROK-1801: a throwing change listener is logged and never stops later sink ca
     ['Presence sink onChanged failed for server 7: Error'],
   ]);
 });
+
+it('a stop during rehydrate cancels the pending start — no socket opens (Codex r3)', async () => {
+  const h = harness();
+  let release: (open: ServerPresencePlayer[]) => void = () => undefined;
+  h.sink.openPresence.mockImplementationOnce(
+    () =>
+      new Promise<ServerPresencePlayer[]>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const starting = h.session.start();
+  await h.session.stop(false);
+  release([{ steamId: 'A', displayName: 'Alice' }]);
+  await starting;
+  await jest.advanceTimersByTimeAsync(0);
+  expect(h.wings.sockets).toHaveLength(0);
+});

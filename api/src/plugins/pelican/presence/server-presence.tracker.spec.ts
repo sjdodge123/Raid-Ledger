@@ -234,6 +234,27 @@ describe('ServerPresenceTracker — hydrate (restart path)', () => {
   });
 });
 
+describe('ServerPresenceTracker — unnamed players after a restart (Codex r3)', () => {
+  it('a hydrated unnamed player takes the next unpaired character name', () => {
+    tracker.hydrate([
+      { steamId: A, name: 'X' },
+      { steamId: B, name: null },
+    ]);
+    expect(run(tracker, [character('Y')], 10)).toEqual([
+      { kind: 'renamed', steamId: B, name: 'Y' },
+    ]);
+  });
+
+  it('a restored unnamed player takes the next unpaired character name', () => {
+    tracker.hydrate([{ steamId: B, name: null }]);
+    run(tracker, [heartbeat(0)], 5);
+    tracker.restore([{ steamId: B, name: null }]);
+    expect(run(tracker, [character('Y')], 10)).toEqual([
+      { kind: 'renamed', steamId: B, name: 'Y' },
+    ]);
+  });
+});
+
 describe('presenceDisplayName', () => {
   it('uses the character name, else the SteamID64 (ruling 3)', () => {
     expect(presenceDisplayName({ steamId: A, name: 'X' })).toBe('X');

@@ -90,7 +90,11 @@ export async function closeServerRows(
 ): Promise<void> {
   const open = await listOnServerSteamIds(deps.db, live.id, pelicanServerId);
   for (const steamId of open)
-    await deps.participantService.markServerLeave(live.id, steamId);
+    await deps.participantService.markServerLeave(
+      live.id,
+      steamId,
+      pelicanServerId,
+    );
   if (open.length > 0) await afterServerLeave(deps, live);
 }
 

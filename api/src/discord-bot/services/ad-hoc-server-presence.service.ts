@@ -104,7 +104,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   ): Promise<void> {
     return this.serial(source.gameId, async () => {
       this.pending.rename(source.pelicanServerId, player);
-      const live = await findLiveGameAdHocEvent(this.db, source.gameId);
+      const live = await this.enrolledEvent(source, player.steamId);
       if (!live) return;
       await renameSteamOnlyRow(this.db, live.id, player);
       await refreshLive(this.fx, live);
@@ -114,13 +114,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   playerLeft(source: ServerPresenceSource, steamId: string): Promise<void> {
     return this.serial(source.gameId, async () => {
       this.pending.remove(source.pelicanServerId, steamId);
-      const live = await findServerEnrolledEvent(
-        this.db,
-        source.gameId,
-        steamId,
-      );
+      const live = await this.enrolledEvent(source, steamId);
       if (!live) return;
-      if (await this.participantService.markServerLeave(live.id, steamId))
+      const id = source.pelicanServerId;
+      if (await this.participantService.markServerLeave(live.id, steamId, id))
         await afterServerLeave(this.fx, live);
     });
   }
@@ -180,6 +177,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       gracePeriodQueue: this.gracePeriodQueue,
       gateway: this.gateway,
     };
+  }
+
+  /** The live event `steamId` is enrolled in on THIS server (Codex r2/r3). */
+  private enrolledEvent(source: ServerPresenceSource, steamId: string) {
+    const { gameId, pelicanServerId } = source;
+    return findServerEnrolledEvent(this.db, gameId, steamId, pelicanServerId);
   }
 
   /** Live events holding an open row on this server (Codex r2 routing). */
