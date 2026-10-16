@@ -240,6 +240,8 @@ export class AdHocParticipantService {
       discordUserId: r.discordUserId,
       steamId: r.steamId,
       source: toParticipantSource(r.source),
+      inVoice: r.inVoice,
+      onServer: r.onServer,
       discordUsername: r.discordUsername,
       discordAvatarHash: r.discordAvatarHash,
       joinedAt: r.joinedAt.toISOString(),

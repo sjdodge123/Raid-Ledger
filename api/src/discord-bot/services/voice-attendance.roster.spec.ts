@@ -135,6 +135,18 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
 
       expect(at(result.participants, 0).discordAvatarHash).toBeNull();
     });
+
+    it('marks each session as a discord voice row, inVoice only while active (ROK-1821)', () => {
+      service.handleJoin(10, 'discord-in', 'InUser', 1);
+      service.handleJoin(10, 'discord-out', 'OutUser', 2);
+      service.handleLeave(10, 'discord-out');
+
+      const { participants } = service.getActiveRoster(10);
+      const byId = (id: string) => participants.find((p) => p.discordUserId === id);
+
+      expect(byId('discord-in')).toMatchObject({ source: 'discord', inVoice: true });
+      expect(byId('discord-out')).toMatchObject({ source: 'discord', inVoice: false });
+    });
   });
 
   describe('active vs inactive (leftAt)', () => {
