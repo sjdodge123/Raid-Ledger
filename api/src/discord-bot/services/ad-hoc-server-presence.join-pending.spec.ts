@@ -226,4 +226,24 @@ describe('AdHocServerPresenceService — a heartbeat after a spawn (ROK-1802 Cod
       .mock.calls.map(([, , , pl]) => pl.steamId);
     expect(attached).toEqual([OTHER.steamId, THIRD.steamId]);
   });
+
+  it("a reconnected, enrolled player's own hold never takes the heartbeat's cover slot (Codex r3)", async () => {
+    const live = { id: 77, channelBindingId: 'b1', adHocStatus: 'live' };
+    const { svc } = serviceWith(0);
+    // A then B held (no spawn input), then a reopen leaves both unconfirmed.
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.playerJoined(SOURCE, OTHER);
+    await svc.openPresence(SOURCE);
+    // A live event appears; B reconnects and is enrolled, its hold kept.
+    jest.mocked(findLiveGameAdHocEvent).mockResolvedValue(live);
+    await svc.playerJoined(SOURCE, OTHER);
+    jest.mocked(listServerEnrolledEvents).mockResolvedValue([live]);
+    jest.mocked(listOpenServerPresence).mockResolvedValue([OTHER]);
+    // Two on the server: enrolled B plus held A — A is covered.
+    await svc.playerCount(SOURCE, 2);
+    const attached = jest
+      .mocked(attachServerPlayer)
+      .mock.calls.map(([, , , pl]) => pl.steamId);
+    expect(attached).toEqual([OTHER.steamId, PLAYER.steamId]);
+  });
 });
