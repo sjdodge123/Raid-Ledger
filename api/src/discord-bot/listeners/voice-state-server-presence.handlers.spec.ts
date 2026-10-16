@@ -274,32 +274,29 @@ describe('handleServerPresenceChanged — the return trip when no event exists (
     [
       'the group is below threshold',
       { gameId: G, gameName: 'Valheim', memberIds: ['b'] },
+      ['a'],
     ],
-    ['no group is left for the game', null],
+    // b is tracked on G too, and with no group it is out of it as well.
+    ['no group is left for the game', null, ['a', 'b']],
   ] as const)(
     'return trip (review BLOCKER 1): %s → a member tracked on the game but out of its group goes back through the presence path',
-    async (_case, group) => {
-      const gmA = { id: 'a' };
-      jest.mocked(resolveVoiceChannel).mockReturnValue({
-        id: 'vc',
-        members: new Map([
-          ['a', gmA],
-          ['b', { id: 'b' }],
-          ['c', { id: 'c' }],
-        ]),
-      } as never);
+    async (_case, group, returned) => {
+      const members = new Map(['a', 'b', 'c'].map((id) => [id, { id }]));
+      jest
+        .mocked(resolveVoiceChannel)
+        .mockReturnValueOnce({ id: 'vc', members } as never);
       jest.mocked(resolveLobbyGroups).mockResolvedValue({
         qualifying: [],
         dropped: group ? [{ ...group, memberIds: [...group.memberIds] }] : [],
         minPlayers: 2,
         channelMemberCount: 3,
       });
-      // a: switched onto G, left its server. b: in G's group. c: on another game.
+      // a: switched onto G, left its server. b: tracked on G. c: another game.
       const ctx = ctxWith(null, { a: G, b: G, c: G + 1 });
       await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
-      expect(jest.mocked(handlePresenceChange).mock.calls).toEqual([
-        [ctx.deps, 'a', LOBBY, gmA],
-      ]);
+      expect(jest.mocked(handlePresenceChange).mock.calls).toEqual(
+        returned.map((id) => [ctx.deps, id, LOBBY, members.get(id)]),
+      );
       expect(fns.cancelSpawn).toHaveBeenCalledWith(G);
     },
   );
