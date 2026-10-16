@@ -67,14 +67,28 @@ export function restoreServerFields(
     };
 }
 
+/** Where an admin installs and activates plugins (ROK-1819). */
+export const INTEGRATIONS_HREF = '/admin/settings/integrations';
+
+type QuickPlayRow = Pick<PelicanServerRowDto, 'gameId' | 'presenceSupported' | 'presencePluginInactive'>;
+
 /**
  * Why "Detect Quick Play from server logs" can't be turned on (ROK-1800), or null when
- * it can: the server needs a mapped game, and that game needs a log parser (Valheim today).
+ * it can: the server needs a mapped game, and that game needs a live log parser. A parser
+ * whose plugin is inactive (ROK-1819) names the plugin to activate.
  */
-export function quickPlayHint(row: Pick<PelicanServerRowDto, 'gameId' | 'presenceSupported'>): string | null {
+export function quickPlayHint(row: QuickPlayRow): string | null {
     if (row.gameId === null) return 'Map a game first';
-    if (!row.presenceSupported) return 'Not available for this game yet';
-    return null;
+    if (row.presenceSupported) return null;
+    const plugin = quickPlayPluginToActivate(row);
+    if (plugin !== null) return `Activate the ${plugin} plugin to detect Quick Play`;
+    return 'Not available for this game yet';
+}
+
+/** The inactive plugin whose activation would enable the switch, or null (ROK-1819). */
+export function quickPlayPluginToActivate(row: QuickPlayRow): string | null {
+    if (row.gameId === null || row.presenceSupported) return null;
+    return row.presencePluginInactive?.pluginName ?? null;
 }
 
 export function errorMessage(err: unknown, fallback: string): string {
