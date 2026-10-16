@@ -1,4 +1,6 @@
 import { Logger } from '@nestjs/common';
+import type { GameLogParser } from '../../plugin-host/extension-points';
+import { parseValheimLine } from '../../valheim/valheim-presence.parser';
 import type { ConsoleCredentialsSource } from '../pelican-console-socket';
 import {
   PRESENCE_REPLAY_SETTLE_MS,
@@ -24,6 +26,7 @@ function harness(
   open: ServerPresencePlayer[] = [],
   getCredentials: ConsoleCredentialsSource = okCredentials,
   held: ServerPresencePlayer[] = [],
+  parser: GameLogParser = fakeParser,
 ) {
   const sink = fakeSink(open, held);
   const logger = fakeLogger();
@@ -34,7 +37,7 @@ function harness(
     serverIdentifier: 'abc123',
     panelUrl: 'https://panel.test',
     getCredentials,
-    parser: fakeParser,
+    parser,
     sink,
     logger,
     socketFactory: wings.factory,
@@ -390,5 +393,62 @@ describe('players the sink held before this session (ROK-1802 Codex r4)', () => 
     await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
     await h.live([beat(0, 2)]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+  });
+});
+
+describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
+  const valheim: GameLogParser = {
+    pluginSlug: 'valheim',
+    parse: parseValheimLine,
+  };
+  const STEAM = '76561190000000001';
+  const JOIN = `10/16/2026 17:27:02: Got handshake from client ${STEAM}`;
+  const CHAR =
+    '10/16/2026 17:27:09: Got character ZDOID from Thorvald : 123456789:1';
+  const OLD_BEAT =
+    '10/16/2026 17:20:00: Connections 0 ZDOS:1200  sent:0 recv:0';
+  const logs = (h: ReturnType<typeof harness>) =>
+    h.logger.log.mock.calls.map(([m]) => m);
+  const thorvald = [SRC, { steamId: STEAM, displayName: 'Thorvald' }];
+
+  it('missing test 4: a live join between two re-auth replays applies at once; the next replay adds 0 events', async () => {
+    const h = harness([], okCredentials, [], valheim);
+    await h.connect([OLD_BEAT]);
+    // ScanReader rewrote the game's " \r" to "\r\n": two lines, ONE frame.
+    h.wings.frame('console output', `${JOIN}\r\n${CHAR}`);
+    await h.session.idle();
+    expect(h.sink.playerJoined.mock.calls).toEqual([thorvald]);
+    expect(logs(h)).toContain('Presence event for server 7: join (live)');
+    // ~6 min later: token refresh → auth success → send-logs replay, one
+    // \n-split line per frame (Wings Readlog).
+    h.wings.frame('auth success');
+    h.wings.lines([OLD_BEAT, JOIN, CHAR]);
+    await h.settle();
+    expect(logs(h)).toContain(
+      'Presence replay for server 7: 0 events, 0 changes',
+    );
+    expect(logs(h)).toContain(
+      'Presence re-auth for server 7: 2 live lines, 2 applied, 0 unparsed, 0 stale since the last auth',
+    );
+    expect(h.sink.playerJoined.mock.calls).toEqual([thorvald]);
+  });
+
+  it('applies an ANSI-coloured live line with a trailing carriage return', async () => {
+    const h = harness([], okCredentials, [], valheim);
+    await h.connect();
+    h.wings.frame('console output', JOIN);
+    h.wings.frame('console output', `\u001b[0;32m${CHAR}\u001b[0m\r`);
+    await h.session.idle();
+    expect(h.sink.playerJoined.mock.calls).toEqual([thorvald]);
+  });
+
+  it('logs why it emptied the server (F6), with counts only', async () => {
+    const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+    await h.connect();
+    h.wings.frame('status', 'offline');
+    await h.session.idle();
+    expect(logs(h)).toContain(
+      'Presence: emptying server 7 (status offline); 1 tracked',
+    );
   });
 });
