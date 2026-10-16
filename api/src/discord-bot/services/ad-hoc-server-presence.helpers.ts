@@ -215,14 +215,24 @@ export async function countServerOnlyPresence(
   return rows.length;
 }
 
-/** Open rows still on THIS server — the rehydrate set for its session. */
+/**
+ * Open rows still on THIS server — the rehydrate set for its session. Only an
+ * unlinked row's name is a character name; a linked or merged row's is the
+ * RL/Discord name (ROK-1821), so it rehydrates as its SteamID — nameless to
+ * the tracker until the next character line names it (Codex r3).
+ */
 export async function listOpenServerPresence(
   db: Db,
   eventId: number,
   pelicanServerId: number,
 ): Promise<ServerPresencePlayer[]> {
   const rows = await db
-    .select({ steamId: p.steamId, displayName: p.discordUsername })
+    .select({
+      steamId: p.steamId,
+      displayName: p.discordUsername,
+      userId: p.userId,
+      discordUserId: p.discordUserId,
+    })
     .from(p)
     .where(
       and(
@@ -232,9 +242,13 @@ export async function listOpenServerPresence(
         isNull(p.leftAt),
       ),
     );
-  return rows.flatMap((r) =>
-    r.steamId ? [{ steamId: r.steamId, displayName: r.displayName }] : [],
-  );
+  return rows.flatMap((r) => {
+    if (!r.steamId) return [];
+    const named = r.userId === null && r.discordUserId === null;
+    return [
+      { steamId: r.steamId, displayName: named ? r.displayName : r.steamId },
+    ];
+  });
 }
 
 /**
