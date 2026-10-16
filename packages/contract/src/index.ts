@@ -216,5 +216,16 @@ export * from './ledgerlink-json-schema.js';
 
 // Guild page /guilds/:id — read shapes + editor delegation (ROK-1785).
 export * from './guilds.schema.js';
+// Guild page S3 raids payload (ROK-1787).
+export * from './guild-raids.schema.js';
+
+// Pinned "Join Raid Ledger" Discord post — admin shapes (ROK-1740).
+export * from './discord-join-post.schema.js';
+
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
+
+// Auto-maintained per-game Discord @role (ROK-1767).
+export * from './discord-game-role.schema.js';
+// Per-game notification mute — the game-page bell (ROK-1797).
+export * from './game-notification-mutes.schema.js';

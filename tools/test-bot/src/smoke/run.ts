@@ -7,10 +7,11 @@
  * Connects the companion bot, auto-discovers channels/games from the API,
  * sets up fixtures, runs all smoke tests in parallel, then cleans up.
  */
-import { disconnect } from "../client.js";
+import { disconnect, getGuild } from "../client.js";
 import { isTimeoutError } from "./retry.js";
 import { SMOKE } from "./config.js";
 import { teardownChannelPool } from "./channel-pool.js";
+import { findEphemeralVoiceSince, formatEphemeralLeakReport } from "./ephemeral-leak.js";
 import { setup } from "./setup.js";
 import { partitionTests } from "./test-partition.js";
 import type { SmokeTest, TestContext, TestResult } from "./types.js";
@@ -58,6 +59,8 @@ import { lfmEmbedTests } from "./tests/lfm-embed.test.js";
 import { lfmPlayingTests } from "./tests/lfm-playing.test.js";
 import { lfgBoardTests } from "./tests/lfg-board.test.js";
 import { lfgInviteTests } from "./tests/lfg-invite.test.js";
+import { gameRoleTests } from "./tests/game-role.test.js";
+import { joinPostTests } from "./tests/join-post.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
 // to keep the bundle clean; the test file is kept for local runs + re-registration.
 
@@ -207,6 +210,8 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lfmPlayingTests,
     ...lfgBoardTests,
     ...lfgInviteTests,
+    ...gameRoleTests,
+    ...joinPostTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests
     // (green on CI); the smoke's failure is a CI-seed recipient-eligibility
@@ -216,16 +221,44 @@ function collectTests(filterCat?: string): SmokeTest[] {
   ].filter((t) => !filterCat || t.category === filterCat);
 }
 
+/**
+ * Warn — loudly, with a count — about ephemeral voice channels created during
+ * this run that are still standing (INV-DEV-GUILD-FLOOD-2026-10-15). A warning,
+ * not a failure: a concurrent run sharing the guild can own a live one.
+ */
+async function reportEphemeralLeaks(runStartMs: number): Promise<void> {
+  try {
+    const channels = await getGuild().channels.fetch();
+    const typed = [...channels.values()].flatMap((c) =>
+      c ? [{ id: c.id, name: c.name, type: c.type }] : [],
+    );
+    const leaks = findEphemeralVoiceSince(typed, runStartMs);
+    const githubActions = process.env.GITHUB_ACTIONS === "true";
+    for (const line of formatEphemeralLeakReport(leaks, runStartMs, githubActions)) {
+      console.log(line);
+    }
+  } catch (err) {
+    console.warn(`  Ephemeral voice census skipped: ${String(err)}`);
+  }
+}
+
 /** Clean up resources and exit with the appropriate code. */
-async function teardown(ctx: TestContext, failCount: number): Promise<never> {
+async function teardown(
+  ctx: TestContext,
+  failCount: number,
+  runStartMs: number,
+): Promise<never> {
   console.log("\n=== Teardown ===");
   await teardownChannelPool(ctx.api, ctx.channelPool ?? []);
+  await reportEphemeralLeaks(runStartMs);
   await disconnect();
   console.log("  Done.");
   process.exit(failCount > 0 ? 1 : 0);
 }
 
 async function main(): Promise<void> {
+  // Before setup: the leak census counts channels created from here on.
+  const runStartMs = Date.now();
   const ctx = await setup();
   const nameFilter = process.env.SMOKE_NAME_FILTER;
   const allTests = collectTests(process.env.SMOKE_CATEGORY).filter(
@@ -255,7 +288,7 @@ async function main(): Promise<void> {
 
   const results = [...parallelResults, ...sequentialResults];
   const failCount = report(results);
-  await teardown(ctx, failCount);
+  await teardown(ctx, failCount, runStartMs);
 }
 
 main().catch((err) => {

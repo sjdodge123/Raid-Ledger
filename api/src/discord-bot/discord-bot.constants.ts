@@ -48,8 +48,10 @@ export interface AdHocParticipantJoinedPayload {
  */
 export interface AdHocParticipantLeftPayload {
   eventId: number;
-  /** Discord id of the member who left. Always present — the roster's key. */
-  discordUserId: string;
+  /** Discord id of the member who left; null for a game-server player (ROK-1800). */
+  discordUserId: string | null;
+  /** SteamID64 of a game-server player who left (ROK-1800). */
+  steamId?: string;
 }
 
 /**

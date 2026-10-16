@@ -6,6 +6,8 @@ import { Switch } from '../../components/ui/switch';
 import { EphemeralVoiceSection } from './ephemeral-voice-section';
 import { LfgBoardSection } from './lfg-board-section';
 import { WeeklyDigestSection } from './weekly-digest-section';
+import { GameRolesSection } from './game-roles-section';
+import { JoinPostSection } from './join-post-section';
 
 export function DiscordFeaturesPage() {
     const isDiscordActive = usePluginStore((s) => s.isPluginActive('discord'));
@@ -53,6 +55,8 @@ function DiscordFeaturesContent() {
                     <EphemeralVoiceSection />
                     <LfgBoardSection />
                     <WeeklyDigestSection />
+                    <GameRolesSection />
+                    <JoinPostSection />
                 </>
             ) : (
                 <BotNotConnectedWarning />

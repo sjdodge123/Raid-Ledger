@@ -37,6 +37,7 @@ import * as path from 'path';
 import * as schema from '../../drizzle/schema';
 import { AppModule } from '../../app.module';
 import { applyCorsPolicy } from '../../cors/cors-auto-policy';
+import { installFeedbackBodyParser } from '../../main.helpers';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { QueueHealthService } from '../../queue/queue-health.service';
 import { closeTestSharedRedis } from '../../queue/queue.module';
@@ -237,6 +238,8 @@ async function buildNestApp(
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   // Mirror main.ts: prod accepts 2 MB JSON bodies; Nest's default is 100 KB,
   // which would 413 a request before any route (e.g. ROK-1724's 256 KB cap).
+  // ROK-1313: mirror main.ts — POST /feedback gets 8 MB for screenshots.
+  installFeedbackBodyParser(app);
   app.useBodyParser('json', { limit: '2mb' });
   // ROK-1732: mirror prod's CORS policy. Registered before init() so it runs
   // ahead of the router. Supertest sends no Origin, so it allows every

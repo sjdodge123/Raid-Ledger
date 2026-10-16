@@ -12,6 +12,7 @@ import { discordThreadHandlers } from './discord-thread-handlers';
 import { communityInsightsHandlers } from './community-insights-handlers';
 import { calendarSyncHandlers } from './calendar-sync-handlers';
 import { pelicanHandlers } from './pelican-handlers';
+import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
@@ -26,6 +27,7 @@ export const handlers = [
     ...calendarSyncHandlers,
     // Pelican plugin admin (ROK-121) — nothing stored.
     ...pelicanHandlers,
+    ...guildRaidsHandlers,
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes

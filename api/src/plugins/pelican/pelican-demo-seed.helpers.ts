@@ -1,4 +1,5 @@
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, notInArray } from 'drizzle-orm';
+import { QUICK_PLAY_FIXTURE_UUIDS } from './pelican-demo-quick-play-seed.helpers';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import {
@@ -9,10 +10,8 @@ import {
   type NewPelicanServer,
 } from '../../drizzle/schema';
 import {
-  DEMO_TZ_MISMATCH_FIX,
-  DEMO_TZ_MISMATCH_STORED,
+  offlineServerSchedules,
   runningServerSchedules,
-  tzMismatchServerSchedules,
 } from './pelican-demo-seed-schedules.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -32,20 +31,13 @@ export interface PelicanSeedServer {
   name: string;
   /** Stored schedules seeded for this row (ROK-1096). */
   scheduleCount: number;
-  /** The admin row is expected to carry `tzMismatch: true` (ROK-1096). */
-  tzMismatch: boolean;
 }
 
 export interface PelicanSeedResult {
   gameId: number;
   gameName: string;
   servers: PelicanSeedServer[];
-  /** The override that clears the mismatched row's warning (ROK-1096). */
-  tzMismatchFixTimezone: string;
 }
-
-/** The row whose schedule disagrees with its timezone override. */
-const TZ_MISMATCH_KIND: PelicanSeedKind = 'offline_unmapped';
 
 interface SeedSpec {
   kind: PelicanSeedKind;
@@ -76,11 +68,7 @@ export function buildDemoServers(gameId: number, now: Date): SeedSpec[] {
     [
       'offline_unmapped',
       'Offline',
-      {
-        currentState: 'offline',
-        statusCheckedAt: now,
-        timezone: DEMO_TZ_MISMATCH_STORED,
-      },
+      { currentState: 'offline', statusCheckedAt: now },
     ],
     ['unknown_hidden', 'Hidden', { gameId, showOnCalendar: false }],
     ['missing', 'Missing', { missingSince: now }],
@@ -111,20 +99,29 @@ function schedulesFor(
   now: Date,
 ): NewPelicanSchedule[] {
   if (kind === 'running_mapped') return runningServerSchedules(serverId);
-  if (kind === TZ_MISMATCH_KIND)
-    return tzMismatchServerSchedules(serverId, now);
+  if (kind === 'offline_unmapped') return offlineServerSchedules(serverId, now);
   return [];
 }
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
-/** Wipe `pelican_servers` (schedules cascade), insert `specs` + their schedules. */
+/** Delete every server row (schedules cascade) but the Quick Play fixture. */
+function wipeDemoRows(tx: Tx) {
+  return tx
+    .delete(pelicanServers)
+    .where(notInArray(pelicanServers.panelUuid, QUICK_PLAY_FIXTURE_UUIDS));
+}
+
+/**
+ * Wipe `pelican_servers` (schedules cascade) except the ROK-1800 Quick Play
+ * smoke fixture rows, then insert `specs` + their schedules.
+ */
 async function resetDemoRows(
   tx: Tx,
   specs: SeedSpec[],
   now: Date,
 ): Promise<PelicanSeedServer[]> {
-  await tx.delete(pelicanServers);
+  await wipeDemoRows(tx);
   const inserted = await tx
     .insert(pelicanServers)
     .values(specs.map((s) => s.values))
@@ -146,7 +143,6 @@ async function resetDemoRows(
     id: row.id,
     name: row.name,
     scheduleCount: rows.length,
-    tzMismatch: spec.kind === TZ_MISMATCH_KIND,
   }));
 }
 
@@ -166,6 +162,5 @@ export async function seedDemoPelicanServers(
     gameId: game.id,
     gameName: game.name,
     servers,
-    tzMismatchFixTimezone: DEMO_TZ_MISMATCH_FIX,
   };
 }

@@ -23,8 +23,10 @@ import type {
   GameServerCalendarItemDto,
   GameServerStatusDto,
   UpdateCharacterDto,
+  UserRole,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
+import type { GamePresenceEvent } from '../pelican/presence/presence-events';
 
 /** The character fields a display-equipment resolver may read (ROK-1727). */
 export interface DisplayEquipmentRow {
@@ -229,6 +231,35 @@ export interface GameServerProvider {
 /** Multi-adapter key every game-server provider registers under (providers are not per-game). */
 export const GAME_SERVER_PROVIDER_KEY = '*';
 
+/**
+ * ROK-1800: a game plugin's console-line parser, keyed by game slug. The
+ * hosting-panel plugin pipes each line to it and never imports the game
+ * plugin. `parse` must never return or retain the raw (secret-bearing) line.
+ */
+export interface GameLogParser {
+  /** Owning plugin id — callers skip the parser while that plugin is inactive. */
+  readonly pluginSlug: string;
+  parse(line: string): GamePresenceEvent | null;
+}
+
+/**
+ * ROK-1787: a plugin that owns guilds decides who may tag an event to one.
+ * Core never imports the guild plugin; it resolves this adapter instead.
+ */
+export interface EventGuildTagger {
+  /** Owning plugin id — core treats tagging as unavailable while inactive. */
+  readonly pluginSlug: string;
+  /** Throws (400 unknown guild / wrong game, 403 not an editor) to refuse. */
+  assertCanTag(
+    actor: { id: number; role: UserRole },
+    guildId: number,
+    gameId: number | null,
+  ): Promise<void>;
+}
+
+/** Single-adapter key the event guild tagger registers under. */
+export const EVENT_GUILD_TAGGER_KEY = '*';
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -240,4 +271,6 @@ export const EXTENSION_POINTS = {
   AUTH_PROVIDER: 'auth-provider',
   CHARACTER_IDENTITY: 'character-identity',
   GAME_SERVER_PROVIDER: 'game-server-provider',
+  EVENT_GUILD_TAGGER: 'event-guild-tagger',
+  GAME_LOG_PARSER: 'game-log-parser',
 } as const;

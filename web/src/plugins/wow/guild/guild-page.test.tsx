@@ -1,5 +1,5 @@
 /**
- * ROK-1785: `/guilds/:id` — roster grouped by rank, S1's hidden tabs, the
+ * ROK-1785: `/guilds/:id` — roster grouped by rank, the hidden tabs, the
  * friendly 403 state, and the Page editors card shown only to
  * `viewer.canManageEditors`.
  */
@@ -61,12 +61,12 @@ beforeEach(() => { editorCalls = 0; posts = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GuildPage (ROK-1785)', () => {
-    it('shows only the Overview and Roster tabs in S1', async () => {
+    it('shows only the Overview, Roster and Raids tabs (S1 + S3)', async () => {
         serve(makePage());
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
-        expect(labels).toEqual(['Overview', 'Roster']);
+        expect(labels).toEqual(['Overview', 'Roster', 'Raids']);
     });
 
     it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {

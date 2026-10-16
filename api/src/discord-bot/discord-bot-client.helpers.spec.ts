@@ -14,6 +14,16 @@ import {
 } from './discord-bot-client.helpers';
 
 describe('REQUIRED_PERMISSIONS (ROK-313 AC13)', () => {
+  // ROK-1740: the join post pins itself; a normal invite must grant it.
+  it('includes Pin Messages, so the invite URL lets the join post pin', () => {
+    expect(REQUIRED_PERMISSIONS.map((p) => p.label)).toContain('Pin Messages');
+    expect(
+      REQUIRED_PERMISSIONS.some(
+        (p) => p.flag === PermissionsBitField.Flags.PinMessages,
+      ),
+    ).toBe(true);
+  });
+
   it('includes the Kick Members permission', () => {
     expect(
       REQUIRED_PERMISSIONS.some(
@@ -29,7 +39,7 @@ describe('REQUIRED_PERMISSIONS (ROK-313 AC13)', () => {
  * forbids them in source. D14a's guard spec enforces that.
  */
 describe('botInvitePermissionsBits (ROK-1471 AC11)', () => {
-  // T17 (R): a throwaway 18th entry must move the number. A hardcoded
+  // T17 (R): a throwaway 19th entry must move the number. A hardcoded
   // constant cannot satisfy this — the expectation is recomputed, not literal.
   it('changes when a permission is appended, matching the recomputed OR', () => {
     const extended = [
@@ -54,14 +64,14 @@ describe('botInvitePermissionsBits (ROK-1471 AC11)', () => {
     expect(permissions).not.toBe(base.toString());
   });
 
-  // T18: today's 17 entries. The near-miss value is the same set MINUS
-  // `Connect` (bit 20, 1048576) — the value recorded against the fleet slot
-  // bots before the voice permission was added. Asserting both directions
-  // catches a silently dropped flag as well as a silently added one.
-  it('derives the current 17-permission bitfield', () => {
-    expect(REQUIRED_PERMISSIONS).toHaveLength(17);
-    expect(botInvitePermissionsBits().toString()).toBe('589674583247891');
-    expect(botInvitePermissionsBits().toString()).not.toBe('589674582199315');
+  // T18: today's 18 entries. The near-miss value is the same set MINUS
+  // `Pin Messages` (bit 51) — the 17-permission value shipped before the
+  // ROK-1740 join post needed to pin. Asserting both directions catches a
+  // silently dropped flag as well as a silently added one.
+  it('derives the current 18-permission bitfield', () => {
+    expect(REQUIRED_PERMISSIONS).toHaveLength(18);
+    expect(botInvitePermissionsBits().toString()).toBe('2841474396933139');
+    expect(botInvitePermissionsBits().toString()).not.toBe('589674583247891');
   });
 
   it('is the OR of every declared flag, order-independent', () => {
@@ -95,7 +105,7 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
   it('reports every required permission, including the thread trio', () => {
     const results = checkBotPermissions(guild);
 
-    expect(results).toHaveLength(17);
+    expect(results).toHaveLength(18);
     const names = results.map((r) => r.name);
     expect(names).toContain('Manage Threads');
     expect(names).toContain('Create Public Threads');
@@ -105,7 +115,7 @@ describe('checkBotPermissions (ROK-1471 AC12)', () => {
 
   it('marks everything ungranted when the bot is not in the guild', () => {
     const results = checkBotPermissions(null);
-    expect(results).toHaveLength(17);
+    expect(results).toHaveLength(18);
     expect(results.every((r) => !r.granted)).toBe(true);
   });
 });

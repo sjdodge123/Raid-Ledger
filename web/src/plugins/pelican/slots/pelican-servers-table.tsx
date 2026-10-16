@@ -9,11 +9,10 @@ import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { PelicanServerCard, PelicanServerRow, type ServerUpdateHandler } from './pelican-server-row';
 
-const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Timezone', 'Last synced'] as const;
+const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Last synced'] as const;
 
 interface TableProps {
     rows: PelicanServerRowDto[];
-    defaultTimezone: string;
     onUpdate: ServerUpdateHandler;
 }
 
@@ -25,10 +24,10 @@ function useGameSuggestions(): IgdbGameDto[] {
     } satisfies IgdbGameDto)), [games]);
 }
 
-export function PelicanServersTable({ rows, defaultTimezone, onUpdate }: TableProps) {
+export function PelicanServersTable({ rows, onUpdate }: TableProps) {
     const isDesktop = useMediaQuery(DESKTOP_MQ);
     const suggestions = useGameSuggestions();
-    const shared = { defaultTimezone, suggestions, onUpdate };
+    const shared = { suggestions, onUpdate };
     if (!isDesktop) {
         return (
             <ul className="space-y-3" aria-label="Pelican servers" data-testid="pelican-servers-cards">

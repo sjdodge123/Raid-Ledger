@@ -1,5 +1,5 @@
 {
-  "id": "6049ac11-457b-4199-8204-7c7d3e76b194",
+  "id": "9fc1f59c-f74b-4f67-a8c5-f34d4ac909f8",
   "prevId": "742d0a25-9edf-45ed-a6a9-122270a693cf",
   "version": "7",
   "dialect": "postgresql",
@@ -3144,6 +3144,18 @@
         "client_logs": {
           "name": "client_logs",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "screenshot_path": {
+          "name": "screenshot_path",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_context": {
+          "name": "client_context",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },
@@ -12022,78 +12034,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.calendar_feeds": {
-      "name": "calendar_feeds",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_encrypted": {
-          "name": "token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rotated_at": {
-          "name": "rotated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_fetched_at": {
-          "name": "last_fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "calendar_feeds_user_id_users_id_fk": {
-          "name": "calendar_feeds_user_id_users_id_fk",
-          "tableFrom": "calendar_feeds",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "calendar_feeds_token_hash_unique": {
-          "name": "calendar_feeds_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

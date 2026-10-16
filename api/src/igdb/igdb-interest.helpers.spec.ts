@@ -14,6 +14,7 @@ import {
   getInterestedPlayers,
   batchCheckInterests,
   removeInterest,
+  addInterest,
   HEART_SOURCES,
 } from './igdb-interest.helpers';
 import { at } from '../common/testing/narrow';
@@ -376,12 +377,10 @@ describe('getInterestCount — adversarial edge cases', () => {
   });
 });
 
-// ─── removeInterest — poll-source suppression (ROK-1031 Gap 2) ────────────────
+// ─── removeInterest — suppression (ROK-1031 Gap 2, ROK-1796) ─────────────────
 
-describe('removeInterest — poll-source suppression', () => {
-  function buildRemoveInterestDb(
-    source: string | null,
-  ): Record<string, jest.Mock> {
+describe('removeInterest — suppression', () => {
+  function buildRemoveInterestDb(): Record<string, jest.Mock> {
     const db: Record<string, jest.Mock> = {};
     const chainMethods = ['from', 'innerJoin', 'orderBy', 'groupBy'];
     for (const m of chainMethods) {
@@ -393,52 +392,46 @@ describe('removeInterest — poll-source suppression', () => {
     db.values = jest.fn().mockReturnThis();
     db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
     db.delete = jest.fn().mockReturnThis();
+    // transaction(cb) runs cb against the same chain mock
+    db.transaction = jest.fn((cb: (tx: unknown) => unknown) => cb(db));
 
-    // getUserInterestSource: select().from().where().limit() → source
-    // removeInterest delete: delete().where() → void
+    // tx.delete().where() → void (heart sources only)
     // getInterestCount: select().from().where() → [{ count }]
     // getInterestedPlayers: selectDistinctOn().from().innerJoin().where().orderBy().limit() → []
     let whereCallCount = 0;
     db.where = jest.fn().mockImplementation(() => {
       whereCallCount++;
-      if (whereCallCount === 1) return db; // getUserInterestSource chain → .limit()
-      if (whereCallCount === 2) return Promise.resolve(undefined); // delete
-      if (whereCallCount === 3) return Promise.resolve([{ count: 0 }]); // getInterestCount
+      if (whereCallCount === 1) return Promise.resolve(undefined); // delete
+      if (whereCallCount === 2) return Promise.resolve([{ count: 0 }]); // getInterestCount
       return db; // getInterestedPlayers chain
     });
-    db.limit = jest.fn().mockImplementation(() => {
-      // First limit: getUserInterestSource → returns source row
-      // Subsequent limits: getInterestedPlayers → returns []
-      return Promise.resolve(source ? [{ source }] : []);
-    });
+    db.limit = jest.fn().mockResolvedValue([]); // getInterestedPlayers
 
     return db;
   }
 
-  it('creates suppression row when source is "poll"', async () => {
-    const db = buildRemoveInterestDb('poll');
+  it('deletes the heart rows and writes the suppression in one transaction', async () => {
+    const db = buildRemoveInterestDb();
 
-    await removeInterest(db as never, 42, 7);
+    const result = await removeInterest(db as never, 42, 7);
 
-    expect(db.insert).toHaveBeenCalled();
+    expect(db.transaction).toHaveBeenCalledTimes(1);
+    expect(db.delete).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith({ userId: 7, gameId: 42 });
+    expect(db.onConflictDoNothing).toHaveBeenCalled();
+    expect(result.wantToPlay).toBe(false);
   });
 
-  it('creates suppression row when source is "discord"', async () => {
-    const db = buildRemoveInterestDb('discord');
+  // ROK-1796 intentional behaviour change: a manual-only (or empty) un-heart
+  // now ALSO records a suppression, so a later un-heart → manual re-heart →
+  // un-heart sequence still leaves the user opted out (Codex P2).
+  it('writes the suppression whatever backed the heart (incl. manual-only)', async () => {
+    const db = buildRemoveInterestDb();
 
-    await removeInterest(db as never, 42, 7);
+    await removeInterest(db as never, 10, 2);
 
-    expect(db.insert).toHaveBeenCalled();
-  });
-
-  it('does not create suppression row when source is "manual"', async () => {
-    const db = buildRemoveInterestDb('manual');
-
-    await removeInterest(db as never, 42, 7);
-
-    // insert should be called only for delete, not for suppression
-    // We check insert was NOT called (the delete uses db.delete, not db.insert)
-    expect(db.insert).not.toHaveBeenCalled();
+    expect(db.insert).toHaveBeenCalledTimes(1);
+    expect(db.values).toHaveBeenCalledWith({ userId: 2, gameId: 10 });
   });
 });
 
@@ -553,5 +546,51 @@ describe('batchCheckInterests — deduplication and HEART_SOURCES filter', () =>
     expect(result['10']?.count).toBe(2);
     expect(result['20']?.wantToPlay).toBe(false);
     expect(result['20']?.count).toBe(0);
+  });
+});
+
+// ─── addInterest — clear suppression before inserting (ROK-1796) ────────────
+// Against a concurrent removeInterest (delete heart → insert suppression),
+// clearing first means every interleaving leaves the heart, the suppression,
+// or both (heart wins) — never neither (Codex round 3).
+describe('addInterest — suppression clear ordering', () => {
+  it('deletes the suppression before inserting the manual heart', async () => {
+    const db: Record<string, jest.Mock> = {};
+    const deleteMock = jest.fn().mockReturnThis();
+    const insertMock = jest.fn().mockReturnThis();
+    for (const m of [
+      'from',
+      'innerJoin',
+      'orderBy',
+      'groupBy',
+      'select',
+      'selectDistinctOn',
+      'values',
+    ]) {
+      db[m] = jest.fn().mockReturnThis();
+    }
+    db.delete = deleteMock;
+    db.insert = insertMock;
+    db.onConflictDoNothing = jest.fn().mockResolvedValue(undefined);
+    let whereCallCount = 0;
+    db.where = jest.fn().mockImplementation(() => {
+      whereCallCount++;
+      if (whereCallCount === 1) return Promise.resolve(undefined); // suppression delete
+      if (whereCallCount === 2) return Promise.resolve([{ count: 1 }]); // getInterestCount
+      return db; // getInterestedPlayers chain
+    });
+    db.limit = jest.fn().mockResolvedValue([]);
+
+    const result = await addInterest(db as never, 42, 7);
+
+    const deleteOrder = at(deleteMock.mock.invocationCallOrder, 0);
+    const insertOrder = at(insertMock.mock.invocationCallOrder, 0);
+    expect(deleteOrder).toBeLessThan(insertOrder);
+    expect(db.values).toHaveBeenCalledWith({
+      userId: 7,
+      gameId: 42,
+      source: 'manual',
+    });
+    expect(result.wantToPlay).toBe(true);
   });
 });

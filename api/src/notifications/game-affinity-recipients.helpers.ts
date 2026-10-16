@@ -15,6 +15,8 @@ import { sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { NOW_UTC } from '../drizzle/timestamp-utils';
+import { INTERESTED_GI_ROW } from '../igdb/igdb-interest-sources.helpers';
+import { notGameMutedSql } from './game-notification-mute.helpers';
 
 /** The Drizzle handle these reads run on. */
 export type AffinityDb = PostgresJsDatabase<typeof schema>;
@@ -35,10 +37,17 @@ export interface AffinityRecipientOptions {
   interestsOnly?: boolean;
 }
 
-/** SQL predicate: holds an explicit subscription (heart) for the game. */
+/**
+ * SQL predicate: holds an explicit subscription (heart) for the game.
+ *
+ * A heart-source row always subscribes; a Steam library/wishlist row (kept
+ * by un-heart) subscribes only while no un-heart suppression masks it
+ * (ROK-1796, `interestedRowCondition`).
+ */
 function subscribedPredicate(gameId: number): SQL {
   return sql`u.id IN (
       SELECT gi.user_id FROM game_interests gi WHERE gi.game_id = ${gameId}
+        AND ${INTERESTED_GI_ROW}
     )`;
 }
 
@@ -96,6 +105,8 @@ export async function findGameAffinityRecipients(
       AND u.deactivated_at IS NULL
       ${notBanned}
       AND ${affinityPredicate(gameId, options.interestsOnly === true)}
+      -- outer, so it masks BOTH affinity halves (ROK-1797 D1)
+      AND ${notGameMutedSql(gameId)}
   `);
   return rows.map((r) => r.id);
 }

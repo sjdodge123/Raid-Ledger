@@ -6,17 +6,15 @@
 import { useEffect, useRef, useState, type FocusEvent } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type { IgdbGameDto, PelicanServerRowDto, PelicanServerUpdate } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
 import { Switch } from '../../../components/ui/switch';
 import { GameSearchInput } from '../../../components/events/game-search-input';
 import { PelicanStateChip } from './pelican-state-chip';
-import { PelicanTimezoneField } from './pelican-timezone-field';
+import { quickPlayHint } from './pelican-servers.helpers';
 
 export type ServerUpdateHandler = (id: number, patch: PelicanServerUpdate, gameName?: string | null) => void;
 
 export interface ServerRowProps {
     row: PelicanServerRowDto;
-    defaultTimezone: string;
     suggestions: IgdbGameDto[];
     onUpdate: ServerUpdateHandler;
 }
@@ -95,21 +93,21 @@ function CalendarSwitch({ row, onUpdate }: Pick<ServerRowProps, 'row' | 'onUpdat
     );
 }
 
-/** Operator ruling 5 (ROK-1096): shown when the row's schedules don't fit its effective timezone. */
-export const TZ_MISMATCH_WARNING = "Schedule times don't match this timezone — check the override";
-
-function TimezoneControl({ row, defaultTimezone, onUpdate, inline = false }: ControlProps<'row' | 'defaultTimezone' | 'onUpdate'>) {
-    const inherited = row.timezone === null;
+/**
+ * "Detect Quick Play from server logs" (ROK-1800). Disabled with a hint while the server
+ * has no game or its game has no log parser — but an already-on switch can still be
+ * turned off, so a game change never strands it on.
+ */
+function QuickPlaySwitch({ row, onUpdate, inline = false }: ControlProps<'row' | 'onUpdate'>) {
+    const hint = quickPlayHint(row);
+    const hintId = `pelican-server-${row.id}-quick-play-hint`;
     return (
-        <div className="space-y-1">
-            <PelicanTimezoneField key={row.timezone ?? 'inherit'} id={`pelican-server-${row.id}-tz`} label="Timezone" hideLabel={inline}
-                testId={`pelican-server-${row.id}-tz-input`} value={row.timezone ?? defaultTimezone} inherited={inherited}
-                hint={inherited ? `Uses the panel default (${defaultTimezone}).` : 'Overrides the panel default.'}
-                warning={row.tzMismatch ? TZ_MISMATCH_WARNING : undefined}
-                onChange={(tz) => { if (tz !== row.timezone) onUpdate(row.id, { timezone: tz }); }} />
-            {!inherited && (
-                <Button variant="ghost" size="sm" onClick={() => onUpdate(row.id, { timezone: '' })}>Use default</Button>
-            )}
+        <div className={`flex flex-col gap-1 ${inline ? 'items-start' : 'items-end text-right'}`}>
+            <Switch checked={row.presenceTracking} label={`Detect Quick Play on ${row.name} from server logs`}
+                testId={`pelican-server-${row.id}-quick-play`} disabled={hint !== null && !row.presenceTracking}
+                {...(hint === null ? {} : { 'aria-describedby': hintId })}
+                onChange={(presenceTracking) => onUpdate(row.id, { presenceTracking })} />
+            {hint !== null && <p id={hintId} className="text-xs text-muted">{hint}</p>}
         </div>
     );
 }
@@ -122,8 +120,8 @@ function LastSynced({ at }: { at: string | null }) {
 
 /**
  * Desktop: one `<tr>` in the §4.21-idiom table. Sized to fit the admin content
- * box without inner scroll (~692px at a 1024px viewport, ~820px at 1280): the two
- * pickers hold 10rem, every other column shrinks to its longest word.
+ * box without inner scroll: the game picker holds 10rem, every other column
+ * shrinks to its longest word. No timezone column (ROK-1795).
  */
 export function PelicanServerRow(p: ServerRowProps) {
     return (
@@ -132,7 +130,7 @@ export function PelicanServerRow(p: ServerRowProps) {
             <td className="px-2 py-3"><PelicanStateChip row={p.row} /></td>
             <td className="px-2 py-3 min-w-[10rem]"><GamePicker row={p.row} suggestions={p.suggestions} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><CalendarSwitch row={p.row} onUpdate={p.onUpdate} /></td>
-            <td className="px-2 py-3 min-w-[10rem]"><TimezoneControl row={p.row} defaultTimezone={p.defaultTimezone} onUpdate={p.onUpdate} inline /></td>
+            <td className="px-2 py-3"><QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} inline /></td>
             <td className="px-2 py-3"><LastSynced at={p.row.lastSyncedAt} /></td>
         </tr>
     );
@@ -151,7 +149,10 @@ export function PelicanServerCard(p: ServerRowProps) {
                 <span className="text-sm text-secondary">Show on calendar</span>
                 <CalendarSwitch row={p.row} onUpdate={p.onUpdate} />
             </div>
-            <TimezoneControl row={p.row} defaultTimezone={p.defaultTimezone} onUpdate={p.onUpdate} />
+            <div className="flex items-start justify-between gap-3">
+                <span className="text-sm text-secondary">Detect Quick Play from server logs</span>
+                <QuickPlaySwitch row={p.row} onUpdate={p.onUpdate} />
+            </div>
             <p className="text-xs text-muted">Last synced <LastSynced at={p.row.lastSyncedAt} /></p>
         </div>
     );

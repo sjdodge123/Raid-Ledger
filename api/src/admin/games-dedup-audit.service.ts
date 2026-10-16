@@ -97,6 +97,7 @@ const ZERO_BLAST_RADIUS: BlastRadiusCounts = {
   tiebreakerBracketVotes: 0,
   tiebreakerVetoes: 0,
   playerIntensitySnapshots: 0,
+  notificationMutes: 0,
 };
 
 @Injectable()

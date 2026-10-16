@@ -129,6 +129,13 @@ describe('getAutoHeartSteamUrlsPref', () => {
 });
 
 describe('addDiscordInterest', () => {
+  it('lifts an un-heart suppression in the same transaction (ROK-1796)', async () => {
+    await addDiscordInterest(mockDb as never, 7, 42);
+
+    expect(mockDb.transaction).toHaveBeenCalledTimes(1);
+    expect(mockDb.delete).toHaveBeenCalledTimes(1);
+  });
+
   it('inserts a game_interests row with source discord', async () => {
     mockDb.onConflictDoNothing.mockResolvedValueOnce(undefined);
 

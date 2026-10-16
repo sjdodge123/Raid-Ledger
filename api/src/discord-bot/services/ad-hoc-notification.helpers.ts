@@ -13,7 +13,8 @@ import {
 
 /** Participant with active status for embed building. */
 export interface AdHocParticipant {
-  discordUserId: string;
+  /** Null for a Steam-only (game-server) participant (ROK-1800). */
+  discordUserId: string | null;
   discordUsername: string;
   isActive: boolean;
 }
@@ -28,7 +29,10 @@ export interface AdHocNotificationDeps {
 
 /** Mark all participants as active. */
 export function toActiveParticipants(
-  participants: Array<{ discordUserId: string; discordUsername: string }>,
+  participants: Array<{
+    discordUserId: string | null;
+    discordUsername: string;
+  }>,
 ): AdHocParticipant[] {
   return participants.map((p) => ({
     discordUserId: p.discordUserId,
@@ -39,7 +43,10 @@ export function toActiveParticipants(
 
 /** Mark all participants as inactive. */
 export function toInactiveParticipants(
-  participants: Array<{ discordUserId: string; discordUsername: string }>,
+  participants: Array<{
+    discordUserId: string | null;
+    discordUsername: string;
+  }>,
 ): AdHocParticipant[] {
   return participants.map((p) => ({
     discordUserId: p.discordUserId,

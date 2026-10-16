@@ -5,6 +5,8 @@
  * is off (D1), dedups once per (game, user) and fails CLOSED when Redis is
  * unreachable (E14) — a fan-out that cannot dedup must not fan out at all.
  */
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 import { LfgAffinityDmService } from './lfg-affinity-dm.service';
 import {
   LFG_EVENTS,
@@ -176,7 +178,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
 
     await h.service.handleLfmReached(payload);
 
-    const issued = JSON.stringify(h.execute.mock.calls[0][0]);
+    const issued = issuedSql(h.execute);
     expect(issued).toContain('deactivated_at IS NULL');
     expect(issued).toContain('banned_at IS NULL');
   });
@@ -186,7 +188,7 @@ describe('LfgAffinityDmService (ROK-1471 D11)', () => {
 
     await h.service.handleLfmReached(payload);
 
-    const issued = JSON.stringify(h.execute.mock.calls[0][0]);
+    const issued = issuedSql(h.execute);
     expect(issued).toContain('game_interests');
     expect(issued).not.toContain('event_signups');
   });
@@ -455,3 +457,14 @@ describe('LfgAffinityDmService — a spawned now-group (ROK-1494)', () => {
     );
   });
 });
+
+/**
+ * Render the SQL the recipient read issued. JSON.stringify can't serialise
+ * drizzle column objects (circular via `.table`), which the shared
+ * interested-row condition embeds (ROK-1796).
+ */
+function issuedSql(execute: jest.Mock): string {
+  const arg: unknown = execute.mock.calls[0]?.[0];
+  if (!(arg instanceof SQL)) throw new Error('execute was not called with SQL');
+  return new PgDialect().sqlToQuery(arg).sql;
+}

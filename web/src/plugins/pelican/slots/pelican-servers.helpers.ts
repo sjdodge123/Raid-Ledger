@@ -47,7 +47,7 @@ export function applyServerPatch(
     return {
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: patch.showOnCalendar }),
-        ...(patch.timezone === undefined ? {} : { timezone: patch.timezone === '' ? null : patch.timezone }),
+        ...(patch.presenceTracking === undefined ? {} : { presenceTracking: patch.presenceTracking }),
         ...(patch.gameId === undefined ? {} : {
             gameId: patch.gameId,
             gameName: patch.gameId === null ? null : gameName ?? row.gameName,
@@ -62,9 +62,19 @@ export function restoreServerFields(
     return {
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: prev.showOnCalendar }),
-        ...(patch.timezone === undefined ? {} : { timezone: prev.timezone }),
+        ...(patch.presenceTracking === undefined ? {} : { presenceTracking: prev.presenceTracking }),
         ...(patch.gameId === undefined ? {} : { gameId: prev.gameId, gameName: prev.gameName }),
     };
+}
+
+/**
+ * Why "Detect Quick Play from server logs" can't be turned on (ROK-1800), or null when
+ * it can: the server needs a mapped game, and that game needs a log parser (Valheim today).
+ */
+export function quickPlayHint(row: Pick<PelicanServerRowDto, 'gameId' | 'presenceSupported'>): string | null {
+    if (row.gameId === null) return 'Map a game first';
+    if (!row.presenceSupported) return 'Not available for this game yet';
+    return null;
 }
 
 export function errorMessage(err: unknown, fallback: string): string {

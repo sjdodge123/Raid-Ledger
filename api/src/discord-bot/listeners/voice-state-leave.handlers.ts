@@ -103,6 +103,8 @@ async function removeChannelMember(
     return;
   }
   if (!members) return;
+  // `channelMembers` already excludes bots, including a ROK-1711 DEMO_MODE
+  // allowlisted bot that counted toward the spawn; that asymmetry is demo-only.
   if (members.size < (binding.config?.minPlayers ?? 2))
     cancelPendingSpawn(timers, channelId, binding.gameId);
 }

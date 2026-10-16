@@ -120,6 +120,26 @@ export type PelicanSchedule = z.output<
 >[number];
 
 /**
+ * `GET /api/client/servers/{server}/websocket` (`WebsocketController.php`):
+ * `{ data: { token, socket } }`. `token` is a 10-minute JWT and `socket`
+ * the Wings URL (`wss://<node>/api/servers/<uuid>/ws`). Neither is logged.
+ */
+export const PelicanWebsocketCredentialsSchema = z
+  .object({
+    data: z.object({
+      token: z.string().min(1),
+      socket: z
+        .string()
+        .url()
+        .refine((u) => /^wss?:\/\//i.test(u), 'socket must be ws(s)://'),
+    }),
+  })
+  .transform((r) => r.data);
+export type PelicanWebsocketCredentials = z.output<
+  typeof PelicanWebsocketCredentialsSchema
+>;
+
+/**
  * Laravel error body (`app/Exceptions/Handler.php`):
  * `{ errors: [{ code, status, detail }] }`. Read only to classify a 403;
  * the detail is never echoed or logged.

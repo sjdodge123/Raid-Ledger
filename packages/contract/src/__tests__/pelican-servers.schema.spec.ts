@@ -1,7 +1,8 @@
 /**
  * Contract tests for the Pelican admin servers table (ROK-1094): the row is
  * strict so a leaked panel uuid fails the API's own parse, and the PATCH body
- * is partial, strict, non-empty, with `timezone: ''` meaning "inherit".
+ * is partial, strict and non-empty. ROK-1795 removed the timezone concept: no
+ * row carries `timezone`/`tzMismatch` and the PATCH body rejects `timezone`.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -18,23 +19,23 @@ const row = {
     gameId: 7,
     gameName: 'Valheim',
     showOnCalendar: true,
-    timezone: null,
     lastSyncedAt: '2026-10-13T12:00:00.000Z',
     statusCheckedAt: null,
     missing: false,
-    tzMismatch: false,
+    presenceTracking: false,
+    presenceSupported: true,
 };
 
 describe('PelicanServerRowSchema', () => {
-    it('requires the ROK-1096 tzMismatch flag', () => {
-        const { tzMismatch: _omit, ...withoutFlag } = row;
-        expect(PelicanServerRowSchema.safeParse(withoutFlag).success).toBe(
-            false,
-        );
+    it('rejects the removed timezone and tzMismatch keys (ROK-1795)', () => {
+        expect(PelicanServerRowSchema.safeParse(row).success).toBe(true);
         expect(
-            PelicanServerRowSchema.safeParse({ ...row, tzMismatch: true })
+            PelicanServerRowSchema.safeParse({ ...row, timezone: null }).success,
+        ).toBe(false);
+        expect(
+            PelicanServerRowSchema.safeParse({ ...row, tzMismatch: false })
                 .success,
-        ).toBe(true);
+        ).toBe(false);
     });
 
     it('accepts a well-formed row inside the list response', () => {
@@ -60,19 +61,16 @@ describe('PelicanServerUpdateSchema', () => {
         expect(PelicanServerUpdateSchema.safeParse({}).success).toBe(false);
     });
 
-    it('rejects an unknown timezone', () => {
-        expect(
-            PelicanServerUpdateSchema.safeParse({ timezone: 'Mars/Olympus' })
-                .success,
-        ).toBe(false);
-    });
-
-    it.each([[''], ['America/New_York'], ['  Europe/Berlin  ']])(
-        'accepts timezone %j',
+    it.each([[''], ['America/New_York']])(
+        'rejects a timezone key (%j) — the field was removed (ROK-1795)',
         (timezone) => {
             expect(PelicanServerUpdateSchema.safeParse({ timezone }).success).toBe(
-                true,
+                false,
             );
+            expect(
+                PelicanServerUpdateSchema.safeParse({ timezone, gameId: 1 })
+                    .success,
+            ).toBe(false);
         },
     );
 

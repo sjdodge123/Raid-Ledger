@@ -301,6 +301,7 @@ describe('GamesDedupAuditService.runAudit', () => {
     // Two rows share igdbId=20. Canonical: id=1 (lower id). Loser: id=2.
     // ROK-1270 extends to 23 counts: 22 direct counts via buildDirectCountQueries
     // (16 ROK-1271 + 6 ROK-1270) then 1 JOIN count via countLineupMatchMembers.
+    // ROK-1797 appends a 23rd direct count (notificationMutes).
     // Distinct non-zero values per slot — a destructure swap (e.g. events↔eventPlans
     // or tiebreakerBracketGameA↔tiebreakerBracketGameB) fails this test.
     const counts = [
@@ -326,6 +327,7 @@ describe('GamesDedupAuditService.runAudit', () => {
       21, // tiebreakerBracketVotes       [direct 20 — ROK-1270]
       22, // tiebreakerVetoes             [direct 21 — ROK-1270]
       23, // playerIntensitySnapshots     [direct 22 — ROK-1270]
+      24, // notificationMutes            [direct 23 — ROK-1797]
       5, // lineupMatchMembers           [JOIN via execute()]
     ];
     const { svc } = await buildService(
@@ -361,6 +363,7 @@ describe('GamesDedupAuditService.runAudit', () => {
     expect(br.tiebreakerBracketVotes).toBe(21);
     expect(br.tiebreakerVetoes).toBe(22);
     expect(br.playerIntensitySnapshots).toBe(23);
+    expect(br.notificationMutes).toBe(24);
     expect(br.lineupMatchMembers).toBe(5);
   });
 

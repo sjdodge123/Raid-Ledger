@@ -3,13 +3,13 @@
  * The DEMO_MODE fixture the fleet UI test plan seeds before each run: four
  * admin-table rows, a fake unreachable connection, and reset on re-run.
  * ROK-1096: the running+mapped row also gets a start/stop window + nightly
- * restart, and the offline row a schedule its timezone override mismatches.
+ * restart, and the offline row a nightly restart (all crons UTC, ROK-1795).
  * (403 without DEMO_MODE is the shared DemoModeGuard's own spec.)
  */
+import { eq } from 'drizzle-orm';
 import {
   GameServerCalendarResponseSchema,
   PelicanServerListResponseSchema,
-  PelicanServerRowSchema,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -163,25 +163,18 @@ describe('POST /admin/test/pelican/seed-servers (ROK-1094)', () => {
 });
 
 describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () => {
-  it('seeds calendar schedules: a window + restart markers on the running row, and a fixable tz warning (ROK-1096)', async () => {
+  it('seeds calendar schedules: a window + restart markers on the running row, all UTC (ROK-1096, ROK-1795)', async () => {
     const seeded = await seed();
     const byKind = new Map(seeded.servers.map((s) => [s.kind, s]));
     const running = byKind.get('running_mapped');
-    const mismatched = byKind.get('offline_unmapped');
-    if (!running || !mismatched) throw new Error('seed: kinds missing');
+    const offline = byKind.get('offline_unmapped');
+    if (!running || !offline) throw new Error('seed: kinds missing');
 
-    const rows = await adminRows();
-    const tzView = seeded.servers.map((s) => [
-      s.kind,
-      s.scheduleCount,
-      s.tzMismatch,
-      rows.get(s.id)?.tzMismatch,
-    ]);
-    expect(tzView).toEqual([
-      ['running_mapped', 6, false, false],
-      ['offline_unmapped', 1, true, true],
-      ['unknown_hidden', 0, false, false],
-      ['missing', 0, false, false],
+    expect(seeded.servers.map((s) => [s.kind, s.scheduleCount])).toEqual([
+      ['running_mapped', 6],
+      ['offline_unmapped', 1],
+      ['unknown_hidden', 0],
+      ['missing', 0],
     ]);
     const stored = await testApp.db.select().from(schema.pelicanSchedules);
     expect(
@@ -205,11 +198,75 @@ describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () =>
     expect(kinds).toContain('marker:backup');
     expect(kinds).toContain('window:Midday open');
 
-    const fixed = await testApp.request
-      .patch(`/admin/plugins/pelican/servers/${mismatched.id}`)
+    // The offline row's nightly restart "0 4 * * *" runs at 04:00 UTC.
+    const offlineRuns = stored
+      .filter((r) => r.serverId === offline.id)
+      .map((r) => r.nextRunAt?.toISOString().slice(11));
+    expect(offlineRuns).toEqual(['04:00:00.000Z']);
+  });
+});
+
+describe('POST /admin/test/pelican/quick-play-fixture (ROK-1800)', () => {
+  const FIXTURE = '/admin/test/pelican/quick-play-fixture';
+
+  it('seeds a per-slot mapped + unmapped pair that a seed-servers reset leaves alone, and deletes it', async () => {
+    const gameId = testApp.seed.game.id;
+    const res = await testApp.request
+      .post(FIXTURE)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ timezone: seeded.tzMismatchFixTimezone });
-    expect(fixed.status).toBe(200);
-    expect(PelicanServerRowSchema.parse(fixed.body).tzMismatch).toBe(false);
+      .send({ slot: 3, gameId });
+    expect(res.status).toBe(200);
+    const fixture = res.body as { mappedId: number; unmappedId: number };
+    const ids = [fixture.mappedId, fixture.unmappedId];
+    await testApp.db
+      .update(schema.pelicanServers)
+      .set({ presenceTracking: true })
+      .where(eq(schema.pelicanServers.id, fixture.mappedId));
+
+    await seed(); // a sibling spec's four-row reset mid-run
+    const kept = await testApp.db.select().from(schema.pelicanServers);
+    expect(kept).toHaveLength(6);
+    expect(
+      kept
+        .filter((r) => ids.includes(r.id))
+        .map((r) => [r.id, r.gameId, r.presenceTracking]),
+    ).toEqual(
+      expect.arrayContaining([
+        [fixture.mappedId, gameId, true],
+        [fixture.unmappedId, null, false],
+      ]),
+    );
+
+    const again = await testApp.request
+      .post(FIXTURE)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slot: 3, gameId });
+    expect(again.body).toEqual(fixture); // same rows, switch reset off
+    const [mapped] = await testApp.db
+      .select()
+      .from(schema.pelicanServers)
+      .where(eq(schema.pelicanServers.id, fixture.mappedId));
+    expect(mapped?.presenceTracking).toBe(false);
+
+    const del = await testApp.request
+      .delete(`${FIXTURE}/3`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(del.status).toBe(204);
+    const left = await testApp.db.select().from(schema.pelicanServers);
+    expect(left.filter((r) => ids.includes(r.id))).toEqual([]);
+    expect(left).toHaveLength(4);
+  });
+
+  it('rejects a bad slot or game id with 400', async () => {
+    const results = await Promise.all(
+      [{ slot: 99, gameId: 1 }, { slot: 0 }, { slot: 1.5, gameId: 1 }].map(
+        (body) =>
+          testApp.request
+            .post(FIXTURE)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send(body),
+      ),
+    );
+    expect(results.map((r) => r.status)).toEqual([400, 400, 400]);
   });
 });

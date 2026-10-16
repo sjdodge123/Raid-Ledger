@@ -18,6 +18,7 @@ import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GameBanner } from './game-detail/GameBanner';
 import { PluginSlot } from '../plugins';
 import { LfgToggleButton } from './game-detail/lfg-toggle-button';
+import { GameNotifyBell } from './game-detail/game-notify-bell';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';
 import { useGamePricing } from '../hooks/use-games-discover';
 import type { EventResponseDto } from '@raid-ledger/contract';
@@ -90,7 +91,7 @@ function GameDetailContent({ game, gameId, navigate, streamsData, isAuthenticate
             <GameBanner game={game} rating={rating} genres={genres} platforms={platforms} modes={modes} pricing={pricing} />
             {isAuthenticated && (
                 <div className="flex flex-wrap items-center gap-6 mb-8" data-testid="player-stats-row">
-                    <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} />
+                    <WantToPlaySection wantToPlay={wtp.wantToPlay} count={wtp.count} source={wtp.source} players={wtp.players} toggle={wtp.toggle} isToggling={wtp.isToggling} gameId={gameId} gameName={game.name} />
                     <OwnedBySection owners={wtp.owners ?? []} ownerCount={wtp.ownerCount ?? 0} gameId={gameId} />
                     <WishlistedBySection wishlisters={wtp.wishlisters ?? []} wishlistedCount={wtp.wishlistedCount ?? 0} gameId={gameId} />
                 </div>
@@ -154,10 +155,10 @@ function BackButton({ navigate }: { navigate: NavigateFunction }): JSX.Element {
 }
 
 /** Want to Play button and interest avatars */
-function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggling, gameId }: {
+function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggling, gameId, gameName }: {
     wantToPlay: boolean; count: number; source: string | null | undefined;
     players: { id: number; username: string; avatar: string | null; customAvatarUrl: string | null; discordId: string | null }[];
-    toggle: (v: boolean) => void; isToggling: boolean; gameId: number | undefined;
+    toggle: (v: boolean) => void; isToggling: boolean; gameId: number | undefined; gameName: string;
 }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center gap-4">
@@ -171,6 +172,7 @@ function WantToPlaySection({ wantToPlay, count, source, players, toggle, isToggl
                 </svg>
                 {wantToPlay ? 'Remove from List' : 'Want to Play'}
             </button>
+            {gameId != null && <GameNotifyBell gameId={gameId} gameName={gameName} />}
             {gameId != null && <LfgToggleButton gameId={gameId} />}
             {count > 0 && <InterestPlayerAvatars players={players} totalCount={count} maxVisible={6} gameId={gameId} />}
         </div>

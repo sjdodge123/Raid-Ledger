@@ -17,6 +17,30 @@ export function getHeaders(): Record<string, string> {
     };
 }
 
+/**
+ * A failed non-GET admin call. `message` is the server's message (or the
+ * caller's fallback); `status` and the parsed `body` let a caller read
+ * structured error fields, e.g. the join post's 422 `missing` list (ROK-1740).
+ */
+export class AdminFetchError extends Error {
+    readonly status: number;
+    readonly body: unknown;
+
+    constructor(message: string, status: number, body: unknown) {
+        super(message);
+        this.name = 'AdminFetchError';
+        this.status = status;
+        this.body = body;
+    }
+}
+
+/** Builds the error for a failed non-GET call from its (optional) JSON body. */
+async function toAdminFetchError(response: Response, fallback: string): Promise<AdminFetchError> {
+    const body: unknown = await response.json().catch(() => null);
+    const message = (body as { message?: unknown } | null)?.message;
+    return new AdminFetchError(message ? String(message) : fallback, response.status, body);
+}
+
 /** Standard admin fetch with error handling */
 export async function adminFetch<T>(
     path: string,
@@ -51,10 +75,7 @@ export async function adminFetch<T>(
 
     if (!response.ok) {
         if (options?.method && options.method !== 'GET') {
-            const error = await response.json().catch(
-                () => ({ message: errorMessage }),
-            );
-            throw new Error(error.message || errorMessage);
+            throw await toAdminFetchError(response, errorMessage);
         }
         throw new Error(errorMessage);
     }

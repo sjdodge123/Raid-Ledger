@@ -108,10 +108,11 @@ This is what lets your community sign in and what powers the bot. All of it happ
 3. Paste the token in **Admin Settings** -> **Discord** -> **Connection** and save.
 4. **Use the invite URL shown on that page** to add the bot to your server. Do not hand-build an OAuth2 URL: the one the app generates is derived from the application's own required-permission list, so it always requests exactly what the current version needs, and it stays correct as that list grows.
 
-The page lists the required permissions for you. Two of them are worth calling out:
+The page lists the required permissions for you. A few of them are worth calling out:
 
 - **Manage Threads**, **Create Public Threads** and **Send Messages in Threads** — the LFG board's posts *are* threads (a Discord forum channel contains one thread per post), so the bot cannot create, update or reply to LFG posts without them.
 - **Manage Channels** — the bot creates the forum channel that hosts the LFG board.
+- **Pin Messages** — the "Join Raid Ledger" post pins itself. Discord no longer folds pinning into Manage Messages, so an install from before this permission was added needs re-authorising.
 
 Discord grants a bot's permission set at install time. Editing the application in the developer portal does not change an existing guild install; re-authorising with this URL updates the install in place without removing the bot or losing its channel bindings.
 

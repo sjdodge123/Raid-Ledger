@@ -35,6 +35,7 @@ describe('computeUniqueConflicts integer-ID guard', () => {
       activityRollups: 0,
       interests: 0,
       interestSuppressions: 0,
+      notificationMutes: 0,
       tasteVectors: 0,
     };
     await expect(

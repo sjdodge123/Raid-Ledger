@@ -1,7 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { NotificationPreferencesSection } from './NotificationPreferencesSection';
+import { MemoryRouter } from 'react-router-dom';
 import * as useNotificationsHook from '../../hooks/use-notifications';
+
+// ROK-1797: the muted-games list has its own spec; the hash hook needs a router.
+vi.mock('./muted-games-list', () => ({ MutedGamesList: () => null }));
+
+function renderSection() {
+    return render(<MemoryRouter><NotificationPreferencesSection /></MemoryRouter>);
+}
 
 const mockPreferences = {
     channelPrefs: {
@@ -38,29 +46,29 @@ describe('NotificationPreferencesSection', () => {
 
     describe('Section header', () => {
         it('renders the Notifications heading', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Notifications')).toBeInTheDocument();
         });
 
         it('renders subtitle text', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Choose how and when you get notified')).toBeInTheDocument();
         });
     });
 
     function columnHeadersGroup1() {
 it('renders In-App channel column header', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('In-App')).toBeInTheDocument();
         });
 
 it('renders Push channel column header', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Push')).toBeInTheDocument();
         });
 
 it('renders Discord channel column header when available', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Discord')).toBeInTheDocument();
         });
 
@@ -72,7 +80,7 @@ it('hides Discord column when not available (ROK-180 AC-7)', () => {
                 channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
             } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
 
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.queryByText('Discord')).not.toBeInTheDocument();
         });
 
@@ -87,7 +95,7 @@ it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
                 channelAvailability: { discord: { available: false, reason: 'Link your Discord account' } },
             } as unknown as ReturnType<typeof useNotificationsHook.useNotificationPreferences>);
 
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Link your Discord account')).toBeInTheDocument();
         });
 
@@ -100,7 +108,7 @@ it('shows reason text when Discord is not available (ROK-180 AC-7)', () => {
 
     function notificationTypeRowsGroup1() {
 it('renders all visible notification type labels', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('Slot Vacated')).toBeInTheDocument();
             expect(screen.getByText('Event Reminders')).toBeInTheDocument();
             expect(screen.getByText('New Events')).toBeInTheDocument();
@@ -113,12 +121,12 @@ it('renders all visible notification type labels', () => {
         });
 
 it('does not render missed_event_nudge label (ghost row removed)', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.queryByText('Missed Event Nudge')).not.toBeInTheDocument();
         });
 
 it('does not render Achievements or Level Up (not yet implemented)', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.queryByText('Achievements')).not.toBeInTheDocument();
             expect(screen.queryByText('Level Up')).not.toBeInTheDocument();
         });
@@ -127,7 +135,7 @@ it('does not render Achievements or Level Up (not yet implemented)', () => {
 
     function notificationTypeRowsGroup2() {
 it('renders description for each notification type', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('When someone leaves a roster slot')).toBeInTheDocument();
             expect(screen.getByText('Reminders for upcoming events')).toBeInTheDocument();
             expect(screen.getByText('When new events are created')).toBeInTheDocument();
@@ -147,19 +155,19 @@ it('renders description for each notification type', () => {
 
     describe('Toggle states and interaction', () => {
         it('toggle button has correct aria-label for active toggle', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             // slot_vacated inApp is true -> should say "Disable"
             expect(screen.getByLabelText('Disable Slot Vacated inApp notifications')).toBeInTheDocument();
         });
 
         it('toggle button has correct aria-label for inactive toggle', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             // slot_vacated push is false -> should say "Enable"
             expect(screen.getByLabelText('Enable Slot Vacated push notifications')).toBeInTheDocument();
         });
 
         it('calls updatePreferences when toggle is clicked', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             fireEvent.click(screen.getByLabelText('Disable Slot Vacated inApp notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { slot_vacated: { inApp: false } },
@@ -167,7 +175,7 @@ it('renders description for each notification type', () => {
         });
 
         it('calls updatePreferences to enable an inactive toggle', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             fireEvent.click(screen.getByLabelText('Enable Slot Vacated push notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { slot_vacated: { push: true } },
@@ -177,7 +185,7 @@ it('renders description for each notification type', () => {
 
     describe('LFG player invites row (ROK-1455 T-C4)', () => {
         it('renders the lfg_player_invite row with its description', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByText('LFG player invites')).toBeInTheDocument();
             expect(
                 screen.getByText('A player invites you to join their group for a game'),
@@ -185,12 +193,12 @@ it('renders description for each notification type', () => {
         });
 
         it('shows the opt-out default as an active Discord toggle', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             expect(screen.getByLabelText('Disable LFG player invites discord notifications')).toBeInTheDocument();
         });
 
         it('opting out of Discord invites calls updatePreferences with the lfg_player_invite type', () => {
-            render(<NotificationPreferencesSection />);
+            renderSection();
             fireEvent.click(screen.getByLabelText('Disable LFG player invites discord notifications'));
             expect(mockUpdatePreferences).toHaveBeenCalledWith({
                 channelPrefs: { lfg_player_invite: { discord: false } },

@@ -16,9 +16,11 @@ import {
   PelicanScheduleListSchema,
   PelicanServerPageSchema,
   PelicanStatsSchema,
+  PelicanWebsocketCredentialsSchema,
   type PelicanSchedule,
   type PelicanServerPage,
   type PelicanStats,
+  type PelicanWebsocketCredentials,
 } from './pelican-api.schemas';
 
 /** A failed Pelican call. Carries no response body and never the key. */
@@ -88,6 +90,17 @@ export class PelicanClient {
   listSchedules(serverId: string): Promise<PelicanResult<PelicanSchedule[]>> {
     const path = `/servers/${encodeURIComponent(serverId)}/schedules`;
     return this.request(path, PelicanScheduleListSchema);
+  }
+
+  /**
+   * `GET /api/client/servers/{id}/websocket` — a 10-minute Wings console
+   * token + socket URL. Needs only `websocket.connect` on the key's user.
+   */
+  getWebsocketCredentials(
+    serverIdentifier: string,
+  ): Promise<PelicanResult<PelicanWebsocketCredentials>> {
+    const path = `/servers/${encodeURIComponent(serverIdentifier)}/websocket`;
+    return this.request(path, PelicanWebsocketCredentialsSchema);
   }
 
   private async request<T>(

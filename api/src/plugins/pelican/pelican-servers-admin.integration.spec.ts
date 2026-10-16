@@ -1,13 +1,14 @@
 /**
  * ROK-1094 — Pelican admin servers table against a real database:
  * `GET /admin/plugins/pelican/servers`, `PATCH /admin/plugins/pelican/servers/:id`.
- * Covers the leak-free row shape, the mapping edits (game, Show on calendar,
- * timezone override), the mapping surviving a re-sync (incl. while missing),
+ * Covers the leak-free row shape, the mapping edits (game, Show on calendar;
+ * no timezone since ROK-1795 — Pelican crons are always UTC), the mapping
+ * surviving a re-sync (incl. while missing),
  * the member-facing visibility filter and the guards.
  *
  * Visibility is proven here on `GET /game-servers/status` and the repository
- * filter; the calendar side (projected schedules, ROK-1096) and the admin
- * row's `tzMismatch` are pinned in `pelican-projection.integration.spec.ts`.
+ * filter; the calendar side (projected schedules, ROK-1096) is pinned in
+ * `pelican-projection.integration.spec.ts`.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -23,6 +24,7 @@ import {
 import { nonEmpty } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
+import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
 import { PelicanServersRepository } from './pelican-servers.repository';
@@ -179,11 +181,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
       'synced S1',
     );
     const gameId = testApp.seed.game.id;
-    const mapping = {
-      gameId,
-      showOnCalendar: false,
-      timezone: 'Europe/Berlin',
-    };
+    const mapping = { gameId, showOnCalendar: false };
     expect((await patchServer(listed.id, mapping)).status).toBe(200);
 
     panel.servers = [{ ...S1, name: 'Renamed On Panel' }, S2];
@@ -200,7 +198,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
     expect(gone).toMatchObject(mapping);
 
     const editedWhileMissing = await patchServer(listed.id, {
-      timezone: 'Asia/Tokyo',
+      showOnCalendar: true,
     });
     expect(editedWhileMissing.status).toBe(200);
     expect(editedWhileMissing.body).toMatchObject({ missing: true });
@@ -210,8 +208,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
     expect(await reload(listed.id)).toMatchObject({
       missingSince: null,
       gameId,
-      showOnCalendar: false,
-      timezone: 'Asia/Tokyo',
+      showOnCalendar: true,
     });
   });
 });
@@ -246,25 +243,15 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
   });
 });
 
-describe('PATCH /admin/plugins/pelican/servers/:id — timezone (ROK-1094)', () => {
-  it('stores a valid IANA timezone, and NULL (inherit) for an empty string', async () => {
+describe('PATCH /admin/plugins/pelican/servers/:id — no timezone (ROK-1795)', () => {
+  it('rejects the removed timezone field with 400 and leaves the row unchanged', async () => {
     const server = await insertServer(1);
-    const set = await patchServer(server.id, { timezone: 'America/Chicago' });
-    expect(set.status).toBe(200);
-    expect(set.body).toMatchObject({ timezone: 'America/Chicago' });
-    expect((await reload(server.id)).timezone).toBe('America/Chicago');
-
-    const cleared = await patchServer(server.id, { timezone: '' });
-    expect(cleared.status).toBe(200);
-    expect(cleared.body).toMatchObject({ timezone: null });
-    expect((await reload(server.id)).timezone).toBeNull();
-  });
-
-  it('rejects an unknown timezone with 400 and leaves the row unchanged', async () => {
-    const server = await insertServer(1, { timezone: 'Europe/Berlin' });
-    const res = await patchServer(server.id, { timezone: 'Mars/Olympus_Mons' });
+    const res = await patchServer(server.id, { timezone: 'America/Chicago' });
     expect(res.status).toBe(400);
-    expect((await reload(server.id)).timezone).toBe('Europe/Berlin');
+    expect(await reload(server.id)).toMatchObject({
+      timezone: null,
+      showOnCalendar: true,
+    });
   });
 });
 
@@ -283,11 +270,10 @@ describe('PATCH /admin/plugins/pelican/servers/:id — rejects (ROK-1094)', () =
   });
 
   it('returns 400 for an empty body and changes nothing', async () => {
-    const server = await insertServer(1, { timezone: 'Europe/Berlin' });
+    const server = await insertServer(1);
     const res = await patchServer(server.id, {});
     expect(res.status).toBe(400);
     expect(await reload(server.id)).toMatchObject({
-      timezone: 'Europe/Berlin',
       showOnCalendar: true,
       gameId: null,
     });
@@ -315,5 +301,91 @@ describe('/admin/plugins/pelican/servers guards (ROK-1094)', () => {
     ];
     expect(results.map((r) => r.status)).toEqual([403, 403]);
     expect((await reload(server.id)).showOnCalendar).toBe(true);
+  });
+});
+
+describe('Quick Play detection switch (ROK-1800)', () => {
+  /** Only the seed game's slug has a `game-log-parser` adapter. */
+  async function parserForSeedGame(): Promise<number> {
+    const gameId = testApp.seed.game.id;
+    const [game] = nonEmpty(
+      await testApp.db
+        .select({ slug: schema.games.slug })
+        .from(schema.games)
+        .where(eq(schema.games.id, gameId)),
+      'seed game',
+    );
+    const real = registry().getAdapter.bind(registry());
+    const parser = { pluginSlug: 'test', parse: () => null };
+    const fake = (point: string, slug: string): unknown =>
+      point === EXTENSION_POINTS.GAME_LOG_PARSER && slug === game.slug
+        ? parser
+        : real(point, slug);
+    jest.spyOn(registry(), 'getAdapter').mockImplementation(fake);
+    return gameId;
+  }
+
+  it('PATCH { presenceTracking } persists and GET reports it with presenceSupported', async () => {
+    const gameId = await parserForSeedGame();
+    const mapped = await insertServer(1, { gameId });
+    const unmapped = await insertServer(2);
+
+    const res = await patchServer(mapped.id, { presenceTracking: true });
+    expect(res.status).toBe(200);
+    expect(PelicanServerRowSchema.parse(res.body)).toMatchObject({
+      presenceTracking: true,
+      presenceSupported: true,
+    });
+    expect(await reload(mapped.id)).toMatchObject({ presenceTracking: true });
+
+    const list = PelicanServerListResponseSchema.parse(
+      (await getServers()).body,
+    );
+    const byId = new Map(list.data.map((r) => [r.id, r]));
+    expect(byId.get(mapped.id)).toMatchObject({
+      presenceTracking: true,
+      presenceSupported: true,
+    });
+    expect(byId.get(unmapped.id)).toMatchObject({
+      presenceTracking: false,
+      presenceSupported: false,
+    });
+  });
+});
+
+describe('Quick Play detection switch — guards (ROK-1800)', () => {
+  it('refuses to switch it on for a server whose game has no log parser, with 400 (ROK-1800 m1)', async () => {
+    const unmapped = await insertServer(1);
+    const noParser = await insertServer(2, { gameId: testApp.seed.game.id });
+
+    const results = [
+      await patchServer(unmapped.id, { presenceTracking: true }),
+      await patchServer(noParser.id, { presenceTracking: true }),
+      await patchServer(unmapped.id, {
+        gameId: testApp.seed.game.id,
+        presenceTracking: true,
+      }),
+    ];
+    expect(results.map((r) => [r.status, String(r.body.message)])).toEqual(
+      Array(3).fill([
+        400,
+        "Quick Play detection isn't supported for this server's game",
+      ]),
+    );
+    expect(await reload(unmapped.id)).toMatchObject({
+      presenceTracking: false,
+      gameId: null,
+    });
+    expect(await reload(noParser.id)).toMatchObject({
+      presenceTracking: false,
+    });
+  });
+
+  it('a member cannot flip it (admin guard)', async () => {
+    const server = await insertServer(1);
+    const token = await memberToken(testApp, 'pelicanpresencemember');
+    const res = await patchServer(server.id, { presenceTracking: true }, token);
+    expect(res.status).toBe(403);
+    expect(await reload(server.id)).toMatchObject({ presenceTracking: false });
   });
 });

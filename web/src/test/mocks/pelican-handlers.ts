@@ -36,11 +36,11 @@ export const pelicanServerFixture: PelicanServerRowDto = {
     gameId: 7,
     gameName: 'Valheim',
     showOnCalendar: true,
-    timezone: null,
+    presenceTracking: false,
+    presenceSupported: true,
     lastSyncedAt: '2026-10-13T12:00:00.000Z',
     statusCheckedAt: '2026-10-13T12:00:00.000Z',
     missing: false,
-    tzMismatch: false,
 };
 
 export const pelicanSyncOkResult: PelicanSyncResult = {
@@ -51,29 +51,18 @@ export const pelicanSyncOkResult: PelicanSyncResult = {
 export const pelicanConfigFixture: PelicanConfig = {
     panelUrl: null,
     apiKeySet: false,
-    defaultTimezone: 'UTC',
-    timezoneInherited: true,
 };
 
 export const pelicanConfiguredFixture: PelicanConfig = {
     panelUrl: 'https://panel.example.test',
     apiKeySet: true,
-    defaultTimezone: 'America/New_York',
-    timezoneInherited: false,
 };
-
-function applyTimezone(current: PelicanConfig, tz: string | undefined): Pick<PelicanConfig, 'defaultTimezone' | 'timezoneInherited'> {
-    if (tz === undefined) return { defaultTimezone: current.defaultTimezone, timezoneInherited: current.timezoneInherited };
-    if (tz === '') return { defaultTimezone: 'UTC', timezoneInherited: true };
-    return { defaultTimezone: tz, timezoneInherited: false };
-}
 
 /** Apply a PUT body the way the server does: omitted = unchanged, `''` = clear. */
 export function applyPelicanUpdate(current: PelicanConfig, update: PelicanConfigUpdate): PelicanConfig {
     return {
         panelUrl: update.panelUrl === undefined ? current.panelUrl : update.panelUrl || null,
         apiKeySet: update.apiKey === undefined ? current.apiKeySet : update.apiKey !== '',
-        ...applyTimezone(current, update.defaultTimezone),
     };
 }
 
@@ -98,11 +87,7 @@ export const pelicanHandlers = [
     http.patch(PELICAN_SERVER_URL, async ({ request, params }) => {
         const parsed = PelicanServerUpdateSchema.safeParse(await request.json());
         if (!parsed.success) return HttpResponse.json({ message: 'Invalid update' }, { status: 400 });
-        const { timezone, ...rest } = parsed.data;
-        return HttpResponse.json({
-            ...pelicanServerFixture, id: Number(params.id), ...rest,
-            ...(timezone === undefined ? {} : { timezone: timezone === '' ? null : timezone }),
-        });
+        return HttpResponse.json({ ...pelicanServerFixture, id: Number(params.id), ...parsed.data });
     }),
     http.post(PELICAN_SYNC_URL, () => HttpResponse.json(pelicanSyncOkResult)),
     /* Calendar layer (ROK-1774): nothing scheduled by default, so unrelated calendar specs stay quiet. */

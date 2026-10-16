@@ -64,6 +64,7 @@ function whatWeKeepSection(): PrivacySection {
             { key: 'added', content: 'What you add: your display name, characters, game time and away days, event sign-ups, game interests and preferences.' },
             { key: 'activity', content: 'Activity the community uses to plan: voice-channel attendance at events, and which games members play together.' },
             { key: 'sessions', content: 'Sign-in sessions, so you stay logged in.' },
+            { key: 'feedback', content: 'Feedback you send: your message and, if you add one, a screenshot, plus the page address, your screen size, browser and app version (and, for bug reports, recent browser console logs).' },
         ],
     };
 }
@@ -101,7 +102,7 @@ function whoElseSection(): PrivacySection {
             { key: 'discord', content: <><Lead>Discord</Lead> shows event posts and messages that mention members.</> },
             { key: 'google', requires: 'calendar', content: <><Lead>Google</Lead>: calendar sync, as above.</> },
             // ROK-1779: PROPOSED wording, pending the operator's sign-off in the PR.
-            { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Passwords, tokens and calendar ids are removed first, and usernames, email addresses and IP addresses are stripped wherever they can be detected. Error reports are off unless this site&apos;s admins turn them on, and they can turn them off again.</> },
+            { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Passwords, tokens and calendar ids are removed first, and usernames, email addresses and IP addresses are stripped wherever they can be detected. Feedback you send, including any screenshot you attach, also goes to Sentry. Error reports are off unless this site&apos;s admins turn them on, and they can turn them off again.</> },
             { key: 'ai', requires: 'ai', content: <><Lead>AI suggestions.</Lead> If the admins turn on AI features, members&apos; usernames and gaming stats (not calendar data) are sent to the AI provider they chose to suggest games.</> },
             { key: 'games', content: 'Game databases (IGDB, Steam, IsThereAnyDeal, Blizzard) are asked about games and characters. If you link Steam, your Steam id is used to read your game library.' },
         ],

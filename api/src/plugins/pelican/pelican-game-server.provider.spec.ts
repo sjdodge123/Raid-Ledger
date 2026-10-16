@@ -4,7 +4,6 @@ import type {
   PelicanClientFactory,
   PelicanConnection,
 } from './pelican-client.factory';
-import type { PelicanConfigService } from './pelican-config.service';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
 import type {
   PelicanSchedulesRepository,
@@ -26,23 +25,20 @@ const CONNECTED = {
 
 function build(
   rows: PelicanServableSchedule[],
-  defaultTz = 'UTC',
   pollable: PelicanServerRow[] = [],
   connection: PelicanConnection | null = CONNECTED,
 ) {
   const listServable = jest.fn<Promise<PelicanServableSchedule[]>, [number[]?]>(
     () => Promise.resolve(rows),
   );
-  const resolveDefaultTimezone = jest.fn(() => Promise.resolve(defaultTz));
   const listPollable = jest.fn(() => Promise.resolve(pollable));
   const connect = jest.fn(() => Promise.resolve(connection));
   const provider = new PelicanGameServerProvider(
     { listPollable } as unknown as PelicanServersRepository,
     { listServable } as unknown as PelicanSchedulesRepository,
-    { resolveDefaultTimezone } as unknown as PelicanConfigService,
     { connect } as unknown as PelicanClientFactory,
   );
-  return { provider, listServable, resolveDefaultTimezone, listPollable };
+  return { provider, listServable, listPollable };
 }
 
 const evening = (over: Partial<PelicanServableSchedule> = {}) => [
@@ -72,20 +68,6 @@ describe('PelicanGameServerProvider.getCalendarItems (ROK-1096)', () => {
     for (const item of items) {
       expect(GameServerCalendarItemSchema.parse(item)).toEqual(item);
     }
-  });
-
-  it('uses the plugin default timezone when the server has no override', async () => {
-    const { provider, resolveDefaultTimezone } = build(
-      evening({ serverTimezone: null }),
-      'America/New_York',
-    );
-    const items = await provider.getCalendarItems(RANGE);
-    expect(resolveDefaultTimezone).toHaveBeenCalledTimes(1);
-    // 18:00–23:00 EDT; the previous evening's window spills into the range (D7).
-    expect(items.map((i) => (i.kind === 'window' ? i.start : i.at))).toEqual([
-      '2026-10-13T22:00:00.000Z',
-      '2026-10-14T22:00:00.000Z',
-    ]);
   });
 
   it('passes gameIds to the repository and omits them when absent', async () => {
@@ -119,34 +101,18 @@ describe('PelicanGameServerProvider.getCalendarItems filtering (ROK-1096)', () =
     expect(JSON.stringify(items)).not.toContain('10.1.2.3');
   });
 
-  it('logs skipped servers by id only', async () => {
+  it('logs skipped schedules by id only', async () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    const { provider } = build(
-      evening({
-        serverId: 42,
-        serverTimezone: 'Mars/Olympus',
-        serverName: 'Secret',
-      }),
-    );
+    const bad = servableSchedule('61 4 * * *', 'restart', {
+      serverId: 42,
+      name: 'Secret reboot',
+      serverName: 'Secret',
+    });
+    const { provider } = build([bad]);
     await expect(provider.getCalendarItems(RANGE)).resolves.toEqual([]);
     const lines = warn.mock.calls.map((c) => String(c[0]));
-    expect(lines).toEqual(['Pelican projection skipped server 42: bad_tz']);
-  });
-
-  it('logs a tz mismatch at debug, never warn (every member load hits it)', async () => {
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    const debug = jest.spyOn(Logger.prototype, 'debug').mockImplementation();
-    const { provider } = build([
-      servableSchedule('0 4 * * *', 'restart', {
-        serverId: 9,
-        serverTimezone: 'UTC',
-        nextRunAt: new Date('2026-10-14T08:00:00Z'),
-      }),
-    ]);
-    await provider.getCalendarItems(RANGE);
-    expect(warn.mock.calls.map((c) => String(c[0]))).toEqual([]);
-    expect(debug.mock.calls.map((c) => String(c[0]))).toEqual([
-      'Pelican tz mismatch servers: 9',
+    expect(lines).toEqual([
+      `Pelican projection skipped server 42 schedule ${bad.id}: bad_cron`,
     ]);
   });
 });
@@ -156,13 +122,13 @@ describe('PelicanGameServerProvider.getStatuses (ROK-1776)', () => {
   const rows = () => [pelicanRow(1, { statusCheckedAt: checked })];
 
   it('returns nothing and skips the repository while unconfigured', async () => {
-    const { provider, listPollable } = build([], 'UTC', rows(), null);
+    const { provider, listPollable } = build([], rows(), null);
     await expect(provider.getStatuses()).resolves.toEqual([]);
     expect(listPollable).not.toHaveBeenCalled();
   });
 
   it('maps checked rows to member-safe DTOs while configured', async () => {
-    const { provider, listPollable } = build([], 'UTC', rows());
+    const { provider, listPollable } = build([], rows());
     const out = await provider.getStatuses();
     expect(listPollable).toHaveBeenCalledTimes(1);
     expect(out.map((s) => [s.serverKey, s.provider, s.state])).toEqual([

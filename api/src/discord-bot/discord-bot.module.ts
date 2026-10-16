@@ -16,6 +16,8 @@ import { DiscordBotSettingsController } from './discord-bot-settings.controller'
 import { DiscordBotInviteController } from './discord-bot-invite.controller';
 import { LfgBoardSettingsController } from './lfg-board-settings.controller';
 import { WeeklyDigestSettingsController } from './weekly-digest-settings.controller';
+import { JoinPostSettingsController } from './join-post-settings.controller';
+import { JoinPostService } from './join-post/join-post.service';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
 import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
@@ -29,6 +31,7 @@ import { GameActivityService } from './services/game-activity.service';
 import { AdHocEventService } from './services/ad-hoc-event.service';
 import { QuickPlayHealthService } from './services/quick-play-health.service';
 import { AdHocParticipantService } from './services/ad-hoc-participant.service';
+import { AdHocServerPresenceService } from './services/ad-hoc-server-presence.service';
 import { AdHocNotificationService } from './services/ad-hoc-notification.service';
 import { ChannelPresenceEmbedService } from './services/channel-presence-embed.service';
 import { DiscordEventListener } from './listeners/event.listener';
@@ -107,6 +110,9 @@ import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listene
 import { LfgModule } from '../lfg/lfg.module';
 import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { GameRolesSettingsController } from './game-roles/game-roles-settings.controller';
+import { GameRoleReconcileService } from './game-roles/game-role-reconcile.service';
+import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-delete.listener';
 
 @Module({
   imports: [
@@ -135,6 +141,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     DiscordBotInviteController,
     LfgBoardSettingsController,
     WeeklyDigestSettingsController,
+    GameRolesSettingsController,
+    JoinPostSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
     DiscordMemberController,
@@ -147,6 +155,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   ],
   providers: [
     DiscordBotService,
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,
@@ -154,6 +163,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ChannelBindingsService,
     PugInviteService,
     AdHocEventService,
+    // ROK-1800: the Pelican presence sink (exposed globally by
+    // AdHocServerPresenceModule under SERVER_PRESENCE_SINK).
+    AdHocServerPresenceService,
     QuickPlayHealthService,
     AdHocParticipantService,
     AdHocNotificationService,
@@ -181,6 +193,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ActivityListener,
     VoiceStateListener,
     GameActivityService,
+    // ROK-1767: auto-maintained per-game Discord roles.
+    GameRoleReconcileService,
+    GameRoleAccountDeleteListener,
     PresenceGameDetectorService,
     VoiceAttendanceService,
     EventAutoExtendService,
@@ -219,6 +234,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   ],
   exports: [
     DiscordBotService,
+    // ROK-1740: the DEMO join-post fixture reuses the service.
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,
@@ -227,6 +244,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ChannelResolverService,
     PugInviteService,
     AdHocEventService,
+    AdHocServerPresenceService,
     VoiceAttendanceService,
     // ROK-1446: the voice listeners and the ad-hoc suppression gate both
     // inject the channel presence service (D6/D9).

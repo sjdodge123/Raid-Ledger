@@ -14,6 +14,7 @@
 /** All Drizzle chain methods observed across the codebase. */
 const CHAIN_METHODS = [
   'select',
+  'selectDistinct',
   'from',
   'where',
   'orderBy',
@@ -32,6 +33,7 @@ const CHAIN_METHODS = [
   'groupBy',
   'having',
   '$dynamic',
+  'for',
   'execute',
   'as',
 ] as const;

@@ -1503,8 +1503,36 @@
     {
       "idx": 215,
       "version": "7",
-      "when": 1792076209945,
-      "tag": "0215_calendar_feeds",
+      "when": 1792073484547,
+      "tag": "0215_feedback_screenshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 216,
+      "version": "7",
+      "when": 1792079717160,
+      "tag": "0216_discord_game_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 217,
+      "version": "7",
+      "when": 1792096254446,
+      "tag": "0217_guild_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 218,
+      "version": "7",
+      "when": 1792101320942,
+      "tag": "0218_game_notification_mutes",
+      "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1792109595724,
+      "tag": "0219_valheim_presence",
       "breakpoints": true
     }
   ]

@@ -9,11 +9,22 @@ import {
   isWishlistedByUser,
   getSteamWishlisters,
 } from './igdb-steam-interest.helpers';
+import {
+  HEART_SOURCES,
+  INTERESTED_ROW,
+  STEAM_SYNC_SOURCES,
+  USER_HEART_SOURCES,
+  toDtoSource,
+} from './igdb-interest-sources.helpers';
+import { isGameMuted } from '../notifications/game-notification-mute.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 /** Sources that count as "interested" (hearts). Library/wishlist are separate. */
-export const HEART_SOURCES = ['manual', 'discord', 'steam', 'poll'];
+export { HEART_SOURCES };
+
+/** Order heart sources ahead of Steam sync rows (ROK-1796). */
+const STEAM_SOURCE_LAST = sql`case when ${inArray(schema.gameInterests.source, STEAM_SYNC_SOURCES)} then 1 else 0 end`;
 
 /** SQL expression for distinct user count (ROK-804). */
 const DISTINCT_USER_COUNT = sql<number>`count(distinct ${schema.gameInterests.userId})::int`;
@@ -43,7 +54,10 @@ export async function getInterestCount(
 }
 
 /**
- * Get user's interest source for a game.
+ * Get the current user's interest source for a game (ROK-1796: Steam
+ * library/wishlist rows count for the per-user heart; a real heart source is
+ * preferred over a Steam row when both exist; an un-heart suppression means
+ * "not interested" even while Steam rows remain).
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -61,9 +75,11 @@ export async function getUserInterestSource(
       and(
         eq(schema.gameInterests.gameId, gameId),
         eq(schema.gameInterests.userId, userId),
-        inArray(schema.gameInterests.source, HEART_SOURCES),
+        inArray(schema.gameInterests.source, USER_HEART_SOURCES),
+        INTERESTED_ROW,
       ),
     )
+    .orderBy(STEAM_SOURCE_LAST)
     .limit(1);
   return row?.source ?? null;
 }
@@ -107,7 +123,7 @@ export async function getInterestedPlayers(
   }));
 }
 
-/** Fetch batch counts and user interests in parallel (hearts only, ROK-804). */
+/** Fetch batch counts (hearts only, ROK-804) and the user's own hearts incl. Steam rows (ROK-1796). */
 async function fetchBatchData(
   db: PostgresJsDatabase<typeof schema>,
   gameIds: number[],
@@ -131,7 +147,8 @@ async function fetchBatchData(
         and(
           gameIdFilter,
           eq(schema.gameInterests.userId, userId),
-          sourceFilter,
+          inArray(schema.gameInterests.source, USER_HEART_SOURCES),
+          INTERESTED_ROW,
         ),
       ),
   ]);
@@ -175,20 +192,46 @@ export async function addInterest(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
+  // A manual re-heart lifts any earlier un-heart suppression (ROK-1796).
+  // Clear it BEFORE inserting the heart: against a concurrent removeInterest
+  // (delete heart → insert suppression) every interleaving then ends with the
+  // heart, the suppression, or both (heart wins) — never neither.
+  await db
+    .delete(schema.gameInterestSuppressions)
+    .where(
+      and(
+        eq(schema.gameInterestSuppressions.userId, userId),
+        eq(schema.gameInterestSuppressions.gameId, gameId),
+      ),
+    );
   await db
     .insert(schema.gameInterests)
     .values({ userId, gameId, source: 'manual' })
     .onConflictDoNothing();
 
-  const [count, players] = await Promise.all([
+  const [count, players, notificationsMuted] = await Promise.all([
     getInterestCount(db, gameId),
     getInterestedPlayers(db, gameId),
+    isGameMuted(db, userId, gameId),
   ]);
-  return { wantToPlay: true, count, players, source: 'manual' as const };
+  return {
+    wantToPlay: true,
+    count,
+    players,
+    source: 'manual' as const,
+    notificationsMuted,
+  };
 }
 
 /**
- * Remove want-to-play interest (with auto-heart suppression for Discord and poll sources).
+ * Remove want-to-play interest (ROK-444, ROK-1031, ROK-1796).
+ *
+ * Deletes only the HEART-source rows; Steam library/wishlist rows stay, since
+ * ownership and playtime are facts ~20 other features read. ALWAYS records a
+ * suppression — whatever backed the heart — so the per-user heart, the
+ * interest-driven DMs and every auto-heart path (Discord activity, poll
+ * votes) treat the pair as "not interested" until a manual re-heart. Both
+ * writes share one transaction so neither can land without the other.
  * @param db - Database connection
  * @param gameId - Game ID
  * @param userId - User ID
@@ -199,29 +242,28 @@ export async function removeInterest(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  const source = await getUserInterestSource(db, gameId, userId);
-
-  if (source === 'discord' || source === 'poll') {
-    await db
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(schema.gameInterests)
+      .where(
+        and(
+          eq(schema.gameInterests.gameId, gameId),
+          eq(schema.gameInterests.userId, userId),
+          inArray(schema.gameInterests.source, HEART_SOURCES),
+        ),
+      );
+    await tx
       .insert(schema.gameInterestSuppressions)
       .values({ userId, gameId })
       .onConflictDoNothing();
-  }
+  });
 
-  await db
-    .delete(schema.gameInterests)
-    .where(
-      and(
-        eq(schema.gameInterests.gameId, gameId),
-        eq(schema.gameInterests.userId, userId),
-      ),
-    );
-
-  const [count, players] = await Promise.all([
+  const [count, players, notificationsMuted] = await Promise.all([
     getInterestCount(db, gameId),
     getInterestedPlayers(db, gameId),
+    isGameMuted(db, userId, gameId),
   ]);
-  return { wantToPlay: false, count, players };
+  return { wantToPlay: false, count, players, notificationsMuted };
 }
 
 /** Build the parallel query array for game interest data. */
@@ -275,18 +317,20 @@ export async function fetchGameInterestResponse(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  const d = await fetchGameInterestData(db, gameId, userId);
+  const [d, notificationsMuted] = await Promise.all([
+    fetchGameInterestData(db, gameId, userId),
+    isGameMuted(db, userId, gameId),
+  ]);
   return {
     wantToPlay: d.source !== null,
     count: d.count,
     players: d.players,
-    source: d.source
-      ? (d.source as 'manual' | 'steam' | 'discord' | 'poll')
-      : undefined,
+    source: toDtoSource(d.source),
     ownerCount: d.ownerCount,
     owners: d.owners,
     wishlisters: d.wishlisters,
     wishlistedCount: d.wishlistedCount,
     wishlistedByMe: d.wishlistedByMe,
+    notificationsMuted,
   };
 }

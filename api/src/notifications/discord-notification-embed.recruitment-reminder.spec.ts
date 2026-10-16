@@ -314,11 +314,39 @@ describe('DiscordNotificationEmbedService — recruitment_reminder (ROK-535)', (
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string }> };
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
       const adjustBtn = rowJson.components.find(
         (c) => c.label === 'Adjust Notifications',
       );
       expect(adjustBtn).toBeDefined();
+      // ROK-1797: no gameId in the payload → the recruitment settings row.
+      expect(adjustBtn?.url).toMatch(
+        /\/profile\/notifications\?type=recruitment_reminder#notif-recruitment_reminder$/,
+      );
+    });
+
+    it('links Adjust Notifications to the game page when gameId is known', async () => {
+      const { row } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-rr-16',
+          type: 'recruitment_reminder',
+          title: 'Spots Available',
+          message: 'Sign up!',
+          payload: { gameId: 5 },
+        },
+        'Community',
+      );
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const adjustBtn = rowJson.components.find(
+        (c) => c.label === 'Adjust Notifications',
+      );
+      expect(adjustBtn?.url).toMatch(
+        /\/games\/5\?action=notifications&notif=notif-rr-16$/,
+      );
     });
   });
 

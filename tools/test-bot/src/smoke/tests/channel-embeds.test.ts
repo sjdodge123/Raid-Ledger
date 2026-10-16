@@ -155,6 +155,50 @@ const embedFilling: SmokeTest = {
   },
 };
 
+/** ROK-1804: the description excerpt every event embed opens with. */
+const SMOKE_DESCRIPTION = 'Bring frost resist @everyone, meet at the portal.';
+const SMOKE_DESCRIPTION_RENDERED = 'Bring frost resist @\u200Beveryone, meet at the portal.';
+
+/** The embed opens with the (mention-escaped) description, then a blank line. */
+function opensWithDescription(e: SimpleEmbed, title: string): boolean {
+  return (
+    !!e.title?.includes(title) &&
+    !!e.description?.startsWith(`${SMOKE_DESCRIPTION_RENDERED}\n\n`)
+  );
+}
+
+const embedShowsDescription: SmokeTest = {
+  name: 'Event embed shows the event description, POSTED and FILLING (ROK-1804)',
+  category: 'embed',
+  async run(ctx) {
+    const ch = channelForTest(ctx, 1);
+    const ev = await createEvent(ctx.api, 'embed-desc', {
+      ...mmoOverrides(ctx),
+      ...(ch.gameId ? { gameId: ch.gameId } : {}),
+      description: SMOKE_DESCRIPTION,
+    });
+    try {
+      await pollForEmbed(
+        ch.channelId,
+        (m) => m.embeds.some((e) => opensWithDescription(e, ev.title)),
+        ctx.config.timeoutMs,
+      );
+      await signup(ctx.api, ev.id, mmoSignupOpts(ctx, ['dps']));
+      await awaitProcessing(ctx.api);
+      await waitForEmbedUpdate(
+        ch.channelId,
+        (m) =>
+          m.embeds.some(
+            (e) => embedShowsSignupCount(e, ev.title, 1) && opensWithDescription(e, ev.title),
+          ),
+        ctx.config.timeoutMs,
+      );
+    } finally {
+      await deleteEvent(ctx.api, ev.id);
+    }
+  },
+};
+
 const embedTentative: SmokeTest = {
   name: 'Tentative signup reflected in embed',
   category: 'embed',
@@ -381,6 +425,7 @@ const embedChromePerState: SmokeTest = {
 export const channelEmbedTests: SmokeTest[] = [
   eventEmbedPosted,
   embedFilling,
+  embedShowsDescription,
   embedTentative,
   embedCancelSignup,
   embedCancelled,

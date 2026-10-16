@@ -4,6 +4,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { EventsService } from './events.service';
 import { EventSeriesService } from './event-series.service';
+import { EventGuildTagService } from './event-guild-tag.service';
+import { EventsSeriesController } from './events-series.controller';
 import { SignupsService } from './signups.service';
 import { RunningLateService } from './running-late.service';
 import { SignupsAllocationService } from './signups-allocation.service';
@@ -68,6 +70,7 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
     EventsPugsController,
     EventsAttendanceController,
     EventsDetailController,
+    EventsSeriesController,
     EventPlansController,
     InviteController,
     TemplatesController,
@@ -96,6 +99,7 @@ import { LfgEventConvertService } from '../lfg/lfg-event-convert.service';
     ActiveEventCacheService,
     // ROK-1573: plain provider, not an LfgModule import (LfgModule -> Notification -> Events cycle).
     LfgEventConvertService,
+    EventGuildTagService,
   ],
   exports: [
     EventsService,
