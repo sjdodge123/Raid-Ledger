@@ -13,10 +13,8 @@ import {
   type DiscordMemberInfo,
   type ResolvedBinding,
 } from './voice-state.helpers';
-import {
-  getGameFilteredCount,
-  type VoiceHandlerDeps,
-} from './voice-state.handlers';
+import { type VoiceHandlerDeps } from './voice-state.handlers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import { handleGameSpecificGroupRoster } from './voice-state-recovery.handlers';
 import { humanMembers } from './voice-lobby-groups.helpers';
 import {
@@ -183,7 +181,7 @@ async function resolveGameBindingSpawn(
   clearance: SpawnClearance,
   spawnFns?: GameSpawnFns,
 ): Promise<void> {
-  const { counted, allConfirmed, confirmedCount } = await getGameFilteredCount(
+  const { counted, allConfirmed, confirmedCount } = await serverAwareGameCount(
     deps,
     channelId,
     binding,

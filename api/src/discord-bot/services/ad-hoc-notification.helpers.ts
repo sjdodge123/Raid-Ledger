@@ -10,6 +10,7 @@ import {
   toQuickPlayGame,
   type EmbedGame,
 } from './embed-game.helpers';
+import { isAnonymousServerRow } from './ad-hoc-anonymous-row.helpers';
 
 /** Participant with active status for embed building. */
 export interface AdHocParticipant {
@@ -17,6 +18,13 @@ export interface AdHocParticipant {
   discordUserId: string | null;
   discordUsername: string;
   isActive: boolean;
+  /** ROK-1801: trusted roster marker (` 🖥` / ` 🖥 on server`), card only. */
+  rosterSuffix?: string;
+  /**
+   * ROK-1801 Q4: an unnamed, unlinked server player whose stored username is
+   * its SteamID64. Never rendered by name — counted into `+N on server`.
+   */
+  anonymousOnServer?: boolean;
 }
 
 /** Dependencies for ad-hoc notification helper functions. */
@@ -118,6 +126,22 @@ async function resolveVoice(
   );
 }
 
+/** Participants as render-only roster mentions (no `<@id>`; see below). */
+function rosterMentions(
+  participants: AdHocParticipant[],
+): NonNullable<EmbedEventData['signupMentions']> {
+  return participants
+    .filter((p) => !p.anonymousOnServer)
+    .map((p) => ({
+      discordId: null,
+      username: p.discordUsername,
+      role: null,
+      preferredRoles: null,
+      ...(p.isActive ? {} : { status: 'left' }),
+      ...(p.rosterSuffix ? { rosterSuffix: p.rosterSuffix } : {}),
+    }));
+}
+
 /** Assemble EmbedEventData from resolved components. */
 function assembleEmbedData(
   event: typeof schema.events.$inferSelect,
@@ -145,14 +169,12 @@ function assembleEmbedData(
     // cached), which leaked literal "<@1234>" tokens — especially on the COMPLETED
     // embed re-rendered hours after the session ended (ROK). discordId is dropped
     // here (render-only field) so the shared roster layout falls back to username.
-    signupMentions: participants.map((p) => ({
-      discordId: null,
-      username: p.discordUsername,
-      role: null,
-      preferredRoles: null,
-      ...(p.isActive ? {} : { status: 'left' }),
-    })),
+    signupMentions: rosterMentions(participants),
   };
+  const anonymous = participants.filter(
+    (p) => p.anonymousOnServer && p.isActive,
+  ).length;
+  if (anonymous > 0) data.serverAnonymousCount = anonymous;
   if (voiceChannelId) data.voiceChannelId = voiceChannelId;
   return data;
 }
@@ -288,5 +310,6 @@ export async function readParticipants(
     discordUserId: r.discordUserId,
     discordUsername: r.discordUsername,
     isActive: !allInactive && !r.leftAt,
+    ...(isAnonymousServerRow(r) ? { anonymousOnServer: true } : {}),
   }));
 }

@@ -1,5 +1,5 @@
 {
-  "id": "2e5ece6a-f904-4a35-98e9-812f19bb7ce5",
+  "id": "5635e2a4-613d-4974-8071-136809c996ab",
   "prevId": "380b5154-76ce-4b23-a923-712f2b607e9d",
   "version": "7",
   "dialect": "postgresql",
@@ -11383,6 +11383,31 @@
           "primaryKey": false,
           "notNull": false
         },
+        "discord_channel_id": {
+          "name": "discord_channel_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "discord_channel_private_ack": {
+          "name": "discord_channel_private_ack",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "discord_channel_set_by": {
+          "name": "discord_channel_set_by",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "discord_channel_set_at": {
+          "name": "discord_channel_set_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11404,6 +11429,21 @@
           "columns": [
             {
               "expression": "gm_post_updated_by",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_guild_profiles_discord_channel_set_by": {
+          "name": "idx_guild_profiles_discord_channel_set_by",
+          "columns": [
+            {
+              "expression": "discord_channel_set_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -11435,6 +11475,19 @@
           "tableTo": "users",
           "columnsFrom": [
             "gm_post_updated_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "guild_profiles_discord_channel_set_by_users_id_fk": {
+          "name": "guild_profiles_discord_channel_set_by_users_id_fk",
+          "tableFrom": "guild_profiles",
+          "tableTo": "users",
+          "columnsFrom": [
+            "discord_channel_set_by"
           ],
           "columnsTo": [
             "id"
@@ -12212,78 +12265,6 @@
         }
       },
       "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.calendar_feeds": {
-      "name": "calendar_feeds",
-      "schema": "",
-      "columns": {
-        "user_id": {
-          "name": "user_id",
-          "type": "integer",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "token_hash": {
-          "name": "token_hash",
-          "type": "char(64)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token_encrypted": {
-          "name": "token_encrypted",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "rotated_at": {
-          "name": "rotated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "last_fetched_at": {
-          "name": "last_fetched_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "calendar_feeds_user_id_users_id_fk": {
-          "name": "calendar_feeds_user_id_users_id_fk",
-          "tableFrom": "calendar_feeds",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {
-        "calendar_feeds_token_hash_unique": {
-          "name": "calendar_feeds_token_hash_unique",
-          "nullsNotDistinct": false,
-          "columns": [
-            "token_hash"
-          ]
-        }
-      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

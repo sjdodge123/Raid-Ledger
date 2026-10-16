@@ -91,7 +91,7 @@ const LAZY_NAMED = [
   { name: 'calendar-page', kb: 12.7, why: 'route; +0.13 KB ROK-1775 server-schedule layer in Month (date-header glyph) and Schedule (muted rows), +0.1 KB Schedule lists server-only days with a muted header (Lead ruling) — the layer pieces share the calendar chunk with CalendarView, their only importer' },
   { name: 'lfg-group-page', kb: 11.81, why: 'route' },
   { name: 'game-detail-page', kb: 10.2, why: 'route; was on lazyDefault (9.76). +0.3 KB ROK-1797 per-game notification bell: trigger, anchored popover / BottomSheet panel, deep-link hook; measured 11.6 KB gz vs the 11.3 default cap (fleet build 0.3 KB over)' },
-  { name: 'guild-page', kb: 10.0, why: 'route; was on lazyDefault (9.76). +0.24 KB ROK-1787 guild S3: Raids tab, schedule, attendance leaderboard, role composition, hero Next-raid chip; measured 11.57 KB gz vs the 11.57 default cap (fleet build 0.0 KB over)' },
+  { name: 'guild-page', kb: 10.9, why: 'route; was on lazyDefault (9.76). +0.24 KB ROK-1787 guild S3: Raids tab, schedule, attendance leaderboard, role composition, hero Next-raid chip; measured 11.57 KB gz vs the 11.57 default cap (fleet build 0.0 KB over). +0.9 KB ROK-1788 guild S4: lazy mirror/picker loader glue — the `__vite__mapDeps` preload list for the mirror chunk (1.16 KB gz, ~60 asset paths, since the chunk reaches app-entry); module set otherwise identical to main. Mirror 3.61 KB + picker 1.73 KB split out; measured 12.52 KB gz (main 11.29), cap 12.6' },
 ];
 
 const mapValues = (obj, fn) =>

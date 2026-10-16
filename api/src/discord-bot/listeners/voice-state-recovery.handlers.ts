@@ -204,7 +204,7 @@ async function trackDroppedMembers(
 }
 
 /** Add members from qualifying game groups to their own event. */
-async function addDetectedMembers(
+export async function addDetectedMembers(
   deps: VoiceHandlerDeps,
   channel: VoiceBasedChannel,
   groups: LobbyGameGroup[],
