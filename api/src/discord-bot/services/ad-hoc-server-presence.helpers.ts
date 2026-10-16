@@ -135,6 +135,28 @@ export async function hasOpenServerPlayers(
   return rows[0] !== undefined;
 }
 
+/**
+ * Codex r2 P1: open rows held by a game server ALONE (not also in voice) —
+ * the attendance the voice tracker cannot see, so auto-extend adds it.
+ */
+export async function countServerOnlyPresence(
+  db: Db,
+  eventId: number,
+): Promise<number> {
+  const rows = await db
+    .select({ id: p.id })
+    .from(p)
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        eq(p.onServer, true),
+        eq(p.inVoice, false),
+        isNull(p.leftAt),
+      ),
+    );
+  return rows.length;
+}
+
 /** Open rows still on THIS server — the rehydrate set for its session. */
 export async function listOpenServerPresence(
   db: Db,

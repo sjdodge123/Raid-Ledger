@@ -298,14 +298,31 @@ async function findParticipantByDiscordId(
   return rows[0] ?? null;
 }
 
+/**
+ * Re-read a row FOR UPDATE (Codex r2 P2). A voice leave and a server leave
+ * for one person serialise here, so the second sees the first's cleared flag
+ * and closes the row — two unlocked reads would each clear only their own
+ * flag and leave it open with both flags false.
+ */
+async function lockRow(
+  tx: Db,
+  id: string,
+): Promise<AdHocParticipantRow | null> {
+  const rows = await tx.select().from(t).where(eq(t.id, id)).for('update');
+  return rows[0] ?? null;
+}
+
 /** A voice leave: closes the row unless the player is still on the server. */
 export async function markVoiceLeave(
   db: Db,
   eventId: number,
   discordUserId: string,
 ): Promise<{ session: number; total: number } | null> {
-  const row = await findParticipantByDiscordId(db, eventId, discordUserId);
-  return leaveSource(db, row, 'voice');
+  return db.transaction(async (tx) => {
+    const found = await findParticipantByDiscordId(tx, eventId, discordUserId);
+    const row = found && (await lockRow(tx, found.id));
+    return leaveSource(tx, row, 'voice');
+  });
 }
 
 /**
@@ -318,7 +335,11 @@ export async function markSteamLeave(
   eventId: number,
   steamId: string,
 ): Promise<boolean> {
-  const row = await findParticipantBySteamId(db, eventId, steamId);
-  if (row && !row.onServer) return false;
-  return (await leaveSource(db, row, 'server')) !== null;
+  const closed = await db.transaction(async (tx) => {
+    const found = await findParticipantBySteamId(tx, eventId, steamId);
+    const row = found && (await lockRow(tx, found.id));
+    if (row && !row.onServer) return null;
+    return leaveSource(tx, row, 'server');
+  });
+  return closed !== null;
 }
