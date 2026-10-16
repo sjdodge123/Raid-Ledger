@@ -108,3 +108,21 @@ describe('TokenBlocklistService', () => {
     });
   });
 });
+
+describe('ROK-1810 TokenBlocklistService blockUser result + minIatFor', () => {
+  beforeEach(() => setupModule());
+
+  it('blockUser resolves true on success and false on a Redis error', async () => {
+    await expect(service.blockUser(5)).resolves.toBe(true);
+    mockRedis.set.mockRejectedValueOnce(new Error('down'));
+    await expect(service.blockUser(5)).resolves.toBe(false);
+  });
+
+  it('minIatFor is the stamp + 1, undefined with no block or on error', async () => {
+    mockRedis.get.mockResolvedValueOnce('1792152000');
+    await expect(service.minIatFor(5)).resolves.toBe(1792152001);
+    await expect(service.minIatFor(5)).resolves.toBeUndefined();
+    mockRedis.get.mockRejectedValueOnce(new Error('down'));
+    await expect(service.minIatFor(5)).resolves.toBeUndefined();
+  });
+});
