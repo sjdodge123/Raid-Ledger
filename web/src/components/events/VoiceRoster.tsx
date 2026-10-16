@@ -1,6 +1,6 @@
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
-import { voiceParticipants } from './voice-participants';
+import { serverGuestParticipants, voiceParticipants } from './voice-participants';
 
 interface VoiceRosterProps {
   /** The whole ad-hoc roster; game-server rows are filtered out here (ROK-1821). */
@@ -100,4 +100,13 @@ export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
       {participants.length === 0 && <p className="text-sm text-muted text-center py-4">No participants yet</p>}
     </div>
   );
+}
+
+/**
+ * ROK-1821 — unlinked players on the event's game server, listed apart from
+ * the voice roster (which stays voice-only). Renders nothing when there are none.
+ */
+export function ServerGuestRoster({ participants: allRows }: VoiceRosterProps) {
+  const guests = serverGuestParticipants(allRows);
+  return <ParticipantGroup participants={guests} isActive={true} label="On the game server" count={guests.length} />;
 }

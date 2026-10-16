@@ -16,3 +16,13 @@ export function isVoiceParticipant(participant: AdHocParticipantDto): boolean {
 export function voiceParticipants(participants: AdHocParticipantDto[]): AdHocParticipantDto[] {
   return participants.filter(isVoiceParticipant);
 }
+
+/**
+ * ROK-1821 — unlinked game-server players still on the server. They have no
+ * Raid Ledger user, so no signup shows them; the voice section lists them in
+ * their own "On the game server" group. Linked server players are omitted —
+ * the signup roster already shows them as their Raid Ledger user.
+ */
+export function serverGuestParticipants(participants: AdHocParticipantDto[]): AdHocParticipantDto[] {
+  return participants.filter((p) => !isVoiceParticipant(p) && p.userId === null && !p.leftAt);
+}
