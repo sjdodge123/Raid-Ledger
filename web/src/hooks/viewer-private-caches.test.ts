@@ -67,6 +67,17 @@ describe('ROK-1599: viewer-private cache guard', () => {
         setAccessToken(jwt({ sub: 2 }));
         expect(others.map((key) => queryClient.getQueryData(key))).toEqual(others.map(() => undefined));
         expect(queryClient.getQueryData(['auth', 'me'])).toEqual({ id: 1 });
+        expect(queryClient.getQueryState(['auth', 'me'])?.isInvalidated).toBe(true);
+    });
+
+    it('ROK-1811: a drop keeps the SAME auth Query (its observers) and its timestamp', () => {
+        queryClient.setQueryData(['auth', 'me'], { id: 1 }, { updatedAt: 1000 });
+        const before = queryClient.getQueryCache().find({ queryKey: ['auth', 'me'], exact: true });
+        dropViewerPrivateCaches(queryClient);
+        const after = queryClient.getQueryCache().find({ queryKey: ['auth', 'me'], exact: true });
+        expect(after).toBe(before);
+        expect(queryClient.getQueryState(['auth', 'me'])?.dataUpdatedAt).toBe(1000);
+        expect(queryClient.getQueryData(OVERVIEW)).toBeUndefined();
     });
 
     it('ROK-1811: a same-identity refresh keeps every cache', () => {

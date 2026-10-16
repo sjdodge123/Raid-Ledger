@@ -1,5 +1,5 @@
 /**
- * Every identity change empties the WHOLE query cache (ROK-1811, after
+ * Every identity change empties the query cache except `['auth','me']` (ROK-1811, after
  * ROK-1599's Codex P1). Many cached responses belong to one viewer under keys
  * that are not viewer-scoped — `['notifications', limit, offset]`,
  * `['notifications','unread-count']`, `['me','characters', gameId]`, the
@@ -7,35 +7,42 @@
  * prefixes rots the moment a new private query lands. Clearing everything is
  * correct by construction; the price is one refetch of public data.
  *
- * Explicit drops (logout, login, impersonation start/exit, cross-tab signals)
- * clear eagerly. `installViewerPrivateCacheGuard` is the backstop for every
- * other transition: it watches the in-memory access token and clears whenever
+ * Explicit drops (logout, login, session expiry, impersonation start/exit,
+ * cross-tab signals) clear eagerly; `['auth','me']` itself is never removed.
+ * `installViewerPrivateCacheGuard` is the backstop for every other transition: it watches the in-memory access token and clears whenever
  * the token's identity (subject + impersonator) differs from the last one
  * held — a token refresh that ends impersonation, a re-mint after another tab
  * signed in as someone else. A same-identity refresh clears nothing.
  */
-import type { QueryClient } from '@tanstack/react-query';
+import type { Query, QueryClient } from '@tanstack/react-query';
 import { getAccessToken, subscribeAccessToken } from '../lib/api/access-token-store';
 import { readClaims } from '../lib/api/token-expiry';
 
 const AUTH_ME_KEY = ['auth', 'me'] as const;
 
+/** True for the `['auth','me']` Query itself (not a longer key under it). */
+function isAuthMe(query: Query): boolean {
+    const key = query.queryKey;
+    return key.length === AUTH_ME_KEY.length && key[0] === AUTH_ME_KEY[0] && key[1] === AUTH_ME_KEY[1];
+}
+
+const EVERY_QUERY_BUT_AUTH_ME = { predicate: (query: Query) => !isAuthMe(query) };
+
 /**
- * Cancel every in-flight fetch, then empty the query AND mutation caches, so
- * no response for the previous identity can be read or land afterwards.
- * Synchronous on purpose: `cancelQueries` rejects each fetch immediately (and
- * `clear()` silently cancels whatever is left), and the callers re-seed
- * `['auth','me']` right after — an awaited gap would let a render observe the
- * empty seed and route to /login, or a late `clear()` wipe the new seed.
- * `['auth','me']` is carried across the clear so a caller that does not
- * re-seed it (impersonation, the token guard) never flashes a signed-out
- * state; callers that know the new identity overwrite it next.
+ * Cancel and REMOVE every query except `['auth','me']`, then empty the
+ * mutation cache, so no response for the previous identity can be read or land
+ * afterwards. The live `['auth','me']` Query is left in place, never recreated:
+ * the mounted `useAuth()` observers stay attached to it, so the caller's re-seed
+ * (or a later cross-tab null) reaches `ProtectedRoute` and every other consumer
+ * (ROK-1811 Codex P1), and it keeps its own `dataUpdatedAt`.
+ * Synchronous on purpose: `cancelQueries` rejects each fetch immediately and
+ * the callers re-seed `['auth','me']` right after — an awaited gap would let a
+ * late response or render land between the drop and the re-seed.
  */
 export function dropViewerPrivateCaches(queryClient: QueryClient): void {
-    const me: unknown = queryClient.getQueryData(AUTH_ME_KEY);
-    void queryClient.cancelQueries();
-    queryClient.clear();
-    if (me !== undefined) queryClient.setQueryData(AUTH_ME_KEY, me);
+    void queryClient.cancelQueries(EVERY_QUERY_BUT_AUTH_ME);
+    queryClient.removeQueries(EVERY_QUERY_BUT_AUTH_ME);
+    queryClient.getMutationCache().clear();
 }
 
 function claimText(value: unknown): string {
@@ -50,16 +57,22 @@ export function tokenIdentity(token: string | null): string | null {
 }
 
 /**
- * Clear the query cache whenever the held token changes identity. A
- * cleared token is ignored (logout drops explicitly), so the next token is
- * compared with the last identity that held one. Returns the uninstaller.
+ * Drop the private caches whenever the held token changes identity, then mark
+ * `['auth','me']` stale so a mounted `useAuth()` refetches the NEW identity —
+ * a guard-only change (a refresh that ends impersonation underneath, a re-mint
+ * after another tab signed in) has no caller to re-seed it. A cleared token is
+ * ignored (logout drops explicitly), so the next token is compared with the
+ * last identity that held one. Returns the uninstaller.
  */
 export function installViewerPrivateCacheGuard(queryClient: QueryClient): () => void {
     let lastIdentity = tokenIdentity(getAccessToken());
     return subscribeAccessToken(() => {
         const next = tokenIdentity(getAccessToken());
         if (next === null) return;
-        if (lastIdentity !== null && next !== lastIdentity) dropViewerPrivateCaches(queryClient);
+        if (lastIdentity !== null && next !== lastIdentity) {
+            dropViewerPrivateCaches(queryClient);
+            void queryClient.invalidateQueries({ queryKey: AUTH_ME_KEY, exact: true });
+        }
         lastIdentity = next;
     });
 }
