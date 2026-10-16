@@ -359,55 +359,52 @@ describe('general lobby — a server-driven join leaves the prior game event (Co
   });
 });
 
+// ── ROK-1805: server-driven switches on every branch ─────────────────
+
+const VOICE_B_1805 = '1801000000000000102';
+
+/** A + B on Rust in voice, the Rust event spawned (its timer fired). */
+async function rustEvent(): Promise<{ bindingId: string; rust: number }> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: 'Rust', slug: 'rust', coverUrl: null, igdbId: null })
+      .returning({ id: schema.games.id }),
+    'rust',
+  );
+  await joinVoice(VOICE_A, 'Rust');
+  await joinVoice(VOICE_B_1805, 'Rust');
+  const ctx = listener['joinCtx'];
+  const [binding] = nonEmpty(
+    await ctx.resolveAllBindings(CHANNEL_ID),
+    'binding',
+  );
+  await handleGeneralLobbyGroupDetection(ctx.deps, CHANNEL_ID, binding, row.id);
+  return { bindingId: binding.bindingId, rust: row.id };
+}
+
+async function aJoinsValheimServer(steamIds: string[]): Promise<void> {
+  onServer = steamIds.map(serverPlayer);
+  await testApp.app
+    .get(EventEmitter2)
+    .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
+      pelicanServerId: serverSeq,
+      gameId: valheim,
+    });
+}
+
+async function setUp(): Promise<{ bindingId: string; rust: number }> {
+  await linkVoiceAToSteamA();
+  await useGeneralLobby();
+  const ids = await rustEvent();
+  const svc = testApp.app.get(AdHocEventService);
+  expect(
+    svc.getActiveState(ids.bindingId, ids.rust)?.memberSet.has(VOICE_A),
+  ).toBe(true);
+  return ids;
+}
+
 describe('general lobby — a server-driven switch leaves the prior game on every branch (ROK-1805)', () => {
-  const VOICE_B = '1801000000000000102';
-
-  /** A + B on Rust in voice, the Rust event spawned (its timer fired). */
-  async function rustEvent(): Promise<{ bindingId: string; rust: number }> {
-    const [row] = nonEmpty(
-      await testApp.db
-        .insert(schema.games)
-        .values({ name: 'Rust', slug: 'rust', coverUrl: null, igdbId: null })
-        .returning({ id: schema.games.id }),
-      'rust',
-    );
-    await joinVoice(VOICE_A, 'Rust');
-    await joinVoice(VOICE_B, 'Rust');
-    const ctx = listener['joinCtx'];
-    const [binding] = nonEmpty(
-      await ctx.resolveAllBindings(CHANNEL_ID),
-      'binding',
-    );
-    await handleGeneralLobbyGroupDetection(
-      ctx.deps,
-      CHANNEL_ID,
-      binding,
-      row.id,
-    );
-    return { bindingId: binding.bindingId, rust: row.id };
-  }
-
-  async function aJoinsValheimServer(steamIds: string[]): Promise<void> {
-    onServer = steamIds.map(serverPlayer);
-    await testApp.app
-      .get(EventEmitter2)
-      .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
-        pelicanServerId: serverSeq,
-        gameId: valheim,
-      });
-  }
-
-  async function setUp(): Promise<{ bindingId: string; rust: number }> {
-    await linkVoiceAToSteamA();
-    await useGeneralLobby();
-    const ids = await rustEvent();
-    const svc = testApp.app.get(AdHocEventService);
-    expect(
-      svc.getActiveState(ids.bindingId, ids.rust)?.memberSet.has(VOICE_A),
-    ).toBe(true);
-    return ids;
-  }
-
   it('below threshold: A leaves the Rust event and its Rust voice session closes', async () => {
     const { bindingId, rust } = await setUp();
     const stop = jest.spyOn(testApp.app.get(GameActivityService), 'bufferStop');
