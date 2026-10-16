@@ -85,6 +85,16 @@ function buildGameInterestResponse(
   };
 }
 
+/**
+ * Parse the public `afterDate` query. An unparseable value falls back to now:
+ * an Invalid Date makes `findNextOccurrence` loop forever (getDay() is NaN),
+ * hanging the event loop on an anonymous request.
+ */
+export function parseAfterDate(afterDate?: string): Date {
+  const parsed = afterDate ? new Date(afterDate) : new Date();
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+}
+
 /** Generates time suggestions based on game interest or fallback. */
 export async function getTimeSuggestions(
   db: PostgresJsDatabase<typeof schema>,
@@ -94,7 +104,7 @@ export async function getTimeSuggestions(
   afterDate?: string,
 ): Promise<TimeSuggestionsResponse> {
   const offset = tzOffset ?? 0;
-  const after = afterDate ? new Date(afterDate) : new Date();
+  const after = parseAfterDate(afterDate);
   const timezone = (await settingsService.getDefaultTimezone()) ?? undefined;
   if (gameId) {
     const result = await queryRankedTimeSlots(db, gameId);
