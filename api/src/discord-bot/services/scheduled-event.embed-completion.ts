@@ -9,16 +9,21 @@
  * skipped — kept a live embed and bump forever.
  *
  * This sweep finds those events from Raid Ledger's own effective end time and
- * enqueues the same `cron-complete` sync. It runs after the Discord pass and
- * regardless of its skip reason: it needs only the DB and the embed-sync
- * queue, and the processor itself no-ops while the bot is disconnected (the
- * next tick then picks the event up again, since its embed is still live).
+ * enqueues the same `cron-complete` sync. It runs after the Discord pass
+ * (including when that pass found no candidates) but only while the bot is
+ * connected to a guild: the processor needs the connection and only syncs the
+ * current guild's embeds, so a disconnected sweep would just fail its jobs.
+ * The next connected tick picks the event up again (its embed is still live).
+ *
+ * Newest-ended first: an event whose embed edit keeps failing (message
+ * deleted, channel access lost) never leaves the candidate set, so an
+ * unordered batch could let such rows starve a freshly ended event.
  *
  * Idempotent: an event whose every tracked embed is already COMPLETED or
  * CANCELLED is never returned, and ids the Discord pass just enqueued are
  * excluded (that pass clears the SE id, so they would otherwise match too).
  */
-import { and, eq, isNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, isNull, notInArray, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { utcWallClock } from '../../drizzle/timestamp-utils';
@@ -42,26 +47,36 @@ export interface EmbedSyncEnqueuer {
   enqueue(eventId: number, reason: string): Promise<void>;
 }
 
-/** True while at least one tracked embed for the event is not finished. */
-function hasUnfinishedEmbed() {
+/** Filters for `findEmbedOnlyCompletionCandidates`. */
+export interface EmbedOnlyCandidateQuery {
+  /** Only embeds tracked for this guild — the one the processor syncs. */
+  guildId: string;
+  excludeIds?: number[];
+  now?: Date;
+  limit?: number;
+}
+
+/** True while one of the guild's tracked embeds for the event is not finished. */
+function hasUnfinishedEmbed(guildId: string): SQL {
   const dem = schema.discordEventMessages;
   return sql`EXISTS (
     SELECT 1 FROM ${dem}
     WHERE ${dem.eventId} = ${schema.events.id}
+      AND ${dem.guildId} = ${guildId}
       AND ${dem.embedState} NOT IN (${EMBED_STATES.COMPLETED}, ${EMBED_STATES.CANCELLED})
   )`;
 }
 
 /**
  * Ended, non-cancelled, non-ad-hoc events with NO Discord scheduled event
- * whose posted embed has not reached COMPLETED (ROK-1818). Bounded by
- * `EMBED_COMPLETION_LOOKBACK_MS` and `EMBED_COMPLETION_BATCH_SIZE`.
+ * whose posted embed has not reached COMPLETED (ROK-1818), newest-ended
+ * first. Bounded by `EMBED_COMPLETION_LOOKBACK_MS` and the batch size.
  */
 export async function findEmbedOnlyCompletionCandidates(
   db: PostgresJsDatabase<typeof schema>,
-  excludeIds: number[] = [],
-  now: Date = new Date(),
+  query: EmbedOnlyCandidateQuery,
 ): Promise<number[]> {
+  const { guildId, excludeIds = [], now = new Date() } = query;
   const since = new Date(now.getTime() - EMBED_COMPLETION_LOOKBACK_MS);
   const rows = await db
     .select({ id: schema.events.id })
@@ -79,48 +94,30 @@ export async function findEmbedOnlyCompletionCandidates(
         excludeIds.length > 0
           ? notInArray(schema.events.id, excludeIds)
           : undefined,
-        hasUnfinishedEmbed(),
+        hasUnfinishedEmbed(guildId),
       ),
     )
-    .limit(EMBED_COMPLETION_BATCH_SIZE);
+    .orderBy(desc(effectiveEnd()), desc(schema.events.id))
+    .limit(query.limit ?? EMBED_COMPLETION_BATCH_SIZE);
   return rows.map((r) => r.id);
 }
 
-/** Enqueue one `cron-complete` sync; true when it was accepted. Never throws. */
-async function enqueueCronComplete(
-  queue: EmbedSyncEnqueuer | null,
-  id: number,
-  warn: (message: string) => void,
-): Promise<boolean> {
-  if (!queue) return false;
-  try {
-    await queue.enqueue(id, 'cron-complete');
-    return true;
-  } catch (err) {
-    warn(`Embed-sync enqueue failed for event ${id}: ${errText(err)}`);
-    return false;
-  }
-}
-
 /**
- * Enqueue a `cron-complete` embed sync for every embed-only candidate.
- * Never throws: a fault here must not fail the completion cron. Returns the
- * ids it enqueued (an enqueue that rejected is logged and left out).
+ * Enqueue a `cron-complete` embed sync for every embed-only candidate of the
+ * guild. Never throws: a fault here must not fail the completion cron.
+ * Returns the ids handed to the queue (`EmbedSyncQueueService.enqueue` logs
+ * and swallows its own failures, so it never rejects).
  */
 export async function sweepEmbedOnlyCompletions(
   db: PostgresJsDatabase<typeof schema>,
-  queue: EmbedSyncEnqueuer | null,
-  excludeIds: number[],
+  queue: EmbedSyncEnqueuer,
+  query: EmbedOnlyCandidateQuery,
   warn: (message: string) => void,
 ): Promise<number[]> {
-  if (!queue) return [];
   try {
-    const ids = await findEmbedOnlyCompletionCandidates(db, excludeIds);
-    const enqueued: number[] = [];
-    for (const id of ids) {
-      if (await enqueueCronComplete(queue, id, warn)) enqueued.push(id);
-    }
-    return enqueued;
+    const ids = await findEmbedOnlyCompletionCandidates(db, query);
+    for (const id of ids) await queue.enqueue(id, 'cron-complete');
+    return ids;
   } catch (err) {
     warn(`Embed-only completion sweep failed: ${errText(err)}`);
     return [];
@@ -139,7 +136,7 @@ export interface CompletionCronDeps {
 /**
  * The completion cron (ROK-717, ROK-944, ROK-1818): the Discord SE pass,
  * each completed event's `cron-complete` sync, then the embed-only sweep —
- * which runs whatever the pass's skip reason and skips the ids it enqueued.
+ * while the bot is connected to a guild, skipping the ids the pass enqueued.
  */
 export async function completeAndSweep(
   deps: CompletionCronDeps,
@@ -150,11 +147,18 @@ export async function completeAndSweep(
     client,
     completeOne,
     afterEach: async (id) => {
-      await enqueueCronComplete(queue, id, warn);
+      await queue?.enqueue(id, 'cron-complete');
     },
   });
-  const done = run.outcomes.map((o) => o.eventId);
-  const swept = await sweepEmbedOnlyCompletions(db, queue, done, warn);
+  const guildId = client.isConnected() ? client.getGuildId() : null;
+  if (!queue || !guildId) return run;
+  const excludeIds = run.outcomes.map((o) => o.eventId);
+  const swept = await sweepEmbedOnlyCompletions(
+    db,
+    queue,
+    { guildId, excludeIds },
+    warn,
+  );
   return swept.length > 0 ? { ...run, embedOnlyEventIds: swept } : run;
 }
 

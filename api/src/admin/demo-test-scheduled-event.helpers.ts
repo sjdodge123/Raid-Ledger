@@ -50,6 +50,8 @@ export interface SECompletionTriggerResult {
   success: boolean;
   outcomes: SECompletionOutcome[];
   reason?: SECompletionSkipReason;
+  /** ROK-1818: ended no-SE events the embed-only sweep enqueued. */
+  embedOnlyEventIds?: number[];
 }
 
 /** Trigger the scheduled event completion cron once (ROK-944). */
@@ -65,6 +67,9 @@ export async function triggerScheduledEventCompletionForTest(
     success,
     outcomes: run.outcomes,
     ...(run.reason ? { reason: run.reason } : {}),
+    ...(run.embedOnlyEventIds
+      ? { embedOnlyEventIds: run.embedOnlyEventIds }
+      : {}),
   };
 }
 
