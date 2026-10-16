@@ -351,7 +351,9 @@ describe('Quick Play detection switch (ROK-1800)', () => {
       presenceSupported: false,
     });
   });
+});
 
+describe('Quick Play detection switch — guards (ROK-1800)', () => {
   it('refuses to switch it on for a server whose game has no log parser, with 400 (ROK-1800 m1)', async () => {
     const unmapped = await insertServer(1);
     const noParser = await insertServer(2, { gameId: testApp.seed.game.id });

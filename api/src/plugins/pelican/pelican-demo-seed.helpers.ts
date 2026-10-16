@@ -105,6 +105,13 @@ function schedulesFor(
 
 type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
 
+/** Delete every server row (schedules cascade) but the Quick Play fixture. */
+function wipeDemoRows(tx: Tx) {
+  return tx
+    .delete(pelicanServers)
+    .where(notInArray(pelicanServers.panelUuid, QUICK_PLAY_FIXTURE_UUIDS));
+}
+
 /**
  * Wipe `pelican_servers` (schedules cascade) except the ROK-1800 Quick Play
  * smoke fixture rows, then insert `specs` + their schedules.
@@ -114,9 +121,7 @@ async function resetDemoRows(
   specs: SeedSpec[],
   now: Date,
 ): Promise<PelicanSeedServer[]> {
-  await tx
-    .delete(pelicanServers)
-    .where(notInArray(pelicanServers.panelUuid, QUICK_PLAY_FIXTURE_UUIDS));
+  await wipeDemoRows(tx);
   const inserted = await tx
     .insert(pelicanServers)
     .values(specs.map((s) => s.values))

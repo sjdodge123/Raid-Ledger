@@ -183,7 +183,9 @@ describe('PelicanServersAdminController (ROK-1094)', () => {
     expect(res.presenceTracking).toBe(true);
     expect(res.presenceSupported).toBe(true);
   });
+});
 
+describe('PATCH Quick Play guard + supervisor nudge (ROK-1800)', () => {
   it('rejects turning Quick Play on for a game without a log parser with 400 (ROK-1800 m1)', async () => {
     const { controller, emit } = build({ kind: 'presence_unsupported' });
     await expect(
