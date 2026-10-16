@@ -19,7 +19,10 @@ import {
   serverOnlySummary,
 } from '../listeners/voice-lobby-server-merge.helpers';
 import type { LobbyGameGroup } from '../listeners/voice-lobby-groups.helpers';
-import type { AdHocParticipant } from './ad-hoc-notification.helpers';
+import {
+  isAnonymousServerRow,
+  type AdHocParticipant,
+} from './ad-hoc-notification.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { RoomGroup } from './channel-presence-room.helpers';
 import type { RoomSource } from './channel-presence-room.snapshot';
@@ -98,15 +101,32 @@ function readParticipantRows(
     .where(eq(t.eventId, eventId));
 }
 
-/** Unnamed server-only players no stored row covers (Q4: `+N on server`). */
-function unrowedAnonymousCount(
-  rows: ParticipantRow[],
+/**
+ * Q4 `+N on server`: unnamed live server players no named row covers, plus
+ * anonymous (SteamID-named) rows still on the server — never a SteamID.
+ */
+function anonymousCount(
+  named: ParticipantRow[],
+  anonymous: ParticipantRow[],
   group: RosterGroup,
 ): number {
-  const steam = new Set(rows.map((r) => r.steamId));
-  return (group.serverOnly ?? []).filter(
-    (e) => e.name === null && !steam.has(e.steamId),
-  ).length;
+  const serverOnly = group.serverOnly ?? [];
+  const namedSteam = new Set(named.map((r) => r.steamId));
+  const liveNamed = new Set(
+    serverOnly.filter((e) => e.name !== null).map((e) => e.steamId),
+  );
+  const ids = new Set(
+    serverOnly
+      .filter((e) => e.name === null && !namedSteam.has(e.steamId))
+      .map((e) => e.steamId),
+  );
+  for (const r of anonymous) {
+    const live = r.onServer && r.leftAt === null;
+    if (r.steamId !== null && live && !liveNamed.has(r.steamId)) {
+      ids.add(r.steamId);
+    }
+  }
+  return ids.size;
 }
 
 /** Stored rows ∪ live members without a row ∪ named unrowed server players. */
@@ -156,11 +176,13 @@ export async function eventedRoster(
   group: RosterGroup,
   source: RoomSource,
 ): Promise<EventedRoster> {
-  const rows = await readParticipantRows(db, eventId);
-  const participants = unionRows(rows, group, source);
+  const all = await readParticipantRows(db, eventId);
+  // Q4: SteamID-named rows never render by name (MAJOR 2, review 2026-10-16).
+  const named = all.filter((r) => !isAnonymousServerRow(r));
+  const anonymous = all.filter(isAnonymousServerRow);
   return {
-    participants,
-    anonymousOnServer: unrowedAnonymousCount(rows, group),
+    participants: unionRows(named, group, source),
+    anonymousOnServer: anonymousCount(named, anonymous, group),
   };
 }
 

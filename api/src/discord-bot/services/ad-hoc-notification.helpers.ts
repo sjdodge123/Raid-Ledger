@@ -19,6 +19,30 @@ export interface AdHocParticipant {
   isActive: boolean;
   /** ROK-1801: trusted roster marker (` 🖥` / ` 🖥 on server`), card only. */
   rosterSuffix?: string;
+  /**
+   * ROK-1801 Q4: an unnamed, unlinked server player whose stored username is
+   * its SteamID64. Never rendered by name — counted into `+N on server`.
+   */
+  anonymousOnServer?: boolean;
+}
+
+/** A stored participant row's identity columns. */
+type ParticipantIdentity = {
+  discordUserId: string | null;
+  discordUsername: string;
+  steamId: string | null;
+};
+
+/**
+ * ROK-1801 Q4: ROK-1800 stores an unnamed, unlinked server player with its
+ * SteamID64 as `discordUsername`. Such a row must never render by name.
+ */
+export function isAnonymousServerRow(row: ParticipantIdentity): boolean {
+  return (
+    row.discordUserId === null &&
+    row.steamId !== null &&
+    row.discordUsername === row.steamId
+  );
 }
 
 /** Dependencies for ad-hoc notification helper functions. */
@@ -124,7 +148,9 @@ async function resolveVoice(
 function rosterMentions(
   participants: AdHocParticipant[],
 ): NonNullable<EmbedEventData['signupMentions']> {
-  return participants.map((p) => ({
+  return participants
+    .filter((p) => !p.anonymousOnServer)
+    .map((p) => ({
     discordId: null,
     username: p.discordUsername,
     role: null,
@@ -163,6 +189,10 @@ function assembleEmbedData(
     // here (render-only field) so the shared roster layout falls back to username.
     signupMentions: rosterMentions(participants),
   };
+  const anonymous = participants.filter(
+    (p) => p.anonymousOnServer && p.isActive,
+  ).length;
+  if (anonymous > 0) data.serverAnonymousCount = anonymous;
   if (voiceChannelId) data.voiceChannelId = voiceChannelId;
   return data;
 }
@@ -298,5 +328,6 @@ export async function readParticipants(
     discordUserId: r.discordUserId,
     discordUsername: r.discordUsername,
     isActive: !allInactive && !r.leftAt,
+    ...(isAnonymousServerRow(r) ? { anonymousOnServer: true } : {}),
   }));
 }

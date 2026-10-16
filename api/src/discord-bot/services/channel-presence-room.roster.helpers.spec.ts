@@ -151,6 +151,33 @@ describe('eventedRoster — anonymous server players (ROK-1801 Q4)', () => {
     ]);
   });
 
+  it('renders a SteamID-named row (unnamed, unlinked) as +N on server, never the SteamID (review MAJOR 2)', async () => {
+    const steam = '76561198000000001';
+    const db = dbReturning([
+      row({ steamId: steam, discordUsername: steam, onServer: true }),
+      row({ discordUserId: 'u1', discordUsername: 'Ana' }),
+    ]);
+    const roster = await eventedRoster(
+      db,
+      77,
+      { memberIds: ['u1'], serverOnly: [entry(null, steam)] },
+      SOURCE,
+    );
+    const names = roster.participants.map((p) => p.discordUsername);
+    expect(names).toEqual(['Ana']);
+    expect(roster.anonymousOnServer).toBe(1);
+  });
+
+  it('drops a SteamID-named row that has left the server from the card entirely', async () => {
+    const steam = '76561198000000002';
+    const db = dbReturning([
+      row({ steamId: steam, discordUsername: steam, leftAt: new Date() }),
+    ]);
+    const roster = await eventedRoster(db, 77, { memberIds: [] }, SOURCE);
+    expect(roster.participants).toEqual([]);
+    expect(roster.anonymousOnServer).toBe(0);
+  });
+
   it('withServerAnonymous stamps the count only when there is one', () => {
     const data = { id: 1 } as unknown as Parameters<
       typeof withServerAnonymous
