@@ -13,6 +13,7 @@ import { toast } from '../lib/toast';
 import { endDeactivatedSession, isDeactivatedResponse } from '../lib/api/deactivated-session';
 import { awaitMagicLinkRedeem } from '../lib/magic-link-redeem';
 import { bumpIdentityEpoch } from '../lib/api/cross-tab-auth';
+import { dropViewerPrivateCaches } from './viewer-private-caches';
 import type { UserRole } from '@raid-ledger/contract';
 
 export interface User {
@@ -173,6 +174,7 @@ function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
         setAccessToken(token);
         try {
             const user = await fetchCurrentUser();
+            dropViewerPrivateCaches(queryClient);
             queryClient.setQueryData(['auth', 'me'], user);
             queryClient.invalidateQueries({ queryKey: ['events'] });
             return user;
@@ -228,6 +230,7 @@ async function performImpersonation(userId: number, queryClient: ReturnType<type
         bumpRefreshGeneration();
         setAccessToken(data.access_token);
         signalIdentityChange();
+        dropViewerPrivateCaches(queryClient);
         await queryClient.invalidateQueries();
         return true;
     } catch (error) {
@@ -265,6 +268,7 @@ async function performExitImpersonation(queryClient: ReturnType<typeof useQueryC
         return false;
     }
     signalIdentityChange();
+    dropViewerPrivateCaches(queryClient);
     await queryClient.invalidateQueries();
     return outcome.kind === 'ok';
 }
@@ -289,6 +293,20 @@ export function useViewerCacheScope(): number | 'anon' {
     return user?.id ?? 'anon';
 }
 
+/**
+ * ROK-1353: revoke the refresh family + clear the cookie server-side before
+ * dropping local storage. Fire-and-forget — local logout must succeed even if
+ * the network call fails. ROK-1599: viewer-private caches go with it.
+ */
+function performLogout(queryClient: ReturnType<typeof useQueryClient>): void {
+    void serverLogout();
+    clearAllAuthStorage();
+    clearSilentGuard();
+    clearAuthMethod();
+    dropViewerPrivateCaches(queryClient);
+    queryClient.setQueryData(['auth', 'me'], null);
+}
+
 export function useAuth() {
     const queryClient = useQueryClient();
 
@@ -302,16 +320,7 @@ export function useAuth() {
     const login = useLogin(queryClient);
     const impersonating = useSyncExternalStore(subscribeAccessToken, isImpersonating);
 
-    const logout = () => {
-        // ROK-1353: revoke the refresh family + clear the cookie server-side
-        // before dropping local storage. Fire-and-forget — local logout must
-        // succeed even if the network call fails.
-        void serverLogout();
-        clearAllAuthStorage();
-        clearSilentGuard();
-        clearAuthMethod();
-        queryClient.setQueryData(['auth', 'me'], null);
-    };
+    const logout = () => performLogout(queryClient);
 
     return {
         user: user ?? null,

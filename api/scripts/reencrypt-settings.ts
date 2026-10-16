@@ -14,6 +14,9 @@
  * ROK-1592: also rotates `calendar_connections.credentials_encrypted`
  * (`reencryptCalendarCredentials`) — without it a JWT_SECRET rotation bricks
  * every calendar connection. Boot-time script: fatal errors go to Sentry.
+ *
+ * ROK-1599: also rotates `calendar_feeds.token_encrypted`
+ * (`reencryptCalendarFeedTokens`) so subscribe links survive a rotation.
  */
 
 import '../src/sentry/instrument'; // MUST be first — installs Sentry handlers
@@ -22,7 +25,11 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import postgres from 'postgres';
-import { appSettings, calendarConnections } from '../src/drizzle/schema';
+import {
+  appSettings,
+  calendarConnections,
+  calendarFeeds,
+} from '../src/drizzle/schema';
 import {
   deriveKey,
   encryptWithKey,
@@ -154,6 +161,54 @@ async function reencryptCalendarRow(
   }
 }
 
+/**
+ * ROK-1599: re-encrypt every calendar_feeds token copy from oldKey to newKey.
+ * `token_hash` is unaffected (sha256 of the plaintext). Logs the user id only,
+ * never the token. Returns the number re-encrypted.
+ */
+export async function reencryptCalendarFeedTokens(
+  db: DrizzleDb,
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<number> {
+  const rows = await db
+    .select({
+      userId: calendarFeeds.userId,
+      tokenEncrypted: calendarFeeds.tokenEncrypted,
+    })
+    .from(calendarFeeds);
+  let successCount = 0;
+  for (const row of rows) {
+    if (await reencryptFeedRow(db, row, oldKey, newKey)) successCount++;
+  }
+  console.log(
+    `[reencrypt] calendar_feeds: ${successCount}/${rows.length} re-encrypted`,
+  );
+  return successCount;
+}
+
+/** Re-encrypt one feed's token copy. Returns true on success. */
+async function reencryptFeedRow(
+  db: DrizzleDb,
+  row: { userId: number; tokenEncrypted: string },
+  oldKey: Buffer,
+  newKey: Buffer,
+): Promise<boolean> {
+  try {
+    const token = decryptWithKey(row.tokenEncrypted, oldKey);
+    await db
+      .update(calendarFeeds)
+      .set({ tokenEncrypted: encryptWithKey(token, newKey) })
+      .where(eq(calendarFeeds.userId, row.userId));
+    return true;
+  } catch {
+    console.log(
+      `[reencrypt]   ⏭️  calendar_feeds#${row.userId} — skipped (could not decrypt with old key)`,
+    );
+    return false;
+  }
+}
+
 function logSummary(success: number, skipped: number): void {
   console.log('🔐 JWT_SECRET MIGRATION COMPLETE');
   console.log(`   Succeeded: ${success}/${success + skipped}`);
@@ -232,6 +287,7 @@ async function main(): Promise<void> {
   try {
     await reencryptAllSettings(db, oldKey, newKey);
     await reencryptCalendarCredentials(db, oldKey, newKey);
+    await reencryptCalendarFeedTokens(db, oldKey, newKey);
   } finally {
     await sql.end();
   }

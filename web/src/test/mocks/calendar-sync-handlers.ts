@@ -60,6 +60,10 @@ export function applyCalendarSyncUpdate(
 export const CALENDARS_OVERVIEW_URL = `${API_BASE}/users/me/calendars`;
 export const GOOGLE_OAUTH_START_URL = `${API_BASE}/users/me/calendars/oauth/google/start`;
 export const CALENDAR_CONNECTION_URL = `${API_BASE}/users/me/calendars/:id`;
+/** ROK-1599 subscribe link: POST creates or resets it, answering `{ url }`. */
+export const CALENDAR_FEED_URL = `${API_BASE}/users/me/calendars/feed`;
+export const CALENDAR_FEED_URL_FIXTURE = 'https://raid.example.test/api/cal/u/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.ics';
+export const CALENDAR_FEED_RESET_URL_FIXTURE = 'https://raid.example.test/api/cal/u/BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB.ics';
 /** S3 event copy + Undo (ROK-1596 D9) and the one-event `.ics` (F10). */
 export const EVENT_CALENDAR_COPY_URL = `${API_BASE}/users/me/calendars/events/:eventId`;
 export const EVENT_CALENDAR_UNDO_URL = `${API_BASE}/users/me/calendars/events/:eventId/undo`;
@@ -94,13 +98,14 @@ export function calendarsOverviewFixture(over: Partial<CalendarsOverview> = {}):
     };
 }
 
-/** The four page states the specs drive. */
+/** The page states the specs drive (+ `withFeed`, ROK-1599). */
 export const calendarsOverviewVariants = {
     available: calendarsOverviewFixture(),
     connected: calendarsOverviewFixture({ connections: [calendarConnectionFixture] }),
     notConfigured: calendarsOverviewFixture({
         providers: { google: { available: false }, microsoft: { available: false }, apple: { available: false } },
     }),
+    withFeed: calendarsOverviewFixture({ feed: { url: CALENDAR_FEED_URL_FIXTURE } }),
     disabled: calendarsOverviewFixture({
         enabled: false,
         providers: { google: { available: false }, microsoft: { available: false }, apple: { available: false } },
@@ -113,6 +118,7 @@ export function userCalendarHandlers(overview: CalendarsOverview = calendarsOver
         http.get(CALENDARS_OVERVIEW_URL, () => HttpResponse.json(overview)),
         http.get(GOOGLE_OAUTH_START_URL, () => HttpResponse.json({ url: GOOGLE_CONSENT_URL_FIXTURE })),
         http.delete(CALENDAR_CONNECTION_URL, () => new HttpResponse(null, { status: 202 })),
+        http.post(CALENDAR_FEED_URL, () => HttpResponse.json({ url: CALENDAR_FEED_RESET_URL_FIXTURE })),
         // Default: no write connection → no copy (null); Undo → 204; .ics → one VEVENT.
         http.get(EVENT_CALENDAR_COPY_URL, () => HttpResponse.json(null)),
         http.post(EVENT_CALENDAR_UNDO_URL, () => new HttpResponse(null, { status: 204 })),

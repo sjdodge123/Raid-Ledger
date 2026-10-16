@@ -36,7 +36,7 @@
   "components/layout/bottom-tab-bar.tsx": "Active-tab brand accent (emerald text + indicator bar); selection, not success",
   "components/layout/more-drawer-submenus.tsx": "Active submenu item brand accent (emerald text + tint); selection, not success",
   "components/ui/StartupGate.tsx": "Brand loading spinner (border-t-emerald-500) and the primary Retry fill (bg-emerald-600, design-system §2.2 solid accent button); no status",
-  "components/ui/button.tsx": "Button primary bg-emerald-600 / destructive bg-red-600 solid fills — the sanctioned raw accent buttons index.css keys its light repaint + forced-white label to (design-system §2.2)",
+  "components/ui/button-classes.ts": "Button (classes split out of button.tsx, ROK-1599) primary bg-emerald-600 / destructive bg-red-600 solid fills — the sanctioned raw accent buttons index.css keys its light repaint + forced-white label to (design-system §2.2)",
   "components/ui/fab.tsx": "Primary FAB: bg-emerald-600 solid accent fill + its emerald glow and hover (design-system §2.2 solid accent button); brand, not success",
   "components/ui/loading-spinner.tsx": "Brand loading spinner arc (border-t-emerald-500); promises nothing",
   "components/ui/markdown-text.tsx": "Brand link colour in rendered markdown (text-emerald-400); not a status",

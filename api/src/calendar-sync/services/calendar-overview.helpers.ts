@@ -19,6 +19,7 @@ import {
 } from '@raid-ledger/contract';
 import * as schema from '../../drizzle/schema';
 import { calendarConnections } from '../../drizzle/schema';
+import { loadFeedView } from '../feed/calendar-feed-view.helpers';
 import { CALENDAR_READ_MODE_KEY } from '../read/calendar-busy-query.helpers';
 import type { SettingsCore } from '../../settings/settings-bot.helpers';
 import {
@@ -175,16 +176,11 @@ export async function buildCalendarsOverview(
   userId: number,
 ): Promise<CalendarsOverview> {
   if (!(await getCalendarSyncEnabled(svc))) return buildDisabledOverview();
-  const [providers, connections, readSettings] = await Promise.all([
+  const [providers, connections, readSettings, feed] = await Promise.all([
     getProviderAvailability(svc, true),
     listUserConnections(db, userId),
     loadReadSettings(db, userId),
+    loadFeedView(db, svc, userId),
   ]);
-  return {
-    enabled: true,
-    providers,
-    connections,
-    readSettings,
-    feed: null,
-  };
+  return { enabled: true, providers, connections, readSettings, feed };
 }

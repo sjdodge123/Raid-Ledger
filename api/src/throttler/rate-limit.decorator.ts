@@ -33,6 +33,11 @@ export const RATE_LIMIT_TIERS = {
   // normal multi-tab use and forces spurious logouts. Token brute force is
   // not a concern (256-bit random, hash-matched), so match the global 60/min.
   refresh: { ttl: 60_000, limit: isBrowseRelaxed ? 999_999 : 60 },
+  // ROK-1599: the public ICS subscribe feed. Calendar apps poll it about
+  // hourly; 30/min per IP leaves room for a guild behind one NAT while
+  // capping token guessing (a 256-bit token, hash-matched, so this is cheap
+  // insurance, not the defence).
+  calendarFeed: { ttl: 60_000, limit: isTestEnv ? 999_999 : 30 },
 } as const;
 
 export type RateLimitTier = keyof typeof RATE_LIMIT_TIERS;
