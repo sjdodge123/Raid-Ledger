@@ -34,6 +34,7 @@ import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   enrolGame,
   hasAnyoneToEnrol,
+  hasTrackedPlayers,
   liveEventFor,
   openServerRows,
   type EnrolDeps,
@@ -223,10 +224,13 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
    * the tracker reports players — enrol them into that event now.
    */
   @OnEvent(SERVER_TRACKER_ENROL)
-  onTrackerEnrol(p: ServerTrackerEnrolPayload): Promise<void> {
-    return this.serial(p.gameId, async () => {
+  onTrackerEnrol(p: ServerTrackerEnrolPayload): Promise<boolean> {
+    if (!hasTrackedPlayers(this.reader, p.gameId))
+      return Promise.resolve(false);
+    return this.serial<boolean>(p.gameId, async () => {
       const live = await liveEventFor(this.db, p.eventId, p.gameId);
       if (live) await enrolGame(this.enrol, p.gameId, live);
+      return true;
     });
   }
 
@@ -255,7 +259,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   /** Run `fn` after every earlier call for the same game has settled. */
-  private serial(gameId: number, fn: () => Promise<void>): Promise<void> {
+  private serial<T = void>(gameId: number, fn: () => Promise<T>): Promise<T> {
     const prev = this.chains.get(gameId) ?? Promise.resolve();
     const next = prev.then(fn, fn);
     this.chains.set(

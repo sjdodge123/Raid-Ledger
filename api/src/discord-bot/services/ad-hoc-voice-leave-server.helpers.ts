@@ -1,16 +1,14 @@
 /**
  * ROK-1821 (RCA F1 safety net) — a voice leave that empties the channel only
  * starts grace when nobody is on the game's server. Open on-server rows say
- * so first; failing that, a player the Pelican TRACKER reports for the game
- * keeps the event alive too, and is enrolled on the spot (the server-presence
- * service handles {@link SERVER_TRACKER_ENROL}) so a later server leave can
- * still start grace once the server empties.
+ * so first; failing that, the server-presence service (which owns the Pelican
+ * TRACKER) answers {@link SERVER_TRACKER_ENROL}: when the tracker reports
+ * players for the game it enrols them into the event and answers `true`, so
+ * a later server leave can still start grace once the server empties.
  */
 import { Logger } from '@nestjs/common';
 import type { EventEmitter2 } from '@nestjs/event-emitter';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../../drizzle/schema';
-import type { ServerPresenceReader } from '../../plugins/pelican/presence/server-presence.reader';
+import { startGracePeriod } from './ad-hoc-event.handlers';
 import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
 
 /** Asks the server-presence service to enrol the tracker's players. */
@@ -21,28 +19,51 @@ export interface ServerTrackerEnrolPayload {
   gameId: number;
 }
 
-export interface ServerAliveDeps {
-  db: PostgresJsDatabase<typeof schema>;
-  reader: ServerPresenceReader | null;
-  eventEmitter: Pick<EventEmitter2, 'emitAsync'>;
+type GraceDeps = Parameters<typeof startGracePeriod>[0];
+type Emitter = Pick<EventEmitter2, 'emitAsync'>;
+
+export interface VoiceEmptiedEvent {
+  eventId: number;
+  gameId: number | null;
+  bindingId: string | null;
 }
 
 const logger = new Logger('AdHocVoiceLeaveServer');
 
+/** True when any `SERVER_TRACKER_ENROL` listener reports tracked players. */
+async function trackerKeepsAlive(
+  emitter: Emitter,
+  payload: ServerTrackerEnrolPayload,
+): Promise<boolean> {
+  try {
+    const answers: unknown[] = await emitter.emitAsync(
+      SERVER_TRACKER_ENROL,
+      payload,
+    );
+    return answers.some((a) => a === true);
+  } catch (err) {
+    logger.warn(`Tracker check for ${payload.eventId} failed: ${String(err)}`);
+    return false;
+  }
+}
+
 /** Whether the game's server keeps a voice-emptied event out of grace. */
 export async function serverKeepsEventAlive(
-  deps: ServerAliveDeps,
-  eventId: number,
-  gameId: number | null,
+  deps: Pick<GraceDeps, 'db'>,
+  emitter: Emitter,
+  ev: VoiceEmptiedEvent,
 ): Promise<boolean> {
-  if (await hasOpenServerPlayers(deps.db, eventId)) return true;
-  if (gameId === null || !deps.reader) return false;
-  if (deps.reader.playersForGame(gameId).length === 0) return false;
-  const payload: ServerTrackerEnrolPayload = { eventId, gameId };
-  try {
-    await deps.eventEmitter.emitAsync(SERVER_TRACKER_ENROL, payload);
-  } catch (err) {
-    logger.warn(`Tracker enrol for event ${eventId} failed: ${String(err)}`);
-  }
-  return true;
+  if (await hasOpenServerPlayers(deps.db, ev.eventId)) return true;
+  if (ev.gameId === null) return false;
+  return trackerKeepsAlive(emitter, { eventId: ev.eventId, gameId: ev.gameId });
+}
+
+/** The voice channel emptied: start grace unless the server keeps it alive. */
+export async function graceUnlessOnServer(
+  deps: GraceDeps,
+  emitter: Emitter,
+  ev: VoiceEmptiedEvent,
+): Promise<void> {
+  if (await serverKeepsEventAlive(deps, emitter, ev)) return;
+  await startGracePeriod(deps, ev.eventId, ev.bindingId);
 }

@@ -48,10 +48,18 @@ export function trackedByServer(
   return out;
 }
 
+/** True when the tracker reports anyone on a server of `gameId`. */
+export function hasTrackedPlayers(
+  reader: ServerPresenceReader | null,
+  gameId: number,
+): boolean {
+  return (reader?.playersForGame(gameId).length ?? 0) > 0;
+}
+
 /** True when a held or tracker-reported player of `gameId` could enrol. */
 export function hasAnyoneToEnrol(deps: EnrolDeps, gameId: number): boolean {
   if (deps.pending.hasGame(gameId)) return true;
-  return (deps.reader?.playersForGame(gameId).length ?? 0) > 0;
+  return hasTrackedPlayers(deps.reader, gameId);
 }
 
 /**
