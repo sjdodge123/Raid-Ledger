@@ -152,10 +152,12 @@ export class PelicanPresenceSession {
     const admitted = event !== null && this.watermark.admit(event.loggedAt);
     if (mode === 'live') this.stats.record(event !== null, admitted);
     if (!event || !admitted) return;
-    // ROK-1821 F2: the kind and path only — never the line itself.
-    this.opts.logger.log(
-      `Presence event for server ${this.serverId}: ${event.kind} (${mode})`,
-    );
+    // ROK-1821 F2: the kind and path only — never the line itself. Live only
+    // (review MINOR 6): a replay already logs its own summary line.
+    if (mode === 'live')
+      this.opts.logger.log(
+        `Presence event for server ${this.serverId}: ${event.kind} (${mode})`,
+      );
     const at = new Date(this.now());
     if (this.replay) {
       this.replay.push({ event, at });

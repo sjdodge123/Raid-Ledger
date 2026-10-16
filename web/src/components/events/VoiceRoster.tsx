@@ -86,8 +86,9 @@ function ParticipantGroup({ participants, isActive, label, count }: {
  */
 export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
   const participants = voiceParticipants(allRows);
-  const active = participants.filter((p) => !p.leftAt);
-  const left = participants.filter((p) => !!p.leftAt);
+  // Review MINOR 4: an open row that left voice (still on the server) is "Left".
+  const active = participants.filter((p) => !p.leftAt && p.inVoice !== false);
+  const left = participants.filter((p) => !!p.leftAt || p.inVoice === false);
 
   return (
     <div className="space-y-4">

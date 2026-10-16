@@ -49,6 +49,14 @@ describe('VoiceRoster — voice rows only (ROK-1821)', () => {
     expect(screen.getByText('In Channel (2)')).toBeInTheDocument();
   });
 
+  it('lists an open discord row that left voice under Left, not In Channel', () => {
+    const leftVoice = row({ id: 'd2', discordUsername: 'wanderer', source: 'discord', inVoice: false, onServer: true });
+    render(<VoiceRoster participants={[discordRow, leftVoice]} />);
+    expect(screen.getByText('1 active / 2 total')).toBeInTheDocument();
+    expect(screen.getByText('In Channel (1)')).toBeInTheDocument();
+    expect(screen.getByText('Left (1)')).toBeInTheDocument();
+  });
+
   it('shows the empty state when every row is a server row', () => {
     render(<VoiceRoster participants={[steamOnly, linkedSteam]} />);
     expect(screen.getByText('0 active / 0 total')).toBeInTheDocument();

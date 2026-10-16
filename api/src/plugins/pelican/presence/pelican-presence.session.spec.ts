@@ -431,6 +431,8 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
       'Presence re-auth for server 7: 2 live lines, 2 applied, 0 unparsed, 0 stale since the last auth',
     );
     expect(h.sink.playerJoined.mock.calls).toEqual([thorvald]);
+    // Review MINOR 6: replayed events are summarised, never logged one by one.
+    expect(logs(h)).not.toContainEqual(expect.stringMatching(/\(replay\)$/));
   });
 
   it('applies an ANSI-coloured live line with a trailing carriage return', async () => {
