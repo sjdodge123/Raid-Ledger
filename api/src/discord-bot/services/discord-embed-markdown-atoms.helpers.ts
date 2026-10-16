@@ -44,6 +44,8 @@ function trimmedUrlLength(url: string): number {
  * Where the bare URL at `text[i]` (`len` long) ends, given open closers. A
  * mixed run (`_**`, `__~~`, `_||`) is split into same-character sub-runs, each
  * tested as a closer in order, so `file_**` still yields its `**` (Codex r2 P2).
+ * A `\`-escaped character is skipped, as `step` does, so an escaped `\*` never
+ * starts a closer run (Codex r3 P2).
  */
 function urlLength(
   text: string,
@@ -52,10 +54,18 @@ function urlLength(
   closes: CloserTest,
 ): number {
   const start = i + (SCHEME.exec(text.slice(i, i + len))?.[0].length ?? len);
+  let prev = '';
   for (let j = start; j < i + len; j++) {
     const ch = text[j] ?? '';
-    const runStart = RUN_CHAR.test(ch) && text[j - 1] !== ch;
-    if (runStart && closes(j)) return trimmedUrlLength(text.slice(i, j));
+    if (ch === '\\') {
+      j++;
+      prev = '';
+      continue;
+    }
+    if (RUN_CHAR.test(ch) && prev !== ch && closes(j)) {
+      return trimmedUrlLength(text.slice(i, j));
+    }
+    prev = ch;
   }
   return len;
 }

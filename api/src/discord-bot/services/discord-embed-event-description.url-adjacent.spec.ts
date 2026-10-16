@@ -25,6 +25,8 @@ describe('eventDescriptionExcerpt — URL-adjacent markdown (ROK-1806)', () => {
     ['a URL ending in _** with no opener', 'https://example.com/file_**'],
     ['a URL ending in __~~ with no opener', 'https://example.com/file__~~'],
     ['a URL ending in _|| with no opener', 'https://x.y/x_||'],
+    ['a URL holding an escaped \\**', '**Read https://x.y/a\\**b now**'],
+    ['a URL holding an escaped \\~~', '~~Read https://x.y/a\\~~b now~~'],
     [
       'a URL in link text followed by ](…)',
       '[**https://x.y/a**](https://x.y/b)',
