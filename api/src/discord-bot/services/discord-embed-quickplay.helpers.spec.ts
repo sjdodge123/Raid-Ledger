@@ -581,3 +581,20 @@ describe('buildQuickPlayEmbed — degradation (AC6)', () => {
     }
   });
 });
+
+describe('buildQuickPlayEmbed — anonymous server players (ROK-1801 Q4)', () => {
+  it('appends `+N on server` after the roster, never an id', () => {
+    const data = event({
+      signupMentions: [player('Ana')],
+      serverAnonymousCount: 2,
+    });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(bodyLines(embed.data.description)[0]).toBe('**Ana** · +2 on server');
+  });
+
+  it('shows the anonymous count alone instead of "Nobody yet"', () => {
+    const data = event({ signupMentions: [], serverAnonymousCount: 1 });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(bodyLines(embed.data.description)[0]).toBe('+1 on server');
+  });
+});

@@ -20,6 +20,7 @@ import {
 } from '../listeners/voice-lobby-server-merge.helpers';
 import type { LobbyGameGroup } from '../listeners/voice-lobby-groups.helpers';
 import type { AdHocParticipant } from './ad-hoc-notification.helpers';
+import type { EmbedEventData } from './discord-embed.factory';
 import type { RoomGroup } from './channel-presence-room.helpers';
 import type { RoomSource } from './channel-presence-room.snapshot';
 
@@ -97,20 +98,23 @@ function readParticipantRows(
     .where(eq(t.eventId, eventId));
 }
 
-/**
- * Roster for an evented group: the stored `ad_hoc_participants` rows (leavers
- * kept, marked inactive — ROK-1243) UNION the live group members who have no
- * row yet, so someone who just joined voice still renders before the
- * participant write lands. ROK-1801: rows on the server carry the 🖥 marker,
- * and named server-only players with no row yet are appended.
- */
-export async function unionParticipants(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
+/** Unnamed server-only players no stored row covers (Q4: `+N on server`). */
+function unrowedAnonymousCount(
+  rows: ParticipantRow[],
+  group: RosterGroup,
+): number {
+  const steam = new Set(rows.map((r) => r.steamId));
+  return (group.serverOnly ?? []).filter(
+    (e) => e.name === null && !steam.has(e.steamId),
+  ).length;
+}
+
+/** Stored rows ∪ live members without a row ∪ named unrowed server players. */
+function unionRows(
+  rows: ParticipantRow[],
   group: RosterGroup,
   source: RoomSource,
-): Promise<AdHocParticipant[]> {
-  const rows = await readParticipantRows(db, eventId);
+): AdHocParticipant[] {
   const known = new Set(rows.map((r) => r.discordUserId));
   const onServer = new Set(group.onServerIds ?? []);
   return [
@@ -130,6 +134,53 @@ export async function unionParticipants(
       })),
     ...unrowedServerOnly(rows, group),
   ];
+}
+
+/** An evented group's roster plus its anonymous server-only count. */
+export interface EventedRoster {
+  participants: AdHocParticipant[];
+  anonymousOnServer: number;
+}
+
+/**
+ * Roster for an evented group: the stored `ad_hoc_participants` rows (leavers
+ * kept, marked inactive — ROK-1243) UNION the live group members who have no
+ * row yet, so someone who just joined voice still renders before the
+ * participant write lands. ROK-1801: rows on the server carry the 🖥 marker,
+ * named server-only players with no row yet are appended, and unnamed ones
+ * are counted for the anonymous `+N on server` (Q4).
+ */
+export async function eventedRoster(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  group: RosterGroup,
+  source: RoomSource,
+): Promise<EventedRoster> {
+  const rows = await readParticipantRows(db, eventId);
+  const participants = unionRows(rows, group, source);
+  return {
+    participants,
+    anonymousOnServer: unrowedAnonymousCount(rows, group),
+  };
+}
+
+/** {@link eventedRoster}'s participants alone. */
+export async function unionParticipants(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  group: RosterGroup,
+  source: RoomSource,
+): Promise<AdHocParticipant[]> {
+  return (await eventedRoster(db, eventId, group, source)).participants;
+}
+
+/** Stamp the anonymous server-only count onto an evented group's embed data. */
+export function withServerAnonymous(
+  data: EmbedEventData | null,
+  anonymousOnServer: number,
+): EmbedEventData | null {
+  if (!data || anonymousOnServer === 0) return data;
+  return { ...data, serverAnonymousCount: anonymousOnServer };
 }
 
 /** Render order (D2): evented groups first, then size desc, then name asc. */

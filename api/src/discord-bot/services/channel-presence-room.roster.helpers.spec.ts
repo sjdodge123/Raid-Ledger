@@ -7,8 +7,10 @@ import type * as schema from '../../drizzle/schema';
 import {
   ON_SERVER_MARK,
   SERVER_ONLY_MARK,
+  eventedRoster,
   sortGroups,
   unionParticipants,
+  withServerAnonymous,
 } from './channel-presence-room.roster.helpers';
 import type { RoomGroup } from './channel-presence-room.helpers';
 import type { RoomSource } from './channel-presence-room.snapshot';
@@ -120,6 +122,45 @@ describe('unionParticipants — game-server markers (ROK-1801)', () => {
       SOURCE,
     );
     expect(ana?.rosterSuffix).toBe(' \u{1F5A5}');
+  });
+});
+
+describe('eventedRoster — anonymous server players (ROK-1801 Q4)', () => {
+  it('counts unnamed server-only players no row covers, never listing them', async () => {
+    const db = dbReturning([
+      row({ steamId: 'S-ROWED', discordUsername: 'Kveldulf', onServer: true }),
+    ]);
+    const roster = await eventedRoster(
+      db,
+      77,
+      {
+        memberIds: [],
+        serverOnly: [
+          entry(null, 'S-ANON-1'),
+          entry(null, 'S-ANON-2'),
+          entry(null, 'S-ROWED'),
+          entry('Bjorn', 'S-B'),
+        ],
+      },
+      SOURCE,
+    );
+    expect(roster.anonymousOnServer).toBe(2);
+    expect(roster.participants.map((p) => p.discordUsername)).toEqual([
+      'Kveldulf',
+      'Bjorn',
+    ]);
+  });
+
+  it('withServerAnonymous stamps the count only when there is one', () => {
+    const data = { id: 1 } as unknown as Parameters<
+      typeof withServerAnonymous
+    >[0];
+    expect(withServerAnonymous(data, 2)).toEqual({
+      id: 1,
+      serverAnonymousCount: 2,
+    });
+    expect(withServerAnonymous(data, 0)).toBe(data);
+    expect(withServerAnonymous(null, 3)).toBeNull();
   });
 });
 

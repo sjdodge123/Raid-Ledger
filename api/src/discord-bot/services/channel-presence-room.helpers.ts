@@ -45,7 +45,8 @@ import type {
 import {
   namesOf,
   sortGroups,
-  unionParticipants,
+  eventedRoster,
+  withServerAnonymous,
 } from './channel-presence-room.roster.helpers';
 import {
   snapshotSource,
@@ -349,6 +350,20 @@ async function buildGroups(
   return sortGroups(groups);
 }
 
+/** An evented group's embed data, with the anonymous `+N on server` (Q4). */
+async function groupEventData(
+  deps: RoomResolveDeps,
+  eventId: number,
+  group: LobbyGameGroup,
+  source: RoomSource,
+) {
+  const roster = await eventedRoster(deps.db, eventId, group, source);
+  return withServerAnonymous(
+    await buildEmbedEventData(deps, eventId, roster.participants),
+    roster.anonymousOnServer,
+  );
+}
+
 /** Build one renderable group, resolving its event and roster if it has one. */
 async function toRoomGroup(
   deps: RoomResolveDeps,
@@ -362,11 +377,7 @@ async function toRoomGroup(
   const eventData =
     eventId === null
       ? null
-      : await buildEmbedEventData(
-          deps,
-          eventId,
-          await unionParticipants(deps.db, eventId, group, source),
-        );
+      : await groupEventData(deps, eventId, group, source);
   return {
     gameId: group.gameId,
     gameName: group.gameName,

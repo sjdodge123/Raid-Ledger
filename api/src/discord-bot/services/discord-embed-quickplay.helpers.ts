@@ -164,7 +164,11 @@ function rosterBlock(
     ...(state === 'live' && m.status === 'left' ? { struck: true } : {}),
     ...(m.rosterSuffix ? { suffix: m.rosterSuffix } : {}),
   }));
-  return formatRoster(entries, rosterCap) || 'Nobody yet';
+  const roster = formatRoster(entries, rosterCap);
+  const anonymous = event.serverAnonymousCount ?? 0;
+  if (anonymous === 0) return roster || 'Nobody yet';
+  const tag = `+${String(anonymous)} on server`;
+  return roster ? `${roster} ${SEP} ${tag}` : tag;
 }
 
 /** `Attendance · 4 players` — reported once, at the end. */

@@ -62,6 +62,8 @@ export interface EmbedEventData {
     /** ROK-1801: trusted marker after the bold name (` 🖥 on server`). */
     rosterSuffix?: string | null;
   }> | null;
+  /** ROK-1801 Q4: unnamed server-only players, shown as `+N on server`. */
+  serverAnonymousCount?: number;
   // ─── ROK-1460 widening seam ───────────────────────────────
   // `game` is the ONE place the event projection grows. ROK-1447 adds its
   // Quick Play badge inputs (price / co-op) here too; keep new fields optional
