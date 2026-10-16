@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { VoiceRoster } from './VoiceRoster';
+import { ServerGuestRoster, VoiceRoster } from './VoiceRoster';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 
 function createParticipant(
@@ -299,18 +299,33 @@ describe('VoiceRoster — dead avatar (ROK-1714)', () => {
   });
 });
 
-describe('VoiceRoster — Steam-only participant (ROK-1800)', () => {
+function steamOnlyRow(): AdHocParticipantDto {
+  return createParticipant({
+    userId: null,
+    discordUserId: null,
+    steamId: '76561198000000001',
+    source: 'steam',
+    inVoice: false,
+    discordUsername: 'Ragnhild',
+    discordAvatarHash: 'abc123',
+  });
+}
+
+describe('VoiceRoster — Steam-only participant (ROK-1800, ROK-1821)', () => {
+  it('keeps a steam-only server row out of the voice panel', () => {
+    render(<VoiceRoster participants={[steamOnlyRow()]} />);
+    expect(screen.queryByText('Ragnhild'), 'steam-only row must not be listed as voice').toBeNull();
+    expect(screen.getByText('No participants yet')).toBeInTheDocument();
+  });
+});
+
+describe('ServerGuestRoster — Steam-only participant (ROK-1800, ROK-1821)', () => {
   it('renders the character name with initials, never a Discord CDN url for a null id', () => {
-    const steam = createParticipant({
-      userId: null,
-      discordUserId: null,
-      steamId: '76561198000000001',
-      source: 'steam',
-      discordUsername: 'Ragnhild',
-      discordAvatarHash: 'abc123',
-    });
-    const { container } = render(<VoiceRoster participants={[steam]} />);
+    const { container } = render(<ServerGuestRoster participants={[steamOnlyRow()]} />);
+    expect(screen.getByText(/On the game server \(1\)/)).toBeInTheDocument();
     expect(screen.getByText('Ragnhild')).toBeInTheDocument();
+    expect(screen.queryByText('R'), 'initial fallback without a Discord id').not.toBeNull();
     expect(container.querySelector('img'), 'no avatar img without a Discord id').toBeNull();
+    expect(container.innerHTML, 'no Discord CDN url for a null id').not.toContain('cdn.discordapp.com');
   });
 });
