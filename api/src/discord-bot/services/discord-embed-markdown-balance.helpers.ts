@@ -102,6 +102,12 @@ function delimiterStep(
   else if (openAt === undefined && canOpen) open.set(d, at);
 }
 
+/** ROK-1806 — a run at `text[j]` that closes a span already open. */
+function closesOpen(text: string, j: number, open: OpenSet): boolean {
+  const d = delimiterAt(text, j);
+  return d !== null && open.has(d) && flanking(text, j, d).canClose;
+}
+
 function step(text: string, i: number, out: string[], open: OpenSet): number {
   const ch = text[i] ?? '';
   if (ch === '\\') {
@@ -109,7 +115,7 @@ function step(text: string, i: number, out: string[], open: OpenSet): number {
     return i + 2;
   }
   if (ch === '`') return codeStep(text, i, out);
-  const atom = atomLength(text, i);
+  const atom = atomLength(text, i, (j) => closesOpen(text, j, open));
   if (atom > 0) {
     out.push(text.slice(i, i + atom));
     return i + atom;
