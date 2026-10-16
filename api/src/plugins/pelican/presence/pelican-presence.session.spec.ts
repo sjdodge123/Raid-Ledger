@@ -97,6 +97,15 @@ it('server-stopping empties the server once instead of per-player leaves', async
   expect(h.sink.playerLeft).not.toHaveBeenCalled();
 });
 
+it('a stop with nobody tracked still empties the server once, clearing holds the tracker never knew (Codex r2 P3)', async () => {
+  const h = harness();
+  await h.connect();
+  await h.live([line({ kind: 'server-stopping', loggedAt: T(9) })]);
+  await h.live([line({ kind: 'server-stopping', loggedAt: T(10) })]);
+  expect(h.sink.serverEmptied.mock.calls).toEqual([[SRC]]);
+  expect(h.onChanged).not.toHaveBeenCalled();
+});
+
 it('a Wings offline status push empties the server', async () => {
   const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
   await h.connect();

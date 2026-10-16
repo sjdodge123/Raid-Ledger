@@ -66,6 +66,7 @@ export class PelicanPresenceSession {
   private replay: Buffered[] | null = null;
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private emptiedOutage: number | null = null;
+  private emptiedOnce = false;
   /** True until the first replay after `start()` has been flushed. */
   private cold = true;
   private queue: Promise<void> = Promise.resolve();
@@ -234,13 +235,17 @@ export class PelicanPresenceSession {
     this.watermark.reset();
   }
 
-  /** Everyone leaves at once — one `serverEmptied`, only when someone was present. */
+  /** Everyone leaves at once — one `serverEmptied` (see the guard below). */
   private emptyAll(): void {
     const hadPlayers = this.tracker.snapshot().length > 0;
     this.tracker.hydrate([]);
-    if (!hadPlayers) return;
+    // ROK-1802 Codex r2: a session's first empty runs even with nobody
+    // tracked — it clears holds the tracker never knew (unconfirmed ones
+    // from the last session). Later ones need someone present.
+    if (!hadPlayers && this.emptiedOnce) return;
+    this.emptiedOnce = true;
     this.enqueue('serverEmptied', (s, src) => s.serverEmptied(src));
-    this.notify();
+    if (hadPlayers) this.notify();
   }
 
   private forward(changes: PresenceChange[]): void {
