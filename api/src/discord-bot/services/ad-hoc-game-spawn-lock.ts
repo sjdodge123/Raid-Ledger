@@ -15,6 +15,7 @@ import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LiveGameEvent } from './ad-hoc-server-presence.helpers';
+import { createAdHocEventRow, findAdminFallback } from './ad-hoc-event.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -66,4 +67,29 @@ export async function findVoiceSpawnTarget(
     .orderBy(desc(e.id))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * The voice path's create: under the game's spawn lock, join the live
+ * server-born (or same-binding) Quick Play when one exists, else insert.
+ * A null game (general lobby) has nothing to dedup against and skips it.
+ */
+export async function createVoiceQuickPlay(
+  db: Db,
+  bindingId: string,
+  binding: { gameId: number | null | undefined },
+  trigger: { userId: number | null },
+  resolvedGameName?: string,
+): Promise<{ eventId: number; existing: boolean } | null> {
+  const creatorId = trigger.userId ?? (await findAdminFallback(db));
+  if (!creatorId) return null;
+  const gameId = binding.gameId ?? null;
+  const create = (on: Db) =>
+    createAdHocEventRow(on, bindingId, { gameId }, creatorId, resolvedGameName);
+  if (gameId === null) return { eventId: await create(db), existing: false };
+  return withGameSpawnLock(db, gameId, async (tx) => {
+    const live = await findVoiceSpawnTarget(tx, gameId, bindingId);
+    if (live) return { eventId: live.id, existing: true };
+    return { eventId: await create(tx), existing: false };
+  });
 }

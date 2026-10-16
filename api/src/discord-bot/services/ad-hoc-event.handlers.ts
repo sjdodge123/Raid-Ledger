@@ -14,17 +14,12 @@ import type { ChannelBindingsService } from './channel-bindings.service';
 import { bindingIdForEvent } from './ad-hoc-event-key.helpers';
 import {
   resolveGameName,
-  createAdHocEventRow,
-  findAdminFallback,
   getEventById,
   restoreFromGracePeriod,
   setGracePeriodStatus,
 } from './ad-hoc-event.helpers';
 
-import {
-  findVoiceSpawnTarget,
-  withGameSpawnLock,
-} from './ad-hoc-game-spawn-lock';
+import { createVoiceQuickPlay } from './ad-hoc-game-spawn-lock';
 /** In-memory state for an active ad-hoc event. */
 export interface ActiveAdHocState {
   eventId: number;
@@ -109,8 +104,8 @@ export async function spawnNewEvent(
   member: VoiceMemberInfo,
   resolvedGameName?: string,
 ): Promise<number | null> {
-  const created = await createAdHocEvent(
-    deps,
+  const created = await createVoiceQuickPlay(
+    deps.db,
     bindingId,
     effectiveBinding,
     member,
@@ -278,28 +273,6 @@ export async function startGracePeriod(
 }
 
 // ─── Internal helpers ──────────────────────────────────
-
-async function createAdHocEvent(
-  deps: AdHocHandlerDeps,
-  bindingId: string,
-  binding: { gameId: number | null | undefined },
-  triggerMember: VoiceMemberInfo,
-  resolvedGameName?: string,
-): Promise<{ eventId: number; existing: boolean } | null> {
-  const creatorId = triggerMember.userId ?? (await findAdminFallback(deps.db));
-  if (!creatorId) return null;
-  const gameId = binding.gameId ?? null;
-  const create = (db: PostgresJsDatabase<typeof schema>) =>
-    createAdHocEventRow(db, bindingId, { gameId }, creatorId, resolvedGameName);
-  if (gameId === null)
-    return { eventId: await create(deps.db), existing: false };
-  // ROK-1800: one Quick Play per game — the server path takes the same lock.
-  return withGameSpawnLock(deps.db, gameId, async (tx) => {
-    const live = await findVoiceSpawnTarget(tx, gameId, bindingId);
-    if (live) return { eventId: live.id, existing: true };
-    return { eventId: await create(tx), existing: false };
-  });
-}
 
 async function notifySpawn(
   deps: AdHocHandlerDeps,
