@@ -16,6 +16,10 @@
  * surface. `ttl` returns -2 for a missing key and -1 for one with no
  * expiry, matching Redis.
  */
+import {
+  BLOCK_USER_SCRIPT,
+  nextBlockStamp,
+} from '../../auth/token-blocklist.service';
 
 /**
  * Parses ioredis-style trailing `EX <seconds>` / `PX <millis>` tokens into
@@ -50,6 +54,26 @@ function mockRedisSet(
     if (expiresAt === null) expiries.delete(key);
     else expiries.set(key, expiresAt);
     return Promise.resolve('OK');
+  };
+}
+
+/**
+ * ROK-1810: EVAL for the scripts the codebase runs, by their JS twins. An
+ * unknown script throws, so a new Lua call cannot silently no-op in tests.
+ */
+function mockRedisEval(
+  store: Map<string, string>,
+  expiries: Map<string, number>,
+) {
+  return (script: string, _numKeys: number, ...args: string[]) => {
+    const [key, now, ttl] = args;
+    if (script !== BLOCK_USER_SCRIPT || !key || !now || !ttl) {
+      return Promise.reject(new Error('redis-mock: unsupported EVAL script'));
+    }
+    const stamp = nextBlockStamp(store.get(key) ?? null, Number(now));
+    store.set(key, String(stamp));
+    expiries.set(key, Date.now() + Number(ttl) * 1000);
+    return Promise.resolve(stamp);
   };
 }
 
@@ -157,6 +181,7 @@ function buildRedisMockClient(
       return Promise.resolve(list.slice(start, end));
     },
     set: mockRedisSet(store, expiries),
+    eval: mockRedisEval(store, expiries),
     setex: (key: string, seconds: number, value: string) => {
       store.set(key, value);
       expiries.set(key, Date.now() + seconds * 1000);

@@ -8,7 +8,10 @@ import { JwtService } from '@nestjs/jwt';
 import type Redis from 'ioredis';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
-import { TokenBlocklistService } from '../token-blocklist.service';
+import {
+  TokenBlocklistService,
+  nextBlockStamp,
+} from '../token-blocklist.service';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
@@ -33,6 +36,11 @@ function build(live: { target: typeof TARGET; expiresAt: Date } | null) {
       return Promise.resolve('OK');
     }),
     get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+    eval: jest.fn((_s: string, _n: number, key: string, now: string) => {
+      const stamp = nextBlockStamp(store.get(key) ?? null, Number(now));
+      store.set(key, String(stamp));
+      return Promise.resolve(stamp);
+    }),
   };
   const blocklist = new TokenBlocklistService(redis as unknown as Redis);
   const jwt = new JwtService({ secret: 'test-secret' });

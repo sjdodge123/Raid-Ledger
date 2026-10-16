@@ -5,7 +5,10 @@
  */
 import { JwtService } from '@nestjs/jwt';
 import type Redis from 'ioredis';
-import { TokenBlocklistService } from './token-blocklist.service';
+import {
+  TokenBlocklistService,
+  nextBlockStamp,
+} from './token-blocklist.service';
 import { issuedAtFor, signAccessToken } from './access-token-mint.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
@@ -19,6 +22,11 @@ function build() {
       return Promise.resolve('OK');
     }),
     get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
+    eval: jest.fn((_s: string, _n: number, key: string, now: string) => {
+      const stamp = nextBlockStamp(store.get(key) ?? null, Number(now));
+      store.set(key, String(stamp));
+      return Promise.resolve(stamp);
+    }),
   };
   const blocklist = new TokenBlocklistService(redis as unknown as Redis);
   const jwt = new JwtService({ secret: 'test-secret' });
@@ -71,5 +79,20 @@ describe('ROK-1810 issuedAtFor', () => {
     expect(issuedAtFor(second - 60, nowMs)).toBe(second);
     expect(issuedAtFor(second + 1, nowMs)).toBe(second + 1);
     expect(issuedAtFor(undefined, nowMs)).toBe(second);
+  });
+});
+
+describe('ROK-1810 Codex r2 — a second block in the same second', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  it('revokes the token minted after the first block; a later mint survives', async () => {
+    const t = build();
+    await t.blocklist.blockUser(CLAIMS.sub);
+    const between = iatOf(t.jwt, await signAccessToken(t, CLAIMS));
+    await t.blocklist.blockUser(CLAIMS.sub);
+    expect(await t.blocklist.isBlocked(CLAIMS.sub, between)).toBe(true);
+    const after = iatOf(t.jwt, await signAccessToken(t, CLAIMS));
+    expect(await t.blocklist.isBlocked(CLAIMS.sub, after)).toBe(false);
   });
 });
