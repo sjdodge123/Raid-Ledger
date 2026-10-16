@@ -28,27 +28,76 @@ export interface LiveGameEvent {
   adHocStatus: string | null;
 }
 
+const e = schema.events;
+const liveEventCols = {
+  id: e.id,
+  channelBindingId: e.channelBindingId,
+  adHocStatus: e.adHocStatus,
+};
+const liveGameWhere = (gameId: number) =>
+  and(
+    eq(e.isAdHoc, true),
+    eq(e.gameId, gameId),
+    inArray(e.adHocStatus, ['live', 'grace_period']),
+    isNull(e.cancelledAt),
+  );
+
+/**
+ * Codex r2: the live event this player is ENROLLED in on a server — not the
+ * game's newest event, which may be a separate binding's Quick Play.
+ */
+export async function findServerEnrolledEvent(
+  db: Db,
+  gameId: number,
+  steamId: string,
+): Promise<LiveGameEvent | null> {
+  const rows = await db
+    .select(liveEventCols)
+    .from(e)
+    .innerJoin(p, eq(p.eventId, e.id))
+    .where(
+      and(
+        liveGameWhere(gameId),
+        eq(p.steamId, steamId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+      ),
+    )
+    .orderBy(desc(e.id))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Every live event holding an open row on THIS server (Codex r2). */
+export async function listServerEnrolledEvents(
+  db: Db,
+  gameId: number,
+  pelicanServerId: number,
+): Promise<LiveGameEvent[]> {
+  return db
+    .selectDistinct(liveEventCols)
+    .from(e)
+    .innerJoin(p, eq(p.eventId, e.id))
+    .where(
+      and(
+        liveGameWhere(gameId),
+        eq(p.pelicanServerId, pelicanServerId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+      ),
+    )
+    .orderBy(asc(e.id));
+}
+
 /** The game's live (or in-grace) ad-hoc event, whatever spawned it. */
 export async function findLiveGameAdHocEvent(
   db: Db,
   gameId: number,
 ): Promise<LiveGameEvent | null> {
-  const e = schema.events;
   const rows = await db
-    .select({
-      id: e.id,
-      channelBindingId: e.channelBindingId,
-      adHocStatus: e.adHocStatus,
-    })
+    .select(liveEventCols)
     .from(e)
-    .where(
-      and(
-        eq(e.isAdHoc, true),
-        eq(e.gameId, gameId),
-        inArray(e.adHocStatus, ['live', 'grace_period']),
-        isNull(e.cancelledAt),
-      ),
-    )
+    .where(liveGameWhere(gameId))
     .orderBy(desc(e.id))
     .limit(1);
   return rows[0] ?? null;
@@ -133,6 +182,28 @@ export async function hasOpenServerPlayers(
     .where(and(eq(p.eventId, eventId), eq(p.onServer, true), isNull(p.leftAt)))
     .limit(1);
   return rows[0] !== undefined;
+}
+
+/**
+ * Codex r2 P1: open rows held by a game server ALONE (not also in voice) —
+ * the attendance the voice tracker cannot see, so auto-extend adds it.
+ */
+export async function countServerOnlyPresence(
+  db: Db,
+  eventId: number,
+): Promise<number> {
+  const rows = await db
+    .select({ id: p.id })
+    .from(p)
+    .where(
+      and(
+        eq(p.eventId, eventId),
+        eq(p.onServer, true),
+        eq(p.inVoice, false),
+        isNull(p.leftAt),
+      ),
+    );
+  return rows.length;
 }
 
 /** Open rows still on THIS server — the rehydrate set for its session. */
