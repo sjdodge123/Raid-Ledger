@@ -102,6 +102,15 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
     expect(dto.isSuspended).toBe(suspended);
   });
 
+  it('carries presencePluginInactive only when the caller names an inactive plugin (ROK-1819)', () => {
+    const plugin = { pluginId: 'valheim', pluginName: 'Valheim' };
+    const inactive = toAdminServerRowDto(makeRow(), NOW, false, plugin);
+    expect(inactive.presencePluginInactive).toEqual(plugin);
+    expect(PelicanServerRowSchema.parse(inactive)).toEqual(inactive);
+    const plain = toAdminServerRowDto(makeRow(), NOW, true);
+    expect('presencePluginInactive' in plain).toBe(false);
+  });
+
   it('flags a row with missing_since as missing', () => {
     const dto = toAdminServerRowDto(
       makeRow({ missingSince: FRESH }),
