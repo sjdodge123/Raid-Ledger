@@ -28,3 +28,18 @@ export function atomLength(text: string, i: number): number {
   const match = ATOM.exec(text);
   return match ? match[0].length : 0;
 }
+
+/** A bare URL whose run of non-space characters reaches the end of `text`. */
+const URL_TAIL = /https?:\/\/[^\s<]*$/;
+
+/**
+ * ROK-1806 — whether `text` ends inside a bare URL's run. `BARE_URL` stops
+ * before a trailing `_` or `)`, but Discord's autolink keeps going through any
+ * non-space character, so a `…` appended directly would join the link.
+ *
+ * @param text - The kept part of a truncated excerpt.
+ * @returns True when the last non-space run is (or ends) a bare URL.
+ */
+export function endsInBareUrl(text: string): boolean {
+  return URL_TAIL.test(text);
+}
