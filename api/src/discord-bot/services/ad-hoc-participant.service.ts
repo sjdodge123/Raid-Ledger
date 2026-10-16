@@ -9,12 +9,55 @@ import {
   AD_HOC_EVENTS,
   type AdHocParticipantLeftPayload,
 } from '../discord-bot.constants';
+import {
+  attachDiscordToUserRow,
+  markSteamLeave,
+  markVoiceLeave,
+  rejoinJoinedAt,
+  upsertSteamParticipant,
+  type ServerPresenceMemberInfo,
+  type SteamUpsertOutcome,
+} from './ad-hoc-steam-participant.helpers';
+import { withParticipantLock } from './ad-hoc-participant-lock';
+
+export type { ServerPresenceMemberInfo, SteamUpsertOutcome };
+
+/**
+ * ROK-1800: the Discord unique index is partial — Postgres only infers it for
+ * ON CONFLICT when the predicate is restated.
+ */
+const DISCORD_CONFLICT = {
+  target: [
+    schema.adHocParticipants.eventId,
+    schema.adHocParticipants.discordUserId,
+  ],
+  targetWhere: sql`${schema.adHocParticipants.discordUserId} IS NOT NULL`,
+};
+
+/** Narrow the stored `source` column to the contract enum (ROK-1800). */
+function toParticipantSource(value: string): 'discord' | 'steam' {
+  return value === 'steam' ? 'steam' : 'discord';
+}
 
 export interface VoiceMemberInfo {
   discordUserId: string;
   discordUsername: string;
   discordAvatarHash: string | null;
   userId: number | null;
+}
+
+/** On a Discord-id conflict: re-open the row and mark it in voice. */
+function voiceConflictSet(member: VoiceMemberInfo, now: Date) {
+  return {
+    leftAt: null,
+    // m10: a re-opened row starts its new session now.
+    joinedAt: rejoinJoinedAt(now),
+    inVoice: true,
+    discordUsername: member.discordUsername,
+    discordAvatarHash: member.discordAvatarHash,
+    userId: member.userId,
+    sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
+  };
 }
 
 @Injectable()
@@ -68,7 +111,20 @@ export class AdHocParticipantService {
     eventId: number,
     member: VoiceMemberInfo,
   ): Promise<boolean> {
-    const [row] = await this.db
+    return withParticipantLock(this.db, eventId, member.userId, (db) =>
+      this.upsertParticipantOn(db, eventId, member),
+    );
+  }
+
+  /** The upsert itself, on the (possibly locked) handle. */
+  private async upsertParticipantOn(
+    db: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<boolean> {
+    if (await this.mergeIntoServerRow(db, eventId, member)) return false;
+    const now = new Date();
+    const [row] = await db
       .insert(schema.adHocParticipants)
       .values({
         eventId,
@@ -76,62 +132,39 @@ export class AdHocParticipantService {
         discordUserId: member.discordUserId,
         discordUsername: member.discordUsername,
         discordAvatarHash: member.discordAvatarHash,
-        joinedAt: new Date(),
+        joinedAt: now,
         sessionCount: 1,
       })
       .onConflictDoUpdate({
-        target: [
-          schema.adHocParticipants.eventId,
-          schema.adHocParticipants.discordUserId,
-        ],
-        set: {
-          leftAt: null,
-          discordUsername: member.discordUsername,
-          discordAvatarHash: member.discordAvatarHash,
-          userId: member.userId,
-          sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
-        },
+        ...DISCORD_CONFLICT,
+        set: voiceConflictSet(member, now),
       })
       .returning({ sessionCount: schema.adHocParticipants.sessionCount });
     return row?.sessionCount === 1;
   }
 
   /**
-   * Mark a participant as having left the voice channel.
-   * Calculates session duration and accumulates total.
+   * ROK-1800: a linked user already on the event via the game server is ONE
+   * participant — the voice identity joins their Steam row.
+   */
+  private async mergeIntoServerRow(
+    db: PostgresJsDatabase<typeof schema>,
+    eventId: number,
+    member: VoiceMemberInfo,
+  ): Promise<boolean> {
+    const { userId } = member;
+    if (userId === null) return false;
+    return attachDiscordToUserRow(db, eventId, { ...member, userId });
+  }
+
+  /**
+   * Mark a participant as having left the voice channel. Accumulates the
+   * session — unless they are still on the game server (ROK-1800), in which
+   * case the row stays open and only its voice flag clears.
    */
   async markLeave(eventId: number, discordUserId: string): Promise<void> {
-    const now = new Date();
-
-    // Fetch current row to compute duration delta
-    const [row] = await this.db
-      .select()
-      .from(schema.adHocParticipants)
-      .where(
-        and(
-          eq(schema.adHocParticipants.eventId, eventId),
-          eq(schema.adHocParticipants.discordUserId, discordUserId),
-        ),
-      )
-      .limit(1);
-
-    if (!row) return;
-
-    // Don't double-mark if already left
-    if (row.leftAt) return;
-
-    const sessionDuration = Math.round(
-      (now.getTime() - row.joinedAt.getTime()) / 1000,
-    );
-    const totalDuration = (row.totalDurationSeconds ?? 0) + sessionDuration;
-
-    await this.db
-      .update(schema.adHocParticipants)
-      .set({
-        leftAt: now,
-        totalDurationSeconds: totalDuration,
-      })
-      .where(eq(schema.adHocParticipants.id, row.id));
+    const closed = await markVoiceLeave(this.db, eventId, discordUserId);
+    if (!closed) return;
 
     // ROK-1494 D5: the mirror of PARTICIPANT_JOINED, emitted AFTER the write so
     // a consumer that re-reads the roster sees this row already closed. Without
@@ -142,8 +175,53 @@ export class AdHocParticipantService {
     } satisfies AdHocParticipantLeftPayload);
 
     this.logger.debug(
-      `Participant ${discordUserId} left ad-hoc event ${eventId} (session: ${sessionDuration}s, total: ${totalDuration}s)`,
+      `Participant ${discordUserId} left ad-hoc event ${eventId} (session: ${closed.session}s, total: ${closed.total}s)`,
     );
+  }
+
+  /**
+   * ROK-1800: record a game-server player. Emits PARTICIPANT_JOINED only for a
+   * genuinely new participation (`inserted`), mirroring {@link addParticipant}.
+   */
+  async addServerParticipant(
+    eventId: number,
+    member: ServerPresenceMemberInfo,
+  ): Promise<SteamUpsertOutcome> {
+    const outcome = await withParticipantLock(
+      this.db,
+      eventId,
+      member.userId,
+      (db) => upsertSteamParticipant(db, eventId, member),
+    );
+    if (outcome === 'inserted') {
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
+        eventId,
+        userId: member.userId,
+      });
+    }
+    return outcome;
+  }
+
+  /** ROK-1800: close a Steam-only row when the player leaves the server. */
+  async markServerLeave(
+    eventId: number,
+    steamId: string,
+    pelicanServerId?: number,
+  ): Promise<boolean> {
+    const closed = await markSteamLeave(
+      this.db,
+      eventId,
+      steamId,
+      pelicanServerId,
+    );
+    if (closed) {
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
+        eventId,
+        discordUserId: null,
+        steamId,
+      } satisfies AdHocParticipantLeftPayload);
+    }
+    return closed;
   }
 
   /**
@@ -160,6 +238,8 @@ export class AdHocParticipantService {
       eventId: r.eventId,
       userId: r.userId,
       discordUserId: r.discordUserId,
+      steamId: r.steamId,
+      source: toParticipantSource(r.source),
       discordUsername: r.discordUsername,
       discordAvatarHash: r.discordAvatarHash,
       joinedAt: r.joinedAt.toISOString(),

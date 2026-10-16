@@ -174,6 +174,53 @@ describe('PelicanServersSection — row edits', () => {
     });
 });
 
+describe('PelicanServersSection — Detect Quick Play (ROK-1800)', () => {
+    const quickPlay = (id: number) => screen.getByTestId(`pelican-server-${id}-quick-play`);
+    const unsupported: PelicanServerRowDto = { ...pelicanServerFixture, id: 5, name: 'Palworld', gameName: 'Palworld', presenceSupported: false };
+
+    it.each([true, false])('renders an enabled, off switch for a supported game (desktop: %s)', async (desktop) => {
+        setViewport(desktop);
+        await renderSection([pelicanServerFixture]);
+        expect(quickPlay(1)).toBeEnabled();
+        expect(quickPlay(1)).toHaveAttribute('aria-checked', 'false');
+        expect(quickPlay(1)).toHaveAccessibleName('Detect Quick Play on Valheim — Main from server logs');
+        expect(quickPlay(1)).not.toHaveAttribute('aria-describedby');
+    });
+
+    it('is disabled with a hint when no game is mapped or the game has no log parser', async () => {
+        await renderSection([suspended, unsupported]);
+        expect(quickPlay(2)).toBeDisabled();
+        expect(quickPlay(2)).toHaveAccessibleDescription('Map a game first');
+        expect(quickPlay(5)).toBeDisabled();
+        expect(quickPlay(5)).toHaveAccessibleDescription('Not available for this game yet');
+    });
+
+    it('an unsupported server that is already on can still be turned off', async () => {
+        const patches = await renderSection([{ ...unsupported, presenceTracking: true }]);
+        expect(quickPlay(5)).toBeEnabled();
+        fireEvent.click(quickPlay(5));
+        await waitFor(() => expect(patches).toEqual([{ presenceTracking: false }]));
+    });
+
+    it('toggling applies at once and PATCHes only presenceTracking', async () => {
+        let release = () => {};
+        const hold = new Promise<void>((resolve) => { release = resolve; });
+        const patches = await renderSection([pelicanServerFixture], { hold });
+        fireEvent.click(quickPlay(1));
+        await waitFor(() => expect(patches).toEqual([{ presenceTracking: true }]));
+        // The reply is held, so the flipped switch is the optimistic write.
+        expect(quickPlay(1)).toHaveAttribute('aria-checked', 'true');
+        release();
+    });
+
+    it('a failed PATCH rolls the switch back and toasts the error', async () => {
+        await renderSection([pelicanServerFixture], { failPatch: true });
+        fireEvent.click(quickPlay(1));
+        await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Panel said no'));
+        await waitFor(() => expect(quickPlay(1)).toHaveAttribute('aria-checked', 'false'));
+    });
+});
+
 describe('PelicanServersSection — game picker (review MAJOR)', () => {
     const gameBox = () => screen.getByRole('combobox', { name: 'Game' });
 

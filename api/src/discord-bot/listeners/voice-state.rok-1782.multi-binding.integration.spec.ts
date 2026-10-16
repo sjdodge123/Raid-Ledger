@@ -272,7 +272,7 @@ async function adHocEvents(): Promise<
     .where(eq(schema.events.isAdHoc, true));
 }
 
-async function rosterOf(eventId: number): Promise<string[]> {
+async function rosterOf(eventId: number): Promise<Array<string | null>> {
   const rows = await testApp.db
     .select({ id: schema.adHocParticipants.discordUserId })
     .from(schema.adHocParticipants)

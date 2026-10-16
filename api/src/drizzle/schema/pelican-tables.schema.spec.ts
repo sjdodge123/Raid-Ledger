@@ -23,6 +23,7 @@ const SERVER_COLUMNS = [
   'missing_since',
   'name',
   'panel_uuid',
+  'presence_tracking',
   'show_on_calendar',
   'status_checked_at',
   'timezone',
