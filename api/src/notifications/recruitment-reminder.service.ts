@@ -87,15 +87,19 @@ export class RecruitmentReminderService {
   /**
    * DEMO fixture seam (ROK-1812): post the channel bump for ONE eligible
    * event now, skipping the grace period and dedup so a smoke test can get a
-   * live bump without backdating `created_at`. Returns false when the event
-   * is not eligible (no embed, full, out of the 48h window, no game).
+   * live bump without backdating `created_at`. `not-eligible` when the event
+   * has no embed, is full, is outside the 48h window or has no game;
+   * `not-posted` when it was eligible but the post was skipped or failed
+   * (bot offline, channel unresolved, Discord error — see the warn log).
+   * Calling it twice posts a second bump and orphans the first card.
    */
-  async postBumpNowForEvent(eventId: number): Promise<boolean> {
+  async postBumpNowForEvent(
+    eventId: number,
+  ): Promise<'posted' | 'not-eligible' | 'not-posted'> {
     const events = await findEligibleEvents(this.db);
     const event = events.find((e) => e.id === eventId);
-    if (!event) return false;
-    await this.postChannelBump(event);
-    return true;
+    if (!event) return 'not-eligible';
+    return (await this.postChannelBump(event)) ? 'posted' : 'not-posted';
   }
 
   /** Process a single eligible event for bumps and DMs. */
@@ -281,9 +285,12 @@ export class RecruitmentReminderService {
     );
   }
 
-  /** Post a recruitment bump to the event's currently-bound channel (ROK-1335). */
-  private async postChannelBump(event: EligibleEvent): Promise<void> {
-    if (this.shouldSkipBump(event)) return;
+  /**
+   * Post a recruitment bump to the event's currently-bound channel (ROK-1335).
+   * Never throws; resolves true only when the bump was posted and persisted.
+   */
+  private async postChannelBump(event: EligibleEvent): Promise<boolean> {
+    if (this.shouldSkipBump(event)) return false;
     try {
       const { embed, row } = await this.buildBump(event);
       const targetChannelId = await resolveBumpChannel(
@@ -297,11 +304,13 @@ export class RecruitmentReminderService {
       );
       await this.persistBumpMessageId(event, message.id, targetChannelId);
       this.logger.log(formatBumpLog(event, targetChannelId));
+      return true;
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       this.logger.warn(
         `Failed to post channel bump for event ${event.id}: ${msg}`,
       );
+      return false;
     }
   }
 

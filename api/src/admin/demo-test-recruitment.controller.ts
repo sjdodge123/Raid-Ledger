@@ -12,6 +12,7 @@
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   ForbiddenException,
   HttpCode,
@@ -60,7 +61,9 @@ export class DemoTestRecruitmentController {
   /**
    * Post the "Spots still available" bump for one event right now, skipping
    * the grace period + dedup (ROK-1812 smoke: the bump's count must follow
-   * later sign-ups). 404 when the event is not bump-eligible.
+   * later sign-ups). 404 when the event is not bump-eligible; 409 when it
+   * was eligible but nothing was posted (bot offline, channel unresolved,
+   * Discord error), so a smoke fails on the real cause, not a poll timeout.
    */
   @Post('post-recruitment-bump')
   @HttpCode(HttpStatus.OK)
@@ -69,11 +72,16 @@ export class DemoTestRecruitmentController {
     const parsed = PostBumpSchema.safeParse(body ?? {});
     if (!parsed.success) throw new BadRequestException(parsed.error.issues);
     const { eventId } = parsed.data;
-    const posted =
+    const outcome =
       await this.recruitmentReminderService.postBumpNowForEvent(eventId);
-    if (!posted) {
+    if (outcome === 'not-eligible') {
       throw new NotFoundException(
         `Event ${eventId} is not eligible for a recruitment bump`,
+      );
+    }
+    if (outcome === 'not-posted') {
+      throw new ConflictException(
+        `Event ${eventId} is eligible but no bump was posted (bot offline, channel unresolved or Discord error — see the API warn log)`,
       );
     }
     return { success: true };
