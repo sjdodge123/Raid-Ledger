@@ -100,10 +100,12 @@ function PhoneWriteSection({ connections }: { connections: CalendarConnection[] 
     );
 }
 
-/** ROK-1599 K6: the subscribe link, below Send events — in the phone column, a full-width card on desktop. */
-function SubscribeLink({ feed, desktopRow }: { feed: CalendarsOverview['feed']; desktopRow: boolean }): JSX.Element | null {
-    const desktop = useMediaQuery(DESKTOP_MQ);
-    if (desktop !== desktopRow) return null;
+/**
+ * ROK-1599 K6: the subscribe link — one full-width section after Send events
+ * and "Add a calendar" at every width (operator 2026-10-16: same order on
+ * phone and desktop).
+ */
+function SubscribeLink({ feed }: { feed: CalendarsOverview['feed'] }): JSX.Element {
     return <Section heading={F.heading}><SubscribeLinkCard feed={feed} /></Section>;
 }
 
@@ -127,7 +129,6 @@ function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
             )}
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow={false} />
             <PhoneWriteSection connections={google} />
-            <SubscribeLink feed={data.feed} desktopRow={false} />
             {/* Q15: several Google accounts are allowed, so the row stays once one is connected. */}
             <Section heading={C.addHeading}>
                 <CalendarProviderRow available={data.providers.google.available} another={google.length > 0} />
@@ -152,7 +153,7 @@ export function CalendarsPage(): JSX.Element {
             <ConnectionsGrid data={data} />
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow />
             <DesktopSendEvents connections={google} />
-            <SubscribeLink feed={data.feed} desktopRow />
+            <SubscribeLink feed={data.feed} />
             <PrivacyNote />
         </PageFrame>
     );
