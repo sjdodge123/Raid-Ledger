@@ -340,6 +340,26 @@ test_padded_id_is_trimmed() {
     fo_teardown
 }
 
+# --- ROK-1711: companion bot allowlist for the voice threshold ---------------
+test_companion_bot_allowlist() {
+    CURRENT_TEST_NAME="ROK-1711: RL_TEST_BOT_USER_ID reaches the app as VOICE_THRESHOLD_BOT_ALLOWLIST"
+    fo_setup
+    export RL_TEST_BOT_USER_ID=$' 112233445566778899\r'
+    run_spin allow1
+    assert_exit_code "$FO_RC" "0" "fresh spin should succeed"
+    assert_contains "$(app_run_line)" "VOICE_THRESHOLD_BOT_ALLOWLIST=112233445566778899 " \
+        "the app container gets the trimmed companion bot id"
+    fo_teardown
+    fo_setup
+    export RL_TEST_BOT_USER_ID="not-a-snowflake"
+    run_spin allow2
+    assert_exit_code "$FO_RC" "0" "a malformed id must not fail the spin"
+    assert_excludes "$(app_run_line)" "VOICE_THRESHOLD_BOT_ALLOWLIST" \
+        "a malformed id is ignored, not passed through"
+    fo_teardown
+    unset RL_TEST_BOT_USER_ID
+}
+
 run_test "p6-demo-mode-gate-present" test_env_container_sets_demo_mode
 run_test "1537-fresh-marker-and-id" test_fresh_spin_sets_marker_and_id
 run_test "1537-fresh-unset-first-login" test_fresh_spin_unset_id_reports_first_login
@@ -347,5 +367,6 @@ run_test "1537-idempotent-reads-container" test_idempotent_reports_from_containe
 run_test "p2-malformed-fresh" test_malformed_id_falls_back_to_first_login
 run_test "p2-malformed-idempotent" test_malformed_id_idempotent_path
 run_test "p2-padded-id-trimmed" test_padded_id_is_trimmed
+run_test "1711-companion-bot-allowlist" test_companion_bot_allowlist
 
 print_test_summary

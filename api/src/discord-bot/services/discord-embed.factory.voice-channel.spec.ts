@@ -159,7 +159,7 @@ describe('buildEventInvite — voice channel in invite DM embed', () => {
     expect(embed.toJSON().description!).not.toContain('\uD83D\uDD0A');
   });
 
-  it('places voice channel after timestamp but before description excerpt', () => {
+  it('opens with the description excerpt, then timestamp, then voice channel (ROK-1804)', () => {
     const event: EmbedEventData = {
       ...baseEvent,
       description: 'This is a long event description',
@@ -170,8 +170,9 @@ describe('buildEventInvite — voice channel in invite DM embed', () => {
     const tsPos = desc.indexOf('\uD83D\uDCC6');
     const vcPos = desc.indexOf('\uD83D\uDD0A');
     const excerptPos = desc.indexOf('This is a long event description');
+    expect(excerptPos).toBe(0);
+    expect(excerptPos).toBeLessThan(tsPos);
     expect(tsPos).toBeLessThan(vcPos);
-    expect(vcPos).toBeLessThan(excerptPos);
   });
 
   it('renders voice channel as correct Discord channel mention format', () => {

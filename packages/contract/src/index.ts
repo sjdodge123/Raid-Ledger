@@ -227,3 +227,5 @@ export * from './guild-content.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';
+// Per-game notification mute — the game-page bell (ROK-1797).
+export * from './game-notification-mutes.schema.js';

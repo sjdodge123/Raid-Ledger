@@ -730,6 +730,20 @@ EXTRA_ENV=()
 if [[ -n "${RL_ENV_JWT_SECRET:-}" ]]; then
     EXTRA_ENV+=(-e "JWT_SECRET=${RL_ENV_JWT_SECRET}")
 fi
+# ROK-1711: the API skips Discord bots in the voice game-filtered count, except
+# a DEMO_MODE-only allowlist (VOICE_THRESHOLD_BOT_ALLOWLIST). Allowlist the
+# companion test bot (tools/test-bot) so fleet voice smoke still reaches
+# minPlayers. Set RL_TEST_BOT_USER_ID (its Discord user id) in
+# /srv/rl-infra/.env; unset or malformed = no allowlist (warning on malformed).
+RL_TEST_BOT_USER_ID="${RL_TEST_BOT_USER_ID:-}"
+RL_TEST_BOT_USER_ID="${RL_TEST_BOT_USER_ID//[[:space:]]/}"
+if [[ -n "$RL_TEST_BOT_USER_ID" ]]; then
+    if env_spin::is_discord_snowflake "$RL_TEST_BOT_USER_ID"; then
+        EXTRA_ENV+=(-e "VOICE_THRESHOLD_BOT_ALLOWLIST=${RL_TEST_BOT_USER_ID}")
+    else
+        echo "env-spin: WARNING: RL_TEST_BOT_USER_ID is not a Discord snowflake (digits only) — ignoring it; the companion bot will not count toward voice minPlayers" >&2
+    fi
+fi
 # ROK-1469 D1 + review M4: the slot's OWN Discord app. The token and client
 # secret go in via --env-file, NOT `-e KEY=value`: argv is world-readable
 # through `ps` on the VM and `docker inspect` stores the -e values in the

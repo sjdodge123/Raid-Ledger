@@ -77,3 +77,25 @@ export function bindingIdForEvent(
   }
   return undefined;
 }
+
+/**
+ * Codex r2: adopt a race winner under `eventKey`, reusing the state that
+ * already tracks `eventId` (a concurrent voice spawn's first joiner) rather
+ * than replacing it with an empty member set.
+ */
+export function adoptEventState(
+  activeEvents: ActiveEventMap,
+  eventKey: string,
+  eventId: number,
+  gameId: number | null | undefined,
+): ActiveAdHocState {
+  let state: ActiveAdHocState | undefined;
+  for (const s of activeEvents.values()) if (s.eventId === eventId) state = s;
+  state ??= {
+    eventId,
+    memberSet: new Set<string>(),
+    ...(gameId !== undefined ? { gameId } : {}),
+  };
+  activeEvents.set(eventKey, state);
+  return state;
+}

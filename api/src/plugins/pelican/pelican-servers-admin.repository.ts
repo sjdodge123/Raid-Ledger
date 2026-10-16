@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { PelicanServerUpdate } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -22,15 +22,22 @@ type Db = PostgresJsDatabase<typeof schema>;
 export type PelicanAdminServerRow = Omit<
   PelicanServerRow,
   'panelUuid' | 'identifier' | 'timezone'
-> & { gameName: string | null };
+> & { gameName: string | null; gameSlug: string | null };
 
 /** Outcome of an admin mapping edit; never a caught FK violation. */
 export type PelicanMappingUpdateResult =
   | { kind: 'ok'; row: PelicanAdminServerRow }
   | { kind: 'not_found' }
-  | { kind: 'unknown_game' };
+  | { kind: 'unknown_game' }
+  | { kind: 'presence_unsupported' };
 
-type MappingSet = Pick<NewPelicanServer, 'gameId' | 'showOnCalendar'>;
+/** Whether a game slug (null = unmapped) supports Quick Play detection. */
+export type PresenceSupportCheck = (gameSlug: string | null) => boolean;
+
+type MappingSet = Pick<
+  NewPelicanServer,
+  'gameId' | 'showOnCalendar' | 'presenceTracking'
+>;
 
 /** Only the keys the admin sent. */
 export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
@@ -38,6 +45,9 @@ export function toMappingSet(patch: PelicanServerUpdate): MappingSet {
     ...(patch.gameId !== undefined ? { gameId: patch.gameId } : {}),
     ...(patch.showOnCalendar !== undefined
       ? { showOnCalendar: patch.showOnCalendar }
+      : {}),
+    ...(patch.presenceTracking !== undefined
+      ? { presenceTracking: patch.presenceTracking }
       : {}),
   };
 }
@@ -59,15 +69,23 @@ export class PelicanServersAdminRepository {
    * Apply the admin mapping. The server row is locked and the game is
    * pre-checked (`FOR SHARE`) in one transaction, so the update cannot hit
    * the games FK — postgres.js would poison the tx on a caught violation.
+   * Turning Quick Play detection on is refused when the resulting game (the
+   * patched one, else the current one) fails `supportsPresence` (ROK-1800).
    */
   updateMapping(
     id: number,
     patch: PelicanServerUpdate,
+    supportsPresence: PresenceSupportCheck = () => true,
   ): Promise<PelicanMappingUpdateResult> {
     return this.db.transaction(async (tx) => {
-      if (!(await this.lockServer(tx, id))) return { kind: 'not_found' };
-      if (patch.gameId != null && !(await this.lockGame(tx, patch.gameId))) {
-        return { kind: 'unknown_game' };
+      const current = await this.lockServer(tx, id);
+      if (!current) return { kind: 'not_found' };
+      const gameId = patch.gameId !== undefined ? patch.gameId : current.gameId;
+      const game =
+        gameId === null ? { slug: null } : await this.lockGame(tx, gameId);
+      if (!game) return { kind: 'unknown_game' };
+      if (patch.presenceTracking === true && !supportsPresence(game.slug)) {
+        return { kind: 'presence_unsupported' };
       }
       await tx
         .update(pelicanServers)
@@ -82,24 +100,38 @@ export class PelicanServersAdminRepository {
 
   private selectJoined(executor: Db | PelicanTx) {
     return executor
-      .select({ ...getServerColumns(), gameName: games.name })
+      .select({
+        ...getServerColumns(),
+        gameName: games.name,
+        gameSlug: games.slug,
+      })
       .from(pelicanServers)
       .leftJoin(games, eq(games.id, pelicanServers.gameId))
       .$dynamic();
   }
 
-  private async lockServer(tx: PelicanTx, id: number): Promise<boolean> {
-    const rows = await tx.execute(
-      sql`select 1 from ${pelicanServers} where ${pelicanServers.id} = ${id} for update`,
-    );
-    return Array.isArray(rows) && rows.length > 0;
+  private async lockServer(
+    tx: PelicanTx,
+    id: number,
+  ): Promise<{ gameId: number | null } | undefined> {
+    const [row] = await tx
+      .select({ gameId: pelicanServers.gameId })
+      .from(pelicanServers)
+      .where(eq(pelicanServers.id, id))
+      .for('update');
+    return row;
   }
 
-  private async lockGame(tx: PelicanTx, gameId: number): Promise<boolean> {
-    const rows = await tx.execute(
-      sql`select 1 from ${games} where ${games.id} = ${gameId} for share`,
-    );
-    return Array.isArray(rows) && rows.length > 0;
+  private async lockGame(
+    tx: PelicanTx,
+    gameId: number,
+  ): Promise<{ slug: string } | undefined> {
+    const [row] = await tx
+      .select({ slug: games.slug })
+      .from(games)
+      .where(eq(games.id, gameId))
+      .for('share', { of: games });
+    return row;
   }
 }
 
@@ -109,6 +141,7 @@ function getServerColumns() {
     name: pelicanServers.name,
     gameId: pelicanServers.gameId,
     showOnCalendar: pelicanServers.showOnCalendar,
+    presenceTracking: pelicanServers.presenceTracking,
     currentState: pelicanServers.currentState,
     isSuspended: pelicanServers.isSuspended,
     statusCheckedAt: pelicanServers.statusCheckedAt,

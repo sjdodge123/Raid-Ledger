@@ -6,10 +6,12 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import { INTERESTED_GI_ROW } from '../../igdb/igdb-interest-sources.helpers';
+import { notGameMutedSql } from '../../notifications/game-notification-mute.helpers';
 
 /**
  * Users who hold an interest row for the game (an un-hearted Steam owner does
- * not — ROK-1796) or signed up for any non-cancelled event of it.
+ * not — ROK-1796) or signed up for any non-cancelled event of it, minus
+ * anyone who muted the game's notifications (ROK-1797).
  *
  * @param db - Drizzle handle.
  * @param gameId - Game the poll schedules.
@@ -39,6 +41,7 @@ export async function findStandalonePollRecipients(
             AND es.user_id IS NOT NULL
         )
       )
+      AND ${notGameMutedSql(gameId)}
   `);
   return rows.map((r) => r.id);
 }

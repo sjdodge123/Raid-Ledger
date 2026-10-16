@@ -298,3 +298,19 @@ describe('VoiceRoster — dead avatar (ROK-1714)', () => {
     expect(screen.queryByText('H'), 'initial fallback should render after the img error').not.toBeNull();
   });
 });
+
+describe('VoiceRoster — Steam-only participant (ROK-1800)', () => {
+  it('renders the character name with initials, never a Discord CDN url for a null id', () => {
+    const steam = createParticipant({
+      userId: null,
+      discordUserId: null,
+      steamId: '76561198000000001',
+      source: 'steam',
+      discordUsername: 'Ragnhild',
+      discordAvatarHash: 'abc123',
+    });
+    const { container } = render(<VoiceRoster participants={[steam]} activeCount={1} />);
+    expect(screen.getByText('Ragnhild')).toBeInTheDocument();
+    expect(container.querySelector('img'), 'no avatar img without a Discord id').toBeNull();
+  });
+});

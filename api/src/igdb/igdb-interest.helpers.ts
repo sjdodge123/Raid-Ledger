@@ -16,6 +16,7 @@ import {
   USER_HEART_SOURCES,
   toDtoSource,
 } from './igdb-interest-sources.helpers';
+import { isGameMuted } from '../notifications/game-notification-mute.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -208,11 +209,18 @@ export async function addInterest(
     .values({ userId, gameId, source: 'manual' })
     .onConflictDoNothing();
 
-  const [count, players] = await Promise.all([
+  const [count, players, notificationsMuted] = await Promise.all([
     getInterestCount(db, gameId),
     getInterestedPlayers(db, gameId),
+    isGameMuted(db, userId, gameId),
   ]);
-  return { wantToPlay: true, count, players, source: 'manual' as const };
+  return {
+    wantToPlay: true,
+    count,
+    players,
+    source: 'manual' as const,
+    notificationsMuted,
+  };
 }
 
 /**
@@ -250,11 +258,12 @@ export async function removeInterest(
       .onConflictDoNothing();
   });
 
-  const [count, players] = await Promise.all([
+  const [count, players, notificationsMuted] = await Promise.all([
     getInterestCount(db, gameId),
     getInterestedPlayers(db, gameId),
+    isGameMuted(db, userId, gameId),
   ]);
-  return { wantToPlay: false, count, players };
+  return { wantToPlay: false, count, players, notificationsMuted };
 }
 
 /** Build the parallel query array for game interest data. */
@@ -308,7 +317,10 @@ export async function fetchGameInterestResponse(
   gameId: number,
   userId: number,
 ): Promise<GameInterestResponseDto> {
-  const d = await fetchGameInterestData(db, gameId, userId);
+  const [d, notificationsMuted] = await Promise.all([
+    fetchGameInterestData(db, gameId, userId),
+    isGameMuted(db, userId, gameId),
+  ]);
   return {
     wantToPlay: d.source !== null,
     count: d.count,
@@ -319,5 +331,6 @@ export async function fetchGameInterestResponse(
     wishlisters: d.wishlisters,
     wishlistedCount: d.wishlistedCount,
     wishlistedByMe: d.wishlistedByMe,
+    notificationsMuted,
   };
 }

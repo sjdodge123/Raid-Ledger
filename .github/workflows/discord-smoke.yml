@@ -215,7 +215,12 @@ jobs:
         # bot's gateway session) before the lease is released.
         # ROK-1769: API output goes to api.log (uploaded + grepped on failure)
         # so a swallowed error like createForEvent's captureError is readable.
+        # ROK-1711: the voice game-filtered count skips Discord bots except a
+        # DEMO_MODE allowlist. Allowlist the companion bot. A bot token's first
+        # segment is its base64 user id, so no extra secret is needed.
         run: |
+          VOICE_THRESHOLD_BOT_ALLOWLIST=$(node -e 'const s=(process.env.TEST_BOT_TOKEN||"").split(".")[0];const id=Buffer.from(s,"base64").toString();process.stdout.write(/^\d{17,20}$/.test(id)?id:"")')
+          export VOICE_THRESHOLD_BOT_ALLOWLIST
           node api/dist/src/main.js > api.log 2>&1 &
           echo "API_PID=$!" >> "$GITHUB_ENV"
         env:

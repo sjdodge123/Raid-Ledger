@@ -11,16 +11,15 @@ import type { VoiceAttendanceService } from './voice-attendance.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import type { ChannelBindingsService } from './channel-bindings.service';
-import { bindingIdForEvent } from './ad-hoc-event-key.helpers';
+import { adoptEventState, bindingIdForEvent } from './ad-hoc-event-key.helpers';
 import {
   resolveGameName,
-  createAdHocEventRow,
-  findAdminFallback,
   getEventById,
   restoreFromGracePeriod,
   setGracePeriodStatus,
 } from './ad-hoc-event.helpers';
 
+import { createVoiceQuickPlay } from './ad-hoc-game-spawn-lock';
 /** In-memory state for an active ad-hoc event. */
 export interface ActiveAdHocState {
   eventId: number;
@@ -105,36 +104,63 @@ export async function spawnNewEvent(
   member: VoiceMemberInfo,
   resolvedGameName?: string,
 ): Promise<number | null> {
-  const eventId = await createAdHocEvent(
-    deps,
+  const created = await createVoiceQuickPlay(
+    deps.db,
     bindingId,
     effectiveBinding,
     member,
     resolvedGameName,
   );
-  if (!eventId) return null;
-  registerNewEvent(deps, eventKey, eventId, effectiveGameId, member);
-  await enrollMember(deps, eventId, member);
-  await broadcastSpawn(
-    deps,
-    eventId,
+  if (!created) return null;
+  await completeSpawn(deps, created, {
+    eventKey,
     bindingId,
     effectiveGameId,
     member,
     resolvedGameName,
-  );
-  return eventId;
+  });
+  return created.eventId;
+}
+
+interface SpawnContext {
+  eventKey: string;
+  bindingId: string;
+  effectiveGameId: number | null | undefined;
+  member: VoiceMemberInfo;
+  resolvedGameName?: string | undefined;
+}
+
+/** Join the race winner's event, or register + announce the new one. */
+async function completeSpawn(
+  deps: AdHocHandlerDeps,
+  created: NonNullable<Awaited<ReturnType<typeof createVoiceQuickPlay>>>,
+  ctx: SpawnContext,
+): Promise<void> {
+  const { eventKey, bindingId, effectiveGameId, member } = ctx;
+  const { eventId } = created;
+  if (created.existing) {
+    await joinRaceWinner(
+      deps,
+      eventKey,
+      bindingId,
+      effectiveGameId,
+      member,
+      eventId,
+    );
+    return;
+  }
+  registerNewEvent(deps, eventKey, eventId, effectiveGameId, member);
+  await enrollMember(deps, eventId, member);
+  await broadcastSpawn(deps, eventId, ctx);
 }
 
 /** Notify spawn and broadcast live status + roster. */
 async function broadcastSpawn(
   deps: AdHocHandlerDeps,
   eventId: number,
-  bindingId: string,
-  effectiveGameId: number | null | undefined,
-  member: VoiceMemberInfo,
-  resolvedGameName?: string,
+  ctx: SpawnContext,
 ): Promise<void> {
+  const { bindingId, effectiveGameId, member, resolvedGameName } = ctx;
   await notifySpawn(
     deps,
     eventId,
@@ -155,6 +181,30 @@ async function enrollMember(
 ): Promise<void> {
   await deps.participantService.addParticipant(eventId, member);
   await deps.autoSignupParticipant(eventId, member);
+}
+
+/**
+ * ROK-1800: another spawn (the game-server path, or a concurrent voice join)
+ * created this game's Quick Play while we waited on the spawn lock — adopt it
+ * under our key and join it. Codex r2: when a voice spawn already registered
+ * the event, MERGE into its state; a fresh empty `memberSet` would drop that
+ * first joiner and their leave would never be seen.
+ */
+async function joinRaceWinner(
+  deps: AdHocHandlerDeps,
+  eventKey: string,
+  bindingId: string,
+  effectiveGameId: number | null | undefined,
+  member: VoiceMemberInfo,
+  eventId: number,
+): Promise<void> {
+  const state = adoptEventState(
+    deps.activeEvents,
+    eventKey,
+    eventId,
+    effectiveGameId,
+  );
+  await handleJoinExisting(deps, state, eventKey, bindingId, member);
 }
 
 /** Register a new event in active state and track voice attendance. */
@@ -219,7 +269,10 @@ export async function notifyCompleted(
 
 /** Start the grace period when all members leave. */
 export async function startGracePeriod(
-  deps: AdHocHandlerDeps,
+  deps: Pick<
+    AdHocHandlerDeps,
+    'db' | 'channelBindingsService' | 'gracePeriodQueue' | 'gateway'
+  >,
   eventId: number,
   channelBindingId: string | null,
 ): Promise<void> {
@@ -238,27 +291,6 @@ export async function startGracePeriod(
 }
 
 // ─── Internal helpers ──────────────────────────────────
-
-async function createAdHocEvent(
-  deps: AdHocHandlerDeps,
-  bindingId: string,
-  binding: { gameId: number | null | undefined },
-  triggerMember: VoiceMemberInfo,
-  resolvedGameName?: string,
-): Promise<number | null> {
-  let creatorId = triggerMember.userId;
-  if (!creatorId) {
-    creatorId = await findAdminFallback(deps.db);
-    if (!creatorId) return null;
-  }
-  return createAdHocEventRow(
-    deps.db,
-    bindingId,
-    { gameId: binding.gameId ?? null },
-    creatorId,
-    resolvedGameName,
-  );
-}
 
 async function notifySpawn(
   deps: AdHocHandlerDeps,

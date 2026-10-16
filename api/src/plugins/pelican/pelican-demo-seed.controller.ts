@@ -1,9 +1,14 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Delete,
   HttpCode,
   HttpStatus,
   Inject,
   NotFoundException,
+  Param,
+  ParseIntPipe,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -24,6 +29,13 @@ import {
   seedDemoPelicanServers,
   type PelicanSeedResult,
 } from './pelican-demo-seed.helpers';
+import {
+  deleteQuickPlayFixture,
+  isFixtureSlot,
+  parseQuickPlayFixtureRequest,
+  seedQuickPlayFixture,
+  type QuickPlayFixture,
+} from './pelican-demo-quick-play-seed.helpers';
 
 /**
  * Pelican fixture endpoint — DEMO_MODE only (ROK-1094 fleet UI test plan).
@@ -48,6 +60,39 @@ export class PelicanDemoSeedController {
   @Post('pelican/seed-servers')
   @HttpCode(HttpStatus.OK)
   async seedPelicanServers(): Promise<PelicanSeedResult> {
+    await this.ensureDemoPelican();
+    const seeded = await seedDemoPelicanServers(this.db, new Date());
+    if (!seeded) {
+      throw new NotFoundException('No visible game to map — seed games first');
+    }
+    return seeded;
+  }
+
+  /**
+   * ROK-1800 Quick Play switch smoke: Pelican active with the fake
+   * connection, plus the caller's slot rows (mapped to `gameId`, and
+   * unmapped) reset to switch-off. `seed-servers` never touches them.
+   */
+  @Post('pelican/quick-play-fixture')
+  @HttpCode(HttpStatus.OK)
+  async seedQuickPlayFixture(@Body() body: unknown): Promise<QuickPlayFixture> {
+    const req = parseQuickPlayFixtureRequest(body);
+    if (!req) throw new BadRequestException('Expected { slot, gameId }');
+    await this.ensureDemoPelican();
+    return seedQuickPlayFixture(this.db, req, new Date());
+  }
+
+  /** Remove a slot's Quick Play fixture rows (smoke teardown). */
+  @Delete('pelican/quick-play-fixture/:slot')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteQuickPlayFixture(
+    @Param('slot', ParseIntPipe) slot: number,
+  ): Promise<void> {
+    if (!isFixtureSlot(slot)) throw new BadRequestException('Unknown slot');
+    await deleteQuickPlayFixture(this.db, slot);
+  }
+
+  private async ensureDemoPelican(): Promise<void> {
     await this.registry.ensureInstalled(PELICAN_PLUGIN_ID);
     await this.registry.activate(PELICAN_PLUGIN_ID);
     await this.pelicanConfig.updateConfig(
@@ -56,10 +101,5 @@ export class PelicanDemoSeedController {
         apiKey: DEMO_PELICAN_API_KEY,
       }),
     );
-    const seeded = await seedDemoPelicanServers(this.db, new Date());
-    if (!seeded) {
-      throw new NotFoundException('No visible game to map — seed games first');
-    }
-    return seeded;
   }
 }

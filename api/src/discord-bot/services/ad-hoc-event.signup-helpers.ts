@@ -2,17 +2,43 @@
  * Signup and roster slot helpers for ad-hoc events (ROK-959 extraction).
  * Extracted from ad-hoc-event.helpers.ts to stay within max-lines limit.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import * as tables from '../../drizzle/schema';
 import type { VoiceMemberInfo } from './ad-hoc-participant.service';
 
+/** Advisory-lock class for an ad-hoc event's roster picks (two-int form). */
+export const AD_HOC_ROSTER_LOCK_CLASS = 1802;
+
 /**
  * Auto-create a signup and roster slot for an ad-hoc participant.
  * Idempotent: skips if the participant already has a signup.
+ *
+ * ROK-1800: two members joining one event at once (concurrent voice joins,
+ * or a voice and a game-server join) each read the free positions and pick
+ * the same one, so the second insert hits `unique_slot_per_event` and that
+ * member is left signed up with no roster slot. A transaction-scoped advisory
+ * lock on the event serialises the whole check-signup-then-pick-slot; work
+ * runs on its `tx`. Inside a caller's transaction this is a savepoint and the
+ * lock holds until that outer transaction ends. No catch-and-retry: under
+ * postgres.js a failed statement poisons the transaction.
  */
 export async function autoSignupParticipant(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+  member: VoiceMemberInfo,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`SELECT pg_advisory_xact_lock(${AD_HOC_ROSTER_LOCK_CLASS}::int4, ${eventId}::int4)`,
+    );
+    await signupUnderLock(tx, eventId, member);
+  });
+}
+
+/** The check-signup-then-pick-slot body; caller holds the event's lock. */
+async function signupUnderLock(
   db: PostgresJsDatabase<typeof schema>,
   eventId: number,
   member: VoiceMemberInfo,

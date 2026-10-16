@@ -16,6 +16,7 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import { NOW_UTC } from '../drizzle/timestamp-utils';
 import { INTERESTED_GI_ROW } from '../igdb/igdb-interest-sources.helpers';
+import { notGameMutedSql } from './game-notification-mute.helpers';
 
 /** The Drizzle handle these reads run on. */
 export type AffinityDb = PostgresJsDatabase<typeof schema>;
@@ -104,6 +105,8 @@ export async function findGameAffinityRecipients(
       AND u.deactivated_at IS NULL
       ${notBanned}
       AND ${affinityPredicate(gameId, options.interestsOnly === true)}
+      -- outer, so it masks BOTH affinity halves (ROK-1797 D1)
+      AND ${notGameMutedSql(gameId)}
   `);
   return rows.map((r) => r.id);
 }
