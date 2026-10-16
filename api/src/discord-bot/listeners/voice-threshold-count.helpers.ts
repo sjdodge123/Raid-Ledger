@@ -27,12 +27,12 @@ function allowlistedBotIds(): Set<string> {
 }
 
 /** Whether a voice member counts toward a game binding's threshold. */
-export function countsTowardThreshold(member: {
-  id: string;
-  user?: { bot?: boolean } | null;
-}): boolean {
+export function countsTowardThreshold(
+  member: { id: string; user?: { bot?: boolean } | null },
+  allowlist: ReadonlySet<string> = allowlistedBotIds(),
+): boolean {
   if (!isBotMember(member)) return true;
-  return allowlistedBotIds().has(member.id);
+  return allowlist.has(member.id);
 }
 
 /** Threshold tally for a game binding (see `getGameFilteredCount`). */
@@ -53,8 +53,9 @@ export async function tallyGameMembers(
   gameId: number,
 ): Promise<GameMemberTally> {
   const tally = { counted: 0, allConfirmed: true, confirmedCount: 0 };
+  const allowlist = allowlistedBotIds();
   for (const member of members) {
-    if (!countsTowardThreshold(member)) continue;
+    if (!countsTowardThreshold(member, allowlist)) continue;
     const detected = await detect(member);
     if (detected.gameId !== null && detected.gameId !== gameId) continue;
     tally.counted++;
