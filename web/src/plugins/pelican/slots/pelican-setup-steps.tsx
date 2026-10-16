@@ -1,8 +1,13 @@
+import { Link } from 'react-router-dom';
+import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { PLUGINS_HREF } from './pelican-servers.helpers';
+
 /**
  * How to make a least-privilege Pelican client key (ROK-121 ruling Q5).
  * ROK-1800: spells out the subuser permissions, including the console
  * stream Quick Play detection reads (Pelican grants websocket access to
  * every subuser; there is no checkbox for it).
+ * ROK-1819: Quick Play detection also needs the game's own plugin active.
  */
 export function PelicanSetupSteps() {
     return (
@@ -25,6 +30,11 @@ export function PelicanSetupSteps() {
                 <li>Signed in as that user, open Account → API Keys and create a <strong>client</strong> key (<code>pacc_</code>)</li>
                 <li>Set the key&apos;s Allowed IPs to this Raid Ledger host</li>
                 <li>Paste the panel URL and the key below, save, then Test Connection</li>
+                <li>
+                    For Quick Play detection, also turn on the game&apos;s plugin under{' '}
+                    <Link to={PLUGINS_HREF} className={`rounded-sm text-success underline underline-offset-2 ${FOCUS_RING}`}>Plugins</Link>,
+                    then turn on Detect Quick Play for its servers below
+                </li>
             </ol>
         </div>
     );

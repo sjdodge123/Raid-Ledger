@@ -26,6 +26,10 @@ import * as schema from '../../drizzle/schema';
 import { SettingsService } from '../../settings/settings.service';
 import { EXTENSION_POINTS } from '../plugin-host/extension-points';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
+import {
+  VALHEIM_GAME_SLUG,
+  VALHEIM_PLUGIN_ID,
+} from '../valheim/valheim.constants';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
 import { PelicanServersRepository } from './pelican-servers.repository';
 import { PelicanSyncService } from './pelican-sync.service';
@@ -350,6 +354,64 @@ describe('Quick Play detection switch (ROK-1800)', () => {
       presenceTracking: false,
       presenceSupported: false,
     });
+  });
+});
+
+describe('Quick Play detection switch — inactive parser plugin (ROK-1819)', () => {
+  /** A `valheim` game, so the real Valheim parser (owned by its plugin) applies. */
+  async function valheimGameId(): Promise<number> {
+    const [existing] = await testApp.db
+      .select({ id: schema.games.id })
+      .from(schema.games)
+      .where(eq(schema.games.slug, VALHEIM_GAME_SLUG));
+    if (existing) return existing.id;
+    const [row] = nonEmpty(
+      await testApp.db
+        .insert(schema.games)
+        .values({ name: 'Valheim', slug: VALHEIM_GAME_SLUG })
+        .returning({ id: schema.games.id }),
+      'valheim game',
+    );
+    return row.id;
+  }
+
+  const rowsById = async () =>
+    new Map(
+      PelicanServerListResponseSchema.parse((await getServers()).body).data.map(
+        (r) => [r.id, r],
+      ),
+    );
+
+  afterEach(async () => {
+    // Back to the boot state: Valheim is never auto-installed, so its parser starts suspended.
+    if (registry().isActive(VALHEIM_PLUGIN_ID)) {
+      await registry().deactivate(VALHEIM_PLUGIN_ID);
+    }
+  });
+
+  it('names the inactive Valheim plugin on a Valheim row, and drops it once the plugin is active', async () => {
+    const gameId = await valheimGameId();
+    await registry().ensureInstalled(VALHEIM_PLUGIN_ID);
+    await registry().deactivate(VALHEIM_PLUGIN_ID);
+    const valheimServer = await insertServer(1, { gameId });
+    const noParser = await insertServer(2, { gameId: testApp.seed.game.id });
+
+    const inactive = await rowsById();
+    expect(inactive.get(valheimServer.id)).toMatchObject({
+      presenceSupported: false,
+      presencePluginInactive: { pluginId: 'valheim', pluginName: 'Valheim' },
+    });
+    expect(inactive.get(noParser.id)).toMatchObject({
+      presenceSupported: false,
+    });
+    expect(inactive.get(noParser.id)?.presencePluginInactive).toBeUndefined();
+
+    await registry().activate(VALHEIM_PLUGIN_ID);
+    const active = await rowsById();
+    expect(active.get(valheimServer.id)?.presenceSupported).toBe(true);
+    expect(
+      active.get(valheimServer.id)?.presencePluginInactive,
+    ).toBeUndefined();
   });
 });
 

@@ -195,6 +195,18 @@ describe('PelicanServersSection — Detect Quick Play (ROK-1800)', () => {
         expect(quickPlay(5)).toHaveAccessibleDescription('Not available for this game yet');
     });
 
+    it('names the inactive plugin and links to the Plugins panel to turn it on (ROK-1819)', async () => {
+        const inactive: PelicanServerRowDto = {
+            ...pelicanServerFixture, id: 6, presenceSupported: false,
+            presencePluginInactive: { pluginId: 'valheim', pluginName: 'Valheim' },
+        };
+        await renderSection([inactive]);
+        expect(quickPlay(6)).toBeDisabled();
+        expect(quickPlay(6)).toHaveAccessibleDescription('Turn on the Valheim plugin to detect Quick Play');
+        const link = screen.getByRole('link', { name: 'Turn on the Valheim plugin' });
+        expect(link).toHaveAttribute('href', '/admin/settings/plugins');
+    });
+
     it('an unsupported server that is already on can still be turned off', async () => {
         const patches = await renderSection([{ ...unsupported, presenceTracking: true }]);
         expect(quickPlay(5)).toBeEnabled();

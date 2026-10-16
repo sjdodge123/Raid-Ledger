@@ -38,10 +38,10 @@ import {
 } from './scheduled-event.create';
 import {
   completeScheduledEventWithOutcome,
-  runCompletionPass,
   type SECompletionOutcome,
   type SECompletionRun,
 } from './scheduled-event.completion';
+import { completeAndSweep } from './scheduled-event.embed-completion';
 
 async function desc(s: SettingsService, id: number, d: ScheduledEventData) {
   return buildDescriptionText(id, d, await s.getClientUrl());
@@ -118,24 +118,22 @@ export class ScheduledEventService {
   /** Find and complete events past their effective end time (ROK-717, ROK-944). */
   async completeExpiredEvents(): Promise<void | false> {
     const run = await this.completeExpiredEventsDetailed();
-    if (run.reason) return false;
+    if (run.reason && !run.embedOnlyEventIds) return false;
   }
 
-  /** One completion pass with a per-event outcome — the smoke trigger reads it (ROK-944). */
+  /**
+   * One completion pass with a per-event outcome — the smoke trigger reads it
+   * (ROK-944). ROK-1818: then sweeps ended events that have NO Discord SE, so
+   * their embed still reaches COMPLETED; it runs whatever the pass's skip
+   * reason, and skips the ids the pass already enqueued.
+   */
   async completeExpiredEventsDetailed(): Promise<SECompletionRun> {
-    return runCompletionPass({
+    return completeAndSweep({
       db: this.db,
       client: this.clientService,
+      queue: this.embedSyncQueue,
       completeOne: (id) => this.completeScheduledEvent(id),
-      afterEach: async (id) => {
-        await this.embedSyncQueue
-          ?.enqueue(id, 'cron-complete')
-          .catch((err) =>
-            this.logger.warn(
-              `Embed-sync enqueue failed for event ${id}: ${err instanceof Error ? err.message : 'unknown'}`,
-            ),
-          );
-      },
+      warn: (message) => this.logger.warn(message),
     });
   }
 

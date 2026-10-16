@@ -57,6 +57,22 @@ export class PluginAdapterStore {
     return this.adapters.get(point)?.get(key) as T | undefined;
   }
 
+  /**
+   * The plugin whose suspended single adapter sits at `point`/`key`, or
+   * undefined when none is suspended there — tells "no adapter for this key"
+   * apart from "registered, but its owner plugin is inactive" (ROK-1819).
+   * Several owners at one point/key: the first suspended (insertion order) wins.
+   */
+  findSuspendedOwner(point: string, key: string): string | undefined {
+    for (const [pluginId, entries] of this.suspended) {
+      const hit = entries.some(
+        (e) => !e.multi && e.point === point && e.key === key,
+      );
+      if (hit) return pluginId;
+    }
+    return undefined;
+  }
+
   getAdaptersForExtensionPoint<T>(point: string): Map<string, T> {
     const keyMap = this.adapters.get(point);
     if (!keyMap) return new Map<string, T>();
