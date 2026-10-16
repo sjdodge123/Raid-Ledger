@@ -112,6 +112,31 @@ export async function spawnNewEvent(
     resolvedGameName,
   );
   if (!created) return null;
+  await completeSpawn(deps, created, {
+    eventKey,
+    bindingId,
+    effectiveGameId,
+    member,
+    resolvedGameName,
+  });
+  return created.eventId;
+}
+
+interface SpawnContext {
+  eventKey: string;
+  bindingId: string;
+  effectiveGameId: number | null | undefined;
+  member: VoiceMemberInfo;
+  resolvedGameName?: string | undefined;
+}
+
+/** Join the race winner's event, or register + announce the new one. */
+async function completeSpawn(
+  deps: AdHocHandlerDeps,
+  created: NonNullable<Awaited<ReturnType<typeof createVoiceQuickPlay>>>,
+  ctx: SpawnContext,
+): Promise<void> {
+  const { eventKey, bindingId, effectiveGameId, member } = ctx;
   const { eventId } = created;
   if (created.existing) {
     await joinRaceWinner(
@@ -122,30 +147,20 @@ export async function spawnNewEvent(
       member,
       eventId,
     );
-    return eventId;
+    return;
   }
   registerNewEvent(deps, eventKey, eventId, effectiveGameId, member);
   await enrollMember(deps, eventId, member);
-  await broadcastSpawn(
-    deps,
-    eventId,
-    bindingId,
-    effectiveGameId,
-    member,
-    resolvedGameName,
-  );
-  return eventId;
+  await broadcastSpawn(deps, eventId, ctx);
 }
 
 /** Notify spawn and broadcast live status + roster. */
 async function broadcastSpawn(
   deps: AdHocHandlerDeps,
   eventId: number,
-  bindingId: string,
-  effectiveGameId: number | null | undefined,
-  member: VoiceMemberInfo,
-  resolvedGameName?: string,
+  ctx: SpawnContext,
 ): Promise<void> {
+  const { bindingId, effectiveGameId, member, resolvedGameName } = ctx;
   await notifySpawn(
     deps,
     eventId,
