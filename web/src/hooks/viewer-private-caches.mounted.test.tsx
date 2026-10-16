@@ -62,3 +62,40 @@ describe('ROK-1811: a mounted private query across an identity change', () => {
         expect(fetchPrefs).toHaveBeenCalledTimes(1);
     });
 });
+
+/** Stands in for `getPublicLineup`: never sends a token, so it answers the same for everyone. */
+const fetchPublicLineup = vi.fn(async (): Promise<string> => 'public lineup abc');
+
+function PublicLineup() {
+    const { data, isPending } = useQuery({ queryKey: ['lineups', 'public', 'abc'], queryFn: fetchPublicLineup, retry: false });
+    return <p>{isPending ? 'lineup pending' : data}</p>;
+}
+
+describe('ROK-1811 Codex r3 P2: a mounted public lineup across a cross-tab logout', () => {
+    let queryClient: QueryClient;
+
+    beforeEach(async () => {
+        fetchPrefs.mockClear();
+        fetchPublicLineup.mockClear();
+        setAccessToken(jwt({ sub: 9 }));
+        queryClient = new QueryClient();
+        render(<QueryClientProvider client={queryClient}><PublicLineup /><Prefs /></QueryClientProvider>);
+        expect(await screen.findByText('public lineup abc')).toBeTruthy();
+        expect(await screen.findByText('preferences for 9')).toBeTruthy();
+    });
+    afterEach(() => { clearAccessToken(); });
+
+    it('keeps the public lineup on screen while the private query empties without firing', async () => {
+        act(() => {
+            clearAccessToken();
+            dropViewerPrivateCaches(queryClient);
+        });
+        await waitFor(() => { expect(screen.queryByText('preferences for 9')).toBeNull(); });
+        expect(screen.getByText('no preferences')).toBeTruthy();
+        expect(screen.queryByText('lineup pending')).toBeNull();
+        expect(screen.getByText('public lineup abc')).toBeTruthy();
+        expect(queryClient.getQueryData(['lineups', 'public', 'abc'])).toBe('public lineup abc');
+        await waitFor(() => { expect(queryClient.isFetching()).toBe(0); });
+        expect(fetchPrefs).toHaveBeenCalledTimes(1);
+    });
+});

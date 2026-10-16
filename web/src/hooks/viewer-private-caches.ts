@@ -1,5 +1,6 @@
 /**
- * Every identity change empties the query cache except `['auth','me']` (ROK-1811, after
+ * Every identity change empties the query cache except `['auth','me']` and the
+ * token-less public queries in `VIEWER_INDEPENDENT_PREFIXES` (ROK-1811, after
  * ROK-1599's Codex P1). Many cached responses belong to one viewer under keys
  * that are not viewer-scoped — `['notifications', limit, offset]`,
  * `['notifications','unread-count']`, `['me','characters', gameId]`, the
@@ -28,10 +29,31 @@ function isAuthMe(query: Query): boolean {
     return key.length === AUTH_ME_KEY.length && key[0] === AUTH_ME_KEY[0] && key[1] === AUTH_ME_KEY[1];
 }
 
-const EVERY_QUERY_BUT_AUTH_ME = { predicate: (query: Query) => !isAuthMe(query) };
+/**
+ * Key prefixes of queries whose fetcher never sends the viewer's token or
+ * cookies, so the response is the same for every viewer and holds nothing to
+ * drop (ROK-1811 Codex r3 P2). They are left untouched — reset, they would sit
+ * pending after a logout because nothing refetches without a token, and the
+ * public lineup page would read that as "no longer available". The ONLY place
+ * this list lives; forgetting an entry costs a refetch, never a leak.
+ */
+const VIEWER_INDEPENDENT_PREFIXES: readonly (readonly string[])[] = [
+    ['lineups', 'public'], // getPublicLineup — raw fetch, no bearer, no credentials
+];
+
+/** True when the query's key starts with a viewer-independent prefix. */
+function isViewerIndependent(query: Query): boolean {
+    const key = query.queryKey;
+    return VIEWER_INDEPENDENT_PREFIXES.some((prefix) => prefix.every((part, i) => key[i] === part));
+}
+
+const VIEWER_PRIVATE_QUERIES = {
+    predicate: (query: Query) => !isAuthMe(query) && !isViewerIndependent(query),
+};
 
 /**
- * Cancel every query except `['auth','me']`, then RESET the ones a mounted
+ * Cancel every query except `['auth','me']` and the viewer-independent public
+ * ones, then RESET the ones a mounted
  * component still observes and REMOVE the rest, and empty the mutation cache,
  * so no response for the previous identity can be read or land afterwards.
  * Reset (not remove) for observed queries is ROK-1811 Codex r2 P1: a subtree
@@ -50,8 +72,8 @@ const EVERY_QUERY_BUT_AUTH_ME = { predicate: (query: Query) => !isAuthMe(query) 
  * awaited gap would let a late response or render land between drop and re-seed.
  */
 export function dropViewerPrivateCaches(queryClient: QueryClient): void {
-    void queryClient.cancelQueries(EVERY_QUERY_BUT_AUTH_ME, { silent: true });
-    const queries = queryClient.getQueryCache().findAll(EVERY_QUERY_BUT_AUTH_ME);
+    void queryClient.cancelQueries(VIEWER_PRIVATE_QUERIES, { silent: true });
+    const queries = queryClient.getQueryCache().findAll(VIEWER_PRIVATE_QUERIES);
     notifyManager.batch(() => {
         for (const query of queries) {
             if (query.getObserversCount() > 0) query.reset();
@@ -60,7 +82,7 @@ export function dropViewerPrivateCaches(queryClient: QueryClient): void {
     });
     queryClient.getMutationCache().clear();
     if (getAccessToken() !== null) {
-        void queryClient.refetchQueries({ ...EVERY_QUERY_BUT_AUTH_ME, type: 'active' });
+        void queryClient.refetchQueries({ ...VIEWER_PRIVATE_QUERIES, type: 'active' });
     }
 }
 
