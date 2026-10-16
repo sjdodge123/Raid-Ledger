@@ -240,11 +240,39 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string }> };
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
       const adjustButton = rowJson.components.find(
         (c) => c.label === 'Adjust Notifications',
       );
       expect(adjustButton).toBeDefined();
+      // ROK-1797: a non-per-game type links its own settings row.
+      expect(adjustButton?.url).toMatch(
+        /\/profile\/notifications\?type=event_reminder#notif-event_reminder$/,
+      );
+    });
+
+    it('links "Adjust Notifications" for a subscribed_game DM to the game page', async () => {
+      const { row } = await service.buildNotificationEmbed(
+        {
+          notificationId: 'notif-sg-1',
+          type: 'subscribed_game',
+          title: 'Test',
+          message: 'Test',
+          payload: { gameId: 77 },
+        },
+        'Community',
+      );
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
+      const adjustButton = rowJson.components.find(
+        (c) => c.label === 'Adjust Notifications',
+      );
+      expect(adjustButton?.url).toMatch(
+        /\/games\/77\?action=notifications&notif=notif-sg-1$/,
+      );
     });
 
     it('should include "View Event" button when eventId is in payload for event_reminder', async () => {
@@ -549,9 +577,8 @@ describe('DiscordNotificationEmbedService — core', () => {
         (c) => c.label === 'Notification Settings',
       );
       expect(settingsButton).toBeDefined();
-      expect(settingsButton?.url).toContain(
-        '/profile/preferences/notifications',
-      );
+      // ROK-1797: the welcome link stays generic, on the canonical path.
+      expect(settingsButton?.url).toMatch(/\/profile\/notifications$/);
     });
 
     it('should include feature fields', async () => {
@@ -589,13 +616,20 @@ describe('DiscordNotificationEmbedService — core', () => {
         'Community',
       );
 
-      const rowJson = row.toJSON() as { components: Array<{ label: string }> };
+      const rowJson = row.toJSON() as {
+        components: Array<{ label: string; url: string }>;
+      };
       const viewAll = rowJson.components.find((c) => c.label === 'View All');
       const adjust = rowJson.components.find(
         (c) => c.label === 'Adjust Notifications',
       );
       expect(viewAll).toBeDefined();
       expect(adjust).toBeDefined();
+      // ROK-1797: the digest deep-links its type's settings row, no notif id.
+      expect(adjust?.url).toMatch(
+        /\/profile\/notifications\?type=event_reminder#notif-event_reminder$/,
+      );
+      expect(viewAll?.url).toMatch(/\/profile\/notifications$/);
     });
   });
 

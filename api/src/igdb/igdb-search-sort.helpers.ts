@@ -2,10 +2,11 @@
  * Post-search sorting: rank results by relevance tier, popularity, community
  * interest, name length, then alphabetically (ROK-1602).
  */
-import { sql, inArray } from 'drizzle-orm';
+import { and, sql, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../drizzle/schema';
 import { gameInterests } from '../drizzle/schema';
+import { INTERESTED_ROW } from './igdb-interest-sources.helpers';
 import type { SearchResult } from './igdb.constants';
 import {
   isAcronymQuery,
@@ -25,7 +26,7 @@ async function fetchInterestCounts(
         cnt: sql<number>`count(distinct ${gameInterests.userId})`,
       })
       .from(gameInterests)
-      .where(inArray(gameInterests.gameId, ids))
+      .where(and(inArray(gameInterests.gameId, ids), INTERESTED_ROW))
       .groupBy(gameInterests.gameId);
     return new Map(counts.map((r) => [r.gameId, Number(r.cnt)]));
   } catch {

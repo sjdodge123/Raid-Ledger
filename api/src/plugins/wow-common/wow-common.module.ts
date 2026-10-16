@@ -6,7 +6,12 @@ import { GuildAccessService } from './guilds/guild-access.service';
 import { GuildEditorGuard } from './guilds/guild-editor.guard';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
+import { GuildRaidsService } from './guilds/guild-raids.service';
 import { GuildEditorsService } from './guilds/guild-editors.service';
+import { GuildEventTagger } from './guilds/guild-event-tagger';
+import { GuildContentController } from './guilds/guild-content.controller';
+import { GuildProfileService } from './guilds/guild-profile.service';
+import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
 import { ForeverConfigController } from './forever-config.controller';
@@ -30,7 +35,10 @@ import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
-import { EXTENSION_POINTS } from '../plugin-host/extension-points';
+import {
+  EVENT_GUILD_TAGGER_KEY,
+  EXTENSION_POINTS,
+} from '../plugin-host/extension-points';
 import { PLUGIN_EVENTS } from '../plugin-host/plugin-manifest.interface';
 import { WOW_COMMON_MANIFEST } from './manifest';
 import { AddonImportController } from './addon-import/addon-import.controller';
@@ -43,6 +51,7 @@ import { WowItemMetaService } from './wowhead-item/wow-item-meta.service';
 import { WOWHEAD_RESOLVER_DEPS } from './wowhead-item/wow-item-meta.resolve';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
+import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
 
@@ -59,6 +68,7 @@ import { CharacterQuestsService } from './character-quests.service';
     AddonImportAdminController,
     CharacterQuestsController,
     GuildsController,
+    GuildContentController,
   ],
   providers: [
     BlizzardService,
@@ -85,11 +95,16 @@ import { CharacterQuestsService } from './character-quests.service';
     { provide: WOWHEAD_RESOLVER_DEPS, useValue: {} },
     ForeverDisplayEquipmentService,
     ForeverDisplayTalentsService,
+    ForeverDisplayLockoutsService,
     CharacterQuestsService,
     GuildAccessService,
     GuildEditorGuard,
     GuildPageService,
+    GuildRaidsService,
     GuildEditorsService,
+    GuildEventTagger,
+    GuildProfileService,
+    GuildAddonsService,
   ],
   exports: [
     BlizzardService,
@@ -116,6 +131,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly dungeonQuestsService: DungeonQuestsService,
     private readonly bossEncountersService: BossEncountersService,
     private readonly identityProvider: WowForeverIdentityProvider,
+    private readonly guildEventTagger: GuildEventTagger,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -252,6 +268,17 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       EXTENSION_POINTS.CRON_REGISTRAR,
       WOW_COMMON_MANIFEST.id,
       this.cronRegistrar,
+    );
+    this.registerGuildTagger();
+  }
+
+  /** ROK-1787: guild editors tag events to their guild (core resolves it). */
+  private registerGuildTagger(): void {
+    this.pluginRegistry.registerAdapter(
+      EXTENSION_POINTS.EVENT_GUILD_TAGGER,
+      EVENT_GUILD_TAGGER_KEY,
+      this.guildEventTagger,
+      { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
   }
 }

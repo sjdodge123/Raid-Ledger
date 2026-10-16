@@ -111,3 +111,14 @@ export function minPlayersLabel(purpose: BindingPurpose): string {
 export function autoCloseLabel(): string {
   return `${AUTO_CLOSE_LABEL} ${AUTO_CLOSE_TRIGGER_NOUN}`;
 }
+
+/**
+ * ROK-1768: the 409 BINDING_QP_GAME_TAKEN sentence, shared by `/bind` and the
+ * admin form so both name the existing Quick Play channel in the same words.
+ *
+ * @param channelLabel - `#name` on the web, `<#channelId>` in Discord.
+ * @returns The refusal sentence naming the channel that already posts.
+ */
+export function quickPlayGameTakenMessage(channelLabel: string): string {
+  return `This game already posts Quick Play to ${channelLabel}. Remove or edit that binding first.`;
+}

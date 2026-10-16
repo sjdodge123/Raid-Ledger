@@ -1,7 +1,8 @@
 /** Pure view helpers for the Pelican admin Servers section (ROK-1094). */
 import type { PelicanServerRowDto, PelicanServerUpdate, PelicanSyncResult } from '@raid-ledger/contract';
+import type { StatusChipTone } from '../../../components/ui/status-chip';
 
-export type ChipTone = 'success' | 'warning' | 'danger' | 'neutral';
+export type ChipTone = StatusChipTone;
 
 export interface StateChipView { tone: ChipTone; label: string; title: string }
 
@@ -46,7 +47,6 @@ export function applyServerPatch(
     return {
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: patch.showOnCalendar }),
-        ...(patch.timezone === undefined ? {} : { timezone: patch.timezone === '' ? null : patch.timezone }),
         ...(patch.gameId === undefined ? {} : {
             gameId: patch.gameId,
             gameName: patch.gameId === null ? null : gameName ?? row.gameName,
@@ -61,7 +61,6 @@ export function restoreServerFields(
     return {
         ...row,
         ...(patch.showOnCalendar === undefined ? {} : { showOnCalendar: prev.showOnCalendar }),
-        ...(patch.timezone === undefined ? {} : { timezone: prev.timezone }),
         ...(patch.gameId === undefined ? {} : { gameId: prev.gameId, gameName: prev.gameName }),
     };
 }

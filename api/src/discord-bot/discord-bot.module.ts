@@ -16,6 +16,8 @@ import { DiscordBotSettingsController } from './discord-bot-settings.controller'
 import { DiscordBotInviteController } from './discord-bot-invite.controller';
 import { LfgBoardSettingsController } from './lfg-board-settings.controller';
 import { WeeklyDigestSettingsController } from './weekly-digest-settings.controller';
+import { JoinPostSettingsController } from './join-post-settings.controller';
+import { JoinPostService } from './join-post/join-post.service';
 import { LineupChannelSettingsController } from './lineup-channel-settings.controller';
 import { DiscordChannelsController } from './discord-channels.controller';
 import { DiscordMemberController } from './discord-member.controller';
@@ -107,6 +109,9 @@ import { LfgInviteDeclineListener } from './listeners/lfg-invite-decline.listene
 import { LfgModule } from '../lfg/lfg.module';
 import { LfgNowStartController } from './lfg-now/lfg-now-start.controller';
 import { ActivityLogModule } from '../activity-log/activity-log.module';
+import { GameRolesSettingsController } from './game-roles/game-roles-settings.controller';
+import { GameRoleReconcileService } from './game-roles/game-role-reconcile.service';
+import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-delete.listener';
 
 @Module({
   imports: [
@@ -135,6 +140,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     DiscordBotInviteController,
     LfgBoardSettingsController,
     WeeklyDigestSettingsController,
+    GameRolesSettingsController,
+    JoinPostSettingsController,
     LineupChannelSettingsController,
     DiscordChannelsController,
     DiscordMemberController,
@@ -147,6 +154,7 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   ],
   providers: [
     DiscordBotService,
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,
@@ -181,6 +189,9 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
     ActivityListener,
     VoiceStateListener,
     GameActivityService,
+    // ROK-1767: auto-maintained per-game Discord roles.
+    GameRoleReconcileService,
+    GameRoleAccountDeleteListener,
     PresenceGameDetectorService,
     VoiceAttendanceService,
     EventAutoExtendService,
@@ -219,6 +230,8 @@ import { ActivityLogModule } from '../activity-log/activity-log.module';
   ],
   exports: [
     DiscordBotService,
+    // ROK-1740: the DEMO join-post fixture reuses the service.
+    JoinPostService,
     DiscordBotClientService,
     DiscordEmbedFactory,
     DiscordEmojiService,

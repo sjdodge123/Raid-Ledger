@@ -1,145 +1,134 @@
 /**
  * Sentry initialization for the React frontend.
- * MUST be imported FIRST in main.tsx — before any other imports.
- * ROK-306: Maintainer telemetry — hardcoded DSN, opt-out via VITE_DISABLE_TELEMETRY.
+ * ROK-306: Maintainer telemetry — hardcoded DSN (lib/sentry-options.ts).
+ * ROK-1779: runtime opt-out. Nothing initialises at import time any more;
+ * bootstrap.ts fetches /system/status and calls `initSentry(telemetryEnabled)`
+ * before the app's modules are imported.
+ * VITE_DISABLE_TELEMETRY=true still disables it at build time. Until init
+ * runs (or when it never does) every Sentry call below is a no-op.
  *
  * ROK-1366: the magic-link fragment strip is this module's FIRST import. ES
  * module evaluation runs an importer's dependencies before its body, so the
- * token leaves the address bar before `Sentry.init` below — whichever chunk
- * the bundler puts this file in (main.tsx's import order alone did not survive
+ * token leaves the address bar before `Sentry.init` — whichever chunk the
+ * bundler puts this file in (main.tsx's import order alone did not survive
  * chunking). magic-link-capture.test.ts pins it.
  */
 import './lib/magic-link-capture';
 import * as Sentry from '@sentry/react';
-import { scrubBreadcrumb } from './lib/sentry-scrub';
+import { buildSentryOptions, replaySampleRates } from './lib/sentry-options';
+import { shouldInitTelemetry } from './lib/telemetry-gate';
 import {
-    scrubErrorEvent,
-    scrubReplayEventUrls,
-    scrubTransactionEvent,
-} from './lib/sentry-scrub-events';
+    bufferCapture,
+    closeBootBuffer,
+    installBootErrorBuffer,
+    type PendingCapture,
+} from './lib/sentry-boot-buffer';
 
-const SENTRY_DSN =
-    'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
+// ROK-1779: errors thrown before the telemetry decision are held, then sent
+// after init (ON) or dropped (OFF) — see lib/sentry-boot-buffer.ts.
+installBootErrorBuffer();
 
-const isProduction = import.meta.env.PROD;
-const telemetryDisabled = import.meta.env.VITE_DISABLE_TELEMETRY === 'true';
-const isLocalhost = ['localhost', '127.0.0.1'].includes(
-    window.location.hostname,
-);
-
+let initialised = false;
+let decided = false;
 // Track transport-level send failures (e.g. 403 from invalid DSN)
 let _lastTransportFailed = false;
 
-const replaysSessionSampleRate = 0;
-const replaysOnErrorSampleRate = isProduction ? 1.0 : 0;
-
-/** Sentry v11's documented equivalent of the v10 `sendDefaultPii: false` default. */
-const PII_KEY_DENY = { deny: ['forwarded', '-ip', 'remote-', 'via', '-user'] };
-const V10_DATA_COLLECTION = {
-    userInfo: false,
-    cookies: false,
-    httpHeaders: { request: PII_KEY_DENY, response: PII_KEY_DENY },
-    httpBodies: [],
-    urlQueryParams: PII_KEY_DENY,
-    genAI: { inputs: false, outputs: false },
-    databaseQueryData: false,
-    queues: false,
-    graphQL: { document: false, variables: false },
-} satisfies Sentry.BrowserOptions['dataCollection'];
-
-if (!telemetryDisabled) {
-    Sentry.init({
-        dsn: SENTRY_DSN,
-        enabled: !isLocalhost,
-        environment: isProduction ? 'production' : 'development',
-        tracesSampleRate: isProduction ? 0.1 : 1.0,
-        replaysSessionSampleRate,
-        replaysOnErrorSampleRate,
-        // Sentry v11 streams spans by default, which turns
-        // beforeSendTransaction into a no-op and would skip the ROK-1366
-        // scrub below. Keep the v10 transaction model until it moves to
-        // beforeSendSpan.
-        traceLifecycle: 'static',
-        // v11 dropped sendDefaultPii; pin the v10 data-collection baseline.
-        dataCollection: V10_DATA_COLLECTION,
-        // v11 defaults this to true; keep v10 issue grouping.
-        attachStacktrace: false,
-        // ROK-1366: the navigation PerformanceEntry keeps the pre-strip URL
-        // (fragment included) — scrub it from spans, replay and replay urls.
-        beforeSendTransaction: (event) => scrubTransactionEvent(event),
-        integrations: [
-            Sentry.browserTracingIntegration(),
-            // Replay is added lazily below (lib/sentry-replay.ts).
-            { name: 'ScrubReplayUrls', processEvent: scrubReplayEventUrls },
-        ],
-        // ROK-1162: drop AbortError noise (TanStack Query cancels in-flight
-        // fetches on unmount / refetch; the cancellation surfaces as
-        // AbortError or DOMException and is not a bug).
-        beforeSend(event) {
-            const exceptionType = event.exception?.values?.[0]?.type;
-            const exceptionValue = event.exception?.values?.[0]?.value;
-            if (
-                exceptionType === 'AbortError' ||
-                (exceptionType === 'DOMException' &&
-                    typeof exceptionValue === 'string' &&
-                    /abort/i.test(exceptionValue))
-            ) {
-                return null;
-            }
-            // ROK-1366 backstop + ROK-1750: scrub a `token=` / poll share
-            // token from the error event's request.url, transaction name and
-            // trace data. The join page's intent `?token=` stays in the
-            // address bar, so it still reaches the Replay Meta href
-            // (TECH-DEBT-BACKLOG.md, 2026-09-27).
-            return scrubErrorEvent(event);
-        },
-        beforeBreadcrumb: (breadcrumb) => scrubBreadcrumb(breadcrumb),
-        initialScope: {
-            tags: {
-                app_version: (window as unknown as { __APP_VERSION__?: string })
-                    .__APP_VERSION__ ?? 'unknown',
-                deployment: window.location.hostname,
-            },
-        },
-        transport: (options) => {
-            const base = Sentry.makeFetchTransport(options);
-            return {
-                send: async (envelope) => {
-                    const result = await base.send(envelope);
-                    if (result.statusCode !== undefined && result.statusCode >= 400) {
-                        _lastTransportFailed = true;
-                    }
-                    return result;
-                },
-                flush: (timeout) => base.flush(timeout),
-            };
-        },
-    });
-    // Replay loads in its own chunk after init, and not at all when no replay
-    // would ever be sampled.
-    if (replaysSessionSampleRate > 0 || replaysOnErrorSampleRate > 0) {
-        // A failed chunk load must not surface as an unhandled rejection that
-        // Sentry itself would report; Replay is best-effort.
-        void import('./lib/sentry-replay')
-            .then((m) => m.addReplayIntegration())
-            .catch((err: unknown) => {
-                console.debug('[sentry] Replay chunk failed to load', err);
-            });
-    }
+/** Replay loads in its own chunk after init, and not at all when no replay would ever be sampled. */
+function loadReplayLazily(): void {
+    const rates = replaySampleRates();
+    if (rates.session <= 0 && rates.onError <= 0) return;
+    // A failed chunk load must not surface as an unhandled rejection that
+    // Sentry itself would report; Replay is best-effort.
+    void import('./lib/sentry-replay')
+        .then((m) => m.addReplayIntegration())
+        .catch((err: unknown) => {
+            console.debug('[sentry] Replay chunk failed to load', err);
+        });
 }
 
 /**
+ * ROK-1779: initialise Sentry when the served flag allows it. Idempotent —
+ * a second call returns the first call's result without re-initialising.
+ * Returns whether telemetry is active.
+ */
+export function initSentry(serverEnabled: boolean | undefined): boolean {
+    if (decided) return initialised;
+    decided = true;
+    const buildDisabled = import.meta.env.VITE_DISABLE_TELEMETRY === 'true';
+    if (!shouldInitTelemetry(serverEnabled, buildDisabled)) {
+        closeBootBuffer(); // OFF: the held startup errors are dropped unsent
+        return false;
+    }
+    initialised = true;
+    Sentry.init(buildSentryOptions(() => { _lastTransportFailed = true; }));
+    closeBootBuffer().forEach(sendPending);
+    loadReplayLazily();
+    return true;
+}
+
+/** Send one startup error held while the decision was pending. */
+function sendPending({ error, source, componentStack }: PendingCapture): void {
+    Sentry.captureException(error, {
+        tags: { 'boot.buffered': source },
+        ...(componentStack === undefined ? {} : { contexts: { react: { componentStack } } }),
+    });
+}
+
+/**
+ * ROK-1779: React 19 root error hooks (main.tsx). Held while the decision is
+ * pending, forwarded once telemetry is ON, dropped when OFF.
+ */
+export function captureReactError(
+    error: unknown,
+    { componentStack }: { componentStack?: string | undefined },
+): void {
+    const stack = componentStack === undefined ? {} : { componentStack };
+    if (bufferCapture({ error, source: 'react-root', ...stack })) return;
+    if (initialised) Sentry.reactErrorHandler()(error, stack);
+}
+
+/**
+ * ROK-1779: Sentry.ErrorBoundary `onError`. The boundary reports by itself
+ * once Sentry is live; before the decision there is no client, so hold it.
+ */
+export function bufferBoundaryError(error: unknown, componentStack: string): void {
+    bufferCapture({ error, source: 'error-boundary', componentStack });
+}
+
+/** Whether `initSentry` has initialised the client. */
+export function isTelemetryActive(): boolean {
+    return initialised;
+}
+
+/** A file sent with a Sentry event (e.g. a feedback screenshot, ROK-1313). */
+export type SentryAttachment = Parameters<Sentry.Scope['addAttachment']>[0];
+
+/**
  * Send a Sentry message and verify delivery succeeded.
- * Returns true if the event was accepted, false if delivery failed or telemetry is disabled.
+ * Returns false only when an initialised client failed to deliver. When
+ * telemetry is off (opted out, or not yet initialised) it sends nothing and
+ * returns true: the caller's own record (e.g. the saved feedback row) is
+ * the delivery, and an opted-out instance must not show a Sentry error.
+ * Attachments go on an isolated `withScope` scope, so they ride this one event
+ * and never leak onto later events from the current scope; with telemetry off
+ * they are never sent.
  */
 export async function captureMessageVerified(
     message: string,
     context: Sentry.CaptureContext,
+    attachments?: readonly SentryAttachment[],
 ): Promise<boolean> {
-    if (telemetryDisabled) return false;
+    if (!initialised) return true;
 
     _lastTransportFailed = false;
-    Sentry.captureMessage(message, context);
+    if (attachments && attachments.length > 0) {
+        Sentry.withScope((scope) => {
+            attachments.forEach((a) => scope.addAttachment(a));
+            Sentry.captureMessage(message, context);
+        });
+    } else {
+        Sentry.captureMessage(message, context);
+    }
     await Sentry.flush(3000);
     return !_lastTransportFailed;
 }

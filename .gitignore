@@ -26,6 +26,7 @@ _bmad-output/
 .windsurf/
 .claude/*
 !.claude/skills/
+!.claude/agents/
 planning-artifacts/
 implementation-artifacts/
 scripts/*

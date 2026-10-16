@@ -4,6 +4,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { IgdbService } from './igdb.service';
 import { IgdbController } from './igdb.controller';
 import { GamesRegistryController } from './games-registry.controller';
+import { GameNotificationMuteController } from './game-notification-mute.controller';
 import { IgdbSyncProcessor } from './igdb-sync.processor';
 import { IGDB_SYNC_QUEUE } from './igdb-sync.constants';
 import { DrizzleModule } from '../drizzle/drizzle.module';
@@ -27,7 +28,11 @@ import { GameTasteModule } from '../game-taste/game-taste.module';
   // ROK-1407: the registry controller is registered FIRST so the literal
   // `GET /games/configured` path is matched ahead of IgdbController's `:id`
   // route family.
-  controllers: [GamesRegistryController, IgdbController],
+  controllers: [
+    GamesRegistryController,
+    IgdbController,
+    GameNotificationMuteController,
+  ],
   providers: [IgdbService, IgdbSyncProcessor],
   exports: [IgdbService],
 })

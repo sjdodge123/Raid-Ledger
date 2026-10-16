@@ -3,13 +3,12 @@
  * The DEMO_MODE fixture the fleet UI test plan seeds before each run: four
  * admin-table rows, a fake unreachable connection, and reset on re-run.
  * ROK-1096: the running+mapped row also gets a start/stop window + nightly
- * restart, and the offline row a schedule its timezone override mismatches.
+ * restart, and the offline row a nightly restart (all crons UTC, ROK-1795).
  * (403 without DEMO_MODE is the shared DemoModeGuard's own spec.)
  */
 import {
   GameServerCalendarResponseSchema,
   PelicanServerListResponseSchema,
-  PelicanServerRowSchema,
 } from '@raid-ledger/contract';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import {
@@ -163,25 +162,18 @@ describe('POST /admin/test/pelican/seed-servers (ROK-1094)', () => {
 });
 
 describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () => {
-  it('seeds calendar schedules: a window + restart markers on the running row, and a fixable tz warning (ROK-1096)', async () => {
+  it('seeds calendar schedules: a window + restart markers on the running row, all UTC (ROK-1096, ROK-1795)', async () => {
     const seeded = await seed();
     const byKind = new Map(seeded.servers.map((s) => [s.kind, s]));
     const running = byKind.get('running_mapped');
-    const mismatched = byKind.get('offline_unmapped');
-    if (!running || !mismatched) throw new Error('seed: kinds missing');
+    const offline = byKind.get('offline_unmapped');
+    if (!running || !offline) throw new Error('seed: kinds missing');
 
-    const rows = await adminRows();
-    const tzView = seeded.servers.map((s) => [
-      s.kind,
-      s.scheduleCount,
-      s.tzMismatch,
-      rows.get(s.id)?.tzMismatch,
-    ]);
-    expect(tzView).toEqual([
-      ['running_mapped', 6, false, false],
-      ['offline_unmapped', 1, true, true],
-      ['unknown_hidden', 0, false, false],
-      ['missing', 0, false, false],
+    expect(seeded.servers.map((s) => [s.kind, s.scheduleCount])).toEqual([
+      ['running_mapped', 6],
+      ['offline_unmapped', 1],
+      ['unknown_hidden', 0],
+      ['missing', 0],
     ]);
     const stored = await testApp.db.select().from(schema.pelicanSchedules);
     expect(
@@ -205,11 +197,10 @@ describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () =>
     expect(kinds).toContain('marker:backup');
     expect(kinds).toContain('window:Midday open');
 
-    const fixed = await testApp.request
-      .patch(`/admin/plugins/pelican/servers/${mismatched.id}`)
-      .set('Authorization', `Bearer ${adminToken}`)
-      .send({ timezone: seeded.tzMismatchFixTimezone });
-    expect(fixed.status).toBe(200);
-    expect(PelicanServerRowSchema.parse(fixed.body).tzMismatch).toBe(false);
+    // The offline row's nightly restart "0 4 * * *" runs at 04:00 UTC.
+    const offlineRuns = stored
+      .filter((r) => r.serverId === offline.id)
+      .map((r) => r.nextRunAt?.toISOString().slice(11));
+    expect(offlineRuns).toEqual(['04:00:00.000Z']);
   });
 });

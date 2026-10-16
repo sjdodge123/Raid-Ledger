@@ -71,6 +71,7 @@ import {
   assertPostsOnFirstHand,
   assertUpgradesOnSecondHand,
 } from '../lfg-board-hands.js';
+import { endSpawnedLfgSession } from '../fixtures-lfg-now.js';
 import { assertComposerPinned } from '../lfg-composer-pin.js';
 import { assertRetiresOnDisable } from '../lfg-board-retire-phase.js';
 import { assertSpawnIndicatorLifecycle } from '../lfg-board-spawn-indicator-phase.js';
@@ -598,6 +599,12 @@ function assertMirrorsCompanionReply(run: Run): Promise<void> {
  * cleanup failure must never replace the test's real failure with its own.
  */
 async function cleanup(run: Run): Promise<void> {
+  // FIRST, while the board and thread still route the post's closing
+  // re-render: end any session a phase spawned (ROK-1619's indicator phase
+  // does) and force-destroy its `⏰ … — Playing now` channel. The reaper would
+  // only do it 30 min later, long after a CI run's API is gone, so skipping
+  // this orphaned one channel per run in the shared guild (INV 2026-10-15).
+  await endSpawnedLfgSession(run.ctx.api, run.game.id, 'lfg-board');
   await withdrawLfgIntent(run.ctx.api, run.game.id);
   if (run.second) await withdrawLfgIntent(run.second.api, run.game.id);
   if (run.third) await withdrawLfgIntent(run.third.api, run.game.id);
@@ -686,7 +693,8 @@ const lfgBoardLifecycle: SmokeTest = {
  * ROK-1619 AC1/AC3 — moved here from `lfm-playing.test.ts`, whose TEXT surface
  * never carries a `+1` (see `lfg-board-spawn-indicator-phase.ts`). Runs AFTER
  * the lifecycle test: its spawn leaves the game non-idle until the session is
- * reaped, and {@link pickIdleGame} skips it for anyone after.
+ * ended — the phase ends it itself, {@link cleanup} again on the failure path —
+ * and {@link pickIdleGame} skips a non-idle game.
  */
 const lfgBoardSpawnIndicator: SmokeTest = {
   name: 'LFG board: the +1 that forms a now-group says so, and drops the mark once it has (ROK-1619)',

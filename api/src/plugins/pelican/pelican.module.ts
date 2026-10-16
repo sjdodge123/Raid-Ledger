@@ -16,7 +16,6 @@ import { PelicanSyncService } from './pelican-sync.service';
 import { PelicanSchedulesRepository } from './pelican-schedules.repository';
 import { PelicanScheduleSyncService } from './pelican-schedule-sync.service';
 import { PelicanStatusService } from './pelican-status.service';
-import { PelicanTzCheckService } from './pelican-tz-check.service';
 import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
 import { PelicanAdapterRegistration } from './pelican-adapters';
@@ -46,7 +45,6 @@ type UninstalledPayload = { slug: string };
     PelicanScheduleSyncService,
     PelicanSyncService,
     PelicanStatusService,
-    PelicanTzCheckService,
     PelicanCronRegistrar,
     PelicanGameServerProvider,
     PelicanAdapterRegistration,

@@ -1,12 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ForeverDisplayEquipmentService } from './forever-display-equipment.service';
 import { ForeverDisplayTalentsService } from './forever-display-talents.service';
+import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { BlizzardCharacterSyncAdapter } from './blizzard-character-sync.adapter';
 import { BlizzardService } from './blizzard.service';
 import { ALL_WOW_GAME_SLUGS } from './manifest';
 
 let adapter: BlizzardCharacterSyncAdapter;
 let talentsResolve: jest.Mock;
+let lockoutsResolve: jest.Mock;
 let mockBlizzardService: {
   fetchCharacterProfile: jest.Mock;
   fetchCharacterSpecializations: jest.Mock;
@@ -22,6 +24,7 @@ async function setupEach() {
     fetchCharacterProfessions: jest.fn(),
   };
   talentsResolve = jest.fn();
+  lockoutsResolve = jest.fn();
   const module: TestingModule = await Test.createTestingModule({
     providers: [
       BlizzardCharacterSyncAdapter,
@@ -33,6 +36,10 @@ async function setupEach() {
       {
         provide: ForeverDisplayTalentsService,
         useValue: { resolve: talentsResolve },
+      },
+      {
+        provide: ForeverDisplayLockoutsService,
+        useValue: { resolve: lockoutsResolve },
       },
     ],
   }).compile();
@@ -247,5 +254,17 @@ describe('BlizzardCharacterSyncAdapter — resolveDisplayTalents (ROK-1744)', ()
     };
     await expect(adapter.resolveDisplayTalents(row)).resolves.toBe(dto);
     expect(talentsResolve).toHaveBeenCalledWith(row);
+  });
+});
+
+describe('BlizzardCharacterSyncAdapter — resolveDisplayLockouts (ROK-1743)', () => {
+  beforeEach(() => setupEach());
+
+  it('delegates to ForeverDisplayLockoutsService', async () => {
+    const dto = { source: 'addon', syncedAt: '', instances: [] };
+    lockoutsResolve.mockResolvedValue(dto);
+    const row = { id: 'c1', gameVariant: 'wow_forever' };
+    await expect(adapter.resolveDisplayLockouts(row)).resolves.toBe(dto);
+    expect(lockoutsResolve).toHaveBeenCalledWith(row);
   });
 });

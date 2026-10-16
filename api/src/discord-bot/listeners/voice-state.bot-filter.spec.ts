@@ -23,6 +23,7 @@ import {
   setupRok1445Harness,
   type Rok1445Harness,
 } from './voice-state.rok-1445.spec-helpers';
+import { VOICE_THRESHOLD_BOT_ALLOWLIST_ENV } from './voice-threshold-count.helpers';
 
 const COD4 = { gameId: 4, gameName: 'Call of Duty 4' };
 const BOUND_GAME = { gameId: 1, gameName: 'Rise of Kingdoms' };
@@ -36,6 +37,20 @@ function occupancy(h: Rok1445Harness): string[] {
   return [...(map.get(CHANNEL_ID) ?? [])].sort();
 }
 
+const SAVED_ENV = {
+  DEMO_MODE: process.env.DEMO_MODE,
+  [VOICE_THRESHOLD_BOT_ALLOWLIST_ENV]:
+    process.env[VOICE_THRESHOLD_BOT_ALLOWLIST_ENV],
+};
+
+/** Undo any ROK-1711 allowlist env a test set. */
+function restoreAllowlistEnv(): void {
+  for (const [key, value] of Object.entries(SAVED_ENV)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+}
+
 describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
   let h: Rok1445Harness;
 
@@ -46,6 +61,7 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
   afterEach(() => {
     h?.teardown();
     jest.useRealTimers();
+    restoreAllowlistEnv();
   });
 
   describe('game-voice-monitor binding', () => {
@@ -83,11 +99,31 @@ describe('ROK-1445 AC9 — bot filter is scoped to counts and rosters', () => {
       expect(h.joinCalls().map((c) => c.memberId)).not.toContain('bot9');
     });
 
+    // ROK-1711: a bot that is NOT allowlisted no longer counts toward a
+    // game bind's threshold, so a bot alone at minPlayers 1 stays below it.
+    it('bot-only channel with a non-allowlisted bot stays below threshold and mints nothing', async () => {
+      h = await setupRok1445Harness(
+        gameBinding({ config: { minPlayers: 1, allowJustChatting: true } }),
+      );
+
+      await h.joinMember({ id: 'bot9', ...BOUND_GAME, bot: true });
+
+      expect(h.mocks.adHocEventService.handleVoiceJoin).not.toHaveBeenCalled();
+      expect(h.gateLines()).toEqual([
+        expect.stringContaining(
+          '[voice-gate] outcome=below-threshold ch=' + CHANNEL_ID,
+        ),
+      ]);
+    });
+
     // ROK-1390: the companion bot alone, its /playing override on the bound
-    // game, minPlayers 1. The bot counts and confirms, so the join reaches the
-    // immediate spawn, where the roster skips it. That return used to be
-    // silent, which hid why the series quick-play smoke never saw an event.
-    it('bot-only channel at threshold with confirmed bound game traces no-human-members and mints nothing', async () => {
+    // game, minPlayers 1. Allowlisted under DEMO_MODE (ROK-1711), the bot
+    // counts and confirms, so the join reaches the immediate spawn, where the
+    // roster skips it. That return used to be silent, which hid why the
+    // series quick-play smoke never saw an event.
+    it('allowlisted bot alone at threshold with confirmed bound game traces no-human-members and mints nothing', async () => {
+      process.env.DEMO_MODE = 'true';
+      process.env[VOICE_THRESHOLD_BOT_ALLOWLIST_ENV] = 'bot9';
       h = await setupRok1445Harness(
         gameBinding({ config: { minPlayers: 1, allowJustChatting: true } }),
       );

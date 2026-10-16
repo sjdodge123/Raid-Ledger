@@ -193,14 +193,11 @@ export async function reassignMiscFks(
   await safeReassignWithUnique(tx, 'characters', 'game_id', loserId, winnerId);
   await safeReassignWithUnique(tx, 'event_types', 'game_id', loserId, winnerId);
   await safeReassign(tx, 'event_plans', 'game_id', loserId, winnerId);
-  // Table may not exist yet (pending migration) — savepoint protects txn
-  await safeReassignWithUnique(
-    tx,
-    'game_interest_suppressions',
-    'game_id',
-    loserId,
-    winnerId,
-  );
+  // Table may not exist yet (pending migration) — savepoint protects txn.
+  // Both are UNIQUE(user_id, game_id): a mute on both sides collapses to one.
+  for (const t of ['game_interest_suppressions', 'game_notification_mutes']) {
+    await safeReassignWithUnique(tx, t, 'game_id', loserId, winnerId);
+  }
   // `games_dedup_audit.canonical_game_id` is a notNull FK with NO `onDelete`,
   // so it RESTRICTs the loser's delete. The row describes a dup group that this
   // merge is dissolving, so it is deleted rather than repointed — repointing to
@@ -399,6 +396,7 @@ function getConflictColumns(
     community_lineup_votes: ['lineup_id', 'user_id'],
     // (user_id, game_id)
     game_interest_suppressions: ['user_id'],
+    game_notification_mutes: ['user_id'], // PK (user_id, game_id)
     // (user_id, game_id, name, realm) OR Forever (game_id, region, lower(name))
     characters: characterUniqueKeyJoin,
     // (game_id, slug)

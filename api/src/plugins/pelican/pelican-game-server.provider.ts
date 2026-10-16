@@ -6,7 +6,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { GameServerProvider } from '../plugin-host/extension-points';
 import { PELICAN_PLUGIN_ID, PELICAN_PROVIDER_LABEL } from './pelican.constants';
-import { PelicanConfigService } from './pelican-config.service';
+import { PelicanClientFactory } from './pelican-client.factory';
 import {
   projectSchedules,
   type ProjectionResult,
@@ -30,7 +30,7 @@ export class PelicanGameServerProvider implements GameServerProvider {
   constructor(
     private readonly repo: PelicanServersRepository,
     private readonly schedules: PelicanSchedulesRepository,
-    private readonly config: PelicanConfigService,
+    private readonly clients: PelicanClientFactory,
   ) {}
 
   /** Windows + markers overlapping `[from, to)` for servable servers (D14). */
@@ -38,13 +38,9 @@ export class PelicanGameServerProvider implements GameServerProvider {
     range: { from: Date; to: Date },
     gameIds?: number[],
   ): Promise<GameServerCalendarItemDto[]> {
-    const [schedules, defaultTimezone] = await Promise.all([
-      this.schedules.listServable(gameIds),
-      this.config.resolveDefaultTimezone(),
-    ]);
+    const schedules = await this.schedules.listServable(gameIds);
     const result = projectSchedules({
       schedules,
-      defaultTimezone,
       range,
       ...(gameIds !== undefined ? { gameIds } : {}),
     });
@@ -52,8 +48,13 @@ export class PelicanGameServerProvider implements GameServerProvider {
     return result.items.map((item) => GameServerCalendarItemSchema.parse(item));
   }
 
-  /** Polled servers that have been checked at least once; never-checked are omitted. */
+  /**
+   * Polled servers that have been checked at least once; never-checked are
+   * omitted. Nothing while unconfigured — the poll stops, so stored rows would
+   * only go stale and read `unknown` (ROK-1776).
+   */
   async getStatuses(gameIds?: number[]): Promise<GameServerStatusDto[]> {
+    if ((await this.clients.connect()) === null) return [];
     const rows = await this.repo.listPollable();
     const wanted = gameIds === undefined ? null : new Set(gameIds);
     const now = new Date();
@@ -68,17 +69,10 @@ export class PelicanGameServerProvider implements GameServerProvider {
 
   /** Ids only — never names, crons or panel payloads. */
   private logProjection(result: ProjectionResult): void {
-    const { truncatedServerIds, tzMismatchServerIds, skipped } = result;
+    const { truncatedServerIds, skipped } = result;
     if (truncatedServerIds.length > 0) {
       this.logger.warn(
         `Pelican projection truncated servers: ${truncatedServerIds.join(', ')}`,
-      );
-    }
-    // debug, not warn: this runs on every member calendar load; the admin
-    // panel already surfaces the mismatch (ROK-1096 review).
-    if (tzMismatchServerIds.length > 0) {
-      this.logger.debug(
-        `Pelican tz mismatch servers: ${tzMismatchServerIds.join(', ')}`,
       );
     }
     for (const s of skipped) {

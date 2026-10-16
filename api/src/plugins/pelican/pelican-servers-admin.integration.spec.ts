@@ -1,13 +1,14 @@
 /**
  * ROK-1094 — Pelican admin servers table against a real database:
  * `GET /admin/plugins/pelican/servers`, `PATCH /admin/plugins/pelican/servers/:id`.
- * Covers the leak-free row shape, the mapping edits (game, Show on calendar,
- * timezone override), the mapping surviving a re-sync (incl. while missing),
+ * Covers the leak-free row shape, the mapping edits (game, Show on calendar;
+ * no timezone since ROK-1795 — Pelican crons are always UTC), the mapping
+ * surviving a re-sync (incl. while missing),
  * the member-facing visibility filter and the guards.
  *
  * Visibility is proven here on `GET /game-servers/status` and the repository
- * filter; the calendar side (projected schedules, ROK-1096) and the admin
- * row's `tzMismatch` are pinned in `pelican-projection.integration.spec.ts`.
+ * filter; the calendar side (projected schedules, ROK-1096) is pinned in
+ * `pelican-projection.integration.spec.ts`.
  */
 import { eq } from 'drizzle-orm';
 import {
@@ -179,11 +180,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
       'synced S1',
     );
     const gameId = testApp.seed.game.id;
-    const mapping = {
-      gameId,
-      showOnCalendar: false,
-      timezone: 'Europe/Berlin',
-    };
+    const mapping = { gameId, showOnCalendar: false };
     expect((await patchServer(listed.id, mapping)).status).toBe(200);
 
     panel.servers = [{ ...S1, name: 'Renamed On Panel' }, S2];
@@ -200,7 +197,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
     expect(gone).toMatchObject(mapping);
 
     const editedWhileMissing = await patchServer(listed.id, {
-      timezone: 'Asia/Tokyo',
+      showOnCalendar: true,
     });
     expect(editedWhileMissing.status).toBe(200);
     expect(editedWhileMissing.body).toMatchObject({ missing: true });
@@ -210,8 +207,7 @@ describe('PATCH /admin/plugins/pelican/servers/:id — re-sync (ROK-1094)', () =
     expect(await reload(listed.id)).toMatchObject({
       missingSince: null,
       gameId,
-      showOnCalendar: false,
-      timezone: 'Asia/Tokyo',
+      showOnCalendar: true,
     });
   });
 });
@@ -222,6 +218,8 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
     const kept = await insertServer(1, { gameId });
     const hidden = await insertServer(2, { gameId });
     const unmapped = await insertServer(3, { gameId });
+    // A configured plugin — unconfigured returns no statuses (ROK-1776).
+    stubPanel(testApp, createFakePanel([]));
     const token = await memberToken(testApp, 'pelicanvisibilitymember');
     expect(await memberStatusKeys(token)).toEqual(
       [kept.id, hidden.id, unmapped.id].map(String).sort(),
@@ -244,25 +242,15 @@ describe('PATCH /admin/plugins/pelican/servers/:id — visibility (ROK-1094)', (
   });
 });
 
-describe('PATCH /admin/plugins/pelican/servers/:id — timezone (ROK-1094)', () => {
-  it('stores a valid IANA timezone, and NULL (inherit) for an empty string', async () => {
+describe('PATCH /admin/plugins/pelican/servers/:id — no timezone (ROK-1795)', () => {
+  it('rejects the removed timezone field with 400 and leaves the row unchanged', async () => {
     const server = await insertServer(1);
-    const set = await patchServer(server.id, { timezone: 'America/Chicago' });
-    expect(set.status).toBe(200);
-    expect(set.body).toMatchObject({ timezone: 'America/Chicago' });
-    expect((await reload(server.id)).timezone).toBe('America/Chicago');
-
-    const cleared = await patchServer(server.id, { timezone: '' });
-    expect(cleared.status).toBe(200);
-    expect(cleared.body).toMatchObject({ timezone: null });
-    expect((await reload(server.id)).timezone).toBeNull();
-  });
-
-  it('rejects an unknown timezone with 400 and leaves the row unchanged', async () => {
-    const server = await insertServer(1, { timezone: 'Europe/Berlin' });
-    const res = await patchServer(server.id, { timezone: 'Mars/Olympus_Mons' });
+    const res = await patchServer(server.id, { timezone: 'America/Chicago' });
     expect(res.status).toBe(400);
-    expect((await reload(server.id)).timezone).toBe('Europe/Berlin');
+    expect(await reload(server.id)).toMatchObject({
+      timezone: null,
+      showOnCalendar: true,
+    });
   });
 });
 
@@ -281,11 +269,10 @@ describe('PATCH /admin/plugins/pelican/servers/:id — rejects (ROK-1094)', () =
   });
 
   it('returns 400 for an empty body and changes nothing', async () => {
-    const server = await insertServer(1, { timezone: 'Europe/Berlin' });
+    const server = await insertServer(1);
     const res = await patchServer(server.id, {});
     expect(res.status).toBe(400);
     expect(await reload(server.id)).toMatchObject({
-      timezone: 'Europe/Berlin',
       showOnCalendar: true,
       gameId: null,
     });

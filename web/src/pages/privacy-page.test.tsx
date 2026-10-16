@@ -48,8 +48,32 @@ describe('PrivacyPage', () => {
         expect(page).toHaveTextContent(`Last updated: ${PRIVACY_LAST_UPDATED}`);
     });
 
-    it('discloses Sentry error reports', () => {
-        expect(renderPage()).toHaveTextContent("sent to the Raid Ledger project's error tracker, Sentry");
+    it('discloses Sentry error reports when the status flag is absent', () => {
+        const page = renderPage();
+        expect(page).toHaveTextContent('Error reports.');
+        expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
+        expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
+        expect(page).toHaveTextContent("Error reports are off unless this site's admins turn them on");
+    });
+
+    it('discloses error reports when the instance reports telemetry on (ROK-1779)', () => {
+        status.current = { telemetryEnabled: true };
+        expect(renderPage()).toHaveTextContent('Error reports.');
+    });
+
+    it('omits error reports when the instance has not opted in to telemetry (ROK-1779)', () => {
+        status.current = { telemetryEnabled: false };
+        const page = renderPage();
+        expect(page).not.toHaveTextContent('Error reports');
+        expect(page).not.toHaveTextContent('Sentry');
+    });
+
+    it('discloses feedback screenshots and page context, and that feedback goes to Sentry (ROK-1313)', () => {
+        const page = renderPage();
+        expect(page).toHaveTextContent(
+            'Feedback you send: your message and, if you add one, a screenshot, plus the page address, your screen size, browser and app version (and, for bug reports, recent browser console logs).',
+        );
+        expect(page).toHaveTextContent('Feedback you send, including any screenshot you attach, also goes to Sentry.');
     });
 
     it('offers the admin-set contact email and the Discord route', () => {
@@ -74,18 +98,23 @@ describe('PrivacyPage', () => {
 
 describe('buildPrivacySections — feature-conditional disclosures', () => {
     const ctx = { community: 'Night Owls', contactEmail: null };
-    const bulletKeys = (features: { calendar: boolean; ai: boolean }) =>
+    const bulletKeys = (features: { calendar: boolean; ai: boolean; telemetry: boolean }) =>
         buildPrivacySections(ctx, features).find((s) => s.id === 'who-else')?.bullets?.map((b) => b.key);
 
     it('drops the Google Calendar section and the Google + AI bullets while those features are off', () => {
-        const ids = buildPrivacySections(ctx, { calendar: false, ai: false }).map((s) => s.id);
+        const ids = buildPrivacySections(ctx, { calendar: false, ai: false, telemetry: true }).map((s) => s.id);
         expect(ids).not.toContain('google-calendar');
-        expect(bulletKeys({ calendar: false, ai: false })).toEqual(['discord', 'errors', 'games']);
+        expect(bulletKeys({ calendar: false, ai: false, telemetry: true })).toEqual(['discord', 'errors', 'games']);
     });
 
     it('keeps them while the features are on', () => {
-        const ids = buildPrivacySections(ctx, { calendar: true, ai: true }).map((s) => s.id);
+        const ids = buildPrivacySections(ctx, { calendar: true, ai: true, telemetry: true }).map((s) => s.id);
         expect(ids).toContain('google-calendar');
-        expect(bulletKeys({ calendar: true, ai: true })).toEqual(['discord', 'google', 'errors', 'ai', 'games']);
+        expect(bulletKeys({ calendar: true, ai: true, telemetry: true }))
+            .toEqual(['discord', 'google', 'errors', 'ai', 'games']);
+    });
+
+    it('drops the errors bullet while telemetry is off (ROK-1779)', () => {
+        expect(bulletKeys({ calendar: true, ai: true, telemetry: false })).toEqual(['discord', 'google', 'ai', 'games']);
     });
 });
