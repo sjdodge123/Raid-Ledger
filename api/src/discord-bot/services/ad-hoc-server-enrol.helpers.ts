@@ -5,7 +5,7 @@
  * unconfirmed by a re-auth (ROK-1802) was counted yet never got a row, so a
  * voice leave made the event look empty. A live event now takes every player
  * the tracker reports for its game, plus the eligible holds, idempotently:
- * a player already open on that server is skipped (no second
+ * a player already open on any server of the game is skipped (no second
  * PARTICIPANT_JOINED, no duplicate row).
  */
 import type { ModuleRef } from '@nestjs/core';
@@ -24,6 +24,7 @@ import {
 } from './ad-hoc-server-presence.effects';
 import {
   hasOpenServerPlayers,
+  listOpenGameServerSteamIds,
   listOpenServerPresence,
   listServerEnrolledEvents,
   type LiveGameEvent,
@@ -87,22 +88,24 @@ export function hasAnyoneToEnrol(deps: EnrolDeps, gameId: number): boolean {
 }
 
 /**
- * Attach every tracked player of `gameId` with no open row on its server to
+ * Attach every tracked player of `gameId` with no open on-server row to
  * `live`. Their holds are dropped: an enrolled player is no longer pending.
- * Codex P2: "open" spans EVERY live event of the game — with two live Quick
- * Plays, a player enrolled in the other one is not copied into `live`.
+ * "Open" is GAME-wide (Codex r2 P2): any live event of the game, any server —
+ * a player who moved servers before the old tracker saw the disconnect keeps
+ * their row (re-attaching would overwrite its server), and a player the
+ * tracker lists on two servers is attached once.
  */
 export async function enrolTracked(
   deps: EnrolDeps,
   live: LiveGameEvent,
   gameId: number,
 ): Promise<void> {
+  const open = new Set(await listOpenGameServerSteamIds(deps.fx.db, gameId));
   for (const [serverId, players] of trackedByServer(deps.reader, gameId)) {
-    const rows = await openServerRows(deps.fx, gameId, serverId);
-    const open = new Set(rows.map((r) => r.steamId));
     for (const pl of players) {
       deps.pending.remove(serverId, pl.steamId);
       if (open.has(pl.steamId)) continue;
+      open.add(pl.steamId);
       await attachServerPlayer(deps.fx, live, serverId, pl);
     }
   }

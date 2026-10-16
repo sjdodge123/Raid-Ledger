@@ -393,7 +393,10 @@ describe('AdHocServerPresenceService — tracker reader resolved through DI (Cod
       ]);
 
   beforeAll(() => {
-    reader = testApp.app.get<ServerPresenceReader>(SERVER_PRESENCE_READER, strict);
+    reader = testApp.app.get<ServerPresenceReader>(
+      SERVER_PRESENCE_READER,
+      strict,
+    );
     service = testApp.app.get(AdHocServerPresenceService, strict);
   });
 

@@ -238,6 +238,22 @@ export async function listOpenServerPresence(
 }
 
 /**
+ * Codex r2 P2: SteamIDs with an open on-server row in ANY live event of the
+ * game, on ANY server — a player who moved servers keeps their enrolment.
+ */
+export async function listOpenGameServerSteamIds(
+  db: Db,
+  gameId: number,
+): Promise<string[]> {
+  const rows = await db
+    .selectDistinct({ steamId: p.steamId })
+    .from(p)
+    .innerJoin(e, eq(p.eventId, e.id))
+    .where(and(liveGameWhere(gameId), eq(p.onServer, true), isNull(p.leftAt)));
+  return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
+}
+
+/**
  * A character line named a Steam-only player: refresh their shown name.
  * Unlinked rows only — a linked row shows the RL user (ROK-1821).
  */

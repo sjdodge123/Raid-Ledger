@@ -18,6 +18,7 @@ import { getEventById } from './ad-hoc-event.helpers';
 import {
   findLiveGameAdHocEvent,
   hasOpenServerPlayers,
+  listOpenGameServerSteamIds,
   listOpenServerPresence,
   listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
@@ -32,6 +33,7 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findLiveGameAdHocEvent: jest.fn(),
   hasOpenServerPlayers: jest.fn(),
+  listOpenGameServerSteamIds: jest.fn(),
   listServerEnrolledEvents: jest.fn(),
   listOpenServerPresence: jest.fn(),
 }));
@@ -83,6 +85,7 @@ beforeEach(() => {
   jest.mocked(findLiveGameAdHocEvent).mockResolvedValue(LIVE);
   jest.mocked(listOpenServerPresence).mockResolvedValue([]);
   jest.mocked(listServerEnrolledEvents).mockResolvedValue([]);
+  jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([]);
   jest.mocked(checkSuppression).mockResolvedValue(null);
 });
 
@@ -104,33 +107,37 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   });
 
   it('a player whose row is already open on that server is not attached again', async () => {
-    jest.mocked(listServerEnrolledEvents).mockResolvedValue([LIVE]);
-    jest
-      .mocked(listOpenServerPresence)
-      .mockResolvedValue([{ steamId: ROK, displayName: 'rok' }]);
+    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined({ eventId: 278, userId: 5 });
     expect(attachServerPlayer).not.toHaveBeenCalled();
   });
 
   it('a player open in ANOTHER live Quick Play of the game is not copied into this one', async () => {
-    const OLDER = { id: 250, channelBindingId: 'b2', adHocStatus: 'live' };
-    jest.mocked(listServerEnrolledEvents).mockResolvedValue([OLDER]);
-    jest
-      .mocked(listOpenServerPresence)
-      .mockImplementation((_db, eventId) =>
-        Promise.resolve(
-          eventId === OLDER.id ? [{ steamId: ROK, displayName: 'rok' }] : [],
-        ),
-      );
+    // The game-wide read spans every live event of game 10, not only `LIVE`.
+    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const svc = serviceWith([ON_SERVER]);
     await svc.onParticipantJoined({ eventId: 278, userId: 5 });
     expect(attachServerPlayer).not.toHaveBeenCalled();
-    expect(listOpenServerPresence).toHaveBeenCalledWith(
+    expect(listOpenGameServerSteamIds).toHaveBeenCalledWith(
       expect.anything(),
-      OLDER.id,
-      1,
+      10,
     );
+  });
+
+  it('a player who moved servers keeps their row: open on server 1, tracked on server 2 (Codex r2 P2)', async () => {
+    jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
+    const moved = { ...ON_SERVER, pelicanServerId: 2 };
+    const svc = serviceWith([moved]);
+    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    // Re-attaching would overwrite the row's pelicanServerId with 2.
+    expect(attachServerPlayer).not.toHaveBeenCalled();
+  });
+
+  it('a player the tracker lists on two servers is attached once', async () => {
+    const svc = serviceWith([ON_SERVER, { ...ON_SERVER, pelicanServerId: 2 }]);
+    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    expect(attachServerPlayer).toHaveBeenCalledTimes(1);
   });
 
   it('a held player left unconfirmed by a re-auth is still enrolled while the tracker reports them', async () => {
