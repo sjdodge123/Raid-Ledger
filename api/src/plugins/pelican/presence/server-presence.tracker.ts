@@ -1,4 +1,7 @@
-import type { GamePresenceEvent } from './presence-events';
+import type {
+  GamePresenceEvent,
+  PresenceCharacterEvent,
+} from './presence-events';
 
 /** A player the tracker considers present. `name` is null until a character line names them. */
 export interface PresentPlayer {
@@ -19,6 +22,8 @@ export function presenceDisplayName(player: PresentPlayer): string {
 interface Entry {
   name: string | null;
   lastSeen: number;
+  /** The character's owner id once a line names it (ROK-1802), else null. */
+  owner: string | null;
 }
 
 /**
@@ -28,8 +33,9 @@ interface Entry {
  * - A handshake (`join`) is PENDING: it is not a player until the next
  *   character line pairs to it (FIFO), so a wrong-password attempt
  *   (`auth-failed`) retracts silently with no joined/left churn.
- * - A character line whose name already belongs to a present player is that
- *   player's respawn, and any `0:0` line is a death — neither leaves nor pairs.
+ * - A character line whose name AND owner id belong to a present player is
+ *   that player's respawn, and any `0:0` line is a death — neither leaves nor
+ *   pairs. The same name from another owner is a new player (ROK-1802).
  * - A `heartbeat` count is trusted: 0 → everyone leaves; fewer than tracked →
  *   the longest-silent leave; more than tracked → still-pending handshakes are
  *   promoted unnamed (oldest first) and any remaining excess sets
@@ -56,7 +62,7 @@ export class ServerPresenceTracker {
       case 'join':
         return this.onJoin(event.steamId, now);
       case 'character':
-        return this.onCharacter(event.name, event.zdoidZero, now);
+        return this.onCharacter(event, now);
       case 'auth-failed':
       case 'leave':
         return this.onLeave(event.steamId);
@@ -95,7 +101,7 @@ export class ServerPresenceTracker {
 
   /** Present with lastSeen 0; an unnamed one queues for the next character line. */
   private addNeverSeen(p: PresentPlayer): void {
-    this.present.set(p.steamId, { name: p.name, lastSeen: 0 });
+    this.present.set(p.steamId, { name: p.name, lastSeen: 0, owner: null });
     if (p.name === null) this.unnamed.push(p.steamId);
   }
 
@@ -107,29 +113,34 @@ export class ServerPresenceTracker {
   }
 
   private onCharacter(
-    name: string,
-    zdoidZero: boolean,
+    event: PresenceCharacterEvent,
     now: number,
   ): PresenceChange[] {
-    const owner = this.findByName(name);
-    if (owner) owner.lastSeen = now;
-    // A death (`0:0`) or a known name's respawn is never a new player.
-    if (owner || zdoidZero) return [];
+    const { name, zdoidZero } = event;
+    const ownerId = zdoidZero ? undefined : event.ownerId;
+    const known = this.findCharacter(name, ownerId);
+    if (known) known.lastSeen = now;
+    // A death (`0:0`) or a known character's respawn is never a new player.
+    if (known || zdoidZero) return [];
+    const owner = ownerId ?? null;
     const pendingId = firstKey(this.pending);
     if (pendingId !== undefined) {
       this.pending.delete(pendingId);
-      this.present.set(pendingId, { name, lastSeen: now });
+      this.present.set(pendingId, { name, lastSeen: now, owner });
       return [{ kind: 'joined', steamId: pendingId, name }];
     }
-    return this.nameOldestUnnamed(name, now);
+    return this.nameOldestUnnamed(name, now, owner);
   }
 
-  private nameOldestUnnamed(name: string, now: number): PresenceChange[] {
+  private nameOldestUnnamed(
+    name: string,
+    now: number,
+    owner: string | null,
+  ): PresenceChange[] {
     const steamId = this.unnamed.shift();
     const entry = steamId === undefined ? undefined : this.present.get(steamId);
     if (steamId === undefined || !entry) return [];
-    entry.name = name;
-    entry.lastSeen = now;
+    Object.assign(entry, { name, lastSeen: now, owner });
     return [{ kind: 'renamed', steamId, name }];
   }
 
@@ -162,7 +173,7 @@ export class ServerPresenceTracker {
     const ids = [...this.pending.keys()].slice(0, n);
     return ids.map((steamId) => {
       this.pending.delete(steamId);
-      this.present.set(steamId, { name: null, lastSeen: now });
+      this.present.set(steamId, { name: null, lastSeen: now, owner: null });
       this.unnamed.push(steamId);
       return { kind: 'joined' as const, steamId, name: null };
     });
@@ -185,11 +196,23 @@ export class ServerPresenceTracker {
     return { kind: 'left', steamId, name: entry.name };
   }
 
-  private findByName(name: string): Entry | undefined {
+  /**
+   * The present player a character line belongs to: same name and, when the
+   * line carries one, same owner id (ROK-1802). A same-named player whose
+   * owner is not yet known (hydrated after a restart) adopts it.
+   */
+  private findCharacter(
+    name: string,
+    ownerId: string | undefined,
+  ): Entry | undefined {
+    let unowned: Entry | undefined;
     for (const entry of this.present.values()) {
-      if (entry.name === name) return entry;
+      if (entry.name !== name) continue;
+      if (ownerId === undefined || entry.owner === ownerId) return entry;
+      if (entry.owner === null) unowned ??= entry;
     }
-    return undefined;
+    if (unowned && ownerId !== undefined) unowned.owner = ownerId;
+    return unowned;
   }
 
   private reset(): void {

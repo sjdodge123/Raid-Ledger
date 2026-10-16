@@ -55,6 +55,7 @@ describe('parseValheimLine — character (ZDOID)', () => {
       kind: 'character',
       name: 'Ragnhild',
       zdoidZero: false,
+      ownerId: '123456789',
       loggedAt: '2026-10-14T00:11:12',
     });
   });
@@ -68,6 +69,7 @@ describe('parseValheimLine — character (ZDOID)', () => {
       kind: 'character',
       name: 'Bjorn',
       zdoidZero: true,
+      ownerId: '0',
       loggedAt: '2026-10-14T02:45:04',
     });
   });
@@ -75,7 +77,12 @@ describe('parseValheimLine — character (ZDOID)', () => {
   it('keeps spaces inside a character name and accepts a negative UID', () => {
     expect(
       parseValheimLine('Got character ZDOID from Old Bjorn : -42:4931'),
-    ).toEqual({ kind: 'character', name: 'Old Bjorn', zdoidZero: false });
+    ).toEqual({
+      kind: 'character',
+      name: 'Old Bjorn',
+      zdoidZero: false,
+      ownerId: '-42',
+    });
   });
 
   it('treats 0:N (N > 0) as a live character, not a death', () => {

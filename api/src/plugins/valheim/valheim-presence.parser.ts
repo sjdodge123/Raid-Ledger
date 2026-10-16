@@ -51,8 +51,10 @@ function matchCharacter(line: string): EventBody | null {
   const m = CHARACTER.exec(line);
   const name = m?.[1]?.trim();
   if (!m || !name) return null;
-  const zdoidZero = m[2] === '0' && m[3] === '0';
-  return { kind: 'character', name, zdoidZero };
+  const owner = m[2];
+  const zdoidZero = owner === '0' && m[3] === '0';
+  const base = { kind: 'character' as const, name, zdoidZero };
+  return owner === undefined ? base : { ...base, ownerId: owner };
 }
 
 function matchServerEvent(line: string): EventBody | null {
