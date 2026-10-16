@@ -52,10 +52,15 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
       ? {}
       : undefined,
   );
+  // No parser is suspended behind an inactive plugin by default (ROK-1819).
+  const getSuspendedAdapterOwner = jest.fn(() => undefined);
   const emit = jest.fn();
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
-    { getAdapter } as unknown as PluginRegistryService,
+    {
+      getAdapter,
+      getSuspendedAdapterOwner,
+    } as unknown as PluginRegistryService,
     { emit } as unknown as EventEmitter2,
   );
   return { controller, listForAdmin, updateMapping, emit };

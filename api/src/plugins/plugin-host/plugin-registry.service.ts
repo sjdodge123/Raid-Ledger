@@ -24,8 +24,13 @@ import {
 import {
   PluginAdapterStore,
   type AdapterRegistrationOptions,
-  type SuspendedAdapterOwner,
 } from './plugin-adapter-store';
+
+/** A suspended adapter's owning plugin, named for an admin hint (ROK-1819). */
+export interface SuspendedAdapterOwner {
+  pluginId: string;
+  pluginName: string;
+}
 
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {

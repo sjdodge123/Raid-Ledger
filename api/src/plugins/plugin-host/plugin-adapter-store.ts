@@ -18,12 +18,6 @@ export interface AdapterRegistrationOptions {
   ownerPluginId?: string;
 }
 
-/** A suspended adapter's owning plugin, named for an admin hint (ROK-1819). */
-export interface SuspendedAdapterOwner {
-  pluginId: string;
-  pluginName: string;
-}
-
 /** Whether a plugin is currently active (defaults to always-active). */
 export type OwnerActivePredicate = (pluginId: string) => boolean;
 
@@ -67,6 +61,7 @@ export class PluginAdapterStore {
    * The plugin whose suspended single adapter sits at `point`/`key`, or
    * undefined when none is suspended there — tells "no adapter for this key"
    * apart from "registered, but its owner plugin is inactive" (ROK-1819).
+   * Several owners at one point/key: the first suspended (insertion order) wins.
    */
   findSuspendedOwner(point: string, key: string): string | undefined {
     for (const [pluginId, entries] of this.suspended) {
