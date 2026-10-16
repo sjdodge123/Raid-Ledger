@@ -9,7 +9,7 @@ import { useGameRegistry } from '../../../hooks/use-game-registry';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { PelicanServerCard, PelicanServerRow, type ServerUpdateHandler } from './pelican-server-row';
 
-const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Last synced'] as const;
+const HEADERS = ['Server', 'Status', 'Game', 'Show on calendar', 'Detect Quick Play', 'Last synced'] as const;
 
 interface TableProps {
     rows: PelicanServerRowDto[];

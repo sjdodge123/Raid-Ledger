@@ -9,7 +9,7 @@
  * AdHocParticipantService is triggered by Discord voice events,
  * not HTTP endpoints. The roster endpoint IS tested via HTTP.
  */
-import { eq, and, isNull } from 'drizzle-orm';
+import { eq, and, isNull, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -289,6 +289,8 @@ describe('Ad-Hoc Events — participant upsert and rejoin', () => {
           schema.adHocParticipants.eventId,
           schema.adHocParticipants.discordUserId,
         ],
+        // ROK-1800: the Discord unique is partial — restate its predicate.
+        targetWhere: sql`${schema.adHocParticipants.discordUserId} IS NOT NULL`,
         set: {
           leftAt: null,
           discordUsername: 'Player1-Updated',

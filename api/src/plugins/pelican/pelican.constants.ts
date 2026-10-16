@@ -28,3 +28,10 @@ export const PELICAN_SCHEDULE_NAME_MAX = 200;
 export const PELICAN_PROJECTION_CAP = 500;
 /** A stored `next_run_at` within this of a cron occurrence counts as one (ROK-1096 D10). */
 export const PELICAN_TZ_TOLERANCE_MS = 60_000;
+/**
+ * Emitted after an admin edit that can change a server's Quick Play detection
+ * eligibility (ROK-1800) — the presence supervisor reconciles at once instead
+ * of waiting for the next status poll.
+ */
+export const PELICAN_PRESENCE_CONFIG_CHANGED =
+  'pelican.presence-config-changed';

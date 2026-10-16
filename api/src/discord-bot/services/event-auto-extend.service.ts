@@ -20,6 +20,7 @@ import {
   SUPPRESSION_WINDOW_EVENTS,
   type SuppressionWindowExtendedPayload,
 } from './suppression-window-events';
+import { countServerOnlyPresence } from './ad-hoc-server-presence.helpers';
 
 /** Look-ahead window: find events ending within the next 5 minutes (ms). */
 const WINDOW_AHEAD_MS = 5 * 60 * 1000;
@@ -162,7 +163,7 @@ export class EventAutoExtendService {
     c: ExtendCandidate,
     config: ExtendConfig,
   ): Promise<void> {
-    const activeCount = this.voiceAttendanceService.getActiveCount(c.id);
+    const activeCount = await this.attendanceCount(c);
     if (activeCount < config.minVoiceMembers) {
       this.logger.debug(
         `Event ${c.id}: ${activeCount} voice members (threshold: ${config.minVoiceMembers}), skip`,
@@ -172,6 +173,17 @@ export class EventAutoExtendService {
     const newEnd = this.computeNewEnd(c, config);
     if (!newEnd) return;
     await this.applyExtension(c, newEnd, activeCount);
+  }
+
+  /**
+   * Voice members, plus (ROK-1800, Codex r2 P1) an ad-hoc event's players who
+   * are on its game server but not in voice — else a server-only Quick Play
+   * is never extended and the reaper ends it while people are still playing.
+   */
+  private async attendanceCount(c: ExtendCandidate): Promise<number> {
+    const voice = this.voiceAttendanceService.getActiveCount(c.id);
+    if (!c.isAdHoc) return voice;
+    return voice + (await countServerOnlyPresence(this.db, c.id));
   }
 
   /** Compute the new extended end time, or null if max overage reached. */

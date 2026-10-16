@@ -1,5 +1,5 @@
 {
-  "id": "970070ab-7a43-46b1-bcb2-eaa24ab87d6f",
+  "id": "380b5154-76ce-4b23-a923-712f2b607e9d",
   "prevId": "6b990ec4-f5d6-4ac8-aa23-f2c2b139565d",
   "version": "7",
   "dialect": "postgresql",
@@ -5437,7 +5437,40 @@
           "name": "discord_user_id",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "steam_id": {
+          "name": "steam_id",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source": {
+          "name": "source",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'discord'"
+        },
+        "in_voice": {
+          "name": "in_voice",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "on_server": {
+          "name": "on_server",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pelican_server_id": {
+          "name": "pelican_server_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "discord_username": {
           "name": "discord_username",
@@ -5496,6 +5529,29 @@
             }
           ],
           "isUnique": true,
+          "where": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "ad_hoc_participants_event_steam_unique": {
+          "name": "ad_hoc_participants_event_steam_unique",
+          "columns": [
+            {
+              "expression": "event_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "steam_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"ad_hoc_participants\".\"steam_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5562,7 +5618,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "ad_hoc_participants_identity_check": {
+          "name": "ad_hoc_participants_identity_check",
+          "value": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL OR \"ad_hoc_participants\".\"steam_id\" IS NOT NULL"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.game_interest_suppressions": {
@@ -11322,31 +11383,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "discord_channel_id": {
-          "name": "discord_channel_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discord_channel_private_ack": {
-          "name": "discord_channel_private_ack",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "discord_channel_set_by": {
-          "name": "discord_channel_set_by",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "discord_channel_set_at": {
-          "name": "discord_channel_set_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -11368,21 +11404,6 @@
           "columns": [
             {
               "expression": "gm_post_updated_by",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "idx_guild_profiles_discord_channel_set_by": {
-          "name": "idx_guild_profiles_discord_channel_set_by",
-          "columns": [
-            {
-              "expression": "discord_channel_set_by",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -11414,19 +11435,6 @@
           "tableTo": "users",
           "columnsFrom": [
             "gm_post_updated_by"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "guild_profiles_discord_channel_set_by_users_id_fk": {
-          "name": "guild_profiles_discord_channel_set_by_users_id_fk",
-          "tableFrom": "guild_profiles",
-          "tableTo": "users",
-          "columnsFrom": [
-            "discord_channel_set_by"
           ],
           "columnsTo": [
             "id"
@@ -12248,6 +12256,13 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
+        },
+        "presence_tracking": {
+          "name": "presence_tracking",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "timezone": {
           "name": "timezone",

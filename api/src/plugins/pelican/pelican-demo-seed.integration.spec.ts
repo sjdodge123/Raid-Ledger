@@ -6,6 +6,7 @@
  * restart, and the offline row a nightly restart (all crons UTC, ROK-1795).
  * (403 without DEMO_MODE is the shared DemoModeGuard's own spec.)
  */
+import { eq } from 'drizzle-orm';
 import {
   GameServerCalendarResponseSchema,
   PelicanServerListResponseSchema,
@@ -202,5 +203,70 @@ describe('POST /admin/test/pelican/seed-servers — schedules (ROK-1096)', () =>
       .filter((r) => r.serverId === offline.id)
       .map((r) => r.nextRunAt?.toISOString().slice(11));
     expect(offlineRuns).toEqual(['04:00:00.000Z']);
+  });
+});
+
+describe('POST /admin/test/pelican/quick-play-fixture (ROK-1800)', () => {
+  const FIXTURE = '/admin/test/pelican/quick-play-fixture';
+
+  it('seeds a per-slot mapped + unmapped pair that a seed-servers reset leaves alone, and deletes it', async () => {
+    const gameId = testApp.seed.game.id;
+    const res = await testApp.request
+      .post(FIXTURE)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slot: 3, gameId });
+    expect(res.status).toBe(200);
+    const fixture = res.body as { mappedId: number; unmappedId: number };
+    const ids = [fixture.mappedId, fixture.unmappedId];
+    await testApp.db
+      .update(schema.pelicanServers)
+      .set({ presenceTracking: true })
+      .where(eq(schema.pelicanServers.id, fixture.mappedId));
+
+    await seed(); // a sibling spec's four-row reset mid-run
+    const kept = await testApp.db.select().from(schema.pelicanServers);
+    expect(kept).toHaveLength(6);
+    expect(
+      kept
+        .filter((r) => ids.includes(r.id))
+        .map((r) => [r.id, r.gameId, r.presenceTracking]),
+    ).toEqual(
+      expect.arrayContaining([
+        [fixture.mappedId, gameId, true],
+        [fixture.unmappedId, null, false],
+      ]),
+    );
+
+    const again = await testApp.request
+      .post(FIXTURE)
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ slot: 3, gameId });
+    expect(again.body).toEqual(fixture); // same rows, switch reset off
+    const [mapped] = await testApp.db
+      .select()
+      .from(schema.pelicanServers)
+      .where(eq(schema.pelicanServers.id, fixture.mappedId));
+    expect(mapped?.presenceTracking).toBe(false);
+
+    const del = await testApp.request
+      .delete(`${FIXTURE}/3`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(del.status).toBe(204);
+    const left = await testApp.db.select().from(schema.pelicanServers);
+    expect(left.filter((r) => ids.includes(r.id))).toEqual([]);
+    expect(left).toHaveLength(4);
+  });
+
+  it('rejects a bad slot or game id with 400', async () => {
+    const results = await Promise.all(
+      [{ slot: 99, gameId: 1 }, { slot: 0 }, { slot: 1.5, gameId: 1 }].map(
+        (body) =>
+          testApp.request
+            .post(FIXTURE)
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send(body),
+      ),
+    );
+    expect(results.map((r) => r.status)).toEqual([400, 400, 400]);
   });
 });

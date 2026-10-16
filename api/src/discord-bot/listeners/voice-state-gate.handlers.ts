@@ -148,8 +148,8 @@ async function checkGameBindingThreshold(
 /**
  * ROK-1415 tolerance + ROK-1417 observability for a null-game monitor: warn
  * once (the inert shape), then arm the delayed spawn at/above threshold or
- * record it inert below. getGameFilteredCount stays untouched — with no bind
- * game nothing can be game-confirmed, so the immediate unanimous path is
+ * record it inert below. getGameFilteredCount is not consulted here — with no
+ * bind game nothing can be game-confirmed, so the immediate unanimous path is
  * unreachable by construction and the DELAYED path is always taken.
  */
 function traceNullGameMonitor(

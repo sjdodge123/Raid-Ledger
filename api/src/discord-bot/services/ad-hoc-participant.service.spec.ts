@@ -113,6 +113,8 @@ describe('AdHocParticipantService', () => {
         totalDurationSeconds: null,
       };
       mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
       jest.setSystemTime(new Date(joinedAt.getTime() + 120_000));
       await service.markLeave(42, 'discord-123');
       expect(mockDb.update).toHaveBeenCalled();
@@ -138,6 +140,8 @@ describe('AdHocParticipantService', () => {
         totalDurationSeconds: 300,
       };
       mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
       await service.markLeave(42, 'discord-123');
       expect(mockDb.update).not.toHaveBeenCalled();
     });
@@ -156,6 +160,8 @@ describe('AdHocParticipantService', () => {
         totalDurationSeconds: 300,
       };
       mockDb.limit.mockResolvedValueOnce([row]);
+      // Codex r2: the leave re-reads the row FOR UPDATE.
+      mockDb.for.mockResolvedValueOnce([row]);
       jest.setSystemTime(new Date(joinedAt.getTime() + 60_000));
       await service.markLeave(42, 'discord-123');
       expect(mockDb.set).toHaveBeenCalledWith(

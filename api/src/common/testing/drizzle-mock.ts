@@ -33,6 +33,7 @@ const CHAIN_METHODS = [
   'groupBy',
   'having',
   '$dynamic',
+  'for',
   'execute',
   'as',
 ] as const;

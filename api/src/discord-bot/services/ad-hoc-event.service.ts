@@ -32,6 +32,7 @@ import {
   type SpawnClearance,
 } from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
+import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
 import {
   buildEventKey,
   findEventKeyForMember,
@@ -259,6 +260,16 @@ export class AdHocEventService implements OnModuleInit {
     return undefined;
   }
 
+  /**
+   * ROK-1800: register a server-born Quick Play under its game's voice binding
+   * so a voice join attaches to it instead of spawning a second event.
+   */
+  adoptEvent(bindingId: string, gameId: number, eventId: number): void {
+    const key = buildEventKey(bindingId, gameId);
+    if (this.activeEvents.has(key)) return;
+    this.activeEvents.set(key, { eventId, memberSet: new Set(), gameId });
+  }
+
   /** Check if any active event exists for a binding. */
   hasAnyActiveEvent(bindingId: string): boolean {
     return this.getActiveBindingEventGameId(bindingId) !== undefined;
@@ -331,7 +342,11 @@ export class AdHocEventService implements OnModuleInit {
       roster.participants,
       roster.activeCount,
     );
-    if (state.memberSet.size === 0) {
+    // ROK-1800: players still on the game server keep the session alive.
+    if (
+      state.memberSet.size === 0 &&
+      !(await hasOpenServerPlayers(this.db, state.eventId))
+    ) {
       await startGracePeriod(
         this.getDeps(),
         state.eventId,

@@ -102,7 +102,8 @@ export async function resolveGameName(
  */
 export async function createAdHocEventRow(
   db: PostgresJsDatabase<typeof schema>,
-  bindingId: string,
+  /** Null for a server-born Quick Play with no voice binding (ROK-1800). */
+  bindingId: string | null,
   binding: { gameId: number | null },
   creatorId: number,
   resolvedGameName?: string,
@@ -140,7 +141,7 @@ function buildAdHocEventValues(
   title: string,
   gameId: number | null,
   creatorId: number,
-  bindingId: string,
+  bindingId: string | null,
   now: Date,
 ): typeof tables.events.$inferInsert {
   return {
