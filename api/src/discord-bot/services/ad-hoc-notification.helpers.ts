@@ -10,6 +10,7 @@ import {
   toQuickPlayGame,
   type EmbedGame,
 } from './embed-game.helpers';
+import { isAnonymousServerRow } from './ad-hoc-anonymous-row.helpers';
 
 /** Participant with active status for embed building. */
 export interface AdHocParticipant {
@@ -24,25 +25,6 @@ export interface AdHocParticipant {
    * its SteamID64. Never rendered by name — counted into `+N on server`.
    */
   anonymousOnServer?: boolean;
-}
-
-/** A stored participant row's identity columns. */
-type ParticipantIdentity = {
-  discordUserId: string | null;
-  discordUsername: string;
-  steamId: string | null;
-};
-
-/**
- * ROK-1801 Q4: ROK-1800 stores an unnamed, unlinked server player with its
- * SteamID64 as `discordUsername`. Such a row must never render by name.
- */
-export function isAnonymousServerRow(row: ParticipantIdentity): boolean {
-  return (
-    row.discordUserId === null &&
-    row.steamId !== null &&
-    row.discordUsername === row.steamId
-  );
 }
 
 /** Dependencies for ad-hoc notification helper functions. */

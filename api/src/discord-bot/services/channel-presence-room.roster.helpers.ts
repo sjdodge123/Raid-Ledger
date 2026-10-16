@@ -19,10 +19,8 @@ import {
   serverOnlySummary,
 } from '../listeners/voice-lobby-server-merge.helpers';
 import type { LobbyGameGroup } from '../listeners/voice-lobby-groups.helpers';
-import {
-  isAnonymousServerRow,
-  type AdHocParticipant,
-} from './ad-hoc-notification.helpers';
+import type { AdHocParticipant } from './ad-hoc-notification.helpers';
+import { isAnonymousServerRow } from './ad-hoc-anonymous-row.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
 import type { RoomGroup } from './channel-presence-room.helpers';
 import type { RoomSource } from './channel-presence-room.snapshot';
