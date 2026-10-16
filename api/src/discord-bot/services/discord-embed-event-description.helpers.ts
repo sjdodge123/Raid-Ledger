@@ -6,6 +6,7 @@
  * trimmed, block-markdown-safe, mention-safe and truncated, so the
  * `View Event` link carries the full text.
  */
+import { atomLength } from './discord-embed-markdown-atoms.helpers';
 import { balanceInlineMarkdown } from './discord-embed-markdown-balance.helpers';
 
 /** The longest excerpt an embed shows before the `…` (Lead default). */
@@ -40,18 +41,32 @@ function containBlocks(text: string): string {
     .replace(/\n(?:[ \t]*\n){2,}/g, '\n\n');
 }
 
+/** UTF-16 length of the code point at `text[i]` (2 for a surrogate pair). */
+function codePointLength(text: string, i: number): number {
+  return (text.codePointAt(i) ?? 0) > 0xffff ? 2 : 1;
+}
+
 /**
  * Cut `text` to at most `max` UTF-16 units (Discord's own measure), ending in
- * `…` when cut. Iterates code points so a surrogate pair is never split.
+ * `…` when cut. Never splits a surrogate pair or an atomic chunk (emoji,
+ * mention, URL — see `atomLength`): the cut backs off to before it. An
+ * excerpt ending on such a chunk gets a space before the `…`, so a bare URL's
+ * link does not absorb it.
  */
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
-  let out = '';
-  for (const ch of text) {
-    if (out.length + ch.length > max - ELLIPSIS.length) break;
-    out += ch;
+  const limit = max - ELLIPSIS.length;
+  let end = 0;
+  let atomEnd = -1;
+  while (end < text.length) {
+    const atom = atomLength(text, end);
+    const next = end + (atom || codePointLength(text, end));
+    if (next > limit - (atom ? 1 : 0)) break;
+    if (atom) atomEnd = next;
+    end = next;
   }
-  return out.trimEnd() + ELLIPSIS;
+  const kept = text.slice(0, end).trimEnd();
+  return `${kept}${kept.length === atomEnd ? ' ' : ''}${ELLIPSIS}`;
 }
 
 /**
@@ -59,9 +74,10 @@ function truncate(text: string, max: number): string {
  *
  * @param description - The event's raw description (may be null/blank).
  * @param max - The longest excerpt to show, `…` included.
- * @returns The trimmed, block-contained, mention-escaped, truncated excerpt,
- *   with any inline delimiter left unmatched escaped so it cannot pair with
- *   the body below; null when the description is absent, whitespace-only, or
+ * @returns The trimmed, block-contained, mention-escaped excerpt — verbatim
+ *   when it fits (the author's own text, rendered as written); when cut, with
+ *   any inline delimiter the cut left unmatched escaped so it cannot pair with
+ *   the body below. Null when the description is absent, whitespace-only, or
  *   `max` leaves no room.
  */
 export function eventDescriptionExcerpt(
@@ -71,6 +87,7 @@ export function eventDescriptionExcerpt(
   const trimmed = description?.trim();
   if (!trimmed || max < 2) return null;
   const safe = escapeMentions(containBlocks(trimmed));
+  if (safe.length <= max) return safe;
   // Escaping an unmatched delimiter adds a `\`; re-cut shorter until it fits.
   for (let budget = max; budget >= 2;) {
     const excerpt = balanceInlineMarkdown(truncate(safe, budget));

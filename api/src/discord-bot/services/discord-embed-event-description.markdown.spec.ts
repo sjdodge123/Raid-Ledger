@@ -9,6 +9,7 @@ import { EMBED_STATES } from '../discord-bot.constants';
 import { buildEventBody } from './discord-embed-event-body.helpers';
 import { eventDescriptionExcerpt } from './discord-embed-event-description.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
+import { balanceInlineMarkdown } from './discord-embed-markdown-balance.helpers';
 
 const ROSTER_WITH_DEPARTED = '**Ana** · ~~**Bo**~~';
 
@@ -80,14 +81,14 @@ describe('eventDescriptionExcerpt — truncated markdown stays inside (ROK-1804)
     expect(out).toBe(`\\\`\\\`\\\`${'a'.repeat(293)}…`);
   });
 
-  it('escapes a dangling backtick in a short description', () => {
-    expect(eventDescriptionExcerpt('run `npm ci first')).toBe(
+  it('the balancer escapes a dangling backtick', () => {
+    expect(balanceInlineMarkdown('run `npm ci first')).toBe(
       'run \\`npm ci first',
     );
   });
 
-  it('escapes only the unmatched half of ***x**', () => {
-    expect(eventDescriptionExcerpt('***x** tail')).toBe('**\\*x** tail');
+  it('the balancer escapes only the unmatched half of ***x**', () => {
+    expect(balanceInlineMarkdown('***x** tail')).toBe('**\\*x** tail');
   });
 
   it('ignores delimiters inside a closed code span', () => {

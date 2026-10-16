@@ -6,8 +6,10 @@
  * `~~` — then closes it, formatting everything in between. Any delimiter left
  * unmatched is backslash-escaped, so it renders as the literal character it
  * already was and can no longer pair with text outside the excerpt. Matched
- * pairs, code spans and existing escapes are left untouched.
+ * pairs, code spans, existing escapes and atomic chunks (emoji, mentions,
+ * timestamps, URLs, link targets — see `atomLength`) are left untouched.
  */
+import { atomLength } from './discord-embed-markdown-atoms.helpers';
 
 type Delimiter = '**' | '__' | '~~' | '||' | '*' | '_';
 
@@ -84,6 +86,11 @@ function step(text: string, i: number, out: string[], open: OpenSet): number {
     return i + 2;
   }
   if (ch === '`') return codeStep(text, i, out);
+  const atom = atomLength(text, i);
+  if (atom > 0) {
+    out.push(text.slice(i, i + atom));
+    return i + atom;
+  }
   const d = delimiterAt(text, i);
   if (d === null) {
     out.push(ch);
