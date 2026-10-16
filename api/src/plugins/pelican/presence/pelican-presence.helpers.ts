@@ -89,6 +89,32 @@ export class ReplayWatermark {
   }
 }
 
+/**
+ * Live console-line counters between two auths (ROK-1821 F2). Counts only —
+ * a raw line never reaches a log. `unparsed` is noise the parser ignored;
+ * `stale` parsed but sat at or behind the replay watermark.
+ */
+export class LiveLineStats {
+  private lines = 0;
+  private applied = 0;
+  private unparsed = 0;
+  private stale = 0;
+
+  record(parsed: boolean, admitted: boolean): void {
+    this.lines += 1;
+    if (!parsed) this.unparsed += 1;
+    else if (admitted) this.applied += 1;
+    else this.stale += 1;
+  }
+
+  /** The summary so far, then start counting afresh. */
+  take(): string {
+    const text = `${this.lines} live lines, ${this.applied} applied, ${this.unparsed} unparsed, ${this.stale} stale`;
+    this.lines = this.applied = this.unparsed = this.stale = 0;
+    return text;
+  }
+}
+
 export function errName(err: unknown): string {
   return err instanceof Error ? err.name : 'unknown error';
 }

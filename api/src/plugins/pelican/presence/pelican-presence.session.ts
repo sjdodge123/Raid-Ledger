@@ -6,6 +6,7 @@ import {
 import type { WingsSocketFactory } from '../pelican-console-socket.helpers';
 import {
   errName,
+  LiveLineStats,
   netPresenceChanges,
   PRESENCE_REPLAY_SETTLE_MS,
   PRESENCE_STOPPED_STATES,
@@ -64,6 +65,7 @@ export class PelicanPresenceSession {
   /** Holds a heartbeat may enrol that the tracker never saw (Codex r4). */
   private readonly held = new UntrackedHeldPlayers();
   private readonly watermark = new ReplayWatermark();
+  private readonly stats = new LiveLineStats();
   private readonly now: () => number;
   private socket: PelicanConsoleSocket | null = null;
   private replay: Buffered[] | null = null;
@@ -116,7 +118,7 @@ export class PelicanPresenceSession {
     this.socket = null;
     this.clearSettle();
     this.replay = null;
-    if (empty) this.emptyAll();
+    if (empty) this.emptyAll('session stopped');
     // Not emptied, but no longer read: the roster readers saw is gone.
     else if (this.tracker.snapshot().length > 0) this.notify();
     await this.idle();
@@ -145,8 +147,17 @@ export class PelicanPresenceSession {
   }
 
   private onLine(line: string): void {
+    const mode = this.replay ? 'replay' : 'live';
     const event = this.parse(line);
-    if (!event || !this.watermark.admit(event.loggedAt)) return;
+    const admitted = event !== null && this.watermark.admit(event.loggedAt);
+    if (mode === 'live') this.stats.record(event !== null, admitted);
+    if (!event || !admitted) return;
+    // ROK-1821 F2: the kind and path only — never the line itself. Live only
+    // (review MINOR 6): a replay already logs its own summary line.
+    if (mode === 'live')
+      this.opts.logger.log(
+        `Presence event for server ${this.serverId}: ${event.kind} (${mode})`,
+      );
     const at = new Date(this.now());
     if (this.replay) {
       this.replay.push({ event, at });
@@ -168,7 +179,8 @@ export class PelicanPresenceSession {
   }
 
   private applyLive(event: GamePresenceEvent, at: Date): void {
-    if (event.kind === 'server-stopping') return this.emptyAll();
+    if (event.kind === 'server-stopping')
+      return this.emptyAll('server-stopping line');
     this.forward(this.tracker.apply(event, at));
     this.forwardHeldLeaves(event);
     if (event.kind !== 'heartbeat') return;
@@ -193,6 +205,11 @@ export class PelicanPresenceSession {
 
   private onReachable(): void {
     this.emptiedOutage = null;
+    if (!this.cold) {
+      this.opts.logger.log(
+        `Presence re-auth for server ${this.serverId}: ${this.stats.take()} since the last auth`,
+      );
+    }
     // A re-auth inside the settle window: the buffered events already
     // advanced the watermark, so apply them now rather than drop them.
     this.flushReplay();
@@ -242,7 +259,7 @@ export class PelicanPresenceSession {
   private onStatus(state: string): void {
     if (!PRESENCE_STOPPED_STATES.has(state)) return;
     this.flushReplay();
-    this.emptyAll();
+    this.emptyAll(`status ${state}`);
   }
 
   private onUnreachable(sinceMs: number): void {
@@ -252,15 +269,20 @@ export class PelicanPresenceSession {
     this.opts.logger.warn(
       `Presence: server ${this.serverId} unreachable past the timeout — emptying`,
     );
-    this.emptyAll();
+    this.emptyAll('unreachable past the timeout');
     // The tracker no longer holds anyone the watermark saw: let the next
     // replay re-admit those lines so players still on the server re-enrol.
     this.watermark.reset();
   }
 
   /** Everyone leaves at once — one `serverEmptied` (see the guard below). */
-  private emptyAll(): void {
-    const hadPlayers = this.tracker.snapshot().length > 0;
+  private emptyAll(reason: string): void {
+    const tracked = this.tracker.snapshot().length;
+    const hadPlayers = tracked > 0;
+    // ROK-1821 F6: say why everyone is leaving (a stop vs a lost stream).
+    this.opts.logger.log(
+      `Presence: emptying server ${this.serverId} (${reason}); ${tracked} tracked`,
+    );
     this.tracker.hydrate([]);
     this.held.clear(); // serverEmptied clears the sink's holds too
     // ROK-1802 Codex r2: a session's first empty runs even with nobody

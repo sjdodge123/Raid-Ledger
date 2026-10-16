@@ -1,9 +1,10 @@
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
+import { serverGuestParticipants, voiceParticipants } from './voice-participants';
 
 interface VoiceRosterProps {
+  /** The whole ad-hoc roster; game-server rows are filtered out here (ROK-1821). */
   participants: AdHocParticipantDto[];
-  activeCount: number;
 }
 
 /**
@@ -80,20 +81,33 @@ function ParticipantGroup({ participants, isActive, label, count }: {
 
 /**
  * VoiceRoster — Real-time voice channel participant list (ROK-293, ROK-530).
+ * Shows voice rows only; the header counts are computed from the same rows,
+ * not the server's all-rows `activeCount` (ROK-1821).
  */
-export function VoiceRoster({ participants, activeCount }: VoiceRosterProps) {
-  const active = participants.filter((p) => !p.leftAt);
-  const left = participants.filter((p) => !!p.leftAt);
+export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
+  const participants = voiceParticipants(allRows);
+  // Review MINOR 4: an open row that left voice (still on the server) is "Left".
+  const active = participants.filter((p) => !p.leftAt && p.inVoice !== false);
+  const left = participants.filter((p) => !!p.leftAt || p.inVoice === false);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Voice Channel Roster</h3>
-        <span className="text-xs text-muted">{activeCount} active / {participants.length} total</span>
+        <span className="text-xs text-muted">{active.length} active / {participants.length} total</span>
       </div>
       <ParticipantGroup participants={active} isActive={true} label="In Channel" count={active.length} />
       <ParticipantGroup participants={left} isActive={false} label="Left" count={left.length} />
       {participants.length === 0 && <p className="text-sm text-muted text-center py-4">No participants yet</p>}
     </div>
   );
+}
+
+/**
+ * ROK-1821 — unlinked players on the event's game server, listed apart from
+ * the voice roster (which stays voice-only). Renders nothing when there are none.
+ */
+export function ServerGuestRoster({ participants: allRows }: VoiceRosterProps) {
+  const guests = serverGuestParticipants(allRows);
+  return <ParticipantGroup participants={guests} isActive={true} label="On the game server" count={guests.length} />;
 }

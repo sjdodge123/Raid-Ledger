@@ -19,6 +19,10 @@ export const AdHocParticipantSchema = z.object({
     steamId: z.string().nullable().optional(),
     /** Where the participant was first seen (ROK-1800). */
     source: z.enum(['discord', 'steam']).optional(),
+    /** Currently in the event's voice channel (ROK-1821). Absent on legacy payloads. */
+    inVoice: z.boolean().optional(),
+    /** Currently on the linked game server (ROK-1821). Absent on legacy payloads. */
+    onServer: z.boolean().optional(),
     /** Display name: Discord username, or character name / SteamID64. */
     discordUsername: z.string(),
     discordAvatarHash: z.string().nullable(),
