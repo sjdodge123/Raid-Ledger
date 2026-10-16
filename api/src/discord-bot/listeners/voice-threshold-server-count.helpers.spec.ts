@@ -5,6 +5,7 @@ import type { GuildMember } from 'discord.js';
 import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import type { VoiceHandlerDeps } from './voice-handler-deps';
 import type { ResolvedBinding } from './voice-state.helpers';
+import { VOICE_THRESHOLD_BOT_ALLOWLIST_ENV } from './voice-threshold-count.helpers';
 import {
   emptyServerRoster,
   type ServerRoster,
@@ -70,5 +71,36 @@ describe('serverAwareGameCount — bots', () => {
     const deps = depsFor([member('bot', true)], { bot: G }, roster);
     const tally = await serverAwareGameCount(deps, 'vc', binding);
     expect(tally.counted).toBe(1);
+  });
+
+  describe('DEMO_MODE allowlist (ROK-1711)', () => {
+    const saved = {
+      demo: process.env.DEMO_MODE,
+      allow: process.env[VOICE_THRESHOLD_BOT_ALLOWLIST_ENV],
+    };
+    afterEach(() => {
+      for (const [k, v] of [
+        ['DEMO_MODE', saved.demo],
+        [VOICE_THRESHOLD_BOT_ALLOWLIST_ENV, saved.allow],
+      ] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+
+    it('counts an allowlisted companion bot toward the game-bound tally', async () => {
+      process.env.DEMO_MODE = 'true';
+      process.env[VOICE_THRESHOLD_BOT_ALLOWLIST_ENV] = 'companion';
+      const deps = depsFor(
+        [member('h1', false), member('companion', true), member('music', true)],
+        { h1: G, companion: G, music: G },
+        null,
+      );
+      await expect(serverAwareGameCount(deps, 'vc', binding)).resolves.toEqual({
+        counted: 2,
+        confirmedCount: 2,
+        allConfirmed: true,
+      });
+    });
   });
 });
