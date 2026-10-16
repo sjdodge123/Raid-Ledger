@@ -18,6 +18,7 @@ import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { ServerPresenceRosterService } from '../services/server-presence-roster.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { DepartureGraceService } from '../services/departure-grace.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -115,6 +116,10 @@ export class VoiceStateListener implements OnApplicationShutdown {
     @Optional()
     @Inject(AdHocParticipantService)
     private readonly adHocParticipants: AdHocParticipantService | null = null,
+    // ROK-1801: game-server presence folded into lobby groups and thresholds.
+    @Optional()
+    @Inject(ServerPresenceRosterService)
+    private readonly serverRoster: ServerPresenceRosterService | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -136,6 +141,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
       // a listener built without them simply records nothing.
       db: this.db,
       adHocParticipantService: this.adHocParticipants,
+      serverRoster: this.serverRoster,
     };
   }
 

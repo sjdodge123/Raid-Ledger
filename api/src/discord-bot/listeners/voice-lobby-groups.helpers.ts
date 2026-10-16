@@ -24,7 +24,12 @@ import {
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
-import type { VoiceHandlerDeps } from './voice-state.handlers';
+import type { VoiceHandlerDeps } from './voice-handler-deps';
+import type { ServerRosterEntry } from '../services/server-presence-roster.helpers';
+import {
+  groupSize,
+  mergeServerPresence,
+} from './voice-lobby-server-merge.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
 
 /** A detected game group inside a general-lobby channel. */
@@ -32,6 +37,13 @@ export interface LobbyGameGroup {
   gameId: number | null;
   gameName: string;
   memberIds: string[];
+  /** ROK-1801: voice members matched to this game's server (rendered 🖥). */
+  onServerIds?: string[];
+  /**
+   * ROK-1801: on this game's server but not in this voice channel. Counted
+   * toward the threshold (`groupSize`); `name: null` = anonymous `+N`.
+   */
+  serverOnly?: ServerRosterEntry[];
 }
 
 /** Groups split by whether they clear the binding's `minPlayers`. */
@@ -96,8 +108,8 @@ export function partitionLobbyGroups(
 ): LobbyGroupSplit {
   const groups = applyNullPolicy(detected, allowJustChatting);
   return {
-    qualifying: groups.filter((g) => g.memberIds.length >= minPlayers),
-    dropped: groups.filter((g) => g.memberIds.length < minPlayers),
+    qualifying: groups.filter((g) => groupSize(g) >= minPlayers),
+    dropped: groups.filter((g) => groupSize(g) < minPlayers),
     minPlayers,
   };
 }
@@ -108,6 +120,24 @@ export function partitionLobbyGroups(
  */
 export function undetectedMemberIds(detected: LobbyGameGroup[]): string[] {
   return detected.find((g) => g.gameId === null)?.memberIds ?? [];
+}
+
+/**
+ * Rich-presence detection with game-server presence merged in (ROK-1801).
+ * No roster source → detection unchanged.
+ */
+async function detectWithServer(
+  deps: VoiceHandlerDeps,
+  members: GuildMember[],
+): Promise<LobbyGameGroup[]> {
+  const detected = await deps.presenceDetector.detectGames(members);
+  if (!deps.serverRoster) return detected;
+  const roster = await deps.serverRoster.snapshot();
+  return mergeServerPresence(
+    detected,
+    members.map((m) => m.id),
+    roster,
+  );
 }
 
 /**
@@ -129,7 +159,7 @@ export async function resolveLobbyGroups(
       minPlayers,
       channelMemberCount: 0,
     };
-  const detected = await deps.presenceDetector.detectGames(members);
+  const detected = await detectWithServer(deps, members);
   return {
     ...partitionLobbyGroups(
       detected,
@@ -157,7 +187,7 @@ export async function lobbyGroupSize(
     binding,
   );
   const group = [...qualifying, ...dropped].find((g) => g.gameId === gameId);
-  return group?.memberIds.length ?? 0;
+  return group ? groupSize(group) : 0;
 }
 
 /** Emit one `group-below-threshold` trace per dropped group (AC10). */
@@ -175,7 +205,7 @@ export function traceDroppedGroups(
         gameId: group.gameId,
         members: partition.channelMemberCount,
         minPlayers: partition.minPlayers,
-        counted: group.memberIds.length,
+        counted: groupSize(group),
       }),
     );
   }

@@ -17,6 +17,7 @@ import type { UsersService } from '../../users/users.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { DiscordBotClientService } from '../discord-bot-client.service';
 import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import type { ServerRosterSource } from '../services/server-presence-roster.helpers';
 
 /** Dependencies bundle for voice state handler functions. */
 export interface VoiceHandlerDeps {
@@ -41,4 +42,7 @@ export interface VoiceHandlerDeps {
   // voice pipeline.
   db?: PostgresJsDatabase<typeof schema> | null;
   adHocParticipantService?: AdHocParticipantService | null;
+  // ROK-1801: who is on each game server. Optional — absent means "no server
+  // presence", so every lobby count is exactly the voice-only one.
+  serverRoster?: ServerRosterSource | null;
 }
