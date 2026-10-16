@@ -162,6 +162,7 @@ function rosterBlock(
   const entries: RosterEntry[] = (event.signupMentions ?? []).map((m) => ({
     name: rosterName(m),
     ...(state === 'live' && m.status === 'left' ? { struck: true } : {}),
+    ...(m.rosterSuffix ? { suffix: m.rosterSuffix } : {}),
   }));
   return formatRoster(entries, rosterCap) || 'Nobody yet';
 }

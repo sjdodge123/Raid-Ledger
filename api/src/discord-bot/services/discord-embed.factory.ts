@@ -59,6 +59,8 @@ export interface EmbedEventData {
     status?: string | null;
     className?: string | null;
     runningLate?: boolean | null;
+    /** ROK-1801: trusted marker after the bold name (` 🖥 on server`). */
+    rosterSuffix?: string | null;
   }> | null;
   // ─── ROK-1460 widening seam ───────────────────────────────
   // `game` is the ONE place the event projection grows. ROK-1447 adds its

@@ -8,7 +8,7 @@
  * than throwing into the voice pipeline.
  */
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
-import { inArray } from 'drizzle-orm';
+import { and, inArray, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -63,7 +63,9 @@ export class ServerPresenceRosterService implements ServerRosterSource {
           username: u.username,
         })
         .from(u)
-        .where(inArray(u.steamId, steamIds)),
+        // A deactivated account is not a linked identity: its SteamID falls
+        // back to the character name / anonymous `+N` like any unlinked one.
+        .where(and(inArray(u.steamId, steamIds), isNull(u.deactivatedAt))),
       this.db
         .select({ id: g.id, name: g.name })
         .from(g)

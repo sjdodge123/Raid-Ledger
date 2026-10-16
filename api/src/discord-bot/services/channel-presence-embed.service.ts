@@ -31,6 +31,7 @@ import {
   Inject,
   Injectable,
   Logger,
+  Optional,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
@@ -41,6 +42,7 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
+import { ServerPresenceRosterService } from './server-presence-roster.service';
 import { ChannelBindingsService } from './channel-bindings.service';
 import { ChannelResolverService } from './channel-resolver.service';
 import { SettingsService } from '../../settings/settings.service';
@@ -176,6 +178,11 @@ export class ChannelPresenceEmbedService
     private readonly channelResolver: ChannelResolverService,
     private readonly settingsService: SettingsService,
     private readonly cronJobService: CronJobService,
+    // ROK-1801: `@Inject` beside `@Optional` — a `T | null` param alone emits
+    // `Object` metadata and silently resolves to null (the ROK-1800 bug).
+    @Optional()
+    @Inject(ServerPresenceRosterService)
+    private readonly serverRoster: ServerPresenceRosterService | null = null,
   ) {}
 
   /** Start the 5 s drain (D5). */
@@ -488,6 +495,7 @@ export class ChannelPresenceEmbedService
       settingsService: this.settingsService,
       clientService: this.clientService,
       presenceDetector: this.presenceDetector,
+      serverRoster: this.serverRoster,
     };
   }
 }

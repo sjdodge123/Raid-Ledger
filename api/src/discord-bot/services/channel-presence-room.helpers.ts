@@ -28,6 +28,11 @@ import {
   undetectedMemberIds,
   type LobbyGameGroup,
 } from '../listeners/voice-lobby-groups.helpers';
+import { mergeServerPresence } from '../listeners/voice-lobby-server-merge.helpers';
+import type {
+  ServerRosterEntry,
+  ServerRosterSource,
+} from './server-presence-roster.helpers';
 import {
   buildEmbedEventData,
   type AdHocNotificationDeps,
@@ -91,6 +96,10 @@ export interface RoomGroup {
    * the group has no game (Just Chatting) or its games row has vanished.
    */
   game: GroupGameArt | null;
+  /** ROK-1801: voice members on this game's server — rendered ` 🖥`. */
+  onServerIds?: string[];
+  /** ROK-1801: on the server, not in this channel — `🖥 on server` / `+N`. */
+  serverOnly?: ServerRosterEntry[];
 }
 
 /** The whole room as one flush sees it (D4). */
@@ -147,6 +156,8 @@ export interface ResolvedRoom {
 export interface RoomResolveDeps extends AdHocNotificationDeps {
   clientService: DiscordBotClientService;
   presenceDetector: PresenceGameDetectorService;
+  /** ROK-1801: game-server roster; absent/null = voice-only card (AC9). */
+  serverRoster?: ServerRosterSource | null;
 }
 
 /** Ad-hoc events under a binding that are still live or in grace (D4). */
@@ -354,7 +365,7 @@ async function toRoomGroup(
       : await buildEmbedEventData(
           deps,
           eventId,
-          await unionParticipants(deps.db, eventId, group.memberIds, source),
+          await unionParticipants(deps.db, eventId, group, source),
         );
   return {
     gameId: group.gameId,
@@ -365,6 +376,8 @@ async function toRoomGroup(
     eventId: eventData ? eventId : null,
     eventData,
     game: (group.gameId === null ? null : source.art.get(group.gameId)) ?? null,
+    ...(group.onServerIds ? { onServerIds: group.onServerIds } : {}),
+    ...(group.serverOnly ? { serverOnly: group.serverOnly } : {}),
   };
 }
 
@@ -389,10 +402,7 @@ async function detectSource(
   members: GuildMember[],
 ): Promise<RoomSource> {
   const names = new Map(members.map((m) => [m.id, m.displayName]));
-  const detected =
-    members.length === 0
-      ? []
-      : await deps.presenceDetector.detectGames(members);
+  const detected = await detectWithServer(deps, members);
   const art = await fetchGameArt(
     deps.db,
     detected.map((g) => g.gameId).filter((id): id is number => id !== null),
@@ -404,4 +414,24 @@ async function detectSource(
     art,
     eventHints: new Map(),
   };
+}
+
+/**
+ * Rich-presence detection, then the game-server merge (ROK-1801 L3 — the same
+ * `mergeServerPresence` the spawn gate runs). An empty room stays empty: the
+ * card only exists for a voice room, and the recap path must still close it.
+ */
+async function detectWithServer(
+  deps: RoomResolveDeps,
+  members: GuildMember[],
+): Promise<LobbyGameGroup[]> {
+  if (members.length === 0) return [];
+  const detected = await deps.presenceDetector.detectGames(members);
+  if (!deps.serverRoster) return detected;
+  const roster = await deps.serverRoster.snapshot();
+  return mergeServerPresence(
+    detected,
+    members.map((m) => m.id),
+    roster,
+  );
 }
