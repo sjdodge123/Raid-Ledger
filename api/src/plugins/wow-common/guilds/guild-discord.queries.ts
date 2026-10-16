@@ -31,6 +31,23 @@ export async function findBoundChannelId(
   return row?.channelId ?? null;
 }
 
+/** The bound channel and whether a private-channel ack is on record, or null. */
+export async function findBinding(
+  db: Db,
+  guildId: number,
+): Promise<{ channelId: string; privateAck: boolean } | null> {
+  const [row] = await db
+    .select({
+      channelId: guildProfiles.discordChannelId,
+      privateAck: guildProfiles.discordChannelPrivateAck,
+    })
+    .from(guildProfiles)
+    .where(eq(guildProfiles.guildId, guildId))
+    .limit(1);
+  if (!row?.channelId) return null;
+  return { channelId: row.channelId, privateAck: row.privateAck };
+}
+
 /** Insert-or-update the binding columns only. */
 export async function saveBinding(
   db: Db,

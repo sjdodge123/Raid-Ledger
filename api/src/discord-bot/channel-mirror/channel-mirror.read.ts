@@ -52,8 +52,62 @@ function toFailedRead(
 }
 
 /**
+ * How long one Discord read may take before the card degrades to
+ * `disconnected`. A request parked in a discord.js rate-limit queue would
+ * otherwise hold every GET for the channel on the cache's shared load. The
+ * timeout resolves like any transient failure, so the cache keeps it for the
+ * normal TTL (the same backoff a 5xx gets).
+ */
+export const CHANNEL_MIRROR_READ_TIMEOUT_MS = 5_000;
+
+class MirrorReadTimeoutError extends Error {
+  constructor() {
+    super(`Discord read timed out after ${CHANNEL_MIRROR_READ_TIMEOUT_MS}ms`);
+  }
+}
+
+/** `work`, or a {@link MirrorReadTimeoutError} rejection once the limit passes. */
+async function withReadTimeout<T>(work: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(
+      () => reject(new MirrorReadTimeoutError()),
+      CHANNEL_MIRROR_READ_TIMEOUT_MS,
+    );
+  });
+  try {
+    return await Promise.race([work, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The fetch and the mapping of a readable channel into the `ok` state. */
+async function readOk(
+  port: MirrorChannelPort,
+  ctx: ChannelMirrorReadContext,
+): Promise<ChannelMirrorRead> {
+  const fetched = await withReadTimeout(
+    port.fetchLatest(CHANNEL_MIRROR_FETCH_LIMIT),
+  );
+  return {
+    state: 'ok',
+    channel: {
+      id: port.id,
+      name: port.name,
+      visibility: port.isPrivate() ? 'private' : 'public',
+      url: buildChannelUrl(ctx.discordGuildId, port.id),
+    },
+    messages: toGuildDiscordMessages(fetched, ctx.discordGuildId),
+    fetchedAt: ctx.now.toISOString(),
+  };
+}
+
+/**
  * Read the bound channel once. Never throws: a missing channel is `gone`, a
- * bot without read permission is `no-access`, and a failed fetch is classified.
+ * bot without read permission is `no-access`, and a failed or slow fetch — or
+ * a message the mapping cannot handle — is classified (`disconnected` unless
+ * Discord said otherwise).
  *
  * @param port - The resolved channel, or null when it is not a text channel
  *   in the bot's server (deleted, or never a text channel).
@@ -67,22 +121,10 @@ export async function readChannelMirror(
   if (!port.botCanRead()) {
     return { state: 'no-access', channelId: port.id, channelName: port.name };
   }
-  let fetched: readonly ChannelMirrorSourceMessage[];
   try {
-    fetched = await port.fetchLatest(CHANNEL_MIRROR_FETCH_LIMIT);
+    return await readOk(port, ctx);
   } catch (error) {
     ctx.onError?.(error);
     return toFailedRead(port, classifyMirrorError(error));
   }
-  return {
-    state: 'ok',
-    channel: {
-      id: port.id,
-      name: port.name,
-      visibility: port.isPrivate() ? 'private' : 'public',
-      url: buildChannelUrl(ctx.discordGuildId, port.id),
-    },
-    messages: toGuildDiscordMessages(fetched, ctx.discordGuildId),
-    fetchedAt: ctx.now.toISOString(),
-  };
 }

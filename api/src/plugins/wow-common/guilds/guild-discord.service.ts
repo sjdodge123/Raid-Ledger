@@ -10,6 +10,7 @@ import type {
   GuildDiscordMirrorDto,
 } from '@raid-ledger/contract';
 import { ChannelMirrorService } from '../../../discord-bot/channel-mirror/channel-mirror.service';
+import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -25,9 +26,12 @@ import {
   linkedDiscordId,
   parseSetChannel,
   pickReadableChannel,
+  requirePrivateAck,
+  withServerName,
 } from './guild-discord.helpers';
 import {
   clearBinding,
+  findBinding,
   findBoundChannelId,
   findDiscordId,
   saveBinding,
@@ -46,6 +50,7 @@ export class GuildDiscordService {
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
     private readonly mirror: ChannelMirrorService,
+    private readonly client: DiscordBotClientService,
   ) {}
 
   /** The card's state; `unset` when no channel is bound. Never a 5xx. */
@@ -63,7 +68,9 @@ export class GuildDiscordService {
   /** Picker options (bot-readable text channels, tagged public/private). */
   async listChannels(guildId: number): Promise<GuildDiscordChannelListDto> {
     await this.assertGuild(guildId);
-    return this.mirror.listReadableTextChannels();
+    const list = this.mirror.listReadableTextChannels();
+    const serverName = this.serverName();
+    return serverName === null ? list : { ...list, serverName };
   }
 
   /** Bind (or rebind) the channel after the D7/D8 checks. */
@@ -116,9 +123,18 @@ export class GuildDiscordService {
   }
 
   private async read(guildId: number): Promise<GuildDiscordMirrorDto> {
-    const channelId = await findBoundChannelId(this.db, guildId);
-    if (channelId === null) return { state: 'unset' };
-    return this.mirror.readLatest(channelId);
+    const binding = await findBinding(this.db, guildId);
+    if (binding === null) return { state: 'unset' };
+    const read = await this.mirror.readLatest(binding.channelId);
+    return withServerName(
+      requirePrivateAck(read, binding.privateAck),
+      this.serverName(),
+    );
+  }
+
+  /** The bot's Discord server name (card copy), or null when the bot is down. */
+  private serverName(): string | null {
+    return this.client.getGuildInfo()?.name ?? null;
   }
 
   private clearCache(previous: string | null, next: string | null): void {

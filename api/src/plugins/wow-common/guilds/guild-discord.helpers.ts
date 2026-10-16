@@ -7,6 +7,7 @@ import {
   SetGuildDiscordChannelSchema,
   type GuildDiscordChannelListDto,
   type GuildDiscordChannelOptionDto,
+  type GuildDiscordMirrorDto,
   type SetGuildDiscordChannelDto,
 } from '@raid-ledger/contract';
 
@@ -62,4 +63,27 @@ export function linkedDiscordId(discordId: string | null): string | null {
 /** 404 unless the guild exists. */
 export function assertFound(found: unknown): void {
   if (!found) throw new NotFoundException('Guild not found');
+}
+
+/**
+ * A channel bound while public and later made private in Discord has no ack
+ * on record, so its content must not reach every guild viewer: `no-access`
+ * (name withheld) until an editor rebinds it with the acknowledgement (D7).
+ */
+export function requirePrivateAck(
+  read: GuildDiscordMirrorDto,
+  privateAck: boolean,
+): GuildDiscordMirrorDto {
+  if (read.state !== 'ok' || privateAck) return read;
+  if (read.channel.visibility !== 'private') return read;
+  return { state: 'no-access', channelId: read.channel.id, channelName: null };
+}
+
+/** Name the bot's Discord server on an `ok` read (card copy); else unchanged. */
+export function withServerName(
+  read: GuildDiscordMirrorDto,
+  serverName: string | null,
+): GuildDiscordMirrorDto {
+  if (read.state !== 'ok' || serverName === null) return read;
+  return { ...read, channel: { ...read.channel, serverName } };
 }

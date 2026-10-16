@@ -13,6 +13,7 @@ import { ChannelMirrorService } from './channel-mirror.service';
 @Module({
   imports: [DiscordBotModule],
   providers: [ChannelMirrorService],
-  exports: [ChannelMirrorService],
+  // DiscordBotModule is re-exported so the guild plugin can name the server.
+  exports: [ChannelMirrorService, DiscordBotModule],
 })
 export class ChannelMirrorModule {}

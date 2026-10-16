@@ -31,10 +31,18 @@ export type GuildDiscordChannelOptionDto = z.infer<
     typeof GuildDiscordChannelOptionSchema
 >;
 
+/**
+ * The bot's Discord server name, for "Latest from the <server> Discord" copy.
+ * Optional (additive): absent when the bot is down or the name is unknown, and
+ * the web falls back to "the community Discord".
+ */
+const ServerNameSchema = z.string().optional();
+
 /** Response of `GET .../discord/channels`; `connected:false` = bot down. */
 export const GuildDiscordChannelListSchema = z.object({
     connected: z.boolean(),
     channels: z.array(GuildDiscordChannelOptionSchema),
+    serverName: ServerNameSchema,
 });
 export type GuildDiscordChannelListDto = z.infer<
     typeof GuildDiscordChannelListSchema
@@ -70,6 +78,7 @@ export type GuildDiscordMessageDto = z.infer<typeof GuildDiscordMessageSchema>;
 /** The bound channel as the card shows it; `url` is built server-side (D12). */
 export const GuildDiscordChannelSchema = GuildDiscordChannelOptionSchema.extend({
     url: z.string(),
+    serverName: ServerNameSchema,
 });
 export type GuildDiscordChannelDto = z.infer<typeof GuildDiscordChannelSchema>;
 

@@ -3,6 +3,7 @@
  */
 import { DiscordAPIError } from 'discord.js';
 import {
+  CHANNEL_MIRROR_READ_TIMEOUT_MS,
   readChannelMirror,
   type MirrorChannelPort,
 } from './channel-mirror.read';
@@ -98,5 +99,58 @@ describe('readChannelMirror (D9 states)', () => {
     const fetchLatest = jest.fn().mockResolvedValue([]);
     await readChannelMirror(port({ fetchLatest }), CTX);
     expect(fetchLatest).toHaveBeenCalledWith(10);
+  });
+});
+
+describe('readChannelMirror never rejects (review MINOR 1 + 2)', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('degrades a message the mapping cannot handle to disconnected', async () => {
+    const onError = jest.fn();
+    const unmappable = {
+      ...sourceMessage(),
+      get content(): string {
+        throw new TypeError('unexpected message shape');
+      },
+    };
+    await expect(
+      readChannelMirror(
+        port({ fetchLatest: () => Promise.resolve([unmappable]) }),
+        { ...CTX, onError },
+      ),
+    ).resolves.toEqual({ state: 'disconnected', channelId: '555' });
+    expect(onError).toHaveBeenCalledWith(expect.any(TypeError));
+  });
+
+  it('degrades a Discord read stuck past the timeout to disconnected', async () => {
+    jest.useFakeTimers();
+    const onError = jest.fn();
+    const stuck = readChannelMirror(
+      port({ fetchLatest: () => new Promise(() => undefined) }),
+      { ...CTX, onError },
+    );
+    await jest.advanceTimersByTimeAsync(CHANNEL_MIRROR_READ_TIMEOUT_MS);
+    const outcome = await Promise.race([stuck, Promise.resolve('still pending')]);
+    expect(outcome).toEqual({ state: 'disconnected', channelId: '555' });
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ message: expect.stringContaining('timed out') }),
+    );
+  });
+
+  it('does not time out a read that answers inside the limit', async () => {
+    jest.useFakeTimers();
+    const slow = readChannelMirror(
+      port({
+        fetchLatest: () =>
+          new Promise((resolve) => {
+            setTimeout(() => resolve([sourceMessage()]), 4_000);
+          }),
+      }),
+      CTX,
+    );
+    await jest.advanceTimersByTimeAsync(4_000);
+    await expect(slow).resolves.toMatchObject({ state: 'ok' });
   });
 });

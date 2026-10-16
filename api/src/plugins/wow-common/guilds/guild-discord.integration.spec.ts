@@ -14,6 +14,7 @@ import { getTestApp, type TestApp } from '../../../common/testing/test-app';
 import { loginAsAdmin } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import { ChannelMirrorService } from '../../../discord-bot/channel-mirror/channel-mirror.service';
+import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
 import type { ChannelMirrorRead } from '../../../discord-bot/channel-mirror/channel-mirror.read';
 import * as schema from '../../../drizzle/schema';
 import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
@@ -157,11 +158,16 @@ const call = (
   return body ? req.send(body) : req;
 };
 
-async function bindDirect(channelId: string, setBy?: number): Promise<void> {
+async function bindDirect(
+  channelId: string,
+  setBy?: number,
+  privateAck = false,
+): Promise<void> {
   await testApp.db.insert(schema.guildProfiles).values({
     guildId,
     discordChannelId: channelId,
     discordChannelSetBy: setBy ?? null,
+    discordChannelPrivateAck: privateAck,
   });
 }
 
@@ -274,6 +280,52 @@ describe('GET mirror states', () => {
     expect(res.body).toEqual({
       state: 'disconnected',
       channelId: UNREADABLE_ID,
+    });
+  });
+});
+
+describe('private channel without an ack on record (review MINOR 3)', () => {
+  it('bound while public, now private → no-access with the name withheld', async () => {
+    await bindDirect(PRIVATE.id);
+    const res = await call('get', '/discord', 'plain');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      state: 'no-access',
+      channelId: PRIVATE.id,
+      channelName: null,
+    });
+  });
+
+  it('private with the ack on record → ok', async () => {
+    await bindDirect(PRIVATE.id, undefined, true);
+    const res = await call('get', '/discord', 'plain');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(READS[PRIVATE.id]);
+  });
+});
+
+describe('server name (review MINOR 5)', () => {
+  beforeEach(() => {
+    jest
+      .spyOn(testApp.app.get(DiscordBotClientService), 'getGuildInfo')
+      .mockReturnValue({ name: 'Keepers HQ', memberCount: 12 });
+  });
+
+  it('the ok read names the bot\'s server', async () => {
+    await bindDirect(PUBLIC.id);
+    const res = await call('get', '/discord', 'plain');
+    expect(res.body).toEqual({
+      ...OK_READ,
+      channel: { ...OK_READ.channel, serverName: 'Keepers HQ' },
+    });
+  });
+
+  it('the channel list names the bot\'s server', async () => {
+    const res = await call('get', '/discord/channels', 'editor');
+    expect(res.body).toEqual({
+      connected: true,
+      channels: [PUBLIC, PRIVATE],
+      serverName: 'Keepers HQ',
     });
   });
 });
