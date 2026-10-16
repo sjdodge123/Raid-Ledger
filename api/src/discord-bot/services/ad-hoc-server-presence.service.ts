@@ -155,8 +155,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     if (!this.pending.hasUnconfirmed(id)) return Promise.resolve();
     return this.serial(source.gameId, async () => {
       const rows = await this.openRows(source);
-      const enrolled = new Set(rows.map((r) => r.steamId)).size;
-      if (!this.pending.reconcile(id, count - enrolled)) return;
+      const enrolled = new Set(rows.map((r) => r.steamId));
+      // Codex r3: an enrolled player's own hold must not take a cover slot.
+      for (const steamId of enrolled) this.pending.remove(id, steamId);
+      if (!this.pending.reconcile(id, count - enrolled.size)) return;
       if (!(await this.adHocEventService.isEnabled())) return;
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (live) return this.attachWithPending(live, source, []);
