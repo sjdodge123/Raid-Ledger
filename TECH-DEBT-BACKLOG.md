@@ -2754,3 +2754,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-16 — fix/rok-1711-voice-bots-minplayers (resolution note)
 
 - **[resolved]** The 2026-09-01 rok-1445 entry "`getGameFilteredCount` counts bot members" (`voice-state.handlers.ts:270`) is fixed by ROK-1711: bots are skipped in `voice-threshold-count.helpers.ts` unless DEMO_MODE-allowlisted (`VOICE_THRESHOLD_BOT_ALLOWLIST`).
+
+### 2026-10-16 — fleet env slot-1 (surfaced during the ROK-1808 test plan)
+
+- **low** `rl-infra/` fleet ingress (traefik in front of each env's allinone nginx) — fleet envs don't receive `X-Forwarded-Proto: https`, so nginx's `$csp_upgrade` map (`nginx/monolith.conf.template:26`) and Express's `req.secure` both see plain HTTP on `https://slot-N.gamernight.net`. Evidence 2026-10-16: prod's `/` response carries `upgrade-insecure-requests` and slot-1's doesn't; the ROK-1808 login-state cookie is Secure on prod's path but not on slot-1. Pre-existing fleet config, not app code. Fleet envs diverge from prod on HTTPS-only behaviour (CSP upgrade, Secure cookies keyed on `req.secure`). Suggested: have the fleet ingress set `X-Forwarded-Proto: https` (traefik `forwardedHeaders` / a headers middleware) for slot hosts.
