@@ -5,10 +5,8 @@
  */
 import { JwtService } from '@nestjs/jwt';
 import type Redis from 'ioredis';
-import {
-  TokenBlocklistService,
-  nextBlockStamp,
-} from './token-blocklist.service';
+import { TokenBlocklistService } from './token-blocklist.service';
+import { mockRedisEval } from '../common/testing/redis-mock';
 import { issuedAtFor, signAccessToken } from './access-token-mint.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
@@ -22,11 +20,7 @@ function build() {
       return Promise.resolve('OK');
     }),
     get: jest.fn((key: string) => Promise.resolve(store.get(key) ?? null)),
-    eval: jest.fn((_s: string, _n: number, key: string, now: string) => {
-      const stamp = nextBlockStamp(store.get(key) ?? null, Number(now));
-      store.set(key, String(stamp));
-      return Promise.resolve(stamp);
-    }),
+    eval: jest.fn(mockRedisEval(store, new Map<string, number>())),
   };
   const blocklist = new TokenBlocklistService(redis as unknown as Redis);
   const jwt = new JwtService({ secret: 'test-secret' });
@@ -94,5 +88,32 @@ describe('ROK-1810 Codex r2 — a second block in the same second', () => {
     expect(await t.blocklist.isBlocked(CLAIMS.sub, between)).toBe(true);
     const after = iatOf(t.jwt, await signAccessToken(t, CLAIMS));
     expect(await t.blocklist.isBlocked(CLAIMS.sub, after)).toBe(false);
+  });
+});
+
+describe('ROK-1810 Codex r3 — impersonation vs a same-second block of either id', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  const IMP = { ...CLAIMS, impersonatedBy: 99 };
+
+  it('target blocked, raised impersonation token, admin blocked same second → revoked', async () => {
+    const t = build();
+    await t.blocklist.blockUser(CLAIMS.sub);
+    const iat = iatOf(t.jwt, await signAccessToken(t, IMP));
+    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
+    await t.blocklist.blockUser(99);
+    expect({ adminBlockCovers: await t.blocklist.isBlocked(99, iat) }).toEqual({
+      adminBlockCovers: true,
+    });
+  });
+
+  it('a token minted after both blocks survives both checks', async () => {
+    const t = build();
+    await t.blocklist.blockUser(CLAIMS.sub);
+    await t.blocklist.blockUser(99);
+    const iat = iatOf(t.jwt, await signAccessToken(t, IMP));
+    expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
+    expect(await t.blocklist.isBlocked(99, iat)).toBe(false);
   });
 });

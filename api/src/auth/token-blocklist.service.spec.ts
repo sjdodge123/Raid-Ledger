@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import {
+  BLOCK_SEQ_KEY,
   BLOCK_USER_SCRIPT,
   TokenBlocklistService,
   nextBlockStamp,
@@ -41,13 +42,14 @@ describe('TokenBlocklistService', () => {
 
       expect(mockRedis.eval).toHaveBeenCalledWith(
         BLOCK_USER_SCRIPT,
-        1,
+        2,
         'jwt_block:42',
+        BLOCK_SEQ_KEY,
         expect.any(String),
         '86400',
       );
 
-      const now = Number(mockRedis.eval.mock.calls[0]?.[3]);
+      const now = Number(mockRedis.eval.mock.calls[0]?.[4]);
       expect(now).toBeGreaterThanOrEqual(before);
       expect(now).toBeLessThanOrEqual(after);
     });
@@ -57,8 +59,9 @@ describe('TokenBlocklistService', () => {
 
       expect(mockRedis.eval).toHaveBeenCalledWith(
         BLOCK_USER_SCRIPT,
-        1,
+        2,
         'jwt_block:1',
+        BLOCK_SEQ_KEY,
         expect.any(String),
         '86400',
       );
@@ -139,16 +142,25 @@ describe('ROK-1810 TokenBlocklistService blockUser result + minIatFor', () => {
 
 describe('ROK-1810 nextBlockStamp — the monotonic block rule', () => {
   it('is now with no previous stamp (or a garbage one)', () => {
-    expect(nextBlockStamp(null, 1792152000)).toBe(1792152000);
-    expect(nextBlockStamp('junk', 1792152000)).toBe(1792152000);
+    expect(nextBlockStamp(null, null, 1792152000)).toBe(1792152000);
+    expect(nextBlockStamp('junk', 'junk', 1792152000)).toBe(1792152000);
   });
 
   it('is previous + 1 when a block already holds this second or later', () => {
-    expect(nextBlockStamp('1792152000', 1792152000)).toBe(1792152001);
-    expect(nextBlockStamp('1792152003', 1792152000)).toBe(1792152004);
+    expect(nextBlockStamp('1792152000', null, 1792152000)).toBe(1792152001);
+    expect(nextBlockStamp('1792152003', null, 1792152000)).toBe(1792152004);
   });
 
   it('is now once the clock has passed the previous stamp', () => {
-    expect(nextBlockStamp('1792151990', 1792152000)).toBe(1792152000);
+    expect(nextBlockStamp('1792151990', '1792151995', 1792152000)).toBe(
+      1792152000,
+    );
+  });
+
+  it('Codex r3: is sequence + 1 when ANOTHER user was blocked this second', () => {
+    expect(nextBlockStamp(null, '1792152000', 1792152000)).toBe(1792152001);
+    expect(nextBlockStamp('1792152000', '1792152002', 1792152000)).toBe(
+      1792152003,
+    );
   });
 });

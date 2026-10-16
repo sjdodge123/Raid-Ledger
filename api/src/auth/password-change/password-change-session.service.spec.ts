@@ -21,7 +21,7 @@ function build(blockSucceeds = true) {
     }),
   };
   const blocklist = {
-    // Mirrors TokenBlocklistService: stamps floor(now); floor = stamp + 1.
+    // Mirrors TokenBlocklistService with no prior block: stamps floor(now); floor = stamp + 1.
     blockUser: jest.fn(() => {
       calls.push('blockUser');
       if (blockSucceeds) blockedAt = Math.floor(Date.now() / 1000);

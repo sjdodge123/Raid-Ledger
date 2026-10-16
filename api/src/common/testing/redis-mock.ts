@@ -61,18 +61,22 @@ function mockRedisSet(
  * ROK-1810: EVAL for the scripts the codebase runs, by their JS twins. An
  * unknown script throws, so a new Lua call cannot silently no-op in tests.
  */
-function mockRedisEval(
+export function mockRedisEval(
   store: Map<string, string>,
   expiries: Map<string, number>,
 ) {
   return (script: string, _numKeys: number, ...args: string[]) => {
-    const [key, now, ttl] = args;
-    if (script !== BLOCK_USER_SCRIPT || !key || !now || !ttl) {
+    const [key, seqKey, now, ttl] = args;
+    if (script !== BLOCK_USER_SCRIPT || !key || !seqKey || !now || !ttl) {
       return Promise.reject(new Error('redis-mock: unsupported EVAL script'));
     }
-    const stamp = nextBlockStamp(store.get(key) ?? null, Number(now));
-    store.set(key, String(stamp));
-    expiries.set(key, Date.now() + Number(ttl) * 1000);
+    const previous = store.get(key) ?? null;
+    const sequence = store.get(seqKey) ?? null;
+    const stamp = nextBlockStamp(previous, sequence, Number(now));
+    for (const k of [key, seqKey]) {
+      store.set(k, String(stamp));
+      expiries.set(k, Date.now() + Number(ttl) * 1000);
+    }
     return Promise.resolve(stamp);
   };
 }
