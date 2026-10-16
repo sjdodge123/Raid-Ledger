@@ -26,6 +26,13 @@ const character = (name: string, zdoidZero = false): GamePresenceEvent => ({
   name,
   zdoidZero,
 });
+/** A live character line carrying its ZDOID owner id (ROK-1802). */
+const characterOf = (name: string, ownerId: string): GamePresenceEvent => ({
+  kind: 'character',
+  name,
+  zdoidZero: false,
+  ownerId,
+});
 const heartbeat = (count: number): GamePresenceEvent => ({
   kind: 'heartbeat',
   count,
@@ -99,6 +106,57 @@ describe('ServerPresenceTracker — death and respawn', () => {
   it('a 0:0 line never pairs to a pending handshake', () => {
     expect(run(tracker, [join(B), character('Ghost', true)])).toEqual([]);
     expect(tracker.snapshot()).toEqual([]);
+  });
+});
+
+describe('ServerPresenceTracker — duplicate character names (ROK-1802)', () => {
+  it('a second player sharing a name is promoted from their own handshake', () => {
+    run(tracker, [join(A), characterOf('Bjorn', '111'), join(B)]);
+    expect(run(tracker, [characterOf('Bjorn', '222')], 10)).toEqual([
+      { kind: 'joined', steamId: B, name: 'Bjorn' },
+    ]);
+    expect(tracker.snapshot()).toEqual([
+      { steamId: A, name: 'Bjorn' },
+      { steamId: B, name: 'Bjorn' },
+    ]);
+  });
+
+  it('each same-named player respawns as themselves, never consuming a handshake', () => {
+    run(tracker, [
+      join(A),
+      characterOf('Bjorn', '111'),
+      join(B),
+      characterOf('Bjorn', '222'),
+      join(C),
+    ]);
+    const respawns = [characterOf('Bjorn', '222'), characterOf('Bjorn', '111')];
+    expect(run(tracker, respawns, 10)).toEqual([]);
+    expect(run(tracker, [characterOf('Freya', '333')], 20)).toEqual([
+      { kind: 'joined', steamId: C, name: 'Freya' },
+    ]);
+  });
+
+  it('a hydrated player adopts the owner id of their first respawn line', () => {
+    tracker.hydrate([{ steamId: A, name: 'Bjorn' }]);
+    run(tracker, [join(B)]);
+    expect(run(tracker, [characterOf('Bjorn', '111')], 10)).toEqual([]);
+    expect(run(tracker, [characterOf('Bjorn', '222')], 20)).toEqual([
+      { kind: 'joined', steamId: B, name: 'Bjorn' },
+    ]);
+  });
+});
+
+describe('ServerPresenceTracker — a repeat handshake rebinds the owner (ROK-1802 Codex P2)', () => {
+  it('a reconnect whose disconnect was missed respawns as itself, never taking a stranger’s handshake', () => {
+    run(tracker, [join(A), characterOf('Bjorn', '111')]);
+    // A's disconnect is lost in a socket outage; A logs back in (new owner),
+    // and B's handshake is pending behind it.
+    run(tracker, [join(A), join(B)], 10);
+    expect(run(tracker, [characterOf('Bjorn', '333')], 20)).toEqual([]);
+    expect(run(tracker, [characterOf('Bjorn', '333')], 30)).toEqual([]);
+    expect(run(tracker, [characterOf('Freya', '444')], 40)).toEqual([
+      { kind: 'joined', steamId: B, name: 'Freya' },
+    ]);
   });
 });
 

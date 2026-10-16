@@ -3,6 +3,7 @@
  * broadcast, embed refresh, grace once a server leave empties the event, and
  * the spawn announcement. Split from AdHocServerPresenceService (file size).
  */
+import { Logger } from '@nestjs/common';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
@@ -16,10 +17,16 @@ import type { AdHocNotificationService } from './ad-hoc-notification.service';
 import type { AdHocParticipantService } from './ad-hoc-participant.service';
 import type { ChannelBindingsService } from './channel-bindings.service';
 import { startGracePeriod } from './ad-hoc-event.handlers';
-import { getEventById, resolveGameName } from './ad-hoc-event.helpers';
+import {
+  getEventById,
+  resolveGameName,
+  restoreFromGracePeriod,
+} from './ad-hoc-event.helpers';
+import { signupLinkedServerPlayer } from './ad-hoc-server-signup.helpers';
 import { spawnRoster } from './ad-hoc-server-spawn.helpers';
 import {
   listOnServerSteamIds,
+  resolveSteamIdentity,
   type GameQuickPlayBinding,
   type LiveGameEvent,
   type SteamIdentity,
@@ -34,6 +41,8 @@ export interface PresenceEffectsDeps {
   gracePeriodQueue: AdHocGracePeriodQueueService;
   gateway: AdHocEventsGateway;
 }
+
+const logger = new Logger('AdHocServerPresence');
 
 export interface SpawnPlan {
   source: ServerPresenceSource;
@@ -124,4 +133,34 @@ export async function announceServerSpawn(
   }
   deps.gateway.emitStatusChange(eventId, 'live');
   await emitServerRoster(deps, eventId);
+}
+
+/**
+ * Join the game's live event; a returning player lifts the grace period. A
+ * failed attendance signup (ROK-1802) is logged, never allowed to skip the
+ * grace cancel or lose the rest of a drain — presence comes first.
+ */
+export async function attachServerPlayer(
+  deps: PresenceEffectsDeps,
+  live: LiveGameEvent,
+  pelicanServerId: number,
+  player: ServerPresencePlayer,
+): Promise<void> {
+  const identity = await resolveSteamIdentity(deps.db, player.steamId);
+  const userId = identity?.userId ?? null;
+  await deps.participantService.addServerParticipant(live.id, {
+    steamId: player.steamId,
+    displayName: player.displayName,
+    userId,
+    pelicanServerId,
+  });
+  await deps.gracePeriodQueue.cancel(live.id);
+  if (await restoreFromGracePeriod(deps.db, live.id))
+    deps.gateway.emitStatusChange(live.id, 'live');
+  try {
+    await signupLinkedServerPlayer(deps.db, live.id, userId);
+  } catch (err) {
+    logger.warn(`Server-player signup for event ${live.id} failed: ${err}`);
+  }
+  await refreshLive(deps, live);
 }

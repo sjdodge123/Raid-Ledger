@@ -30,7 +30,11 @@ export interface VoiceHandlerDeps {
   gameActivityService: GameActivityService;
   usersService: UsersService;
   adHocEventsGateway: AdHocEventsGateway;
-  voiceGameTracker: Map<string, { gameName: string; userId: number }>;
+  // ROK-1805: `gameId` is the identity; `gameName` only labels play time.
+  voiceGameTracker: Map<
+    string,
+    { gameId: number; gameName: string; userId: number }
+  >;
   userChannelMap: Map<string, string>;
   channelMembers: Map<string, Set<string>>;
   // ROK-1446 D6: the one live message per bound lobby channel. Every hook that

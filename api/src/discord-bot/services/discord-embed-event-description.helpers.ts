@@ -6,7 +6,10 @@
  * trimmed, block-markdown-safe, mention-safe and truncated, so the
  * `View Event` link carries the full text.
  */
-import { atomLength } from './discord-embed-markdown-atoms.helpers';
+import {
+  atomLength,
+  endsInBareUrl,
+} from './discord-embed-markdown-atoms.helpers';
 import { balanceInlineMarkdown } from './discord-embed-markdown-balance.helpers';
 
 /** The longest excerpt an embed shows before the `…` (Lead default). */
@@ -50,8 +53,9 @@ function codePointLength(text: string, i: number): number {
  * Cut `text` to at most `max` UTF-16 units (Discord's own measure), ending in
  * `…` when cut. Never splits a surrogate pair or an atomic chunk (emoji,
  * mention, URL — see `atomLength`): the cut backs off to before it. An
- * excerpt ending on such a chunk gets a space before the `…`, so a bare URL's
- * link does not absorb it.
+ * excerpt ending on such a chunk, or anywhere in a bare URL's run (a trailing
+ * `_` or `)` included — ROK-1806), gets a space before the `…`, so Discord's
+ * autolink does not absorb it.
  */
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -66,7 +70,8 @@ function truncate(text: string, max: number): string {
     end = next;
   }
   const kept = text.slice(0, end).trimEnd();
-  return `${kept}${kept.length === atomEnd ? ' ' : ''}${ELLIPSIS}`;
+  const separate = kept.length === atomEnd || endsInBareUrl(kept);
+  return `${kept}${separate ? ' ' : ''}${ELLIPSIS}`;
 }
 
 /**
@@ -74,10 +79,11 @@ function truncate(text: string, max: number): string {
  *
  * @param description - The event's raw description (may be null/blank).
  * @param max - The longest excerpt to show, `…` included.
- * @returns The trimmed, block-contained, mention-escaped excerpt — verbatim
- *   when it fits (the author's own text, rendered as written); when cut, with
- *   any inline delimiter the cut left unmatched escaped so it cannot pair with
- *   the body below. Null when the description is absent, whitespace-only, or
+ * @returns The trimmed, block-contained, mention-escaped excerpt, with any
+ *   inline delimiter left unmatched — by the author (`~~Bring flasks`, an
+ *   unclosed ``` fence) or by the cut — escaped so it cannot pair with the
+ *   body below (ROK-1806). Balanced text, URLs, emoji and mentions stay
+ *   byte-identical. Null when the description is absent, whitespace-only, or
  *   `max` leaves no room.
  */
 export function eventDescriptionExcerpt(
@@ -87,8 +93,8 @@ export function eventDescriptionExcerpt(
   const trimmed = description?.trim();
   if (!trimmed || max < 2) return null;
   const safe = escapeMentions(containBlocks(trimmed));
-  if (safe.length <= max) return safe;
-  // Escaping an unmatched delimiter adds a `\`; re-cut shorter until it fits.
+  // Untruncated text is balanced too (ROK-1806). Escaping an unmatched
+  // delimiter adds a `\`; re-cut shorter until it fits.
   for (let budget = max; budget >= 2;) {
     const excerpt = balanceInlineMarkdown(truncate(safe, budget));
     if (excerpt.length <= max) return excerpt;

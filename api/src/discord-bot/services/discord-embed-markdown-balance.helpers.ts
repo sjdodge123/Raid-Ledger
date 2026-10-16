@@ -30,6 +30,31 @@ function isSpace(ch: string | undefined): boolean {
   return ch === undefined || /\s/.test(ch);
 }
 
+function isWord(ch: string | undefined): boolean {
+  return ch !== undefined && /\w/.test(ch);
+}
+
+/**
+ * Whether `d` at `text[i]` can open / close a span. A single `*` / `_` opens
+ * before, and closes after, a non-space; a single `_` inside a word
+ * (`snake_case`) is never emphasis in Discord (its `\b_…_\b` rule), so it is
+ * neither — and is left as written (ROK-1806).
+ */
+function flanking(
+  text: string,
+  i: number,
+  d: Delimiter,
+): { canOpen: boolean; canClose: boolean } {
+  if (!FLANKED.has(d)) return { canOpen: true, canClose: true };
+  const before = text[i - 1];
+  const after = text[i + d.length];
+  const intraword = d === '_';
+  return {
+    canOpen: !isSpace(after) && !(intraword && isWord(before)),
+    canClose: !isSpace(before) && !(intraword && isWord(after)),
+  };
+}
+
 function delimiterAt(text: string, i: number): Delimiter | null {
   return DELIMITERS.find((d) => text.startsWith(d, i)) ?? null;
 }
@@ -72,11 +97,15 @@ function delimiterStep(
   out.push(d);
   const at = out.length - 1;
   const openAt = open.get(d);
-  const flanked = FLANKED.has(d);
-  const canOpen = !flanked || !isSpace(text[i + d.length]);
-  const canClose = !flanked || !isSpace(text[i - 1]);
+  const { canOpen, canClose } = flanking(text, i, d);
   if (openAt !== undefined && canClose) open.delete(d);
   else if (openAt === undefined && canOpen) open.set(d, at);
+}
+
+/** ROK-1806 — a run at `text[j]` that closes a span already open. */
+function closesOpen(text: string, j: number, open: OpenSet): boolean {
+  const d = delimiterAt(text, j);
+  return d !== null && open.has(d) && flanking(text, j, d).canClose;
 }
 
 function step(text: string, i: number, out: string[], open: OpenSet): number {
@@ -86,7 +115,7 @@ function step(text: string, i: number, out: string[], open: OpenSet): number {
     return i + 2;
   }
   if (ch === '`') return codeStep(text, i, out);
-  const atom = atomLength(text, i);
+  const atom = atomLength(text, i, (j) => closesOpen(text, j, open));
   if (atom > 0) {
     out.push(text.slice(i, i + atom));
     return i + atom;

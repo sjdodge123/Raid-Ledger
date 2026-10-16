@@ -14,6 +14,12 @@
  * rich presence says; deactivated users are not linked. Any lookup failure
  * returns 0 so the held player's threshold check never rejects.
  *
+ * Monitors only, by design (ROK-1805, review MINOR 4): general-lobby rooms
+ * are NOT tallied here. A lobby merges server players into its own per-game
+ * groups and spawns through the `SERVER_PRESENCE_EVENTS.CHANGED` re-evaluation
+ * (`voice-state-server-presence.handlers.ts`); counting its voice members here
+ * too would let the server path mint a second event for the same people.
+ *
  * Resolved lazily through `ModuleRef` so this provider can live in the
  * global `AdHocServerPresenceModule` without touching `DiscordBotModule`.
  */
