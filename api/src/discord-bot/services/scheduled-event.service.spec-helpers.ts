@@ -136,6 +136,8 @@ function buildScheduledEventProviders(
       useValue: {
         isConnected: jest.fn().mockReturnValue(true),
         getGuild: jest.fn().mockReturnValue(mockGuild),
+        // ROK-1818: null keeps the embed-only sweep out of these SE-pass specs.
+        getGuildId: jest.fn().mockReturnValue(null),
       },
     },
     {

@@ -103,10 +103,28 @@ export async function findEmbedOnlyCompletionCandidates(
 }
 
 /**
+ * One `cron-complete` enqueue; a rejection is logged, not thrown, so one
+ * event's failure never stops the rest of the pass (ROK-944).
+ */
+async function enqueueCronComplete(
+  queue: EmbedSyncEnqueuer | null,
+  id: number,
+  warn: (message: string) => void,
+): Promise<boolean> {
+  if (!queue) return false;
+  try {
+    await queue.enqueue(id, 'cron-complete');
+    return true;
+  } catch (err) {
+    warn(`Embed-sync enqueue failed for event ${id}: ${errText(err)}`);
+    return false;
+  }
+}
+
+/**
  * Enqueue a `cron-complete` embed sync for every embed-only candidate of the
  * guild. Never throws: a fault here must not fail the completion cron.
- * Returns the ids handed to the queue (`EmbedSyncQueueService.enqueue` logs
- * and swallows its own failures, so it never rejects).
+ * Returns the ids the queue accepted.
  */
 export async function sweepEmbedOnlyCompletions(
   db: PostgresJsDatabase<typeof schema>,
@@ -116,8 +134,11 @@ export async function sweepEmbedOnlyCompletions(
 ): Promise<number[]> {
   try {
     const ids = await findEmbedOnlyCompletionCandidates(db, query);
-    for (const id of ids) await queue.enqueue(id, 'cron-complete');
-    return ids;
+    const enqueued: number[] = [];
+    for (const id of ids) {
+      if (await enqueueCronComplete(queue, id, warn)) enqueued.push(id);
+    }
+    return enqueued;
   } catch (err) {
     warn(`Embed-only completion sweep failed: ${errText(err)}`);
     return [];
@@ -147,7 +168,7 @@ export async function completeAndSweep(
     client,
     completeOne,
     afterEach: async (id) => {
-      await queue?.enqueue(id, 'cron-complete');
+      await enqueueCronComplete(queue, id, warn);
     },
   });
   if (!queue) return run;
