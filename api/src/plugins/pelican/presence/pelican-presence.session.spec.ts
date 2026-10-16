@@ -349,10 +349,10 @@ describe('players the sink held before this session (ROK-1802 Codex r4)', () => 
   it('a held player a heartbeat covered reports their disconnect line', async () => {
     const h = harness([], okCredentials, [A]);
     await h.connect();
-    expect(h.sink.heldPresence).toHaveBeenCalledWith(SRC);
     await h.live([beat(1, 1)]); // covers A: the sink may enrol them
     await h.live([line({ kind: 'leave', steamId: 'A', loggedAt: T(2) })]);
     expect(h.sink.playerLeft.mock.calls).toEqual(left('A'));
+    expect(h.sink.heldPresence).toHaveBeenCalledWith(SRC);
   });
 
   it('a zero-count heartbeat reports every tracked and held player gone', async () => {
