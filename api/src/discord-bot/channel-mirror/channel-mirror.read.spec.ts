@@ -3,7 +3,6 @@
  */
 import { DiscordAPIError } from 'discord.js';
 import {
-  CHANNEL_MIRROR_READ_TIMEOUT_MS,
   readChannelMirror,
   type MirrorChannelPort,
 } from './channel-mirror.read';
@@ -102,6 +101,9 @@ describe('readChannelMirror (D9 states)', () => {
   });
 });
 
+/** The documented limit, as a literal so the spec does not trust the code under test. */
+const READ_TIMEOUT_MS = 5_000;
+
 describe('readChannelMirror never rejects (review MINOR 1 + 2)', () => {
   afterEach(() => {
     jest.useRealTimers();
@@ -131,7 +133,7 @@ describe('readChannelMirror never rejects (review MINOR 1 + 2)', () => {
       port({ fetchLatest: () => new Promise(() => undefined) }),
       { ...CTX, onError },
     );
-    await jest.advanceTimersByTimeAsync(CHANNEL_MIRROR_READ_TIMEOUT_MS);
+    await jest.advanceTimersByTimeAsync(READ_TIMEOUT_MS);
     const outcome = await Promise.race([
       stuck,
       Promise.resolve('still pending'),
