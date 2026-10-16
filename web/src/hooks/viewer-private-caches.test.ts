@@ -109,4 +109,10 @@ describe('ROK-1811: dropViewerPrivateCaches', () => {
         expect(qc.getQueryData(['lineups', 'public', 'abc'])).toEqual({ title: 'shared' });
         expect(qc.getQueryData(['lineups', 'detail', 5])).toBeUndefined();
     });
+
+    it('ROK-1811 Codex r5 P2: a public poll-share preview survives a drop', () => {
+        qc.setQueryData(['poll-share', 'preview', 'tok'], { title: 'poll' });
+        dropViewerPrivateCaches(qc);
+        expect(qc.getQueryData(['poll-share', 'preview', 'tok'])).toEqual({ title: 'poll' });
+    });
 });

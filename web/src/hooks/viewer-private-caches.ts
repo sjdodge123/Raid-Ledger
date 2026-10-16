@@ -43,6 +43,7 @@ function isAuthMe(query: Query): boolean {
 const VIEWER_INDEPENDENT_PREFIXES: readonly (readonly string[])[] = [
     ['lineups', 'public'], // getPublicLineup — raw fetch, no bearer, no credentials
     ['system', 'status'], // getSystemStatus — raw fetch, no bearer; unguarded, viewer-free route (Codex r4 P2b)
+    ['poll-share', 'preview'], // getPollSharePreview — un-authed `public` route, same card for every viewer (Codex r5 P2)
 ];
 
 /** True when the query's key starts with a viewer-independent prefix. */
