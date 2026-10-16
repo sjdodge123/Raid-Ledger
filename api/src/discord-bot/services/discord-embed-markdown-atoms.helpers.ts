@@ -40,7 +40,11 @@ function trimmedUrlLength(url: string): number {
   return URL_ONLY.exec(url)?.[0].length ?? 0;
 }
 
-/** Where the bare URL at `text[i]` (`len` long) ends, given open closers. */
+/**
+ * Where the bare URL at `text[i]` (`len` long) ends, given open closers. A
+ * mixed run (`_**`, `__~~`, `_||`) is split into same-character sub-runs, each
+ * tested as a closer in order, so `file_**` still yields its `**` (Codex r2 P2).
+ */
 function urlLength(
   text: string,
   i: number,
@@ -50,7 +54,7 @@ function urlLength(
   const start = i + (SCHEME.exec(text.slice(i, i + len))?.[0].length ?? len);
   for (let j = start; j < i + len; j++) {
     const ch = text[j] ?? '';
-    const runStart = RUN_CHAR.test(ch) && !RUN_CHAR.test(text[j - 1] ?? '');
+    const runStart = RUN_CHAR.test(ch) && text[j - 1] !== ch;
     if (runStart && closes(j)) return trimmedUrlLength(text.slice(i, j));
   }
   return len;
