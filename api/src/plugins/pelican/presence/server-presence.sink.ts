@@ -43,6 +43,12 @@ export interface ServerPresenceSink {
    * open server participant of this source.
    */
   serverEmptied(source: ServerPresenceSource): Promise<void>;
+  /**
+   * A live heartbeat's player count (ROK-1802) — the only evidence that a
+   * player held before this session, whose join fell outside the replay, is
+   * still on the server.
+   */
+  playerCount(source: ServerPresenceSource, count: number): Promise<void>;
   /** Server players still open on this source's live Quick Play, for rehydrating after an API restart. */
   openPresence(source: ServerPresenceSource): Promise<ServerPresencePlayer[]>;
 }

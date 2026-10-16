@@ -53,6 +53,7 @@ export function fakeSink(open: ServerPresencePlayer[] = []) {
     playerJoined: jest.fn(ok),
     playerRenamed: jest.fn(ok),
     playerLeft: jest.fn(ok),
+    playerCount: jest.fn(ok),
     serverEmptied: jest.fn(() => {
       current = [];
       return Promise.resolve();

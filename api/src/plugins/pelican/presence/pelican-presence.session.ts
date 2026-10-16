@@ -162,6 +162,9 @@ export class PelicanPresenceSession {
   private applyLive(event: GamePresenceEvent, at: Date): void {
     if (event.kind === 'server-stopping') return this.emptyAll();
     this.forward(this.tracker.apply(event, at));
+    if (event.kind !== 'heartbeat') return;
+    const { count } = event;
+    this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
   }
 
   private onReachable(): void {

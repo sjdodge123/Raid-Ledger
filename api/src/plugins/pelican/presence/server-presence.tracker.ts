@@ -107,7 +107,9 @@ export class ServerPresenceTracker {
 
   private onJoin(steamId: string, now: number): PresenceChange[] {
     const entry = this.present.get(steamId);
-    if (entry) entry.lastSeen = now;
+    // A repeat handshake is a new login (its disconnect went unseen), with a
+    // new ZDOID owner: unbind the old one so its next character line rebinds.
+    if (entry) Object.assign(entry, { lastSeen: now, owner: null });
     else if (!this.pending.has(steamId)) this.pending.set(steamId, now);
     return [];
   }
@@ -199,19 +201,24 @@ export class ServerPresenceTracker {
   /**
    * The present player a character line belongs to: same name and, when the
    * line carries one, same owner id (ROK-1802). A same-named player whose
-   * owner is not yet known (hydrated after a restart) adopts it.
+   * owner is not yet known (hydrated after a restart, or re-handshaken)
+   * adopts it when no other present player has that name.
    */
   private findCharacter(
     name: string,
     ownerId: string | undefined,
   ): Entry | undefined {
     let unowned: Entry | undefined;
+    let named = 0;
     for (const entry of this.present.values()) {
       if (entry.name !== name) continue;
       if (ownerId === undefined || entry.owner === ownerId) return entry;
+      named += 1;
       if (entry.owner === null) unowned ??= entry;
     }
-    if (unowned && ownerId !== undefined) unowned.owner = ownerId;
+    // Adopt only an unambiguous name: binding the wrong same-named player
+    // would mis-pair every later respawn of the right one (review MINOR).
+    if (unowned && ownerId !== undefined && named === 1) unowned.owner = ownerId;
     return unowned;
   }
 

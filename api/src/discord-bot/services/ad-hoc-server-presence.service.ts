@@ -21,16 +21,16 @@ import {
 } from './ad-hoc-spawn-clearance';
 import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
 import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
-import { getEventById, restoreFromGracePeriod } from './ad-hoc-event.helpers';
+import { getEventById } from './ad-hoc-event.helpers';
 import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot.constants';
 import { PendingServerPlayers } from './ad-hoc-server-pending';
-import { signupLinkedServerPlayer } from './ad-hoc-server-signup.helpers';
 import {
   afterServerLeave,
   announceServerSpawn,
+  attachServerPlayer,
   closeServerRows,
   refreshLive,
   type PresenceEffectsDeps,
@@ -49,7 +49,6 @@ import {
   listOpenServerPresence,
   listServerEnrolledEvents,
   renameSteamOnlyRow,
-  resolveSteamIdentity,
   serverSourceKey,
   type LiveGameEvent,
 } from './ad-hoc-server-presence.helpers';
@@ -132,15 +131,15 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   /**
-   * ROK-1802: only a fresh session (or a stopped server's cleanup) asks, so
-   * this server's held players are stale — one who left while nobody watched
-   * would be a phantom in the next spawn. Drop them: the new session's first
-   * replay re-reports anyone still on the server as a join, re-holding them.
+   * ROK-1802: a fresh session (or a stopped server's cleanup) asks, so this
+   * server's held players are unverified — one may have left while nobody
+   * watched. Keep them, unconfirmed: a join line re-confirms one, and a
+   * heartbeat count (`playerCount`) covers or drops them, oldest first.
    */
   async openPresence(
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
-    this.pending.clear(source.pelicanServerId);
+    this.pending.unconfirm(source.pelicanServerId);
     const out: ServerPresencePlayer[] = [];
     for (const live of await this.enrolledEvents(source))
       out.push(
@@ -151,6 +150,23 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
         )),
       );
     return out;
+  }
+
+  /**
+   * ROK-1802: a live heartbeat's player count. Unconfirmed holds that it
+   * covers become enrollable — they may now reach the threshold, or join
+   * the game's live event; ones it cannot cover are dropped.
+   */
+  playerCount(source: ServerPresenceSource, count: number): Promise<void> {
+    const id = source.pelicanServerId;
+    if (!this.pending.hasUnconfirmed(id)) return Promise.resolve();
+    return this.serial(source.gameId, async () => {
+      if (!this.pending.reconcile(id, count)) return;
+      if (!(await this.adHocEventService.isEnabled())) return;
+      const live = await findLiveGameAdHocEvent(this.db, source.gameId);
+      if (live) return this.attachWithPending(live, source, []);
+      await this.evaluate(source);
+    });
   }
 
   /**
@@ -241,25 +257,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       await this.attach(live, source.pelicanServerId, pl);
   }
 
-  /** Join the game's live event; a returning player lifts the grace period. */
-  private async attach(
+  private attach(
     live: LiveGameEvent,
     pelicanServerId: number,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const identity = await resolveSteamIdentity(this.db, player.steamId);
-    const userId = identity?.userId ?? null;
-    await this.participantService.addServerParticipant(live.id, {
-      steamId: player.steamId,
-      displayName: player.displayName,
-      userId,
-      pelicanServerId,
-    });
-    await signupLinkedServerPlayer(this.db, live.id, userId);
-    await this.gracePeriodQueue.cancel(live.id);
-    if (await restoreFromGracePeriod(this.db, live.id))
-      this.gateway.emitStatusChange(live.id, 'live');
-    await refreshLive(this.fx, live);
+    return attachServerPlayer(this.fx, live, pelicanServerId, player);
   }
 
   /**
@@ -272,7 +275,13 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const held = this.pending.hold(source, player);
+    this.pending.hold(source, player);
+    await this.evaluate(source);
+  }
+
+  /** The spawn gate over this server's enrollable holds (ROK-1802 split). */
+  private async evaluate(source: ServerPresenceSource): Promise<void> {
+    const held = this.pending.players(source.pelicanServerId).length;
     const clearance = await checkSuppression(
       this.db,
       serverSourceKey(source.pelicanServerId),
@@ -291,8 +300,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     if ((voice?.unconfirmed ?? 0) > 0) return;
     const players = this.pending.players(source.pelicanServerId);
     const plan = { source, binding, players };
+    // Only the enrolled leave the hold; uncovered ones wait for a heartbeat.
     if (await this.spawn(plan, clearance))
-      this.pending.clear(source.pelicanServerId);
+      this.pending.take(source.pelicanServerId);
   }
 
   /**
