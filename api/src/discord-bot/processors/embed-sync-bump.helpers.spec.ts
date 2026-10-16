@@ -181,7 +181,9 @@ describe('reconcileBumpMessage — count sync below FULL (ROK-1812)', () => {
     });
     expect(fetchChannel).toHaveBeenCalledWith('channel-789');
   });
+});
 
+describe('reconcileBumpMessage — skips (ROK-1812)', () => {
   it('does nothing when the record has no bump', async () => {
     const { deps, fetchChannel, deleteMessage, update } = makeDeps();
     const input = makeInput();

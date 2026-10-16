@@ -112,26 +112,37 @@ async function refreshBumpCount(
   if (!bumpEvent || !clientUrl) return;
   const eventId = input.eventData.id;
   try {
-    const { embed, row } = buildBumpEmbed(
+    const built = buildBumpEmbed(
       bumpEvent,
       clientUrl,
       input.context.timezone ?? 'UTC',
       input.context.communityName ?? null,
     );
-    const message = await fetchMessageOrNull(
-      deps.clientService.getClient(),
-      target.channelId,
-      target.messageId,
-    );
-    if (!message) {
-      await forgetMissingBump(deps, input.record.id, eventId);
-      return;
-    }
-    if (cardUnchanged(message, embed)) return;
-    await message.edit({ embeds: [embed], components: [row] });
+    await editIfChanged(deps, input.record.id, eventId, target, built);
   } catch (err) {
     await handleEditFailure(deps, input.record.id, target, eventId, err);
   }
+}
+
+/** Fetch the bump; PATCH it only when the rendered card differs. */
+async function editIfChanged(
+  deps: BumpSyncDeps,
+  recordId: string,
+  eventId: number,
+  target: BumpTarget,
+  built: ReturnType<typeof buildBumpEmbed>,
+): Promise<void> {
+  const message = await fetchMessageOrNull(
+    deps.clientService.getClient(),
+    target.channelId,
+    target.messageId,
+  );
+  if (!message) {
+    await forgetMissingBump(deps, recordId, eventId);
+    return;
+  }
+  if (cardUnchanged(message, built.embed)) return;
+  await message.edit({ embeds: [built.embed], components: [built.row] });
 }
 
 /** 10008 → the bump is gone, forget it. Anything else → log and move on. */
