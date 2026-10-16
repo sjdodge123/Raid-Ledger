@@ -8,7 +8,11 @@ import type { JoinHandlerCtx } from './voice-state-join-dispatch.handlers';
 import type { ResolvedBinding } from './voice-state.helpers';
 import type { LobbyGameGroup } from './voice-lobby-groups.helpers';
 import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
-import { handlePresenceChange } from './voice-state.handlers';
+import {
+  handlePresenceChange,
+  shouldSpawnImmediately,
+} from './voice-state.handlers';
+import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 import { resolveVoiceChannel } from './voice-state.helpers';
 import {
   lobbySpawnFns,
@@ -62,7 +66,10 @@ function ctxWith(activeMembers: string[] | null): JoinHandlerCtx {
     logger: { warn: jest.fn() },
     deps: {
       clientService: {},
-      adHocEventService: { getActiveState: jest.fn(() => state) },
+      adHocEventService: {
+        getActiveState: jest.fn(() => state),
+        handleVoiceLeave: jest.fn(() => Promise.resolve()),
+      },
     },
   } as unknown as JoinHandlerCtx;
 }
@@ -168,6 +175,45 @@ function mockTally(counted: number): void {
     allConfirmed: true,
   });
 }
+
+describe('handleServerPresenceChanged — general lobby switches (Codex r3 P2)', () => {
+  it('moves an event member who left the server (still in voice, not in the group) out via the presence-switch path (Codex r3 P2)', async () => {
+    const gmX = { id: 'x' };
+    jest.mocked(resolveVoiceChannel).mockReturnValueOnce({
+      id: 'vc',
+      members: new Map([
+        ['a', { id: 'a' }],
+        ['b', { id: 'b' }],
+        ['x', gmX],
+      ]),
+    } as never);
+    mockGroup({ gameId: G, gameName: 'Valheim', memberIds: ['a', 'b'] });
+    const ctx = ctxWith(['a', 'b', 'x']);
+    await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+    expect(jest.mocked(handlePresenceChange).mock.calls).toEqual([
+      [ctx.deps, 'x', LOBBY, gmX],
+    ]);
+  });
+
+  it('immediate spawn: every group member leaves their prior event before the group is rostered (Codex r3 P2)', async () => {
+    jest.mocked(shouldSpawnImmediately).mockResolvedValueOnce(true);
+    mockGroup({ gameId: G, gameName: 'Valheim', memberIds: ['a', 'b'] });
+    const order: string[] = [];
+    const ctx = ctxWith(null);
+    jest
+      .mocked(ctx.deps.adHocEventService.handleVoiceLeave)
+      .mockImplementation((_b, id) => {
+        order.push(`leave:${id}`);
+        return Promise.resolve();
+      });
+    jest.mocked(handleGeneralLobbyGroupDetection).mockImplementation(() => {
+      order.push('spawn');
+      return Promise.resolve();
+    });
+    await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+    expect(order).toEqual(['leave:a', 'leave:b', 'spawn']);
+  });
+});
 
 describe('handleServerPresenceChanged — game monitor (ROK-1801)', () => {
   const mfns = { scheduleSpawn: jest.fn(), cancelSpawn: jest.fn() };

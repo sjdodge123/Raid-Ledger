@@ -36,11 +36,14 @@ const PLAYER = {
 } as unknown as ServerPresencePlayer;
 const CLEARANCE = { matches: () => true, consume: () => true };
 
-function serviceWith(voice: number): {
+function serviceWith(
+  voice: number,
+  unconfirmed = 0,
+): {
   svc: AdHocServerPresenceService;
   countFor: jest.Mock;
 } {
-  const countFor = jest.fn().mockResolvedValue(voice);
+  const countFor = jest.fn().mockResolvedValue({ counted: voice, unconfirmed });
   const tally = { countFor } as unknown as ServerPathVoiceTally;
   const deps = [
     {} as PostgresJsDatabase<typeof schema>,
@@ -95,6 +98,17 @@ describe('AdHocServerPresenceService.joinPending — merge order', () => {
         CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
       );
     const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, PLAYER);
+    expect(buildServerSpawnInput).not.toHaveBeenCalled();
+  });
+
+  it('1 held server player + 1 presence-null voice person waits for the delayed spawn (Codex r3 P2)', async () => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    const { svc } = serviceWith(1, 1);
     await svc.playerJoined(SOURCE, PLAYER);
     expect(buildServerSpawnInput).not.toHaveBeenCalled();
   });

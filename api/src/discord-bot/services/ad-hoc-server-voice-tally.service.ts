@@ -3,7 +3,9 @@
  * threshold also counts voice. `countFor` returns how many people sit in the
  * game's monitor-bound voice channels and count for that game (rich presence
  * on it, or none — the voice path's own rule), minus anyone already held on
- * the server, so each person counts once.
+ * the server, so each person counts once. `unconfirmed` is how many of them
+ * count only through a missing rich presence (Codex r3 P2): the voice path
+ * gives such a tally the delayed spawn, never the immediate one.
  *
  * Review fixes (2026-10-16): the count uses main's `countsTowardThreshold`
  * (ROK-1711 bot rule + DEMO allowlist); a monitor channel that also carries a
@@ -76,6 +78,14 @@ async function linkedDiscordIds(
   return new Set(rows.flatMap((r) => (r.discordId ? [r.discordId] : [])));
 }
 
+/** Voice people for a game; `unconfirmed` of them have no rich presence. */
+export interface ServerPathVoiceCount {
+  counted: number;
+  unconfirmed: number;
+}
+
+const NO_VOICE: ServerPathVoiceCount = { counted: 0, unconfirmed: 0 };
+
 @Injectable()
 export class ServerPathVoiceTally {
   constructor(
@@ -87,34 +97,37 @@ export class ServerPathVoiceTally {
   async countFor(
     source: ServerPresenceSource,
     pending: PendingServerPlayers,
-  ): Promise<number> {
+  ): Promise<ServerPathVoiceCount> {
     try {
       return await this.tally(source, pending);
     } catch {
-      return 0; // review MINOR 6: never reject the sink's serial step.
+      return NO_VOICE; // review MINOR 6: never reject the sink's serial step.
     }
   }
 
   private async tally(
     source: ServerPresenceSource,
     pending: PendingServerPlayers,
-  ): Promise<number> {
+  ): Promise<ServerPathVoiceCount> {
     const channelIds = await monitorChannelIds(this.db, source.gameId);
-    if (channelIds.length === 0) return 0;
+    if (channelIds.length === 0) return NO_VOICE;
     const held = pending.players(source.pelicanServerId).map((p) => p.steamId);
     const exclude = await linkedDiscordIds(this.db, held);
     const roster = await this.roster();
-    const counted = new Set<string>();
+    const counted = new Map<string, boolean>(); // id -> confirmed
     for (const member of this.voiceMembers(channelIds)) {
       if (exclude.has(member.id) || counted.has(member.id)) continue;
       const serverGame = roster ? serverGameOf(roster, member.id) : null;
       if (serverGame !== null) {
-        if (serverGame === source.gameId) counted.add(member.id);
+        if (serverGame === source.gameId) counted.set(member.id, true);
         continue; // Q3: the server beats rich presence either way.
       }
-      if (await this.countsFor(member, source.gameId)) counted.add(member.id);
+      const detected = await this.detectedGame(member);
+      if (detected === null || detected === source.gameId)
+        counted.set(member.id, detected !== null);
     }
-    return counted.size;
+    const confirmed = [...counted.values()].filter(Boolean).length;
+    return { counted: counted.size, unconfirmed: counted.size - confirmed };
   }
 
   /** The live server roster, or null when the provider is unavailable. */
@@ -143,15 +156,14 @@ export class ServerPathVoiceTally {
     });
   }
 
-  /** The voice path's rule: on this game, or no rich presence at all. */
-  private async countsFor(
-    member: GuildMember,
-    gameId: number,
-  ): Promise<boolean> {
+  /**
+   * The member's rich-presence game. The voice path's rule: on this game
+   * (confirmed), or none at all (counts, unconfirmed).
+   */
+  private async detectedGame(member: GuildMember): Promise<number | null> {
     const detector = this.moduleRef.get(PresenceGameDetectorService, {
       strict: false,
     });
-    const detected = await detector.detectGameForMember(member);
-    return detected.gameId === null || detected.gameId === gameId;
+    return (await detector.detectGameForMember(member)).gameId;
   }
 }

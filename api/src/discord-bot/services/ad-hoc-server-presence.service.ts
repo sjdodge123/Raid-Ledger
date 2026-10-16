@@ -273,8 +273,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     if (!clearance) return;
     const binding = await findGameVoiceBinding(this.db, source.gameId);
     const min = binding?.config?.minPlayers ?? DEFAULT_SERVER_MIN_PLAYERS;
-    const voice = (await this.voiceTally?.countFor(source, this.pending)) ?? 0;
-    if (held + voice < min) return;
+    const voice = await this.voiceTally?.countFor(source, this.pending);
+    if (held + (voice?.counted ?? 0) < min) return;
+    // Codex r3 P2: a presence-null voice member counts but, as on the voice
+    // path (`resolveGameBindingSpawn`), takes the delayed spawn — the CHANGED
+    // re-check that follows this batch arms the monitor's 15-minute timer.
+    if ((voice?.unconfirmed ?? 0) > 0) return;
     const players = this.pending.players(source.pelicanServerId);
     const plan = { source, binding, players };
     if (await this.spawn(plan, clearance))

@@ -112,8 +112,8 @@ async function monitorBelowThreshold(
 
 /**
  * Card refresh, then that game's group threshold with the Q6 rules. An event
- * already running → join the group's new voice members (Codex P2). Below the
- * threshold → cancel this game's pending spawn, as a voice departure would.
+ * already running → reconcile the room against it (Codex P2 / r3 P2). Below
+ * the threshold → cancel this game's pending spawn, as a voice departure would.
  */
 async function reevaluateLobby(
   ctx: JoinHandlerCtx,
@@ -123,7 +123,7 @@ async function reevaluateLobby(
 ): Promise<void> {
   markLobbyDirty(ctx.deps, b, chId);
   const state = ctx.deps.adHocEventService.getActiveState(b.bindingId, gameId);
-  if (state) return joinNewLobbyMembers(ctx, chId, b, gameId, state.memberSet);
+  if (state) return reconcileLobbyEvent(ctx, chId, b, gameId, state.memberSet);
   const fns = lobbySpawnFns(ctx, chId, b);
   const group = await lobbyGroupOf(ctx, chId, b, gameId);
   if (!group || groupSize(group) < (b.config?.minPlayers ?? 2))
@@ -133,20 +133,41 @@ async function reevaluateLobby(
   if (group.memberIds.length === 0) return;
   if (await shouldSpawnImmediately(ctx.deps, chId, b)) {
     fns.cancelSpawn(gameId);
-    return handleGeneralLobbyGroupDetection(ctx.deps, chId, b, gameId);
+    return spawnLobbyGroup(ctx, chId, b, gameId, group.memberIds);
   }
   fns.scheduleSpawn(gameId);
 }
 
 /**
- * Move the game group's voice members not yet in its running lobby event into
- * it. Codex r2 P2: a member already in game A's event who joins game B's
- * server (no Discord presence change) must leave A first, or they sit in both
- * events and one later departure leaves a ghost. The presence-switch path
- * already does that leave → join (its detection merges server presence), so
- * this reuses it rather than adding to B directly.
+ * Codex r3 P2: the spawn branch's members may still sit in another game's
+ * event (they switched by joining this game's server, presence unchanged).
+ * Each leaves it first — the same `handleVoiceLeave` the presence-switch path
+ * runs before a move. Not `handlePresenceChange` per member: the first call
+ * would mint this game's event and roster the rest before they had left.
  */
-async function joinNewLobbyMembers(
+async function spawnLobbyGroup(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gameId: number,
+  memberIds: readonly string[],
+): Promise<void> {
+  for (const id of memberIds)
+    await ctx.deps.adHocEventService.handleVoiceLeave(b.bindingId, id);
+  await handleGeneralLobbyGroupDetection(ctx.deps, chId, b, gameId);
+}
+
+/**
+ * Reconcile the room against the game's running lobby event through the
+ * presence-switch path (its detection merges server presence, and it leaves
+ * before it joins):
+ * - Codex r2 P2 — a group member not yet in the event (they joined this
+ *   game's server) moves in, leaving their prior game event first.
+ * - Codex r3 P2 — an event member still in voice but no longer in the group
+ *   (they left this game's server, presence unchanged) moves out to whatever
+ *   their presence now says, instead of keeping the event's attendance.
+ */
+async function reconcileLobbyEvent(
   ctx: JoinHandlerCtx,
   chId: string,
   b: ResolvedBinding,
@@ -155,10 +176,12 @@ async function joinNewLobbyMembers(
 ): Promise<void> {
   const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
   if (!channel) return;
-  const group = await lobbyGroupOf(ctx, chId, b, gameId);
-  for (const id of group?.memberIds ?? []) {
+  const group = new Set((await lobbyGroupOf(ctx, chId, b, gameId))?.memberIds);
+  const joiners = [...group].filter((id) => !joined.has(id));
+  const leavers = [...joined].filter((id) => !group.has(id));
+  for (const id of [...leavers, ...joiners]) {
     const gm = channel.members.get(id);
-    if (gm && !joined.has(id)) await handlePresenceChange(ctx.deps, id, b, gm);
+    if (gm) await handlePresenceChange(ctx.deps, id, b, gm);
   }
 }
 

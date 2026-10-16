@@ -150,13 +150,15 @@ const serverPlayer = (steamId: string): ServerRosterPlayer => ({
   name: `Viking-${steamId.slice(-2)}`,
 });
 
-/** Put a member in the fake voice channel, playing `game` (Valheim). */
-function seatInVoice(id: string, game = VALHEIM): GuildMember {
+/** Put a member in the fake voice channel, playing `game` (null: no presence). */
+function seatInVoice(id: string, game: string | null = VALHEIM): GuildMember {
   const m: FakeMember = {
     id,
     displayName: id,
     user: { id, username: id, avatar: null, bot: false },
-    presence: { activities: [{ type: ActivityType.Playing, name: game }] },
+    presence: game
+      ? { activities: [{ type: ActivityType.Playing, name: game }] }
+      : null,
     voice: { channelId: CHANNEL_ID },
   };
   voiceMembers.set(id, m);
@@ -224,6 +226,22 @@ describe('server path — voice members count toward minPlayers (Q9)', () => {
     const src = { pelicanServerId: ++serverSeq, gameId: valheim };
     await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
     expect(await valheimQuickPlays()).toBe(1);
+  });
+
+  it('1 on the server + 1 presence-null person in voice takes the delayed spawn, as in the reverse order (Codex r3 P2)', async () => {
+    seatInVoice(VOICE_A, null);
+    const src = { pelicanServerId: ++serverSeq, gameId: valheim };
+    await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
+    expect(await valheimQuickPlays()).toBe(0);
+    onServer = [serverPlayer(STEAM_B)];
+    await testApp.app
+      .get(EventEmitter2)
+      .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
+        pelicanServerId: serverSeq,
+        gameId: valheim,
+      });
+    expect(await valheimQuickPlays()).toBe(0);
+    expect(listener['pendingSpawnTimers'].size).toBe(1);
   });
 
   it('the same person on the server and in voice counts once', async () => {

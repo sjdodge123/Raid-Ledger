@@ -9,7 +9,10 @@ import type { ServerPresenceSource } from '../../plugins/pelican/presence/server
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { VOICE_THRESHOLD_BOT_ALLOWLIST_ENV } from '../listeners/voice-threshold-count.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
-import { ServerPathVoiceTally } from './ad-hoc-server-voice-tally.service';
+import {
+  ServerPathVoiceTally,
+  type ServerPathVoiceCount,
+} from './ad-hoc-server-voice-tally.service';
 import { PresenceGameDetectorService } from './presence-game-detector.service';
 import { ServerPresenceRosterService } from './server-presence-roster.service';
 import type {
@@ -81,9 +84,16 @@ function moduleRefFor(world: World): ModuleRef {
   return { get: (token: unknown) => fakes.get(token) } as unknown as ModuleRef;
 }
 
-function tallyFor(world: World, results: unknown[][]): Promise<number> {
+function countOf(
+  world: World,
+  results: unknown[][],
+): Promise<ServerPathVoiceCount> {
   const svc = new ServerPathVoiceTally(dbQueue(results), moduleRefFor(world));
   return svc.countFor(SOURCE, PENDING);
+}
+
+async function tallyFor(world: World, results: unknown[][]): Promise<number> {
+  return (await countOf(world, results)).counted;
 }
 
 const MONITOR = [{ channelId: 'ch1' }];
@@ -146,6 +156,23 @@ describe('ServerPathVoiceTally — failure isolation (review MINOR 6)', () => {
       },
     } as unknown as PostgresJsDatabase<typeof schema>;
     const svc = new ServerPathVoiceTally(db, moduleRefFor({ members: [] }));
-    await expect(svc.countFor(SOURCE, PENDING)).resolves.toBe(0);
+    await expect(svc.countFor(SOURCE, PENDING)).resolves.toEqual({
+      counted: 0,
+      unconfirmed: 0,
+    });
+  });
+});
+
+describe('ServerPathVoiceTally — unconfirmed presence (Codex r3 P2)', () => {
+  it('counts a presence-null member as unconfirmed and an on-game one as confirmed', async () => {
+    const members = [
+      { id: 'u1', user: { bot: false } },
+      { id: 'u2', user: { bot: false } },
+    ];
+    const presence = { u2: GAME };
+    expect(await countOf({ members, presence }, [MONITOR, []])).toEqual({
+      counted: 2,
+      unconfirmed: 1,
+    });
   });
 });
