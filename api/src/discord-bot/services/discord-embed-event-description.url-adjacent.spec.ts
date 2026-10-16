@@ -11,8 +11,8 @@ describe('eventDescriptionExcerpt — URL-adjacent markdown (ROK-1806)', () => {
     ['** closing right after a URL', '**Read https://example.com/guide**!'],
     ['~~ closing right after a URL', '~~https://example.com/guide~~!'],
     ['a URL ending in __ with no opener', 'https://example.com/file__'],
-    ['__ underline closing after a URL', '__underline https://x.y/a__'],
-    ['|| spoiler closing after a URL', '||spoiler https://x.y/b||'],
+    ['__ underline closing after a URL', '__underline https://x.y/a__!'],
+    ['|| spoiler closing after a URL', '||spoiler https://x.y/b||!'],
     [
       'a URL in link text followed by ](…)',
       '[**https://x.y/a**](https://x.y/b)',
