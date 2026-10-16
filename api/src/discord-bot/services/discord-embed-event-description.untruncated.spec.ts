@@ -55,27 +55,28 @@ describe('eventDescriptionExcerpt — untruncated markdown stays inside (ROK-180
     },
   );
 
+  // Odd `_` counts on purpose: a balancer that ignored atoms or treated an
+  // intraword `_` as emphasis would escape one and break byte-identity.
   it.each([
-    [
-      'custom + animated emoji',
-      'Bring <:raid_ready:123456789012345678> <a:hype_train:42>',
-    ],
+    ['custom emoji', 'Bring <:raid_ready:123456789012345678> now'],
+    ['animated emoji', 'Hype <a:hype_train:42>!'],
     ['unicode emoji', 'Bring 🧪 flasks 🐉 and 👍🏽'],
+    ['URL with an underscore', 'Read https://example.com/raid_guide first'],
+    ['URL with a leading _ segment', 'Read https://example.com/_raid first'],
     [
-      'URL with underscores',
-      'Read https://example.com/raid_guide_v2?a_b=c_d first',
+      '<url> with a leading _ segment',
+      'Read <https://example.com/_raid> first',
+    ],
+    ['markdown link', 'Read [the guide](https://example.com/_raid) first'],
+    [
+      '**bold** pair around a URL',
+      '**Read https://example.com/raid_guide now**',
     ],
     [
-      '<url> with underscores',
-      'Read <https://example.com/raid_guide_v2> first',
+      '~~strike~~ pair around a URL',
+      '~~skip https://example.com/old_raid now~~',
     ],
-    ['markdown link', 'Read [the_raid_guide](https://example.com/a_b_c) first'],
-    ['**bold** pair', 'Bring **two** flasks'],
-    ['~~strike~~ pair', 'Bring ~~one~~ two flasks'],
-    [
-      'mixed pairs + snake_case',
-      '**Bring** ~~one~~ __two__ ||x|| _it_ my snake_case_note',
-    ],
+    ['snake_case word', 'my snake_case note'],
   ])('leaves a balanced %s byte-identical', (_, text) => {
     expect(eventDescriptionExcerpt(text)).toBe(text);
   });
