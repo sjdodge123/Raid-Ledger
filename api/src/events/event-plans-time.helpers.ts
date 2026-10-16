@@ -85,14 +85,23 @@ function buildGameInterestResponse(
   };
 }
 
+/** How far from now a caller-supplied `afterDate` may be (one year). */
+const AFTER_DATE_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
+
 /**
- * Parse the public `afterDate` query. An unparseable value falls back to now:
- * an Invalid Date makes `findNextOccurrence` loop forever (getDay() is NaN),
- * hanging the event loop on an anonymous request.
+ * Parse the public `afterDate` query. An unparseable value, or one outside
+ * now ± one year, falls back to now: an Invalid Date — or an extreme valid
+ * one that `setDate`/`setHours` overflow into one — makes `findNextOccurrence`
+ * loop forever (getDay() is NaN), hanging the event loop on an anonymous
+ * request.
  */
 export function parseAfterDate(afterDate?: string): Date {
-  const parsed = afterDate ? new Date(afterDate) : new Date();
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+  const now = new Date();
+  if (!afterDate) return now;
+  const parsed = new Date(afterDate);
+  const ms = parsed.getTime();
+  if (Number.isNaN(ms)) return now;
+  return Math.abs(ms - now.getTime()) > AFTER_DATE_WINDOW_MS ? now : parsed;
 }
 
 /** Generates time suggestions based on game interest or fallback. */
