@@ -18,8 +18,8 @@ function depsWith(
   tracked: typeof RUST | null,
 ): { deps: VoiceHandlerDeps; order: string[] } {
   const order: string[] = [];
-  const tracker = new Map<string, { gameName: string; userId: number }>();
-  if (tracked) tracker.set('a', { gameName: tracked.gameName, userId: 7 });
+  const tracker: VoiceHandlerDeps['voiceGameTracker'] = new Map();
+  if (tracked) tracker.set('a', { ...tracked, userId: 7 });
   const state = targetMembers ? { memberSet: new Set(targetMembers) } : null;
   const deps = {
     voiceGameTracker: tracker,
@@ -61,6 +61,23 @@ describe('retrackVoiceGame (ROK-1805)', () => {
   it('keeps the open session when the member is already tracked on that game', () => {
     const { deps, order } = depsWith(null, VALHEIM);
     retrackVoiceGame(deps, 'a', VALHEIM, 7);
-    expect(order).not.toContain('stop:Valheim');
+    expect(order).toEqual(['start:Valheim']);
+  });
+
+  it('matches the tracked game by id, not name — a roster-side name for the same game keeps the session (review MINOR 1)', () => {
+    const { deps, order } = depsWith(null, VALHEIM);
+    retrackVoiceGame(
+      deps,
+      'a',
+      { gameId: VALHEIM.gameId, gameName: 'Unknown game' },
+      7,
+    );
+    expect(order).toEqual(['start:Unknown game']);
+  });
+
+  it('closes the session of a different game id first', () => {
+    const { deps, order } = depsWith(null, RUST);
+    retrackVoiceGame(deps, 'a', VALHEIM, 7);
+    expect(order).toEqual(['stop:Rust', 'start:Valheim']);
   });
 });

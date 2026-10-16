@@ -460,3 +460,27 @@ describe('general lobby — a server-driven switch leaves the prior game on ever
     expect(rows).toHaveLength(1);
   });
 });
+
+describe('general lobby — the return trip before the server game spawns (ROK-1805 review BLOCKER 1)', () => {
+  it('A hops onto the Valheim server below threshold, then off → back in the Rust event, the Valheim voice session closed', async () => {
+    const { bindingId, rust } = await setUp();
+    await aJoinsValheimServer([STEAM_A]);
+    const svc = testApp.app.get(AdHocEventService);
+    expect(svc.getActiveState(bindingId, rust)?.memberSet.has(VOICE_A)).toBe(
+      false,
+    );
+    const stop = jest.spyOn(testApp.app.get(GameActivityService), 'bufferStop');
+    await aJoinsValheimServer([]);
+    expect(svc.getActiveState(bindingId, rust)?.memberSet.has(VOICE_A)).toBe(
+      true,
+    );
+    expect(stop).toHaveBeenCalledWith(
+      expect.any(Number),
+      VALHEIM,
+      expect.any(Date),
+      'voice',
+    );
+    expect(listener['voiceGameTracker'].get(VOICE_A)?.gameId).toBe(rust);
+    expect(await valheimQuickPlays()).toBe(0);
+  });
+});

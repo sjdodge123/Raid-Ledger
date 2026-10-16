@@ -17,7 +17,7 @@ const VALHEIM = { gameId: 2, gameName: 'Valheim', memberIds: ['a'] };
 
 function harness(): { deps: VoiceHandlerDeps; order: string[] } {
   const order: string[] = [];
-  const tracker = new Map([['a', { gameName: 'Rust', userId: 7 }]]);
+  const tracker = new Map([['a', { gameId: 1, gameName: 'Rust', userId: 7 }]]);
   const deps = {
     voiceGameTracker: tracker,
     usersService: { findByDiscordId: () => Promise.resolve({ id: 7 }) },

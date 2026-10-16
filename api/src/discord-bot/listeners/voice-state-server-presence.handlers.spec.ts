@@ -62,14 +62,24 @@ const LOBBY = {
   config: { minPlayers: 2 },
 } as unknown as ResolvedBinding;
 
-function ctxWith(activeMembers: string[] | null): JoinHandlerCtx {
+function ctxWith(
+  activeMembers: string[] | null,
+  trackedOn: Record<string, number> = {},
+): JoinHandlerCtx {
   const state = activeMembers ? { memberSet: new Set(activeMembers) } : null;
+  const tracker = new Map(
+    Object.entries(trackedOn).map(([id, gameId]) => [
+      id,
+      { gameId, gameName: `game-${gameId}`, userId: 7 },
+    ]),
+  );
   return {
-    channelMembers: new Map([['vc', new Set(['a', 'b'])]]),
+    channelMembers: new Map([['vc', new Set(['a', 'b', 'c'])]]),
     resolveAllBindings: () => Promise.resolve([LOBBY]),
     logger: { warn: jest.fn() },
     deps: {
       clientService: {},
+      voiceGameTracker: tracker,
       adHocEventService: {
         getActiveState: jest.fn(() => state),
         handleVoiceLeave: jest.fn(() => Promise.resolve()),
@@ -96,6 +106,9 @@ const fns = { scheduleSpawn: jest.fn(), cancelSpawn: jest.fn() };
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Review MINOR 4: clearAllMocks keeps unconsumed `*Once` values, which then
+  // leak into the next test's branch choice. Reset the queue every test.
+  jest.mocked(shouldSpawnImmediately).mockReset().mockResolvedValue(false);
   jest.mocked(lobbySpawnFns).mockReturnValue(fns);
 });
 
@@ -228,13 +241,13 @@ describe('handleServerPresenceChanged — a server-driven switch leaves the prio
   const VALHEIM_GROUP = { gameId: G, gameName: 'Valheim' };
 
   it.each([
-    ['below threshold', ['a'], false],
-    ['delayed spawn', ['a', 'b'], false],
-    ['immediate spawn', ['a', 'b'], true],
+    ['below threshold', ['a'], false, [1, 0, 0]],
+    ['delayed spawn', ['a', 'b'], false, [0, 1, 0]],
+    ['immediate spawn', ['a', 'b'], true, [1, 0, 1]],
   ] as const)(
     '%s: each group voice member is switched onto the game (leave old event + retrack)',
-    async (_branch, memberIds, immediate) => {
-      jest.mocked(shouldSpawnImmediately).mockResolvedValueOnce(immediate);
+    async (_branch, memberIds, immediate, [cancels, schedules, spawns]) => {
+      jest.mocked(shouldSpawnImmediately).mockResolvedValue(immediate);
       const group = { ...VALHEIM_GROUP, memberIds: [...memberIds] };
       mockGroup(group);
       const ctx = ctxWith(null);
@@ -248,6 +261,46 @@ describe('handleServerPresenceChanged — a server-driven switch leaves the prio
           id === 'a' ? 7 : null,
         ]),
       );
+      // Each row takes its own branch (review MINOR 4).
+      expect(fns.cancelSpawn).toHaveBeenCalledTimes(cancels);
+      expect(fns.scheduleSpawn).toHaveBeenCalledTimes(schedules);
+      expect(handleGeneralLobbyGroupDetection).toHaveBeenCalledTimes(spawns);
+    },
+  );
+});
+
+describe('handleServerPresenceChanged — the return trip when no event exists (ROK-1805 review BLOCKER 1)', () => {
+  it.each([
+    [
+      'the group is below threshold',
+      { gameId: G, gameName: 'Valheim', memberIds: ['b'] },
+    ],
+    ['no group is left for the game', null],
+  ] as const)(
+    'return trip (review BLOCKER 1): %s → a member tracked on the game but out of its group goes back through the presence path',
+    async (_case, group) => {
+      const gmA = { id: 'a' };
+      jest.mocked(resolveVoiceChannel).mockReturnValue({
+        id: 'vc',
+        members: new Map([
+          ['a', gmA],
+          ['b', { id: 'b' }],
+          ['c', { id: 'c' }],
+        ]),
+      } as never);
+      jest.mocked(resolveLobbyGroups).mockResolvedValue({
+        qualifying: [],
+        dropped: group ? [{ ...group, memberIds: [...group.memberIds] }] : [],
+        minPlayers: 2,
+        channelMemberCount: 3,
+      });
+      // a: switched onto G, left its server. b: in G's group. c: on another game.
+      const ctx = ctxWith(null, { a: G, b: G, c: G + 1 });
+      await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+      expect(jest.mocked(handlePresenceChange).mock.calls).toEqual([
+        [ctx.deps, 'a', LOBBY, gmA],
+      ]);
+      expect(fns.cancelSpawn).toHaveBeenCalledWith(G);
     },
   );
 });
