@@ -61,12 +61,10 @@ async function ensureWowGame(): Promise<void> {
     .where(eq(schema.games.slug, WOW_FOREVER_GAME_SLUG))
     .limit(1);
   if (existing) return;
-  await testApp.db
-    .insert(schema.games)
-    .values({
-      name: 'World of Warcraft: Forever',
-      slug: WOW_FOREVER_GAME_SLUG,
-    });
+  await testApp.db.insert(schema.games).values({
+    name: 'World of Warcraft: Forever',
+    slug: WOW_FOREVER_GAME_SLUG,
+  });
 }
 
 beforeAll(async () => {
