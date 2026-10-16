@@ -13,6 +13,7 @@ import {
   ReplayWatermark,
   toPresentPlayers,
 } from './pelican-presence.helpers';
+import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
 import { rosterOf, type ServerRosterPlayer } from './server-presence.reader';
 import type {
@@ -60,12 +61,15 @@ interface Buffered {
  */
 export class PelicanPresenceSession {
   private readonly tracker = new ServerPresenceTracker();
+  /** Holds a heartbeat may enrol that the tracker never saw (Codex r4). */
+  private readonly held = new UntrackedHeldPlayers();
   private readonly watermark = new ReplayWatermark();
   private readonly now: () => number;
   private socket: PelicanConsoleSocket | null = null;
   private replay: Buffered[] | null = null;
   private settleTimer: ReturnType<typeof setTimeout> | null = null;
   private emptiedOutage: number | null = null;
+  private emptiedOnce = false;
   /** True until the first replay after `start()` has been flushed. */
   private cold = true;
   private queue: Promise<void> = Promise.resolve();
@@ -125,9 +129,13 @@ export class PelicanPresenceSession {
 
   private async rehydrate(): Promise<void> {
     try {
-      const open = await this.opts.sink.openPresence(this.opts.source);
+      const { sink, source } = this.opts;
+      const open = await sink.openPresence(source);
+      const held = await sink.heldPresence(source);
       if (this.stopped) return;
       this.tracker.hydrate(toPresentPlayers(open));
+      const ids = (ps: { steamId: string }[]) => ps.map((p) => p.steamId);
+      this.held.reset(ids(held), ids(open));
       if (open.length > 0) this.notify();
     } catch (err) {
       this.opts.logger.error(
@@ -162,6 +170,25 @@ export class PelicanPresenceSession {
   private applyLive(event: GamePresenceEvent, at: Date): void {
     if (event.kind === 'server-stopping') return this.emptyAll();
     this.forward(this.tracker.apply(event, at));
+    this.forwardHeldLeaves(event);
+    if (event.kind !== 'heartbeat') return;
+    const { count } = event;
+    this.enqueue('playerCount', (s, src) => s.playerCount(src, count));
+  }
+
+  /**
+   * Codex r4: a held player the tracker never saw may be enrolled by a
+   * heartbeat, so their disconnect line — or a count with no room left for
+   * them — must still reach the sink, or their row never closes.
+   */
+  private forwardHeldLeaves(event: GamePresenceEvent): void {
+    let gone: string[] = [];
+    if (event.kind === 'leave' && this.held.forget(event.steamId))
+      gone = [event.steamId];
+    else if (event.kind === 'heartbeat')
+      gone = this.held.fit(event.count, this.tracker.snapshot().length);
+    for (const steamId of gone)
+      this.enqueue('playerLeft', (s, src) => s.playerLeft(src, steamId));
   }
 
   private onReachable(): void {
@@ -231,13 +258,18 @@ export class PelicanPresenceSession {
     this.watermark.reset();
   }
 
-  /** Everyone leaves at once — one `serverEmptied`, only when someone was present. */
+  /** Everyone leaves at once — one `serverEmptied` (see the guard below). */
   private emptyAll(): void {
     const hadPlayers = this.tracker.snapshot().length > 0;
     this.tracker.hydrate([]);
-    if (!hadPlayers) return;
+    this.held.clear(); // serverEmptied clears the sink's holds too
+    // ROK-1802 Codex r2: a session's first empty runs even with nobody
+    // tracked — it clears holds the tracker never knew (unconfirmed ones
+    // from the last session). Later ones need someone present.
+    if (!hadPlayers && this.emptiedOnce) return;
+    this.emptiedOnce = true;
     this.enqueue('serverEmptied', (s, src) => s.serverEmptied(src));
-    this.notify();
+    if (hadPlayers) this.notify();
   }
 
   private forward(changes: PresenceChange[]): void {
@@ -247,6 +279,7 @@ export class PelicanPresenceSession {
         displayName: presenceDisplayName(change),
       };
       if (change.kind === 'joined') {
+        this.held.forget(change.steamId); // the tracker owns them now
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
       } else if (change.kind === 'renamed') {
         this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));

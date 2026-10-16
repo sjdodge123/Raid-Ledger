@@ -23,6 +23,12 @@ export interface PresenceCharacterEvent extends PresenceEventBase {
   kind: 'character';
   name: string;
   zdoidZero: boolean;
+  /**
+   * The character's owner (Valheim: the ZDOID's user part — the connection's
+   * session id), stable across that connection's respawns. It tells two
+   * players sharing one character name apart (ROK-1802).
+   */
+  ownerId?: string;
 }
 
 /** The peer failed auth (wrong password) — it never became a player. */

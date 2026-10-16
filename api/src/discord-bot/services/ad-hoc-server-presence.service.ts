@@ -21,7 +21,7 @@ import {
 } from './ad-hoc-spawn-clearance';
 import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
 import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
-import { getEventById, restoreFromGracePeriod } from './ad-hoc-event.helpers';
+import { getEventById } from './ad-hoc-event.helpers';
 import {
   AD_HOC_EVENTS,
   type AdHocParticipantJoinedPayload,
@@ -30,6 +30,7 @@ import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   afterServerLeave,
   announceServerSpawn,
+  attachServerPlayer,
   closeServerRows,
   refreshLive,
   type PresenceEffectsDeps,
@@ -48,7 +49,6 @@ import {
   listOpenServerPresence,
   listServerEnrolledEvents,
   renameSteamOnlyRow,
-  resolveSteamIdentity,
   serverSourceKey,
   type LiveGameEvent,
 } from './ad-hoc-server-presence.helpers';
@@ -130,19 +130,49 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     });
   }
 
+  /**
+   * ROK-1802: a fresh session (or a stopped server's cleanup) asks, so this
+   * server's held players are unverified — one may have left while nobody
+   * watched. Keep them, unconfirmed: a join line re-confirms one, and a
+   * heartbeat count (`playerCount`) covers or drops them, oldest first.
+   */
   async openPresence(
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
-    const out: ServerPresencePlayer[] = [];
-    for (const live of await this.enrolledEvents(source))
-      out.push(
-        ...(await listOpenServerPresence(
-          this.db,
-          live.id,
-          source.pelicanServerId,
-        )),
-      );
-    return out;
+    this.pending.unconfirm(source.pelicanServerId);
+    return this.openRows(source);
+  }
+
+  /**
+   * Codex r4: this server's held players, oldest first. A heartbeat can enrol
+   * one the new session's tracker never saw, so the session asks for them to
+   * report their disconnect lines and count drops as `playerLeft`.
+   */
+  heldPresence(source: ServerPresenceSource): Promise<ServerPresencePlayer[]> {
+    return Promise.resolve(this.pending.all(source.pelicanServerId));
+  }
+
+  /**
+   * ROK-1802: a live heartbeat's player count. Unconfirmed holds that it
+   * covers become enrollable — they may now reach the threshold, or join
+   * the game's live event; ones it cannot cover are dropped. Players
+   * already enrolled on this server are part of the count (Codex r2): a
+   * stale hold must not ride in on their heads.
+   */
+  playerCount(source: ServerPresenceSource, count: number): Promise<void> {
+    const id = source.pelicanServerId;
+    if (!this.pending.hasUnconfirmed(id)) return Promise.resolve();
+    return this.serial(source.gameId, async () => {
+      const rows = await this.openRows(source);
+      const enrolled = new Set(rows.map((r) => r.steamId));
+      // Codex r3: an enrolled player's own hold must not take a cover slot.
+      for (const steamId of enrolled) this.pending.remove(id, steamId);
+      if (!this.pending.reconcile(id, count - enrolled.size)) return;
+      if (!(await this.adHocEventService.isEnabled())) return;
+      const live = await findLiveGameAdHocEvent(this.db, source.gameId);
+      if (live) return this.attachWithPending(live, source, []);
+      await this.evaluate(source);
+    });
   }
 
   /**
@@ -194,6 +224,22 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     );
   }
 
+  /** Open on-server rows for this server across its live events. */
+  private async openRows(
+    source: ServerPresenceSource,
+  ): Promise<ServerPresencePlayer[]> {
+    const out: ServerPresencePlayer[] = [];
+    for (const live of await this.enrolledEvents(source))
+      out.push(
+        ...(await listOpenServerPresence(
+          this.db,
+          live.id,
+          source.pelicanServerId,
+        )),
+      );
+    return out;
+  }
+
   /** Attach every server's held players for `gameId` to `live`. */
   private async drainGame(
     gameId: number,
@@ -233,23 +279,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       await this.attach(live, source.pelicanServerId, pl);
   }
 
-  /** Join the game's live event; a returning player lifts the grace period. */
-  private async attach(
+  private attach(
     live: LiveGameEvent,
     pelicanServerId: number,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const identity = await resolveSteamIdentity(this.db, player.steamId);
-    await this.participantService.addServerParticipant(live.id, {
-      steamId: player.steamId,
-      displayName: player.displayName,
-      userId: identity?.userId ?? null,
-      pelicanServerId,
-    });
-    await this.gracePeriodQueue.cancel(live.id);
-    if (await restoreFromGracePeriod(this.db, live.id))
-      this.gateway.emitStatusChange(live.id, 'live');
-    await refreshLive(this.fx, live);
+    return attachServerPlayer(this.fx, live, pelicanServerId, player);
   }
 
   /**
@@ -262,7 +297,13 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const held = this.pending.hold(source, player);
+    this.pending.hold(source, player);
+    await this.evaluate(source);
+  }
+
+  /** The spawn gate over this server's enrollable holds (ROK-1802 split). */
+  private async evaluate(source: ServerPresenceSource): Promise<void> {
+    const held = this.pending.players(source.pelicanServerId).length;
     const clearance = await checkSuppression(
       this.db,
       serverSourceKey(source.pelicanServerId),
@@ -281,8 +322,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     if ((voice?.unconfirmed ?? 0) > 0) return;
     const players = this.pending.players(source.pelicanServerId);
     const plan = { source, binding, players };
+    // Only the enrolled leave the hold; uncovered ones wait for a heartbeat.
     if (await this.spawn(plan, clearance))
-      this.pending.clear(source.pelicanServerId);
+      this.pending.take(source.pelicanServerId);
   }
 
   /**
