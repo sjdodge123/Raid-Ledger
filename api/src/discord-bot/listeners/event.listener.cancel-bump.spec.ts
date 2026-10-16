@@ -70,6 +70,15 @@ describe('cancelEmbedRecord — recruitment bump (ROK-1812)', () => {
     expect(set).toHaveBeenCalledWith(bumpIdsCleared);
   });
 
+  it('still deletes the bump when the cancelled-embed edit fails, and rethrows the edit error (Codex r3)', async () => {
+    const { deps, editEmbed, deleteMessage } = makeDeps();
+    editEmbed.mockRejectedValue(makeDiscordApiError(10008, 'Unknown Message'));
+    await expect(
+      cancelEmbedRecord(deps, record, event, {}, 42),
+    ).rejects.toThrow('Unknown Message');
+    expect(deleteMessage).toHaveBeenCalledWith('channel-bump', 'bump-msg-001');
+  });
+
   it('clears the bump ids when Discord says the bump is already gone (10008)', async () => {
     const { deps, set, deleteMessage } = makeDeps();
     deleteMessage.mockRejectedValue(

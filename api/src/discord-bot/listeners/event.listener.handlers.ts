@@ -210,27 +210,32 @@ export async function cancelEmbedRecord(
   context: EmbedContext,
   eventId: number,
 ): Promise<void> {
-  const { embed, content } = deps.embedFactory.buildEventCancelled(
-    event,
-    context,
-  );
-  await deps.clientService.editEmbed(
-    record.channelId,
-    record.messageId,
-    embed,
-    undefined,
-    content,
-  );
-  await deps.db
-    .update(schema.discordEventMessages)
-    .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
-    .where(eq(schema.discordEventMessages.id, record.id));
-  deps.logger.log(
-    `Cancelled event embed for event ${eventId} (msg: ${record.messageId})`,
-  );
-  // ROK-1812: the embed sync skips cancelled events, so this is the only
-  // place a cancel can take down the "Spots still available" card.
-  await deleteRecordBump(deps, record, eventId);
+  try {
+    const { embed, content } = deps.embedFactory.buildEventCancelled(
+      event,
+      context,
+    );
+    await deps.clientService.editEmbed(
+      record.channelId,
+      record.messageId,
+      embed,
+      undefined,
+      content,
+    );
+    await deps.db
+      .update(schema.discordEventMessages)
+      .set({ embedState: EMBED_STATES.CANCELLED, updatedAt: new Date() })
+      .where(eq(schema.discordEventMessages.id, record.id));
+    deps.logger.log(
+      `Cancelled event embed for event ${eventId} (msg: ${record.messageId})`,
+    );
+  } finally {
+    // ROK-1812: the embed sync skips cancelled events, so this is the only
+    // place a cancel can take down the "Spots still available" card — even
+    // when the embed edit above fails (Codex r3): a cancelled event must not
+    // keep advertising spots. deleteRecordBump never throws.
+    await deleteRecordBump(deps, record, eventId);
+  }
 }
 
 /** Delete a Discord message and remove the DB record. */
