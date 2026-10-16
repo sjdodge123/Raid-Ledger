@@ -8,7 +8,8 @@ import type { JoinHandlerCtx } from './voice-state-join-dispatch.handlers';
 import type { ResolvedBinding } from './voice-state.helpers';
 import type { LobbyGameGroup } from './voice-lobby-groups.helpers';
 import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
-import { addDetectedMembers } from './voice-state-recovery.handlers';
+import { handlePresenceChange } from './voice-state.handlers';
+import { resolveVoiceChannel } from './voice-state.helpers';
 import {
   lobbySpawnFns,
   monitorSpawnFns,
@@ -17,6 +18,7 @@ import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import { suppressOrCheckThreshold } from './voice-state-gate.handlers';
 
 jest.mock('./voice-state.handlers', () => ({
+  handlePresenceChange: jest.fn(() => Promise.resolve()),
   markLobbyDirty: jest.fn(),
   shouldSpawnImmediately: jest.fn(() => Promise.resolve(false)),
 }));
@@ -27,7 +29,6 @@ jest.mock('./voice-state-join.handlers', () => ({
   handleGameBindingJoin: jest.fn(),
 }));
 jest.mock('./voice-state-recovery.handlers', () => ({
-  addDetectedMembers: jest.fn(() => Promise.resolve()),
   handleGeneralLobbyGroupDetection: jest.fn(),
 }));
 jest.mock('./voice-lobby-groups.helpers', () => ({
@@ -83,20 +84,29 @@ beforeEach(() => {
 });
 
 describe('handleServerPresenceChanged — general lobby (ROK-1801)', () => {
-  it('joins the group voice members not yet in the running event', async () => {
+  it('moves only the group voice members not yet in the running event, via the presence-switch path (Codex r2 P2)', async () => {
+    const gmA = { id: 'a' };
+    const gmB = { id: 'b' };
+    jest.mocked(resolveVoiceChannel).mockReturnValueOnce({
+      id: 'vc',
+      members: new Map([
+        ['a', gmA],
+        ['b', gmB],
+      ]),
+    } as never);
     jest.mocked(resolveLobbyGroups).mockResolvedValue({
       qualifying: [{ gameId: G, gameName: 'Valheim', memberIds: ['a', 'b'] }],
       dropped: [],
       minPlayers: 2,
       channelMemberCount: 2,
     });
-    await handleServerPresenceChanged(ctxWith(['a']), {
-      pelicanServerId: 1,
-      gameId: G,
-    });
-    expect(addDetectedMembers).toHaveBeenCalledTimes(1);
-    const groups = jest.mocked(addDetectedMembers).mock.calls[0]?.[2];
-    expect(groups?.map((g) => g.memberIds)).toEqual([['b']]);
+    const ctx = ctxWith(['a']);
+    await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+    // handlePresenceChange leaves b's prior lobby event before joining G — a
+    // direct add to G would leave b active in two events (ghost attendance).
+    expect(jest.mocked(handlePresenceChange).mock.calls).toEqual([
+      [ctx.deps, 'b', LOBBY, gmB],
+    ]);
   });
 
   it('cancels the game pending spawn when the group falls below minPlayers', async () => {

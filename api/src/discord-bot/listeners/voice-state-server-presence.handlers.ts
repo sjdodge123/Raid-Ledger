@@ -17,13 +17,14 @@ import {
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
-import { markLobbyDirty, shouldSpawnImmediately } from './voice-state.handlers';
+import {
+  handlePresenceChange,
+  markLobbyDirty,
+  shouldSpawnImmediately,
+} from './voice-state.handlers';
 import { suppressOrCheckThreshold } from './voice-state-gate.handlers';
 import { handleGameBindingJoin } from './voice-state-join.handlers';
-import {
-  addDetectedMembers,
-  handleGeneralLobbyGroupDetection,
-} from './voice-state-recovery.handlers';
+import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 import {
   resolveLobbyGroups,
   type LobbyGameGroup,
@@ -137,7 +138,14 @@ async function reevaluateLobby(
   fns.scheduleSpawn(gameId);
 }
 
-/** Join the game group's voice members not yet in its running lobby event. */
+/**
+ * Move the game group's voice members not yet in its running lobby event into
+ * it. Codex r2 P2: a member already in game A's event who joins game B's
+ * server (no Discord presence change) must leave A first, or they sit in both
+ * events and one later departure leaves a ghost. The presence-switch path
+ * already does that leave → join (its detection merges server presence), so
+ * this reuses it rather than adding to B directly.
+ */
 async function joinNewLobbyMembers(
   ctx: JoinHandlerCtx,
   chId: string,
@@ -148,10 +156,10 @@ async function joinNewLobbyMembers(
   const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
   if (!channel) return;
   const group = await lobbyGroupOf(ctx, chId, b, gameId);
-  const fresh = group?.memberIds.filter((id) => !joined.has(id)) ?? [];
-  if (!group || fresh.length === 0) return;
-  const pending = [{ ...group, memberIds: fresh }];
-  await addDetectedMembers(ctx.deps, channel, pending, b, chId);
+  for (const id of group?.memberIds ?? []) {
+    const gm = channel.members.get(id);
+    if (gm && !joined.has(id)) await handlePresenceChange(ctx.deps, id, b, gm);
+  }
 }
 
 /** This lobby's detected group for `gameId` (voice + server), if any. */
