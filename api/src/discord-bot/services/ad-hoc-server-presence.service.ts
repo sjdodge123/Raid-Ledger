@@ -144,6 +144,15 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   /**
+   * Codex r4: this server's held players, oldest first. A heartbeat can enrol
+   * one the new session's tracker never saw, so the session asks for them to
+   * report their disconnect lines and count drops as `playerLeft`.
+   */
+  heldPresence(source: ServerPresenceSource): Promise<ServerPresencePlayer[]> {
+    return Promise.resolve(this.pending.all(source.pelicanServerId));
+  }
+
+  /**
    * ROK-1802: a live heartbeat's player count. Unconfirmed holds that it
    * covers become enrollable — they may now reach the threshold, or join
    * the game's live event; ones it cannot cover are dropped. Players

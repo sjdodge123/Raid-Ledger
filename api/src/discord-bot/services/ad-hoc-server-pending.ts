@@ -61,6 +61,12 @@ export class PendingServerPlayers {
       .map((h) => h.player);
   }
 
+  /** Every player held here, in any state, oldest first (Codex r4). */
+  all(pelicanServerId: number): ServerPresencePlayer[] {
+    const entry = this.held.get(pelicanServerId);
+    return [...(entry?.players.values() ?? [])].map((h) => h.player);
+  }
+
   /** A held player's new character name (never enrols a stranger). */
   rename(pelicanServerId: number, player: ServerPresencePlayer): void {
     const held = this.held.get(pelicanServerId)?.players.get(player.steamId);
