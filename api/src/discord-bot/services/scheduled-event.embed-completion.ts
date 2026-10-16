@@ -150,8 +150,9 @@ export async function completeAndSweep(
       await queue?.enqueue(id, 'cron-complete');
     },
   });
+  if (!queue) return run;
   const guildId = client.isConnected() ? client.getGuildId() : null;
-  if (!queue || !guildId) return run;
+  if (!guildId) return run;
   const excludeIds = run.outcomes.map((o) => o.eventId);
   const swept = await sweepEmbedOnlyCompletions(
     db,
