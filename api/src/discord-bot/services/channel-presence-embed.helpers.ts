@@ -34,7 +34,9 @@ import {
   createChannelEmbed,
   type ChannelEmbed,
 } from '../embeds/embed-chrome.helpers';
-import { formatRoster, ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
+import { ROSTER_NAME_CAP } from '../embeds/embed-roster.helpers';
+import { groupSize } from '../listeners/voice-lobby-server-merge.helpers';
+import { formatGroupRoster } from './channel-presence-room.roster.helpers';
 import {
   buildLeadEmbed,
   MAX_GROUP_EMBEDS,
@@ -104,7 +106,9 @@ function isJustChatting(group: RoomGroup): boolean {
  * alternative wording (`STARTING SOON`, `READY`, …) in the meantime.
  */
 function shortAuthorLine(group: RoomGroup, room: ResolvedRoom): string {
-  const missing = room.minPlayers - group.memberIds.length;
+  // ROK-1801: voice ∪ server, each person once (`groupSize`, ruling 3).
+  const size = groupSize(group);
+  const missing = room.minPlayers - size;
   // `qualifying` is the room layer's threshold verdict; `missing <= 0`
   // re-derives it from the counts actually being rendered so a stale or absent
   // flag can never route a full group into the "needs" copy. That pair is the
@@ -117,7 +121,7 @@ function shortAuthorLine(group: RoomGroup, room: ResolvedRoom): string {
     // `playing` would restate the very falsehood F-1 was about. Applying the
     // existing ruling to this quadrant, not inventing vocabulary for it.
     const noun = group.gameId === null ? 'in voice' : 'playing';
-    return `${DOTTED} ${String(group.memberIds.length)} ${noun}`;
+    return `${DOTTED} ${String(size)} ${noun}`;
   }
   return `${DOTTED} NEEDS ${String(missing)} MORE`;
 }
@@ -166,9 +170,7 @@ export function buildShortGroupEmbed(
     ? null
     : gameDetailUrl(context.clientUrl, group.gameId ?? undefined);
   if (url) embed.setURL(url);
-  embed.setDescription(
-    formatRoster(group.memberNames, rosterCap) || EMPTY_ROSTER,
-  );
+  embed.setDescription(formatGroupRoster(group, rosterCap) || EMPTY_ROSTER);
   if (chatting) return embed;
 
   const fields = badgeFields(group.game, now);

@@ -637,3 +637,119 @@ describe('resolveRoom — art on the DEMO_MODE seam path', () => {
     expect(at(room.groups, 0).game).toBeNull();
   });
 });
+
+describe('resolveRoom — game-server presence (ROK-1801)', () => {
+  const roster = {
+    byGame: new Map([
+      [
+        5,
+        [
+          {
+            key: 'user:2',
+            steamId: 'S-P',
+            userId: 2,
+            discordUserId: 'u2',
+            name: 'Pariah',
+          },
+          {
+            key: 'steam:S-K',
+            steamId: 'S-K',
+            userId: null,
+            discordUserId: null,
+            name: 'Kveldulf',
+          },
+        ],
+      ],
+    ]),
+    gameNames: new Map([[5, 'Valheim']]),
+  };
+
+  it('moves a voice member on the server out of "no game detected" and lists server-only players', async () => {
+    const h = harness([
+      member('u1', 'L✿anati'),
+      member('u2', 'Pariah'),
+      member('u3', 'ProbablyaCat'),
+    ]);
+    h.detectGames.mockResolvedValue([
+      { gameId: 5, gameName: 'Valheim', memberIds: ['u1'] },
+      {
+        gameId: null,
+        gameName: 'Untitled Gaming Session',
+        memberIds: ['u2', 'u3'],
+      },
+    ]);
+    h.deps.serverRoster = { snapshot: () => Promise.resolve(roster) };
+    h.db.queue(schema.events, []);
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2 }),
+    );
+
+    expect(room.memberCount).toBe(3);
+    expect(room.undetectedNames).toEqual(['ProbablyaCat']);
+    const valheim = at(room.groups, 0);
+    expect(valheim.memberIds).toEqual(['u1', 'u2']);
+    expect(valheim.memberNames).toEqual(['L✿anati', 'Pariah']);
+    expect(valheim.onServerIds).toEqual(['u2']);
+    expect(valheim.serverOnly?.map((e) => e.name)).toEqual(['Kveldulf']);
+    expect(valheim.qualifying).toBe(true);
+    // L6: the occupancy ledger is voice-only — Kveldulf was never in the room.
+    expect([...room.members.keys()]).toEqual(['u1', 'u2', 'u3']);
+    expect(room.members.get('u2')?.gameId).toBe(5);
+  });
+
+  it('never consults the roster for an empty room (the recap path must close it)', async () => {
+    const h = harness([]);
+    const snapshot = jest.fn().mockResolvedValue(roster);
+    h.deps.serverRoster = { snapshot };
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2 }),
+    );
+
+    expect(room.groups).toEqual([]);
+    expect(snapshot).not.toHaveBeenCalled();
+  });
+
+  it('merges the D12 seam onServer / serverOnly fields like the live roster', async () => {
+    const h = harness([]);
+    h.db.queue(schema.games, [
+      gameRow(5, 'Valheim', null),
+      gameRow(6, 'Enshrouded', null),
+    ]);
+    h.db.queue(schema.events, []);
+
+    const room = await resolveRoom(
+      h.deps,
+      'vc-1',
+      lobbyBinding({ minPlayers: 2 }),
+      {
+        members: [
+          {
+            discordUserId: 'u1',
+            displayName: 'Ana',
+            gameId: 5,
+            onServer: true,
+          },
+        ],
+        serverOnly: [
+          { displayName: 'Bjorn', gameId: 6 },
+          { displayName: null, gameId: 6 },
+        ],
+      },
+    );
+
+    const byName = new Map(room.groups.map((g) => [g.gameName, g]));
+    expect(byName.get('Valheim')?.onServerIds).toEqual(['u1']);
+    expect(byName.get('Valheim')?.qualifying).toBe(false);
+    const enshrouded = byName.get('Enshrouded');
+    expect(enshrouded?.memberIds).toEqual([]);
+    expect(enshrouded?.serverOnly?.map((e) => e.name)).toEqual(['Bjorn', null]);
+    expect(enshrouded?.qualifying).toBe(true);
+    expect(room.memberCount).toBe(1);
+  });
+});

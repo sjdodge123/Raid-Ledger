@@ -6,7 +6,7 @@ import {
   OnModuleDestroy,
   Optional,
 } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { SettingsService } from '../../../settings/settings.service';
 import {
   EXTENSION_POINTS,
@@ -27,6 +27,11 @@ import {
   type PresenceServerRow,
 } from './pelican-presence.repository';
 import { PelicanPresenceSession } from './pelican-presence.session';
+import {
+  SERVER_PRESENCE_EVENTS,
+  type ServerPresenceReader,
+  type ServerRosterPlayer,
+} from './server-presence.reader';
 import {
   SERVER_PRESENCE_SINK,
   type ServerPresenceSink,
@@ -65,7 +70,7 @@ interface Plan {
  */
 @Injectable()
 export class PelicanPresenceSupervisor
-  implements OnApplicationBootstrap, OnModuleDestroy
+  implements OnApplicationBootstrap, OnModuleDestroy, ServerPresenceReader
 {
   private readonly logger = new Logger(PelicanPresenceSupervisor.name);
   private readonly sessions = new Map<number, Running>();
@@ -81,6 +86,7 @@ export class PelicanPresenceSupervisor
     private readonly factory: PelicanClientFactory,
     private readonly repo: PelicanPresenceRepository,
     private readonly settings: SettingsService,
+    private readonly events: EventEmitter2,
     @Optional()
     @Inject(SERVER_PRESENCE_SINK)
     private readonly sink: ServerPresenceSink | null = null,
@@ -92,6 +98,15 @@ export class PelicanPresenceSupervisor
   /** Server ids with an open session. */
   get activeServerIds(): number[] {
     return [...this.sessions.keys()];
+  }
+
+  /** ROK-1801 read port: every player on every open session. */
+  playersOnGames(): ServerRosterPlayer[] {
+    return [...this.sessions.values()].flatMap((r) => r.session.players());
+  }
+
+  playersForGame(gameId: number): ServerRosterPlayer[] {
+    return this.playersOnGames().filter((p) => p.gameId === gameId);
   }
 
   onApplicationBootstrap(): void {
@@ -258,6 +273,7 @@ export class PelicanPresenceSupervisor
       parser,
       sink: this.sink,
       logger: this.logger,
+      onChanged: (src) => this.events.emit(SERVER_PRESENCE_EVENTS.CHANGED, src),
       ...(this.socketFactory ? { socketFactory: this.socketFactory } : {}),
     });
     this.sessions.set(row.id, { session, key });

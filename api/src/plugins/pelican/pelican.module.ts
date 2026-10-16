@@ -59,6 +59,8 @@ type UninstalledPayload = { slug: string };
     PelicanSchedulesRepository,
     PelicanSyncService,
     PelicanStatusService,
+    // Aliased under SERVER_PRESENCE_READER by ServerPresenceReaderModule (ROK-1801).
+    PelicanPresenceSupervisor,
   ],
 })
 export class PelicanModule implements OnModuleInit, OnModuleDestroy {

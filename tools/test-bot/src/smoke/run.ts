@@ -19,6 +19,7 @@ import { channelEmbedTests } from "./tests/channel-embeds.test.js";
 import { dmNotificationTests } from "./tests/dm-notifications.test.js";
 import { dmEmbedRenderTests } from "./tests/dm-embed-render.test.js";
 import { voiceActivityTests } from "./tests/voice-activity.test.js";
+import { lobbyServerPresenceTests } from "./tests/lobby-server-presence.test.js";
 import { suppressionEndSyncTests } from "./tests/suppression-end-sync.test.js";
 import { interactionFlowTests } from "./tests/interaction-flows.test.js";
 import { rosterCalculationTests } from "./tests/roster-calculation.test.js";
@@ -61,6 +62,7 @@ import { lfgBoardTests } from "./tests/lfg-board.test.js";
 import { lfgInviteTests } from "./tests/lfg-invite.test.js";
 import { gameRoleTests } from "./tests/game-role.test.js";
 import { joinPostTests } from "./tests/join-post.test.js";
+import { guildDiscordMirrorTests } from "./tests/guild-discord-mirror.test.js";
 // ROK-1371 smoke unregistered below (CI-seed recipient flake) — import removed
 // to keep the bundle clean; the test file is kept for local runs + re-registration.
 
@@ -172,6 +174,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...dmNotificationTests,
     ...dmEmbedRenderTests,
     ...voiceActivityTests,
+    ...lobbyServerPresenceTests,
     ...suppressionEndSyncTests,
     ...interactionFlowTests,
     ...slashCommandTests,
@@ -212,6 +215,7 @@ function collectTests(filterCat?: string): SmokeTest[] {
     ...lfgInviteTests,
     ...gameRoleTests,
     ...joinPostTests,
+    ...guildDiscordMirrorTests,
     // ROK-1371 post-event-followup smoke intentionally UNregistered from CI.
     // The M4 DM-delivery flow it covers is verified by 97 api integration tests
     // (green on CI); the smoke's failure is a CI-seed recipient-eligibility

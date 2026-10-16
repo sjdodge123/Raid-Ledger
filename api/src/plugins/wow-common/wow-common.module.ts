@@ -34,6 +34,7 @@ import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
+import { ChannelMirrorModule } from '../../discord-bot/channel-mirror/channel-mirror.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import {
   EVENT_GUILD_TAGGER_KEY,
@@ -54,9 +55,11 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
+import { GuildDiscordController } from './guilds/guild-discord.controller';
+import { GuildDiscordService } from './guilds/guild-discord.service';
 
 @Module({
-  imports: [SettingsModule, CharactersModule],
+  imports: [SettingsModule, CharactersModule, ChannelMirrorModule],
   controllers: [
     BlizzardController,
     ForeverConfigController,
@@ -69,6 +72,7 @@ import { CharacterQuestsService } from './character-quests.service';
     CharacterQuestsController,
     GuildsController,
     GuildContentController,
+    GuildDiscordController,
   ],
   providers: [
     BlizzardService,
@@ -105,6 +109,7 @@ import { CharacterQuestsService } from './character-quests.service';
     GuildEventTagger,
     GuildProfileService,
     GuildAddonsService,
+    GuildDiscordService,
   ],
   exports: [
     BlizzardService,

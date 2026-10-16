@@ -113,6 +113,7 @@ const KNOWN_SPEC_HELPER_FIXTURES = [
   'calendar-sync/providers/testing/calendar-read.conformance.spec-helpers.ts',
   'calendar-sync/providers/testing/calendar-write.conformance.spec-helpers.ts',
   'calendar-sync/read/calendar-read.integration.spec-helpers.ts',
+  'discord-bot/channel-mirror/channel-mirror.spec-helpers.ts',
   'discord-bot/join-post/join-post.integration.spec-helpers.ts',
   'discord-bot/lfm/lfm-embed.service.spec-helpers.ts',
   'discord-bot/listeners/signup-handlers.spec-helpers.ts',

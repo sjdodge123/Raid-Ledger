@@ -22,6 +22,14 @@ export const LobbyPresenceMemberSchema = z.object({
   gameId: z.number().int().positive().nullable(),
   /** Links this member's game group to an existing ad-hoc event. */
   eventId: z.number().int().positive().optional(),
+  /** ROK-1801: also on this game's server (renders ` 🖥`). Additive. */
+  onServer: z.boolean().optional(),
+});
+
+/** ROK-1801: on a game server, not in the channel. `null` = anonymous `+N`. */
+export const LobbyServerOnlySchema = z.object({
+  displayName: z.string().min(1).nullable(),
+  gameId: z.number().int().positive(),
 });
 
 /**
@@ -32,6 +40,8 @@ export const LobbyPresenceMemberSchema = z.object({
 export const SetLobbyPresenceSchema = z.object({
   voiceChannelId: z.string().min(1),
   members: z.array(LobbyPresenceMemberSchema).nullable(),
+  /** ROK-1801: optional, so pre-1801 smoke payloads keep parsing. */
+  serverOnly: z.array(LobbyServerOnlySchema).optional(),
 });
 
 export type SetLobbyPresenceBody = z.infer<typeof SetLobbyPresenceSchema>;

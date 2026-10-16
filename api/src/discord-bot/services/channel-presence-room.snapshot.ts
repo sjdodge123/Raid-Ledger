@@ -13,6 +13,11 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { LobbyGameGroup } from '../listeners/voice-lobby-groups.helpers';
+import { mergeServerPresence } from '../listeners/voice-lobby-server-merge.helpers';
+import type {
+  ServerRoster,
+  ServerRosterEntry,
+} from './server-presence-roster.helpers';
 import { fetchGameArt } from './channel-presence-room.art';
 import type { EmbedGame } from './embed-game.helpers';
 
@@ -34,6 +39,14 @@ export interface RoomMemberSnapshot {
   gameId: number | null;
   /** Links this member's game group to an existing ad-hoc event (D12). */
   eventId?: number;
+  /** ROK-1801: also on `gameId`'s server (renders ` 🖥`); needs a `gameId`. */
+  onServer?: boolean;
+}
+
+/** ROK-1801: on a game server, not in the channel. `null` name = anonymous. */
+export interface ServerOnlySnapshot {
+  displayName: string | null;
+  gameId: number;
 }
 
 /**
@@ -44,6 +57,8 @@ export interface RoomMemberSnapshot {
  */
 export interface RoomSnapshot {
   members: RoomMemberSnapshot[];
+  /** ROK-1801: server-only players, merged exactly as the live roster is. */
+  serverOnly?: ServerOnlySnapshot[];
 }
 
 /** The output of the step the DEMO_MODE override replaces. */
@@ -73,14 +88,21 @@ export async function snapshotSource(
   }
   // ONE games read: the names below come off the very rows the art came off,
   // so the seam path never issues a second select (Lead ruling 1).
-  const art = await fetchGameArt(db, gameIdsOf(snapshot.members));
+  const art = await fetchGameArt(db, [
+    ...gameIdsOf(snapshot.members),
+    ...(snapshot.serverOnly ?? []).map((p) => p.gameId),
+  ]);
   const gameNames = new Map(
     [...art].map(([id, game]) => [id, game.name] as const),
   );
   return {
     memberCount: snapshot.members.length,
     names,
-    detected: groupSnapshotMembers(snapshot.members, gameNames),
+    detected: mergeServerPresence(
+      groupSnapshotMembers(snapshot.members, gameNames),
+      snapshot.members.map((m) => m.discordUserId),
+      seamRoster(snapshot, gameNames),
+    ),
     art,
     eventHints,
   };
@@ -121,4 +143,44 @@ function groupSnapshotMembers(
     ...groups,
     { gameId: null, gameName: UNRESOLVED_GAME_NAME, memberIds: nullIds },
   ];
+}
+
+/** One seam roster entry; the SteamID slot holds a seam key, never rendered. */
+function seamEntry(
+  key: string,
+  discordUserId: string | null,
+  name: string | null,
+): ServerRosterEntry {
+  return { key, steamId: key, userId: null, discordUserId, name };
+}
+
+/**
+ * The seam's stand-in for `ServerPresenceRosterService.snapshot()` (ROK-1801):
+ * `onServer` members and `serverOnly` players become a roster, so the D12 path
+ * runs the SAME `mergeServerPresence` as the live card. No server data → an
+ * empty roster, and the merge returns detection untouched.
+ */
+function seamRoster(
+  snapshot: RoomSnapshot,
+  gameNames: Map<number, string>,
+): ServerRoster {
+  const byGame = new Map<number, ServerRosterEntry[]>();
+  const add = (gameId: number, entry: ServerRosterEntry): void => {
+    byGame.set(gameId, [...(byGame.get(gameId) ?? []), entry]);
+  };
+  for (const m of snapshot.members)
+    if (m.onServer && m.gameId !== null)
+      add(
+        m.gameId,
+        seamEntry(`seam:${m.discordUserId}`, m.discordUserId, m.displayName),
+      );
+  (snapshot.serverOnly ?? []).forEach((p, i) =>
+    add(p.gameId, seamEntry(`seam-server:${String(i)}`, null, p.displayName)),
+  );
+  const names = new Map(
+    [...byGame.keys()].map(
+      (id) => [id, gameNames.get(id) ?? UNRESOLVED_GAME_NAME] as const,
+    ),
+  );
+  return { byGame, gameNames: names };
 }

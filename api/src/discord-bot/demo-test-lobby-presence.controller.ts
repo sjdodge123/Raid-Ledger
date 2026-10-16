@@ -46,12 +46,17 @@ import {
 
 type LobbyPresenceMember = NonNullable<SetLobbyPresenceBody['members']>[number];
 
-/** Drop an absent `eventId` key so the parsed member is exactly a snapshot member. */
+/** Drop absent optional keys so the parsed member is exactly a snapshot member. */
 function toSnapshotMember({
   eventId,
+  onServer,
   ...member
 }: LobbyPresenceMember): RoomMemberSnapshot {
-  return eventId === undefined ? member : { ...member, eventId };
+  return {
+    ...member,
+    ...(eventId === undefined ? {} : { eventId }),
+    ...(onServer === undefined ? {} : { onServer }),
+  };
 }
 
 @Controller('admin/test')
@@ -79,14 +84,19 @@ export class DemoTestLobbyPresenceController {
     @Body() body: unknown,
   ): Promise<LobbyPresenceResponse> {
     await this.assertDemoMode();
-    const { voiceChannelId, members } = parseDemoBody(
+    const { voiceChannelId, members, serverOnly } = parseDemoBody(
       SetLobbyPresenceSchema,
       body,
     );
     // The annotation is the compile-time proof that the body mirrors the
     // override input type — if `RoomMemberSnapshot` gains a field, this breaks.
     const snapshot: RoomSnapshot | null =
-      members === null ? null : { members: members.map(toSnapshotMember) };
+      members === null
+        ? null
+        : {
+            members: members.map(toSnapshotMember),
+            ...(serverOnly ? { serverOnly } : {}),
+          };
 
     await this.presence.setRoomOverride(voiceChannelId, snapshot);
     await this.presence.flushNow();

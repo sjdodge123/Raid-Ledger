@@ -24,6 +24,7 @@ import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
 import { DiscordModule } from './plugins/discord';
 import { PelicanModule } from './plugins/pelican';
+import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
 import { ValheimModule } from './plugins/valheim';
 import { RateLimitModule } from './throttler/throttler.module';
 import { QueueModule } from './queue/queue.module';
@@ -102,6 +103,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     LogsModule,
     AiModule,
     PelicanModule,
+    ServerPresenceReaderModule,
     ValheimModule,
     SchedulingModule,
     LineupsModule,

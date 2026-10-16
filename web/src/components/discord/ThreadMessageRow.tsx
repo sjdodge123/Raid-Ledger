@@ -6,7 +6,7 @@
  * that way. Author name, avatar and timestamp are the values frozen on the row
  * at post time (D8) — a rename three months later must not rewrite history.
  */
-import { useMemo, useState, type JSX } from 'react';
+import { useMemo, useState, type JSX, type ReactNode } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import type {
     ThreadMessageAttachmentDto,
@@ -19,6 +19,11 @@ import { isHttpUrl, tokenize } from './discord-markdown.helpers';
 export interface ThreadMessageRowProps {
     /** One mirrored message, exactly as the API returned it. */
     message: ThreadMessageDto;
+    /**
+     * Optional read-only extra rendered under the body (ROK-1788: the guild
+     * channel mirror's embed block). Display only, like the rest of the row.
+     */
+    children?: ReactNode;
 }
 
 const AVATAR_CLASS = 'h-8 w-8 shrink-0 rounded-full';
@@ -146,6 +151,7 @@ function AttachmentList({
  */
 export function ThreadMessageRow({
     message,
+    children,
 }: ThreadMessageRowProps): JSX.Element {
     const tokens = useMemo(
         () => tokenize(message.content, message.mentions),
@@ -163,6 +169,7 @@ export function ThreadMessageRow({
             <div className="min-w-0 flex-1">
                 <MessageMeta message={message} />
                 {message.content !== '' && <DiscordText tokens={tokens} />}
+                {children}
                 <AttachmentList attachments={message.attachments} />
                 <ThreadMessageReactions reactions={message.reactions} />
             </div>
