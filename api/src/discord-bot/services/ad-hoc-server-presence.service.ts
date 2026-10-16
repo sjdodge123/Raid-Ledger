@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
@@ -27,7 +27,11 @@ import {
   resolveGameName,
   restoreFromGracePeriod,
 } from './ad-hoc-event.helpers';
-import { AD_HOC_EVENTS } from '../discord-bot.constants';
+import {
+  AD_HOC_EVENTS,
+  type AdHocParticipantJoinedPayload,
+} from '../discord-bot.constants';
+import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
   spawnOrFindServerQuickPlay,
   spawnRoster,
@@ -37,7 +41,9 @@ import {
   DEFAULT_SERVER_MIN_PLAYERS,
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
+  findServerEnrolledEvent,
   listOpenServerPresence,
+  listServerEnrolledEvents,
   listOnServerSteamIds,
   renameSteamOnlyRow,
   resolveSteamIdentity,
@@ -65,10 +71,7 @@ interface SpawnPlan {
 export class AdHocServerPresenceService implements ServerPresenceSink {
   private readonly logger = new Logger(AdHocServerPresenceService.name);
   /** Players present before the threshold is met, per Pelican server. */
-  private readonly pending = new Map<
-    number,
-    Map<string, ServerPresencePlayer>
-  >();
+  private readonly pending = new PendingServerPlayers();
   /** Per-game serialisation: one spawn decision at a time. */
   private readonly chains = new Map<number, Promise<unknown>>();
   private readonly onWindowExtended: SuppressionWindowHook = (p) =>
@@ -103,8 +106,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     player: ServerPresencePlayer,
   ): Promise<void> {
     return this.serial(source.gameId, async () => {
-      const held = this.pending.get(source.pelicanServerId);
-      if (held?.has(player.steamId)) held.set(player.steamId, player);
+      this.pending.rename(source.pelicanServerId, player);
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (!live) return;
       await renameSteamOnlyRow(this.db, live.id, player);
@@ -114,8 +116,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
 
   playerLeft(source: ServerPresenceSource, steamId: string): Promise<void> {
     return this.serial(source.gameId, async () => {
-      this.pending.get(source.pelicanServerId)?.delete(steamId);
-      const live = await findLiveGameAdHocEvent(this.db, source.gameId);
+      this.pending.remove(source.pelicanServerId, steamId);
+      const live = await findServerEnrolledEvent(
+        this.db,
+        source.gameId,
+        steamId,
+      );
       if (!live) return;
       if (await this.participantService.markServerLeave(live.id, steamId))
         await this.afterLeave(live);
@@ -124,30 +130,79 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
 
   serverEmptied(source: ServerPresenceSource): Promise<void> {
     return this.serial(source.gameId, async () => {
-      this.pending.delete(source.pelicanServerId);
-      const live = await findLiveGameAdHocEvent(this.db, source.gameId);
-      if (!live) return;
-      const open = await listOnServerSteamIds(
-        this.db,
-        live.id,
-        source.pelicanServerId,
-      );
-      for (const steamId of open)
-        await this.participantService.markServerLeave(live.id, steamId);
-      if (open.length > 0) await this.afterLeave(live);
+      this.pending.clear(source.pelicanServerId);
+      for (const live of await this.enrolledEvents(source))
+        await this.emptyServerOn(live, source.pelicanServerId);
     });
   }
 
   async openPresence(
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
-    const live = await findLiveGameAdHocEvent(this.db, source.gameId);
-    return live
-      ? listOpenServerPresence(this.db, live.id, source.pelicanServerId)
-      : [];
+    const out: ServerPresencePlayer[] = [];
+    for (const live of await this.enrolledEvents(source))
+      out.push(
+        ...(await listOpenServerPresence(
+          this.db,
+          live.id,
+          source.pelicanServerId,
+        )),
+      );
+    return out;
+  }
+
+  /**
+   * Codex r2: a live event born elsewhere (voice, or another server) takes
+   * every player any server of its game is holding below `minPlayers` —
+   * unchanged heartbeats never call the sink again, so nothing else would.
+   */
+  @OnEvent(AD_HOC_EVENTS.PARTICIPANT_JOINED)
+  async onParticipantJoined(p: AdHocParticipantJoinedPayload): Promise<void> {
+    try {
+      const event = await getEventById(this.db, p.eventId);
+      const gameId = event?.gameId;
+      if (!gameId || !this.pending.hasGame(gameId)) return;
+      await this.serial(gameId, async () => {
+        const live = await findLiveGameAdHocEvent(this.db, gameId);
+        if (live) await this.drainGame(gameId, live);
+      });
+    } catch (err) {
+      this.logger.warn(`Pending drain for event ${p.eventId} failed: ${err}`);
+    }
   }
 
   // ─── Private ──────────────────────────────────────────
+
+  /** Live events holding an open row on this server (Codex r2 routing). */
+  private enrolledEvents(source: ServerPresenceSource) {
+    return listServerEnrolledEvents(
+      this.db,
+      source.gameId,
+      source.pelicanServerId,
+    );
+  }
+
+  /** Close this server's open rows on one event; grace if it emptied. */
+  private async emptyServerOn(
+    live: LiveGameEvent,
+    pelicanServerId: number,
+  ): Promise<void> {
+    const open = await listOnServerSteamIds(this.db, live.id, pelicanServerId);
+    for (const steamId of open)
+      await this.participantService.markServerLeave(live.id, steamId);
+    if (open.length > 0) await this.afterLeave(live);
+  }
+
+  /** Attach every server's held players for `gameId` to `live`. */
+  private async drainGame(
+    gameId: number,
+    live: LiveGameEvent,
+    exceptServerId?: number,
+  ): Promise<void> {
+    for (const held of this.pending.takeGame(gameId, exceptServerId))
+      for (const pl of held.players)
+        await this.attach(live, held.source.pelicanServerId, pl);
+  }
 
   /** Run `fn` after every earlier call for the same game has settled. */
   private serial(gameId: number, fn: () => Promise<void>): Promise<void> {
@@ -169,9 +224,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     players: ServerPresencePlayer[],
   ): Promise<void> {
-    const all = new Map(this.pending.get(source.pelicanServerId));
+    const all = new Map(
+      this.pending.take(source.pelicanServerId).map((pl) => [pl.steamId, pl]),
+    );
     for (const pl of players) all.set(pl.steamId, pl);
-    this.pending.delete(source.pelicanServerId);
     for (const pl of all.values())
       await this.attach(live, source.pelicanServerId, pl);
   }
@@ -200,14 +256,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
-    const players =
-      this.pending.get(source.pelicanServerId) ??
-      new Map<string, ServerPresencePlayer>();
-    players.set(player.steamId, player);
-    this.pending.set(source.pelicanServerId, players);
+    const held = this.pending.hold(source, player);
     const binding = await findGameVoiceBinding(this.db, source.gameId);
     const min = binding?.config?.minPlayers ?? DEFAULT_SERVER_MIN_PLAYERS;
-    if (players.size < min) return;
+    if (held < min) return;
     const clearance = await checkSuppression(
       this.db,
       serverSourceKey(source.pelicanServerId),
@@ -216,9 +268,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.onWindowExtended,
     );
     if (!clearance) return;
-    const plan = { source, binding, players: [...players.values()] };
+    const players = this.pending.players(source.pelicanServerId);
+    const plan = { source, binding, players };
     if (await this.spawn(plan, clearance))
-      this.pending.delete(source.pelicanServerId);
+      this.pending.clear(source.pelicanServerId);
   }
 
   /**
@@ -272,6 +325,12 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
         userId,
       });
     await this.announce(eventId, plan, input.ids);
+    const live = {
+      id: eventId,
+      channelBindingId: input.bindingId,
+      adHocStatus: 'live',
+    };
+    await this.drainGame(input.gameId, live, input.pelicanServerId);
     this.logger.log(
       `Server ${serverSourceKey(input.pelicanServerId)} spawned Quick Play ${eventId}`,
     );

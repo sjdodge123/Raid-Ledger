@@ -184,8 +184,11 @@ async function enrollMember(
 }
 
 /**
- * ROK-1800: the game-server path created this game's Quick Play while we
- * waited on the spawn lock — adopt it under our key and join it.
+ * ROK-1800: another spawn (the game-server path, or a concurrent voice join)
+ * created this game's Quick Play while we waited on the spawn lock — adopt it
+ * under our key and join it. Codex r2: when a voice spawn already registered
+ * the event, MERGE into its state; a fresh empty `memberSet` would drop that
+ * first joiner and their leave would never be seen.
  */
 async function joinRaceWinner(
   deps: AdHocHandlerDeps,
@@ -195,13 +198,26 @@ async function joinRaceWinner(
   member: VoiceMemberInfo,
   eventId: number,
 ): Promise<void> {
-  const state: ActiveAdHocState = {
+  const state: ActiveAdHocState = findStateForEvent(
+    deps.activeEvents,
+    eventId,
+  ) ?? {
     eventId,
     memberSet: new Set<string>(),
     ...(effectiveGameId !== undefined ? { gameId: effectiveGameId } : {}),
   };
   deps.activeEvents.set(eventKey, state);
   await handleJoinExisting(deps, state, eventKey, bindingId, member);
+}
+
+/** The in-memory state already tracking `eventId`, if any. */
+function findStateForEvent(
+  activeEvents: Map<string, ActiveAdHocState>,
+  eventId: number,
+): ActiveAdHocState | undefined {
+  for (const state of activeEvents.values())
+    if (state.eventId === eventId) return state;
+  return undefined;
 }
 
 /** Register a new event in active state and track voice attendance. */
