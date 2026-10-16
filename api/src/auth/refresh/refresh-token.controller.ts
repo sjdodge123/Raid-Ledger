@@ -46,7 +46,11 @@ export class RefreshTokenController {
 
   /**
    * Rotate the refresh cookie → fresh access JWT + new cookie. ROK-1754: the
-   * JWT impersonates while the family's marker is live (§3.4.4).
+   * JWT impersonates while the family's marker is live (§3.4.4). Codex r3:
+   * the rotated cookie is set only AFTER the access token is minted; a
+   * concurrent revoke + block (null mint) 401s with NO cookie mutation, so a
+   * late rejection can never delete a cookie a parallel password change just
+   * installed.
    */
   @RateLimit('refresh')
   @Post('refresh')
@@ -60,7 +64,6 @@ export class RefreshTokenController {
     if (!rawToken) throw new UnauthorizedException('No refresh token');
     const rotated = await this.refreshService.rotate(rawToken);
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
-    setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
     const access_token = await mintRefreshAccessToken(
       {
         db: this.db,
@@ -70,12 +73,8 @@ export class RefreshTokenController {
       },
       rotated,
     );
-    if (!access_token) {
-      // Codex r2: the just-rotated row was revoked by a concurrent
-      // revoke + block — drop the dead cookie we just set and 401.
-      clearRefreshCookie(res);
-      throw new UnauthorizedException('Invalid refresh token');
-    }
+    if (!access_token) throw new UnauthorizedException('Invalid refresh token');
+    setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
     return { access_token };
   }
 
