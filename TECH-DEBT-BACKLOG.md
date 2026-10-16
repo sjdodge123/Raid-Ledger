@@ -2730,3 +2730,12 @@ same day (#1278, #1279, #1280).
 
 ### 2026-10-15 — feat/rok-1797-game-mute (surfaced during the `--only-e2e` fleet run on slot 4)
 - **med** — `tools/test-bot` Discord smoke "ROK-1768: /bind purpose binds a text channel as Quick Play Announcements" fails its precondition on fleet slot 4: `needs a non-pool game and two non-default non-pool text channels with no binding for it; got game=32 usable=1/1`. Same root cause as the ROK-1766 and lobby-presence entries above (the fleet slot's Discord channel set is too small). It is not from this branch: no bind/lobby code is touched, and main's GitHub discord-smoke is green (run 38813297985). Suggested: give each fleet slot ≥2 non-pool text channels and ≥2 voice channels (rl-infra channel seeding).
+
+### 2026-10-15 — fix/rok-1711-voice-bots-minplayers (surfaced during the fleet voice smoke, slot 3)
+
+- **low** `tools/test-bot/src/smoke/tests/voice-activity.test.ts:607` — `FAIL  Lobby presence card of a brief visit is deleted`: "Brief-visit test needs a voice channel no other general-lobby test binds, but the pool has 1 voice channel(s), so index 3 and index 2 are both slot-3-voice". Pre-existing: a fixture-capacity check against the `slot-3` channel set (1 voice channel), independent of the ROK-1711 count change. Suggested: give each fleet slot channel set a second voice channel, or skip (not fail) when the pool is too small.
+- **low** `tools/test-bot/src/smoke/tests/quick-play-announcements.test.ts:67` — `FAIL  ROK-1766: General Lobby Quick Play spawn posts to the Quick Play Announcements channel`: "ROK-1766 needs a game, two non-default non-pool text channels and a voice channel; got game=16 texts=1 voice=…". Pre-existing for the same reason: the `slot-3` set has 2 text channels, one of them the default. Suggested: add a third text channel to each fleet slot set, or skip when the set is too small.
+
+### 2026-10-16 — fix/rok-1711-voice-bots-minplayers (resolution note)
+
+- **[resolved]** The 2026-09-01 rok-1445 entry "`getGameFilteredCount` counts bot members" (`voice-state.handlers.ts:270`) is fixed by ROK-1711: bots are skipped in `voice-threshold-count.helpers.ts` unless DEMO_MODE-allowlisted (`VOICE_THRESHOLD_BOT_ALLOWLIST`).
