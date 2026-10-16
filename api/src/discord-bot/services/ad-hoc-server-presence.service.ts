@@ -35,6 +35,7 @@ import {
   hasAnyoneToEnrol,
   hasTrackedPlayers,
   lazyReader,
+  attachUnenrolled,
   openServerRows,
   type EnrolDeps,
 } from './ad-hoc-server-enrol.helpers';
@@ -45,7 +46,6 @@ import {
 import {
   afterServerLeave,
   announceServerSpawn,
-  attachServerPlayer,
   closeServerRows,
   refreshLive,
   type PresenceEffectsDeps,
@@ -277,7 +277,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   /**
    * Attach `players` plus everyone this server held below the threshold — a
    * live event that appeared meanwhile (e.g. voice-born) takes them all, and
-   * then every player the tracker reports for the game (ROK-1821).
+   * then every player the tracker reports for the game (ROK-1821). A player
+   * already open in a live event of the game (enrolled by an earlier
+   * `enrolGame` of this replay) is not attached again (Codex r3).
    */
   private async attachWithPending(
     live: LiveGameEvent,
@@ -288,8 +290,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.pending.take(source.pelicanServerId).map((pl) => [pl.steamId, pl]),
     );
     for (const pl of players) all.set(pl.steamId, pl);
-    for (const pl of all.values())
-      await attachServerPlayer(this.fx, live, source.pelicanServerId, pl);
+    await attachUnenrolled(this.fx, live, source, [...all.values()]);
     await enrolGame(this.enrol, source.gameId, live, source.pelicanServerId);
   }
 

@@ -15,7 +15,10 @@ import {
   SERVER_PRESENCE_READER,
   type ServerPresenceReader,
 } from '../../plugins/pelican/presence/server-presence.reader';
-import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
+import type {
+  ServerPresencePlayer,
+  ServerPresenceSource,
+} from '../../plugins/pelican/presence/server-presence.sink';
 import { getEventById } from './ad-hoc-event.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
@@ -109,6 +112,23 @@ export async function enrolTracked(
       await attachServerPlayer(deps.fx, live, serverId, pl);
     }
   }
+}
+
+/**
+ * Attach `players` of `source` to `live`, skipping any already open in a live
+ * event of the game — e.g. enrolled by an earlier `enrolGame` of the same
+ * replay — so a queued join never opens a second session (Codex r3).
+ */
+export async function attachUnenrolled(
+  fx: PresenceEffectsDeps,
+  live: LiveGameEvent,
+  source: ServerPresenceSource,
+  players: ServerPresencePlayer[],
+): Promise<void> {
+  const open = new Set(await listOpenGameServerSteamIds(fx.db, source.gameId));
+  for (const pl of players)
+    if (!open.has(pl.steamId))
+      await attachServerPlayer(fx, live, source.pelicanServerId, pl);
 }
 
 /** Attach every server's eligible held players for `gameId` to `live`. */

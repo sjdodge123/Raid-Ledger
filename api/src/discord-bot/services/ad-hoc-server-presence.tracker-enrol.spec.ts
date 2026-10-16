@@ -140,6 +140,29 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);
   });
 
+  it("a player enrolled while handling another's join is not attached again by their own queued join (Codex r3)", async () => {
+    const B = '76561198000000002';
+    const open = new Set<string>();
+    jest
+      .mocked(listOpenGameServerSteamIds)
+      .mockImplementation(() => Promise.resolve([...open]));
+    jest.mocked(attachServerPlayer).mockImplementation((_fx, _live, _s, pl) => {
+      open.add(pl.steamId);
+      return Promise.resolve();
+    });
+    const svc = serviceWith([
+      ON_SERVER,
+      { ...ON_SERVER, steamId: B, name: 'b' },
+    ]);
+    await svc.playerJoined(SOURCE, { steamId: ROK, displayName: 'rok' });
+    await svc.playerJoined(SOURCE, { steamId: B, displayName: 'b' });
+    const attachedB = jest
+      .mocked(attachServerPlayer)
+      .mock.calls.filter(([, , , pl]) => pl.steamId === B);
+    // B attached once: one session (sessionCount 1), not two.
+    expect(attachedB).toHaveLength(1);
+  });
+
   it('a held player left unconfirmed by a re-auth is still enrolled while the tracker reports them', async () => {
     jest.mocked(findLiveGameAdHocEvent).mockResolvedValueOnce(null);
     const svc = serviceWith([ON_SERVER]);
