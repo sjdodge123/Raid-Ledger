@@ -39,7 +39,12 @@ function build(live: { target: typeof TARGET; expiresAt: Date } | null) {
   const blocklist = new TokenBlocklistService(redis as unknown as Redis);
   const jwt = new JwtService({ secret: 'test-secret' });
   const impersonation = {
-    resolveForRefresh: jest.fn().mockResolvedValue(live),
+    resolveForRefresh: jest.fn(
+      async (_f: string, _u: number, pin?: (id: number) => Promise<void>) => {
+        if (live) await pin?.(live.target.id);
+        return live;
+      },
+    ),
   };
   const deps = { db: dbReturning([USER]), jwt, blocklist, impersonation };
   return { deps, blocklist, jwt };
@@ -130,5 +135,28 @@ describe('ROK-1810 Codex r2 — refresh mint after a concurrent revoke', () => {
     const q = queuedDb([USER]);
     await mintOrFail({ ...t.deps, db: q.db });
     expect(q.limit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ROK-1810 Codex r4 — target promoted between the floor pin and validation', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  it('the impersonation token keeps the PRE-promotion iat, so the promotion block revokes it', async () => {
+    const expiresAt = new Date(NOW.getTime() + 30 * 60 * 1000);
+    const t = build(null);
+    await t.blocklist.blockUser(TARGET.id);
+    const preFloor = await t.blocklist.minIatFor(TARGET.id);
+    const resolveForRefresh = jest.fn(
+      async (_f: string, _u: number, pin?: (id: number) => Promise<void>) => {
+        await pin?.(TARGET.id);
+        await t.blocklist.blockUser(TARGET.id); // setRole('admin') → block
+        return { target: TARGET, expiresAt };
+      },
+    );
+    const deps = { ...t.deps, impersonation: { resolveForRefresh } };
+    const iat = iatOf(t.jwt, await mintOrFail(deps));
+    expect(iat).toBe(preFloor);
+    expect(await t.blocklist.isBlocked(TARGET.id, iat)).toBe(true);
   });
 });

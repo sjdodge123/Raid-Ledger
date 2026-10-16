@@ -144,10 +144,15 @@ export class ImpersonationSessionService {
   /**
    * For `/auth/refresh` (lane A2): the target to mint while the marker is
    * live and valid (§3.4.2 rules); otherwise ends the marker and returns null.
+   * `beforeValidate` (ROK-1810 Codex r4) runs with the marker's target id
+   * BEFORE the target's role is loaded and validated — the refresh path pins
+   * the target's block floor there, so a promotion (role commit, then block)
+   * landing after the pin is either seen by validation or covers the token.
    */
   async resolveForRefresh(
     familyId: string,
     refreshUserId: number,
+    beforeValidate?: (targetUserId: number) => Promise<void>,
   ): Promise<{ target: ImpersonationTarget; expiresAt: Date } | null> {
     const [marker] = await this.db
       .select()
@@ -155,6 +160,7 @@ export class ImpersonationSessionService {
       .where(eq(markers.familyId, familyId))
       .limit(1);
     if (!marker) return null;
+    await beforeValidate?.(marker.targetUserId);
     const impersonator = await this.loadUser(marker.impersonatorUserId);
     const target = await this.loadUser(marker.targetUserId);
     const reason = markerEndReason(
