@@ -79,7 +79,7 @@ describe('handleServerPresenceChanged — general lobby (ROK-1801)', () => {
     await handleServerPresenceChanged(ctxWith(['a']), {
       pelicanServerId: 1,
       gameId: G,
-    } as never);
+    });
     expect(addDetectedMembers).toHaveBeenCalledTimes(1);
     const groups = jest.mocked(addDetectedMembers).mock.calls[0]?.[2];
     expect(groups?.map((g) => g.memberIds)).toEqual([['b']]);
@@ -90,7 +90,7 @@ describe('handleServerPresenceChanged — general lobby (ROK-1801)', () => {
     await handleServerPresenceChanged(ctxWith(null), {
       pelicanServerId: 1,
       gameId: G,
-    } as never);
+    });
     expect(fns.cancelSpawn).toHaveBeenCalledWith(G);
     expect(fns.scheduleSpawn).not.toHaveBeenCalled();
   });
