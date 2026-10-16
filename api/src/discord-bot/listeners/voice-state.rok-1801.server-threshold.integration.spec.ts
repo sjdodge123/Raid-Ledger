@@ -232,3 +232,41 @@ describe('server path — voice members count toward minPlayers (Q9)', () => {
     expect(await valheimQuickPlays()).toBe(0);
   });
 });
+
+// ── General lobby (the CHANGED handler's lobby half) ─────────────────
+
+/** Swap the monitor for a general-lobby binding on the same channel. */
+async function useGeneralLobby(): Promise<void> {
+  await testApp.db
+    .delete(schema.channelBindings)
+    .where(eq(schema.channelBindings.channelId, CHANNEL_ID));
+  await testApp.db.insert(schema.channelBindings).values({
+    guildId: GUILD_ID,
+    channelId: CHANNEL_ID,
+    channelType: 'voice',
+    bindingPurpose: 'general-lobby',
+    gameId: null,
+    config: { minPlayers: 2 },
+  });
+}
+
+describe('general lobby — CHANGED marks the card dirty and re-checks (Q6)', () => {
+  it('a server player joining Valheim refreshes the lobby card and spawns the group', async () => {
+    await useGeneralLobby();
+    await joinVoice(VOICE_A);
+    expect(await valheimQuickPlays()).toBe(0);
+    const markDirty = jest.mocked(
+      testApp.app.get(ChannelPresenceEmbedService).markDirty,
+    );
+    markDirty.mockClear();
+    onServer = [serverPlayer(STEAM_B)];
+    await testApp.app
+      .get(EventEmitter2)
+      .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
+        pelicanServerId: serverSeq,
+        gameId: valheim,
+      });
+    expect(markDirty).toHaveBeenCalledWith(CHANNEL_ID);
+    expect(await valheimQuickPlays()).toBe(1);
+  });
+});
