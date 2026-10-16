@@ -11,6 +11,10 @@ import {
   lobbyGroupSize,
 } from './voice-lobby-groups.helpers';
 import { gateCtx, traceGate } from './voice-gate-trace';
+import {
+  tallyGameMembers,
+  type GameMemberTally,
+} from './voice-threshold-count.helpers';
 import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 import { unanimousLobbySize } from './voice-threshold-server-count.helpers';
 
@@ -310,39 +314,25 @@ async function switchClearsThreshold(
  * detected game positively matches the bound game — the series spawn guard
  * uses it to refuse minting a stored game off pure presence-null counting.
  *
- * ROK-1445 review MED-2 — deliberately NO bot filter here, unlike every other
- * count surface. This is the game-binding path: AC9 targeted the general-lobby
- * occupancy gate (now filtered in `resolveLobbyGroups`/`humanMembers`), and
- * AC12 requires ROK-1390/1394 behaviour on fixed-game binds to be preserved
- * byte-for-byte. Known consequence, tracked in TECH-DEBT-BACKLOG.md: a bot
- * idling in a game-bound channel is presence-null, so ROK-697 null-counting
- * makes it count — one human plus one music bot reaches `counted = 2` and
- * spawns a 1-human event on the delayed path. Fixing it means changing a count
- * AC12 pins, so it is filed rather than folded in here.
+ * ROK-1711 — Discord bots are skipped (a lone human plus an idle music bot
+ * must not clear `minPlayers`); presence-null HUMANS still count (ROK-697).
+ * A DEMO_MODE-only allowlist keeps the companion smoke bot counting.
  */
 export async function getGameFilteredCount(
   deps: VoiceHandlerDeps,
   channelId: string,
   binding: ResolvedBinding,
-): Promise<{ counted: number; allConfirmed: boolean; confirmedCount: number }> {
+): Promise<GameMemberTally> {
   const channel = resolveVoiceChannel(deps.clientService, channelId);
   // ROK-1415 (TD1): `== null`, not `!binding.gameId` — a bound game id of 0 is
   // a real game, not a missing one.
   if (!channel || binding.gameId == null)
     return { counted: 0, allConfirmed: false, confirmedCount: 0 };
-  const voiceMembers = [...channel.members.values()];
-  let counted = 0;
-  let allConfirmed = true;
-  let confirmedCount = 0;
-  for (const member of voiceMembers) {
-    const detected = await deps.presenceDetector.detectGameForMember(member);
-    if (detected.gameId !== null && detected.gameId !== binding.gameId)
-      continue;
-    counted++;
-    if (detected.gameId === null) allConfirmed = false;
-    else confirmedCount++;
-  }
-  return { counted, allConfirmed, confirmedCount };
+  return tallyGameMembers(
+    channel.members.values(),
+    (m) => deps.presenceDetector.detectGameForMember(m),
+    binding.gameId,
+  );
 }
 
 /** Check if all members share the same game (ROK-697). */

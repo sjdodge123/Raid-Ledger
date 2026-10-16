@@ -181,7 +181,9 @@ export class PelicanPresenceSupervisor
     for (const [id, running] of [...this.sessions]) {
       if (desired.get(id)?.key === running.key) continue;
       this.sessions.delete(id);
-      this.emptiedStopped.add(id);
+      // Not marked emptied here (Codex r4): the session's `serverEmptied` may
+      // have failed, so `emptyStopped` re-checks persisted presence and only
+      // marks the server once a cleanup has actually succeeded.
       await running.session.stop(true);
     }
     for (const [id, target] of desired) {

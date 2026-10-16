@@ -22,6 +22,8 @@ const row = {
     lastSyncedAt: '2026-10-13T12:00:00.000Z',
     statusCheckedAt: null,
     missing: false,
+    presenceTracking: false,
+    presenceSupported: true,
 };
 
 describe('PelicanServerRowSchema', () => {

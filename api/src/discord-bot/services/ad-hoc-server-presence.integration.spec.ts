@@ -153,6 +153,36 @@ describe('AdHocServerPresenceService — spawn and attach (real DB)', () => {
   });
 });
 
+describe('AdHocServerPresenceService — guard below minPlayers', () => {
+  it('a lone server player still extends a live scheduled event (Codex r4)', async () => {
+    const now = Date.now();
+    const scheduledEnd = new Date(now + 10 * 60_000);
+    const inserted = await testApp.db
+      .insert(e)
+      .values({
+        title: 'Valheim night',
+        creatorId: testApp.seed.adminUser.id,
+        gameId: testApp.seed.game.id,
+        duration: [new Date(now - 600_000), scheduledEnd],
+        isAdHoc: false,
+      })
+      .returning();
+    const scheduledId = nonEmpty(inserted, 'scheduled event')[0].id;
+
+    await sink.playerJoined(source(), player(STEAM_A));
+
+    const [row] = nonEmpty(
+      await testApp.db.select().from(e).where(eq(e.id, scheduledId)),
+      'scheduled event row',
+    );
+    // Below minPlayers, but the guard still ran and bumped the window.
+    expect(row.extendedUntil?.getTime() ?? 0).toBeGreaterThan(
+      scheduledEnd.getTime(),
+    );
+    expect(await adHocEvents()).toHaveLength(0);
+  });
+});
+
 describe('AdHocServerPresenceService — one participant per person', () => {
   it('a linked user in voice who joins the server stays ONE participant', async () => {
     const src = source();

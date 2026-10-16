@@ -252,16 +252,17 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     await refreshLive(this.fx, live);
   }
 
-  /** Below threshold: hold the player; at threshold: guard, then spawn. */
+  /**
+   * Hold the player, run the ROK-959 guard, then spawn at the threshold. The
+   * guard runs first, as on the voice path (`suppressOrCheckThreshold`), so a
+   * lone server player still extends a live scheduled event for the game —
+   * `minPlayers` gates only the spawn (Codex r4).
+   */
   private async joinPending(
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void> {
     const held = this.pending.hold(source, player);
-    const binding = await findGameVoiceBinding(this.db, source.gameId);
-    const min = binding?.config?.minPlayers ?? DEFAULT_SERVER_MIN_PLAYERS;
-    const voice = (await this.voiceTally?.countFor(source, this.pending)) ?? 0;
-    if (held + voice < min) return;
     const clearance = await checkSuppression(
       this.db,
       serverSourceKey(source.pelicanServerId),
@@ -270,6 +271,10 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.onWindowExtended,
     );
     if (!clearance) return;
+    const binding = await findGameVoiceBinding(this.db, source.gameId);
+    const min = binding?.config?.minPlayers ?? DEFAULT_SERVER_MIN_PLAYERS;
+    const voice = (await this.voiceTally?.countFor(source, this.pending)) ?? 0;
+    if (held + voice < min) return;
     const players = this.pending.players(source.pelicanServerId);
     const plan = { source, binding, players };
     if (await this.spawn(plan, clearance))
