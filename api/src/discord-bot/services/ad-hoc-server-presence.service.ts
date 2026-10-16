@@ -140,28 +140,23 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
     this.pending.unconfirm(source.pelicanServerId);
-    const out: ServerPresencePlayer[] = [];
-    for (const live of await this.enrolledEvents(source))
-      out.push(
-        ...(await listOpenServerPresence(
-          this.db,
-          live.id,
-          source.pelicanServerId,
-        )),
-      );
-    return out;
+    return this.openRows(source);
   }
 
   /**
    * ROK-1802: a live heartbeat's player count. Unconfirmed holds that it
    * covers become enrollable — they may now reach the threshold, or join
-   * the game's live event; ones it cannot cover are dropped.
+   * the game's live event; ones it cannot cover are dropped. Players
+   * already enrolled on this server are part of the count (Codex r2): a
+   * stale hold must not ride in on their heads.
    */
   playerCount(source: ServerPresenceSource, count: number): Promise<void> {
     const id = source.pelicanServerId;
     if (!this.pending.hasUnconfirmed(id)) return Promise.resolve();
     return this.serial(source.gameId, async () => {
-      if (!this.pending.reconcile(id, count)) return;
+      const rows = await this.openRows(source);
+      const enrolled = new Set(rows.map((r) => r.steamId)).size;
+      if (!this.pending.reconcile(id, count - enrolled)) return;
       if (!(await this.adHocEventService.isEnabled())) return;
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (live) return this.attachWithPending(live, source, []);
@@ -216,6 +211,22 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       source.gameId,
       source.pelicanServerId,
     );
+  }
+
+  /** Open on-server rows for this server across its live events. */
+  private async openRows(
+    source: ServerPresenceSource,
+  ): Promise<ServerPresencePlayer[]> {
+    const out: ServerPresencePlayer[] = [];
+    for (const live of await this.enrolledEvents(source))
+      out.push(
+        ...(await listOpenServerPresence(
+          this.db,
+          live.id,
+          source.pelicanServerId,
+        )),
+      );
+    return out;
   }
 
   /** Attach every server's held players for `gameId` to `live`. */
