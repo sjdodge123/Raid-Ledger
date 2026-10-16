@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as crypto from 'crypto';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -23,9 +23,14 @@ import {
   rotationAgeMs,
 } from './refresh-grace.helpers';
 import {
-  DB_CLOCK,
+  consumeRow,
   findReplayCandidate,
+  lockFamily,
+  lockFamilyOfToken,
+  lockUserFamilies,
   markFirstChildIssued,
+  revokeActiveRows,
+  rowIsRevoked,
 } from './refresh-rotation.helpers';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import type { ImpersonationEndReason } from '../impersonation/impersonation-session.helpers';
@@ -38,6 +43,12 @@ export interface IssuedRefreshToken {
   /** ROK-1754: the refresh family — keys the impersonation marker. */
   familyId: string;
 }
+
+/** The parent fields a child row inherits. */
+type ParentRow = Pick<
+  typeof schema.refreshTokens.$inferSelect,
+  'id' | 'userId' | 'familyId' | 'authMethod' | 'userAgent'
+>;
 
 /**
  * ROK-1353: refresh-token rotation service.
@@ -90,31 +101,33 @@ export class RefreshTokenService {
    * ROK-1753: a deactivated (not banned) holder gets a 401 `USER_DEACTIVATED`
    * BEFORE the consume, so nothing rotates or revokes and reactivation
    * resumes the token. A banned holder keeps the original ban behaviour.
+   * ROK-1809: consume + mint run in ONE transaction under the family lock,
+   * so a concurrent revokeFamily/revokeAllForUser cannot miss the child.
    */
   async rotate(rawToken: string): Promise<IssuedRefreshToken | null> {
     const presentedHash = hashToken(rawToken);
     if (await this.holderIsDeactivated(presentedHash)) {
       throw deactivatedException();
     }
-    const consumed = await this.consumeRow(presentedHash);
-    if (consumed) return this.mintChild(consumed, true);
-    return this.handleNoConsume(presentedHash);
+    const rotated = await this.db.transaction(async (tx) => {
+      if (!(await lockFamilyOfToken(tx, presentedHash))) return null;
+      const consumed = await consumeRow(tx, presentedHash);
+      return consumed ? this.mintChild(tx, consumed, true) : null;
+    });
+    return rotated ?? this.handleNoConsume(presentedHash);
   }
 
   /**
    * Revoke every active refresh row for a user (deactivation, ban). ROK-1754:
-   * also ends every impersonation this user is running.
+   * also ends every impersonation this user is running. ROK-1809: holds
+   * every live family's lock (key order) so an in-flight rotation's child
+   * is committed — and revoked — before this UPDATE's snapshot.
    */
   async revokeAllForUser(userId: number): Promise<void> {
-    await this.db
-      .update(schema.refreshTokens)
-      .set({ revokedAt: sql`NOW()` })
-      .where(
-        and(
-          eq(schema.refreshTokens.userId, userId),
-          isNull(schema.refreshTokens.revokedAt),
-        ),
-      );
+    await this.db.transaction(async (tx) => {
+      await lockUserFamilies(tx, userId);
+      await revokeActiveRows(tx, eq(schema.refreshTokens.userId, userId));
+    });
     await this.endImpersonationBestEffort(`user ${userId}`, () =>
       this.impersonation.endForUser(userId, 'session_revoked'),
     );
@@ -129,15 +142,10 @@ export class RefreshTokenService {
     familyId: string,
     reason: ImpersonationEndReason = 'session_revoked',
   ): Promise<void> {
-    await this.db
-      .update(schema.refreshTokens)
-      .set({ revokedAt: sql`NOW()` })
-      .where(
-        and(
-          eq(schema.refreshTokens.familyId, familyId),
-          isNull(schema.refreshTokens.revokedAt),
-        ),
-      );
+    await this.db.transaction(async (tx) => {
+      await lockFamily(tx, familyId);
+      await revokeActiveRows(tx, eq(schema.refreshTokens.familyId, familyId));
+    });
     await this.endImpersonationBestEffort(`family ${familyId}`, () =>
       this.impersonation.end(familyId, reason),
     );
@@ -195,38 +203,19 @@ export class RefreshTokenService {
     return row?.deactivatedAt != null && row.bannedAt == null;
   }
 
-  /** Atomically consume the row if it is live; returns it or undefined. */
-  private async consumeRow(tokenHash: string) {
-    const [row] = await this.db
-      .update(schema.refreshTokens)
-      .set({ rotatedAt: DB_CLOCK })
-      .where(
-        and(
-          eq(schema.refreshTokens.tokenHash, tokenHash),
-          isNull(schema.refreshTokens.rotatedAt),
-          isNull(schema.refreshTokens.revokedAt),
-          sql`${schema.refreshTokens.expiresAt} > NOW()`,
-        ),
-      )
-      .returning();
-    return row;
-  }
-
   /**
    * Mint the child row for a consumed parent. Only the FIRST child links and
    * re-stamps the parent (`markFirstChildIssued` — the race grace runs from
    * here, see `rotationAgeMs`); a grace sibling leaves the parent untouched.
    */
   private async mintChild(
-    parent: Pick<
-      typeof schema.refreshTokens.$inferSelect,
-      'id' | 'userId' | 'familyId' | 'authMethod' | 'userAgent'
-    >,
+    tx: PostgresJsDatabase<typeof schema>,
+    parent: ParentRow,
     firstChild = false,
   ) {
     const maxAgeMs = await this.sessionMaxAgeMs();
     const rawToken = generateRawToken();
-    const [child] = await this.db
+    const [child] = await tx
       .insert(schema.refreshTokens)
       .values({
         userId: parent.userId,
@@ -238,7 +227,7 @@ export class RefreshTokenService {
       })
       .returning({ id: schema.refreshTokens.id });
     const childId = defined(child, 'inserted child refresh token row').id;
-    if (firstChild) await markFirstChildIssued(this.db, parent.id, childId);
+    if (firstChild) await markFirstChildIssued(tx, parent.id, childId);
     const { userId, familyId } = parent;
     return { rawToken, maxAgeMs, userId, familyId };
   }
@@ -278,7 +267,7 @@ export class RefreshTokenService {
       this.logger.debug(
         `ROK-1353: concurrent-refresh race loser for user ${existing.userId} (rotated ${rotatedAgoMs}ms ago) — minting sibling`,
       );
-      return this.mintChild(existing);
+      return this.mintSibling(existing);
     }
     this.logger.warn(
       `ROK-1353: refresh-token reuse detected for user ${existing.userId} — revoking family`,
@@ -286,6 +275,19 @@ export class RefreshTokenService {
     await this.revokeFamily(existing.familyId);
     await this.blocklist.blockUser(existing.userId);
     return null;
+  }
+
+  /**
+   * ROK-1809: mint the grace sibling under the family lock, re-checking the
+   * parent's revocation AFTER the lock — a logout/revoke that landed since
+   * `findReplayCandidate` wins, and the replay gets a plain 401.
+   */
+  private mintSibling(parent: ParentRow): Promise<IssuedRefreshToken | null> {
+    return this.db.transaction(async (tx) => {
+      await lockFamily(tx, parent.familyId);
+      if (await rowIsRevoked(tx, parent.id)) return null;
+      return this.mintChild(tx, parent);
+    });
   }
 
   /** Configured session length in ms (default 60d). */
