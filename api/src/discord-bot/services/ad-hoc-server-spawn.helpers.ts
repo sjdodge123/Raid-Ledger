@@ -18,6 +18,7 @@ import {
   type SteamIdentity,
 } from './ad-hoc-server-presence.helpers';
 import { upsertSteamParticipant } from './ad-hoc-steam-participant.helpers';
+import { signupLinkedServerPlayer } from './ad-hoc-server-signup.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 
@@ -90,6 +91,8 @@ async function enrolOn(
       pelicanServerId: input.pelicanServerId,
     });
     if (outcome === 'inserted') joined.push(userId);
+    // ROK-1802: a linked player is signed up in the same transaction.
+    await signupLinkedServerPlayer(tx, eventId, userId);
   }
   return joined;
 }
