@@ -24,7 +24,6 @@ import {
 } from './ad-hoc-server-presence.effects';
 import {
   hasOpenServerPlayers,
-  listOnServerSteamIds,
   listOpenServerPresence,
   listServerEnrolledEvents,
   type LiveGameEvent,
@@ -90,6 +89,8 @@ export function hasAnyoneToEnrol(deps: EnrolDeps, gameId: number): boolean {
 /**
  * Attach every tracked player of `gameId` with no open row on its server to
  * `live`. Their holds are dropped: an enrolled player is no longer pending.
+ * Codex P2: "open" spans EVERY live event of the game — with two live Quick
+ * Plays, a player enrolled in the other one is not copied into `live`.
  */
 export async function enrolTracked(
   deps: EnrolDeps,
@@ -97,9 +98,8 @@ export async function enrolTracked(
   gameId: number,
 ): Promise<void> {
   for (const [serverId, players] of trackedByServer(deps.reader, gameId)) {
-    const open = new Set(
-      await listOnServerSteamIds(deps.fx.db, live.id, serverId),
-    );
+    const rows = await openServerRows(deps.fx, gameId, serverId);
+    const open = new Set(rows.map((r) => r.steamId));
     for (const pl of players) {
       deps.pending.remove(serverId, pl.steamId);
       if (open.has(pl.steamId)) continue;
