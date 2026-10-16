@@ -10,6 +10,7 @@ import {
   buildChannelUrl,
   classifyMirrorError,
   toGuildDiscordMessages,
+  type ChannelMirrorFailure,
   type ChannelMirrorSourceMessage,
 } from './channel-mirror.helpers';
 
@@ -39,6 +40,17 @@ export interface ChannelMirrorReadContext {
   onError?: (error: unknown) => void;
 }
 
+/** A failed fetch as its card state; a transient one carries no name. */
+function toFailedRead(
+  port: MirrorChannelPort,
+  failure: ChannelMirrorFailure,
+): ChannelMirrorRead {
+  if (failure === 'disconnected') {
+    return { state: 'disconnected', channelId: port.id };
+  }
+  return { state: failure, channelId: port.id, channelName: port.name };
+}
+
 /**
  * Read the bound channel once. Never throws: a missing channel is `gone`, a
  * bot without read permission is `no-access`, and a failed fetch is classified.
@@ -50,7 +62,8 @@ export async function readChannelMirror(
   port: MirrorChannelPort | null,
   ctx: ChannelMirrorReadContext,
 ): Promise<ChannelMirrorRead> {
-  if (!port) return { state: 'gone', channelId: ctx.channelId, channelName: null };
+  if (!port)
+    return { state: 'gone', channelId: ctx.channelId, channelName: null };
   if (!port.botCanRead()) {
     return { state: 'no-access', channelId: port.id, channelName: port.name };
   }
@@ -59,11 +72,7 @@ export async function readChannelMirror(
     fetched = await port.fetchLatest(CHANNEL_MIRROR_FETCH_LIMIT);
   } catch (error) {
     ctx.onError?.(error);
-    const failure = classifyMirrorError(error);
-    if (failure === 'disconnected') {
-      return { state: 'disconnected', channelId: port.id };
-    }
-    return { state: failure, channelId: port.id, channelName: port.name };
+    return toFailedRead(port, classifyMirrorError(error));
   }
   return {
     state: 'ok',

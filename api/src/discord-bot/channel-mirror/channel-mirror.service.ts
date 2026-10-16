@@ -19,8 +19,14 @@ import {
   listReadableChannels,
   toMirrorPort,
 } from './channel-mirror.discord';
-import { CHANNEL_MIRROR_TTL_MS, buildChannelUrl } from './channel-mirror.helpers';
-import { readChannelMirror, type ChannelMirrorRead } from './channel-mirror.read';
+import {
+  CHANNEL_MIRROR_TTL_MS,
+  buildChannelUrl,
+} from './channel-mirror.helpers';
+import {
+  readChannelMirror,
+  type ChannelMirrorRead,
+} from './channel-mirror.read';
 
 @Injectable()
 export class ChannelMirrorService {
