@@ -41,7 +41,14 @@ function build() {
     blocklist as unknown as TokenBlocklistService,
     jwt as unknown as JwtService,
   );
-  return { service, refresh, blocklist, jwt, calls, blockedAt: () => blockedAt };
+  return {
+    service,
+    refresh,
+    blocklist,
+    jwt,
+    calls,
+    blockedAt: () => blockedAt,
+  };
 }
 
 describe('ROK-1810 PasswordChangeSessionService', () => {
@@ -75,7 +82,11 @@ describe('ROK-1810 PasswordChangeSessionService', () => {
     // TokenBlocklistService.isBlocked rejects `iat <= blockedAt`.
     expect(typeof iat).toBe('number');
     expect((iat ?? 0) > t.blockedAt()).toBe(true);
-    expect(payload[0]).toMatchObject({ sub: 7, username: 'admin', role: 'admin' });
+    expect(payload[0]).toMatchObject({
+      sub: 7,
+      username: 'admin',
+      role: 'admin',
+    });
   });
 
   it('firstSecondAfterBlock is strictly after the stamp at every millisecond of a second', () => {
