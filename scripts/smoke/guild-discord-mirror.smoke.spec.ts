@@ -159,6 +159,10 @@ test('staff editor: a private channel is hidden until shown and needs the acknow
         await expect(save).toBeEnabled();
         await save.click();
         await expectThreeLatest(page, fx.channelId);
+        await expect(
+            page.getByTestId('guild-discord-mirror').getByTestId('guild-discord-private'),
+            'the card tags a private bound channel',
+        ).toHaveText('Private');
         const read = (await apiGet(fx.token, `/plugins/wow/guilds/${fx.guild.guildId}/discord`)) as { channel?: { visibility?: string } };
         expect(read.channel?.visibility, 'the binding is the private channel').toBe('private');
     });
