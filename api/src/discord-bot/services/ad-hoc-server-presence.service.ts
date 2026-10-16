@@ -20,11 +20,9 @@ import {
 } from './ad-hoc-spawn-clearance';
 import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
 import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
-import { startGracePeriod } from './ad-hoc-event.handlers';
 import {
   findAdminFallback,
   getEventById,
-  resolveGameName,
   restoreFromGracePeriod,
 } from './ad-hoc-event.helpers';
 import {
@@ -33,8 +31,14 @@ import {
 } from '../discord-bot.constants';
 import { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
+  afterServerLeave,
+  announceServerSpawn,
+  refreshLive,
+  type PresenceEffectsDeps,
+  type SpawnPlan,
+} from './ad-hoc-server-presence.effects';
+import {
   spawnOrFindServerQuickPlay,
-  spawnRoster,
   type ServerSpawnInput,
 } from './ad-hoc-server-spawn.helpers';
 import {
@@ -48,16 +52,8 @@ import {
   renameSteamOnlyRow,
   resolveSteamIdentity,
   serverSourceKey,
-  type GameQuickPlayBinding,
   type LiveGameEvent,
-  type SteamIdentity,
 } from './ad-hoc-server-presence.helpers';
-
-interface SpawnPlan {
-  source: ServerPresenceSource;
-  binding: GameQuickPlayBinding | null;
-  players: ServerPresencePlayer[];
-}
 
 /**
  * ROK-1800 — Quick Play's side of the Pelican server-presence seam.
@@ -110,7 +106,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (!live) return;
       await renameSteamOnlyRow(this.db, live.id, player);
-      await this.refresh(live);
+      await refreshLive(this.fx, live);
     });
   }
 
@@ -124,7 +120,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       );
       if (!live) return;
       if (await this.participantService.markServerLeave(live.id, steamId))
-        await this.afterLeave(live);
+        await afterServerLeave(this.fx, live);
     });
   }
 
@@ -173,6 +169,18 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
 
   // ─── Private ──────────────────────────────────────────
 
+  private get fx(): PresenceEffectsDeps {
+    return {
+      db: this.db,
+      adHocEventService: this.adHocEventService,
+      participantService: this.participantService,
+      notificationService: this.notificationService,
+      channelBindingsService: this.channelBindingsService,
+      gracePeriodQueue: this.gracePeriodQueue,
+      gateway: this.gateway,
+    };
+  }
+
   /** Live events holding an open row on this server (Codex r2 routing). */
   private enrolledEvents(source: ServerPresenceSource) {
     return listServerEnrolledEvents(
@@ -190,7 +198,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     const open = await listOnServerSteamIds(this.db, live.id, pelicanServerId);
     for (const steamId of open)
       await this.participantService.markServerLeave(live.id, steamId);
-    if (open.length > 0) await this.afterLeave(live);
+    if (open.length > 0) await afterServerLeave(this.fx, live);
   }
 
   /** Attach every server's held players for `gameId` to `live`. */
@@ -248,7 +256,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     await this.gracePeriodQueue.cancel(live.id);
     if (await restoreFromGracePeriod(this.db, live.id))
       this.gateway.emitStatusChange(live.id, 'live');
-    await this.refresh(live);
+    await refreshLive(this.fx, live);
   }
 
   /** Below threshold: hold the player; at threshold: guard, then spawn. */
@@ -324,7 +332,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
         eventId,
         userId,
       });
-    await this.announce(eventId, plan, input.ids);
+    await announceServerSpawn(this.fx, eventId, plan, input.ids);
     const live = {
       id: eventId,
       channelBindingId: input.bindingId,
@@ -333,64 +341,6 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     await this.drainGame(input.gameId, live, input.pelicanServerId);
     this.logger.log(
       `Server ${serverSourceKey(input.pelicanServerId)} spawned Quick Play ${eventId}`,
-    );
-  }
-
-  /** The bound game's Quick Play channel when one exists, else web only. */
-  private async announce(
-    eventId: number,
-    plan: SpawnPlan,
-    ids: (SteamIdentity | null)[],
-  ): Promise<void> {
-    const { binding, players, source } = plan;
-    if (binding) {
-      const event = await getEventById(this.db, eventId);
-      const gameName = await resolveGameName(this.db, source.gameId);
-      await this.notificationService.notifySpawn(
-        eventId,
-        binding.id,
-        {
-          id: eventId,
-          title: event?.title ?? 'Quick Play',
-          ...(gameName !== undefined ? { gameName } : {}),
-        },
-        spawnRoster(players, ids),
-        source.gameId,
-      );
-    }
-    this.gateway.emitStatusChange(eventId, 'live');
-    await this.emitRoster(eventId);
-  }
-
-  /** After a server leave: refresh, then start grace once nobody is left. */
-  private async afterLeave(live: LiveGameEvent): Promise<void> {
-    await this.refresh(live);
-    if (live.adHocStatus !== 'live') return;
-    if ((await this.participantService.getActiveCount(live.id)) > 0) return;
-    await startGracePeriod(
-      {
-        db: this.db,
-        channelBindingsService: this.channelBindingsService,
-        gracePeriodQueue: this.gracePeriodQueue,
-        gateway: this.gateway,
-      },
-      live.id,
-      live.channelBindingId,
-    );
-  }
-
-  private async refresh(live: LiveGameEvent): Promise<void> {
-    if (live.channelBindingId)
-      this.notificationService.queueUpdate(live.id, live.channelBindingId);
-    await this.emitRoster(live.id);
-  }
-
-  private async emitRoster(eventId: number): Promise<void> {
-    const roster = await this.adHocEventService.getAdHocRoster(eventId);
-    this.gateway.emitRosterUpdate(
-      eventId,
-      roster.participants,
-      roster.activeCount,
     );
   }
 }

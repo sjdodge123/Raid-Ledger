@@ -11,7 +11,7 @@ import type { VoiceAttendanceService } from './voice-attendance.service';
 import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import type { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
 import type { ChannelBindingsService } from './channel-bindings.service';
-import { bindingIdForEvent } from './ad-hoc-event-key.helpers';
+import { adoptEventState, bindingIdForEvent } from './ad-hoc-event-key.helpers';
 import {
   resolveGameName,
   getEventById,
@@ -198,26 +198,13 @@ async function joinRaceWinner(
   member: VoiceMemberInfo,
   eventId: number,
 ): Promise<void> {
-  const state: ActiveAdHocState = findStateForEvent(
+  const state = adoptEventState(
     deps.activeEvents,
+    eventKey,
     eventId,
-  ) ?? {
-    eventId,
-    memberSet: new Set<string>(),
-    ...(effectiveGameId !== undefined ? { gameId: effectiveGameId } : {}),
-  };
-  deps.activeEvents.set(eventKey, state);
+    effectiveGameId,
+  );
   await handleJoinExisting(deps, state, eventKey, bindingId, member);
-}
-
-/** The in-memory state already tracking `eventId`, if any. */
-function findStateForEvent(
-  activeEvents: Map<string, ActiveAdHocState>,
-  eventId: number,
-): ActiveAdHocState | undefined {
-  for (const state of activeEvents.values())
-    if (state.eventId === eventId) return state;
-  return undefined;
 }
 
 /** Register a new event in active state and track voice attendance. */
