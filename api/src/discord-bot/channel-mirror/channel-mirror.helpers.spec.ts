@@ -98,7 +98,7 @@ describe('toGuildDiscordMessage (reuses the ROK-1483 pipeline)', () => {
       'G1',
     );
     expect(dto).toEqual({
-      messageId: '1234567890123456789',
+      messageId: '1788000000001',
       author: {
         discordUserId: '42',
         displayName: 'Jake',

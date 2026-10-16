@@ -7,7 +7,7 @@ export function sourceMessage(
   overrides: Partial<ChannelMirrorSourceMessage> = {},
 ): ChannelMirrorSourceMessage {
   return {
-    id: '1234567890123456789',
+    id: '1788000000001',
     content: 'raid at 8',
     createdAt: new Date('2026-10-15T10:00:00.000Z'),
     editedAt: null,
