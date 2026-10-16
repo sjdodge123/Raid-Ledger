@@ -142,6 +142,32 @@ it('empties once when unreachable past 15 min, and not before', async () => {
   expect(h.sink.playerLeft).not.toHaveBeenCalled();
 });
 
+it('re-enrols players still present after a timeout-driven empty (Codex r2)', async () => {
+  let up = true;
+  const flaky: ConsoleCredentialsSource = (id) =>
+    up ? okCredentials(id) : Promise.reject(new Error('down'));
+  const h = harness([], flaky);
+  await h.connect();
+  await h.live(arrive('A', 'Alice', T(1)));
+  expect(h.sink.playerJoined).toHaveBeenCalledTimes(1);
+  up = false;
+  h.wings.sockets[0]?.handlers.onClose();
+  await jest.advanceTimersByTimeAsync(PRESENCE_UNREACHABLE_EMPTY_MS + 60_000);
+  await h.session.idle();
+  expect(h.sink.serverEmptied.mock.calls).toEqual([[SRC]]);
+  up = true;
+  await jest.advanceTimersByTimeAsync(5 * 60_000);
+  expect(h.wings.sockets.length).toBeGreaterThan(1);
+  h.wings.authenticate();
+  h.wings.lines(arrive('A', 'Alice', T(1)));
+  await h.settle();
+  expect(h.sink.playerJoined).toHaveBeenCalledTimes(2);
+  expect(h.sink.playerJoined).toHaveBeenLastCalledWith(SRC, {
+    steamId: 'A',
+    displayName: 'Alice',
+  });
+});
+
 it('one failing sink call is logged and does not stop the next', async () => {
   const h = harness();
   h.sink.playerJoined.mockRejectedValueOnce(new TypeError('db down'));

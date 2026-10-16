@@ -249,3 +249,21 @@ it('a reconcile asked for mid-run runs once more instead of being dropped (ROK-1
   expect(h.supervisor.activeServerIds).toEqual([1]);
   expect(h.deps.repo.listTracked).toHaveBeenCalledTimes(2);
 });
+
+it('a reconnect fetches socket credentials from the CURRENT client (Codex r2)', async () => {
+  const h = harness();
+  await h.reconcile();
+  h.wings.authenticate();
+  const rotated = jest.fn(okCredentials);
+  h.deps.factory.connect.mockImplementation(() =>
+    Promise.resolve({
+      client: { getWebsocketCredentials: rotated },
+      host: 'panel.test',
+    }),
+  );
+  h.wings.sockets[0]?.handlers.onClose();
+  await jest.advanceTimersByTimeAsync(65_000);
+  expect(rotated).toHaveBeenCalledWith('srv1');
+  expect(h.supervisor.activeServerIds).toEqual([1]);
+  expect(h.sink.serverEmptied).not.toHaveBeenCalled();
+});

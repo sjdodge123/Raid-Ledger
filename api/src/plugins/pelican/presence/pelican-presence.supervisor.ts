@@ -19,6 +19,7 @@ import {
   PELICAN_PRESENCE_CONFIG_CHANGED,
 } from '../pelican.constants';
 import { PelicanClientFactory } from '../pelican-client.factory';
+import type { ConsoleCredentialsSource } from '../pelican-console-socket';
 import type { WingsSocketFactory } from '../pelican-console-socket.helpers';
 import { errName, PRESENCE_STOPPED_STATES } from './pelican-presence.helpers';
 import {
@@ -250,7 +251,7 @@ export class PelicanPresenceSupervisor
       source: { pelicanServerId: row.id, gameId: row.gameId },
       serverIdentifier: row.identifier,
       panelUrl,
-      getCredentials: (id) => conn.client.getWebsocketCredentials(id),
+      getCredentials: (id) => this.currentCredentials(id),
       parser,
       sink: this.sink,
       logger: this.logger,
@@ -258,5 +259,18 @@ export class PelicanPresenceSupervisor
     });
     this.sessions.set(row.id, { session, key });
     await session.start();
+  }
+
+  /**
+   * Socket credentials from the client configured NOW, so a rotated API key
+   * applies at the next token refresh/reconnect without restarting the
+   * session (a restart would clear presence and end live Quick Plays).
+   */
+  private async currentCredentials(
+    serverIdentifier: string,
+  ): ReturnType<ConsoleCredentialsSource> {
+    const conn = await this.factory.connect();
+    if (!conn) throw new Error('Pelican client unconfigured');
+    return conn.client.getWebsocketCredentials(serverIdentifier);
   }
 }

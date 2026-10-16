@@ -208,6 +208,9 @@ export class PelicanPresenceSession {
       `Presence: server ${this.serverId} unreachable past the timeout — emptying`,
     );
     this.emptyAll();
+    // The tracker no longer holds anyone the watermark saw: let the next
+    // replay re-admit those lines so players still on the server re-enrol.
+    this.watermark.reset();
   }
 
   /** Everyone leaves at once — one `serverEmptied`, only when someone was present. */

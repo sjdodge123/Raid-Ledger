@@ -63,6 +63,13 @@ export class ReplayWatermark {
     this.skip = this.countAtLast;
   }
 
+  /** Forget everything processed: the next replay is admitted in full. */
+  reset(): void {
+    this.last = null;
+    this.countAtLast = 0;
+    this.skip = 0;
+  }
+
   /** True when the event is newer than anything processed before. */
   admit(loggedAt: string | undefined): boolean {
     if (loggedAt === undefined) return true;
