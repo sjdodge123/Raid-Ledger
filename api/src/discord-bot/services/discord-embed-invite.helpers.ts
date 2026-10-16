@@ -5,6 +5,7 @@
 import { absoluteEmbedImageUrl } from './embed-thumbnail.helpers';
 import { createDmEmbed, type DmEmbed } from '../embeds/embed-chrome.helpers';
 import { openEventLink } from './discord-embed-event-chrome.helpers';
+import { eventDescriptionExcerpt } from './discord-embed-event-description.helpers';
 import type { EmbedEventData, EmbedContext } from './discord-embed.factory';
 
 /** `✉ INVITED BY roknua` — the DM's author line (ROK-1460 §Grammar). */
@@ -57,12 +58,8 @@ function buildInviteBodyLines(event: EmbedEventData): string[] {
   lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
   if (event.voiceChannelId)
     lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-  if (event.description) {
-    const excerpt =
-      event.description.length > 200
-        ? event.description.slice(0, 200) + '...'
-        : event.description;
-    lines.push('', excerpt);
-  }
+  // ROK-1804: the same excerpt (300 chars, `…`, mention-safe) as the announce.
+  const excerpt = eventDescriptionExcerpt(event.description);
+  if (excerpt) lines.push('', excerpt);
   return lines;
 }
