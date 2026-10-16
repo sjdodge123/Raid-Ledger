@@ -85,6 +85,25 @@ function buildGameInterestResponse(
   };
 }
 
+/** How far from now a caller-supplied `afterDate` may be (one year). */
+const AFTER_DATE_WINDOW_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * Parse the public `afterDate` query. An unparseable value, or one outside
+ * now ± one year, falls back to now: an Invalid Date — or an extreme valid
+ * one that `setDate`/`setHours` overflow into one — makes `findNextOccurrence`
+ * loop forever (getDay() is NaN), hanging the event loop on an anonymous
+ * request.
+ */
+export function parseAfterDate(afterDate?: string): Date {
+  const now = new Date();
+  if (!afterDate) return now;
+  const parsed = new Date(afterDate);
+  const ms = parsed.getTime();
+  if (Number.isNaN(ms)) return now;
+  return Math.abs(ms - now.getTime()) > AFTER_DATE_WINDOW_MS ? now : parsed;
+}
+
 /** Generates time suggestions based on game interest or fallback. */
 export async function getTimeSuggestions(
   db: PostgresJsDatabase<typeof schema>,
@@ -94,7 +113,7 @@ export async function getTimeSuggestions(
   afterDate?: string,
 ): Promise<TimeSuggestionsResponse> {
   const offset = tzOffset ?? 0;
-  const after = afterDate ? new Date(afterDate) : new Date();
+  const after = parseAfterDate(afterDate);
   const timezone = (await settingsService.getDefaultTimezone()) ?? undefined;
   if (gameId) {
     const result = await queryRankedTimeSlots(db, gameId);
