@@ -1,17 +1,5 @@
-import type { Logger } from '@nestjs/common';
 import type { GuildMember } from 'discord.js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../../drizzle/schema';
-import type { AdHocParticipantService } from '../services/ad-hoc-participant.service';
-import type { AdHocEventService } from '../services/ad-hoc-event.service';
-import type { VoiceAttendanceService } from '../services/voice-attendance.service';
-import type { DepartureGraceService } from '../services/departure-grace.service';
-import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
-import type { GameActivityService } from '../services/game-activity.service';
-import type { UsersService } from '../../users/users.service';
-import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
-import type { DiscordBotClientService } from '../discord-bot-client.service';
-import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import type { VoiceHandlerDeps } from './voice-handler-deps';
 import {
   buildMemberInfo,
   resolveVoiceChannel,
@@ -25,30 +13,9 @@ import {
 import { gateCtx, traceGate } from './voice-gate-trace';
 import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
 
-/** Dependencies bundle for voice state handler functions. */
-export interface VoiceHandlerDeps {
-  logger: Logger;
-  clientService: DiscordBotClientService;
-  adHocEventService: AdHocEventService;
-  voiceAttendanceService: VoiceAttendanceService;
-  departureGraceService: DepartureGraceService;
-  presenceDetector: PresenceGameDetectorService;
-  gameActivityService: GameActivityService;
-  usersService: UsersService;
-  adHocEventsGateway: AdHocEventsGateway;
-  voiceGameTracker: Map<string, { gameName: string; userId: number }>;
-  userChannelMap: Map<string, string>;
-  channelMembers: Map<string, Set<string>>;
-  // ROK-1446 D6: the one live message per bound lobby channel. Every hook that
-  // changes who is in the room, or which groups are evented, marks it dirty.
-  channelPresence: ChannelPresenceEmbedService;
-  // ROK-1494 A3: the LFG-born "playing now" roster route. Both are OPTIONAL so
-  // every existing handler spec that builds this bundle keeps compiling and a
-  // missing provider degrades to "record nothing" rather than throwing into the
-  // voice pipeline.
-  db?: PostgresJsDatabase<typeof schema> | null;
-  adHocParticipantService?: AdHocParticipantService | null;
-}
+// ROK-1801 Q10: the deps bundle lives in its own file; re-exported so every
+// existing `from './voice-state.handlers'` import keeps compiling.
+export type { VoiceHandlerDeps } from './voice-handler-deps';
 
 /**
  * ROK-1446 D6 — flag a `general-lobby` channel for re-render on the next tick.
