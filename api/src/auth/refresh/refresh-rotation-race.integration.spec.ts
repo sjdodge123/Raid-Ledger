@@ -6,12 +6,16 @@
  * child. Before ROK-1809 the revoke's UPDATE could not see the not-yet-
  * inserted child, so the child stayed live and kept the session alive.
  *
- * The hook sits between consume and insert: `mintChild` reads the session
- * length (`SettingsService.get(SESSION_LENGTH_DAYS)`) before it inserts. The
- * hook fires the revoke and continues as soon as the revoke has either
- * SETTLED (no lock — the pre-fix behaviour, which then leaves the child live)
- * or is WAITING on the family advisory lock (the fix — it then revokes the
- * child once the rotation commits). Either way the test is deterministic.
+ * The hook wraps `consumeRow` (inside rotate's transaction, after the
+ * family lock): once the parent is consumed it fires the revoke WITHOUT
+ * awaiting it and continues as soon as the revoke has either SETTLED (no
+ * lock and no transaction — the pre-fix behaviour, which then leaves the
+ * child live) or is WAITING on a lock (the family advisory lock — the fix,
+ * which then revokes the child once the rotation commits — or the consumed
+ * parent's row lock, the transaction-without-family-lock mutant, whose
+ * UPDATE snapshot then misses the child). Either way it is deterministic.
+ * Codex r3: the hook used to sit on the settings read, which now runs
+ * before the transaction, so the revoke landed before the consume.
  *
  * Without the fix the child-revoked assertions fail with
  * `Expected: {"childRevoked": true} / Received: {"childRevoked": false}`,
@@ -22,15 +26,13 @@ import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { defined } from '../../common/testing/narrow';
 import * as schema from '../../drizzle/schema';
-import { SETTING_KEYS } from '../../drizzle/schema';
-import { SettingsService } from '../../settings/settings.service';
 import {
   RefreshTokenService,
   type IssuedRefreshToken,
 } from './refresh-token.service';
 import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
 import { hashToken } from './refresh-token.helpers';
-import { REFRESH_FAMILY_LOCK_CLASS } from './refresh-rotation.helpers';
+import * as rotation from './refresh-rotation.helpers';
 import * as grace from './refresh-grace.helpers';
 
 let testApp: TestApp;
@@ -57,12 +59,19 @@ async function revokedAtOf(rawToken: string): Promise<Date | null> {
   return defined(row, 'refresh row for token').revokedAt;
 }
 
-/** Is any session waiting (not granted) on a refresh-family lock? */
-async function familyLockWaiterExists(): Promise<boolean> {
+/**
+ * Is any session waiting (not granted) on a refresh-family advisory lock or
+ * on another transaction (a row lock held by the uncommitted consume)?
+ */
+async function lockWaiterExists(): Promise<boolean> {
   const rows = await testApp.db.execute<{ waiting: number }>(sql`
     SELECT count(*)::int AS waiting FROM pg_locks
-    WHERE locktype = 'advisory' AND objsubid = 2 AND NOT granted
-      AND classid::text = ${String(REFRESH_FAMILY_LOCK_CLASS)}
+    WHERE NOT granted AND (
+      locktype = 'transactionid' OR (
+        locktype = 'advisory' AND objsubid = 2
+        AND classid::text = ${String(rotation.REFRESH_FAMILY_LOCK_CLASS)}
+      )
+    )
   `);
   return defined(rows[0], 'pg_locks count row').waiting > 0;
 }
@@ -75,26 +84,27 @@ async function settledOrBlocked(revoke: Promise<void>): Promise<void> {
     () => (settled = true),
   );
   for (let i = 0; i < 200; i++) {
-    if (settled || (await familyLockWaiterExists())) return;
+    if (settled || (await lockWaiterExists())) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error('revoke neither settled nor waited on the family lock');
+  throw new Error('revoke neither settled nor waited on a lock');
 }
 
 /**
- * Fire `revoke` (not awaited) between the rotation's consume and its child
- * insert. Returns the revoke promise once the hook has run.
+ * Fire `revoke` (not awaited) right after rotate's consume, inside its
+ * transaction and under the family lock, before the child insert. Returns
+ * the revoke promise once the hook has run.
  */
 function revokeBetweenConsumeAndMint(revoke: () => Promise<void>) {
-  const settings = testApp.app.get(SettingsService);
-  const original = settings.get.bind(settings);
+  const original = rotation.consumeRow;
   let fired: Promise<void> | undefined;
-  jest.spyOn(settings, 'get').mockImplementation(async (key) => {
-    if (key === SETTING_KEYS.SESSION_LENGTH_DAYS && fired === undefined) {
+  jest.spyOn(rotation, 'consumeRow').mockImplementation(async (tx, hash) => {
+    const consumed = await original(tx, hash);
+    if (consumed !== undefined && fired === undefined) {
       fired = revoke();
       await settledOrBlocked(fired);
     }
-    return original(key);
+    return consumed;
   });
   return (): Promise<void> => defined(fired, 'revoke hook fired');
 }
