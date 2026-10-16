@@ -2,7 +2,6 @@ import type { GuildMember } from 'discord.js';
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
 import type { DiscordMemberInfo, ResolvedBinding } from './voice-state.helpers';
 import {
-  getGameFilteredCount,
   shouldSpawnImmediately,
   startVoiceGameTracking,
   type VoiceHandlerDeps,
@@ -11,7 +10,12 @@ import {
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
-import { isBotMember, lobbyGroupSize } from './voice-lobby-groups.helpers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
+import {
+  detectLobbyMemberGame,
+  isBotMember,
+  lobbyGroupSize,
+} from './voice-lobby-groups.helpers';
 import {
   gateCtx,
   joinExistingEvent,
@@ -84,7 +88,7 @@ export async function detectGameForLobby(
 ): Promise<{ gameId: number | null; gameName: string } | null> {
   if (!guildMember)
     return { gameId: null, gameName: 'Untitled Gaming Session' };
-  const detected = await deps.presenceDetector.detectGameForMember(guildMember);
+  const detected = await detectLobbyMemberGame(deps, guildMember);
   if (detected.gameId !== null) return detected;
   if (!(binding.config?.allowJustChatting ?? false)) return null;
   return { gameId: null, gameName: 'Just Chatting' };
@@ -255,7 +259,7 @@ async function resolveThresholdSpawnGameId(
   binding: ResolvedBinding,
   minPlayers: number,
 ): Promise<ThresholdSpawnDecision> {
-  const { counted, confirmedCount } = await getGameFilteredCount(
+  const { counted, confirmedCount } = await serverAwareGameCount(
     deps,
     channelId,
     binding,

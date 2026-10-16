@@ -15,6 +15,7 @@ import {
 } from './voice-state.handlers';
 import { executeDelayedSpawn } from './voice-state-join.handlers';
 import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import {
   lfgNowDeps,
   recordLfgNowVoiceLeave,
@@ -103,10 +104,33 @@ async function removeChannelMember(
     return;
   }
   if (!members) return;
-  // `channelMembers` already excludes bots, including a ROK-1711 DEMO_MODE
-  // allowlisted bot that counted toward the spawn; that asymmetry is demo-only.
-  if (members.size < (binding.config?.minPlayers ?? 2))
+  if (
+    (await monitorCount(deps, channelId, binding, members.size)) <
+    minOf(binding)
+  )
     cancelPendingSpawn(timers, channelId, binding.gameId);
+}
+
+function minOf(binding: ResolvedBinding): number {
+  return binding.config?.minPlayers ?? 2;
+}
+
+/**
+ * ROK-1801 (Codex P2): with a server roster the monitor's spawn gate counts
+ * voice + server players, so the departure cancel must use the same tally —
+ * else one server player plus two voice members loses its timer when either
+ * voice member leaves. No roster or an unresolvable channel → raw occupancy
+ * (`channelMembers` excludes bots, incl. a ROK-1711 allowlisted one; demo-only).
+ */
+async function monitorCount(
+  deps: VoiceHandlerDeps,
+  channelId: string,
+  binding: ResolvedBinding,
+  voiceSize: number,
+): Promise<number> {
+  if (!deps.serverRoster || binding.gameId == null) return voiceSize;
+  if (!resolveVoiceChannel(deps.clientService, channelId)) return voiceSize;
+  return (await serverAwareGameCount(deps, channelId, binding)).counted;
 }
 
 /**

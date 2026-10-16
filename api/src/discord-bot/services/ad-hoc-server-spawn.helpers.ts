@@ -9,10 +9,11 @@
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
-import { createAdHocEventRow } from './ad-hoc-event.helpers';
+import { createAdHocEventRow, findAdminFallback } from './ad-hoc-event.helpers';
 import { withGameSpawnLock } from './ad-hoc-game-spawn-lock';
 import {
   findLiveGameAdHocEvent,
+  resolveSteamIdentity,
   type LiveGameEvent,
   type SteamIdentity,
 } from './ad-hoc-server-presence.helpers';
@@ -27,6 +28,26 @@ export interface ServerSpawnInput {
   creatorId: number;
   players: ServerPresencePlayer[];
   ids: (SteamIdentity | null)[];
+}
+
+/**
+ * Identities and creator for a server-born spawn: the first linked player
+ * owns it, else the admin fallback; `null` when nobody can.
+ */
+export async function buildServerSpawnInput(
+  db: Db,
+  source: { gameId: number; pelicanServerId: number },
+  bindingId: string | null,
+  players: ServerPresencePlayer[],
+): Promise<ServerSpawnInput | null> {
+  const ids = await Promise.all(
+    players.map((pl) => resolveSteamIdentity(db, pl.steamId)),
+  );
+  const creatorId =
+    ids.find((i) => i !== null)?.userId ?? (await findAdminFallback(db));
+  if (!creatorId) return null;
+  const { gameId, pelicanServerId } = source;
+  return { gameId, pelicanServerId, bindingId, creatorId, players, ids };
 }
 
 export type ServerSpawnResult =

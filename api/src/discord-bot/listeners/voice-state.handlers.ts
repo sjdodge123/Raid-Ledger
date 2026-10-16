@@ -1,23 +1,12 @@
-import type { Logger } from '@nestjs/common';
 import type { GuildMember } from 'discord.js';
-import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type * as schema from '../../drizzle/schema';
-import type { AdHocParticipantService } from '../services/ad-hoc-participant.service';
-import type { AdHocEventService } from '../services/ad-hoc-event.service';
-import type { VoiceAttendanceService } from '../services/voice-attendance.service';
-import type { DepartureGraceService } from '../services/departure-grace.service';
-import type { PresenceGameDetectorService } from '../services/presence-game-detector.service';
-import type { GameActivityService } from '../services/game-activity.service';
-import type { UsersService } from '../../users/users.service';
-import type { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
-import type { DiscordBotClientService } from '../discord-bot-client.service';
-import type { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import type { VoiceHandlerDeps } from './voice-handler-deps';
 import {
   buildMemberInfo,
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
 import {
+  detectLobbyMemberGame,
   humanMembers,
   isBotMember,
   lobbyGroupSize,
@@ -28,31 +17,11 @@ import {
   type GameMemberTally,
 } from './voice-threshold-count.helpers';
 import { handleGeneralLobbyGroupDetection } from './voice-state-recovery.handlers';
+import { unanimousLobbySize } from './voice-threshold-server-count.helpers';
 
-/** Dependencies bundle for voice state handler functions. */
-export interface VoiceHandlerDeps {
-  logger: Logger;
-  clientService: DiscordBotClientService;
-  adHocEventService: AdHocEventService;
-  voiceAttendanceService: VoiceAttendanceService;
-  departureGraceService: DepartureGraceService;
-  presenceDetector: PresenceGameDetectorService;
-  gameActivityService: GameActivityService;
-  usersService: UsersService;
-  adHocEventsGateway: AdHocEventsGateway;
-  voiceGameTracker: Map<string, { gameName: string; userId: number }>;
-  userChannelMap: Map<string, string>;
-  channelMembers: Map<string, Set<string>>;
-  // ROK-1446 D6: the one live message per bound lobby channel. Every hook that
-  // changes who is in the room, or which groups are evented, marks it dirty.
-  channelPresence: ChannelPresenceEmbedService;
-  // ROK-1494 A3: the LFG-born "playing now" roster route. Both are OPTIONAL so
-  // every existing handler spec that builds this bundle keeps compiling and a
-  // missing provider degrades to "record nothing" rather than throwing into the
-  // voice pipeline.
-  db?: PostgresJsDatabase<typeof schema> | null;
-  adHocParticipantService?: AdHocParticipantService | null;
-}
+// ROK-1801 Q10: the deps bundle lives in its own file; re-exported so every
+// existing `from './voice-state.handlers'` import keeps compiling.
+export type { VoiceHandlerDeps } from './voice-handler-deps';
 
 /**
  * ROK-1446 D6 — flag a `general-lobby` channel for re-render on the next tick.
@@ -215,7 +184,7 @@ async function resolveSwitchTarget(
   binding: ResolvedBinding,
   guildMember: GuildMember,
 ): Promise<{ gameId: number | null; gameName: string } | null> {
-  const detected = await deps.presenceDetector.detectGameForMember(guildMember);
+  const detected = await detectLobbyMemberGame(deps, guildMember);
   if (detected.gameId !== null) return detected;
   if (binding.config?.allowJustChatting ?? false)
     return { gameId: null, gameName: 'Just Chatting' };
@@ -379,12 +348,10 @@ export async function shouldSpawnImmediately(
   // ROK-1445 AC9: a bot on the same game must never push a lone human over
   // `minPlayers`, nor break/satisfy the unanimity check.
   const voiceMembers = humanMembers(channel);
-  if (voiceMembers.length < minPlayers) return false;
+  // ROK-1801 Q9: server players can make up the shortfall, so only a room
+  // with no server roster can be ruled out on voice occupancy alone.
+  if (!deps.serverRoster && voiceMembers.length < minPlayers) return false;
+  if (voiceMembers.length === 0) return false;
   if (binding.bindingPurpose !== 'general-lobby') return false;
-  const detections = await Promise.all(
-    voiceMembers.map((m) => deps.presenceDetector.detectGameForMember(m)),
-  );
-  const firstGameId = detections[0]?.gameId;
-  if (firstGameId === null || firstGameId === undefined) return false;
-  return detections.every((d) => d.gameId === firstGameId);
+  return (await unanimousLobbySize(deps, voiceMembers)) >= minPlayers;
 }

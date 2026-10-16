@@ -27,6 +27,7 @@ import {
   okCredentials,
 } from './pelican-presence.spec-fakes';
 import type { ServerPresencePlayer } from './server-presence.sink';
+import { SERVER_PRESENCE_EVENTS } from './server-presence.reader';
 
 function row(
   id: number,
@@ -79,11 +80,13 @@ function harness(opts: Opts = {}) {
   };
   const sink = fakeSink(opts.open ?? []);
   const wings = fakeWings();
+  const events = { emit: jest.fn() };
   const supervisor = new PelicanPresenceSupervisor(
     registry as unknown as PluginRegistryService,
     factory as unknown as PelicanClientFactory,
     repo as unknown as PelicanPresenceRepository,
     settings as unknown as SettingsService,
+    events as unknown as EventEmitter2,
     opts.noSink ? null : sink,
     wings.factory,
   );
@@ -92,7 +95,7 @@ function harness(opts: Opts = {}) {
     await jest.advanceTimersByTimeAsync(PRESENCE_REPLAY_SETTLE_MS);
   };
   const deps = { registry, factory, repo, settings };
-  return { supervisor, sink, wings, state, reconcile, deps };
+  return { supervisor, sink, wings, state, reconcile, deps, events };
 }
 
 beforeEach(() => jest.useFakeTimers());
@@ -266,6 +269,59 @@ it('a reconnect fetches socket credentials from the CURRENT client (Codex r2)', 
   expect(rotated).toHaveBeenCalledWith('srv1');
   expect(h.supervisor.activeServerIds).toEqual([1]);
   expect(h.sink.serverEmptied).not.toHaveBeenCalled();
+});
+
+describe('ROK-1801 read port', () => {
+  const ALICE = { steamId: 'A', displayName: 'Alice' };
+  const UNNAMED = { steamId: 'B', displayName: 'B' };
+  const changed = (pelicanServerId: number, gameId = 42) => [
+    SERVER_PRESENCE_EVENTS.CHANGED,
+    { pelicanServerId, gameId },
+  ];
+
+  it('reads every open session, and per game across all its servers', async () => {
+    const h = harness({
+      rows: [row(1), row(2), row(3, { gameId: 43 })],
+      open: [ALICE, UNNAMED],
+    });
+    await h.reconcile();
+    const on = (pelicanServerId: number, gameId = 42) => [
+      { pelicanServerId, gameId, steamId: 'A', name: 'Alice' },
+      { pelicanServerId, gameId, steamId: 'B', name: null },
+    ];
+    expect(h.supervisor.playersOnGames()).toEqual([
+      ...on(1),
+      ...on(2),
+      ...on(3, 43),
+    ]);
+    expect(h.supervisor.playersForGame(42)).toEqual([...on(1), ...on(2)]);
+    expect(h.supervisor.playersForGame(43)).toEqual(on(3, 43));
+    expect(h.supervisor.playersForGame(99)).toEqual([]);
+  });
+
+  it('reads nothing while no session is open', async () => {
+    const h = harness({ active: false, open: [ALICE] });
+    await h.reconcile();
+    expect(h.supervisor.playersOnGames()).toEqual([]);
+  });
+
+  it('emits CHANGED with the server and its game when a roster changes', async () => {
+    const h = harness({
+      rows: [row(1), row(3, { gameId: 43 })],
+      open: [ALICE],
+    });
+    await h.reconcile();
+    expect(h.events.emit.mock.calls).toEqual([changed(1), changed(3, 43)]);
+  });
+
+  it('deactivation empties the read roster and emits CHANGED', async () => {
+    const h = harness({ open: [ALICE] });
+    await h.reconcile();
+    h.events.emit.mockClear();
+    await h.supervisor.handlePluginDeactivated({ slug: 'pelican' });
+    expect(h.supervisor.playersOnGames()).toEqual([]);
+    expect(h.events.emit.mock.calls).toEqual([changed(1)]);
+  });
 });
 
 it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', async () => {

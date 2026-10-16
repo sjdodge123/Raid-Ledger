@@ -182,7 +182,7 @@ async function dispatchBindingJoin(
 }
 
 /** Channel-keyed spawn callbacks for a game-voice-monitor binding. */
-function monitorSpawnFns(
+export function monitorSpawnFns(
   ctx: JoinHandlerCtx,
   chId: string,
   b: ResolvedBinding,
@@ -202,7 +202,7 @@ function monitorSpawnFns(
 }
 
 /** Per-(channel, game) spawn callbacks shared by both binding kinds (AC13). */
-function lobbySpawnFns(
+export function lobbySpawnFns(
   ctx: JoinHandlerCtx,
   chId: string,
   binding: ResolvedBinding,
