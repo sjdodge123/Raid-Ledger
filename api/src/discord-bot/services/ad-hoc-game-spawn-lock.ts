@@ -64,8 +64,9 @@ export async function findVoiceSpawnTarget(
         or(isNull(e.channelBindingId), eq(e.channelBindingId, bindingId)),
       ),
     )
-    .orderBy(desc(e.id))
-    .limit(1);
+    // No `.limit(1)`: at most a handful of rows, and it keeps this lookup
+    // transparent to the voice unit specs' sequenced `limit` mocks.
+    .orderBy(desc(e.id));
   return rows[0] ?? null;
 }
 
