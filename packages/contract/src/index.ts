@@ -224,6 +224,7 @@ export * from './discord-join-post.schema.js';
 
 // Guild page content — GM post, rules, links, recommended addons (ROK-1786).
 export * from './guild-content.schema.js';
+export * from './guild-discord.schema.js';
 
 // Auto-maintained per-game Discord @role (ROK-1767).
 export * from './discord-game-role.schema.js';

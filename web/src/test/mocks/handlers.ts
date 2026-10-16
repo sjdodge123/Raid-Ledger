@@ -14,6 +14,7 @@ import { calendarSyncHandlers } from './calendar-sync-handlers';
 import { pelicanHandlers } from './pelican-handlers';
 import { guildRaidsHandlers } from './guild-raids-handlers';
 import { guildContentHandlers } from './guild-content-handlers';
+import { guildDiscordHandlers } from './guild-discord-handlers';
 import { absenceIgnoreHandler } from './game-time-calendar-handlers';
 
 const API_BASE = 'http://localhost:3000';
@@ -30,6 +31,7 @@ export const handlers = [
     ...guildRaidsHandlers,
     // Guild page content (ROK-1786) — empty profile, no addons.
     ...guildContentHandlers,
+    ...guildDiscordHandlers,
     // Auth — refresh (ROK-1353): mounting useAuth with no access token probes
     // POST /auth/refresh before settling on logged-out. Default to 401 (no
     // refresh cookie) so component tests resolve the probe deterministically.
