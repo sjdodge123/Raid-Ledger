@@ -199,12 +199,15 @@ export class OnboardingController {
       parsed.data.currentPassword,
       localCred.passwordHash,
     );
+    // ROK-1810: revoke BEFORE the hash update so a failure in between leaves
+    // the old password with no live sessions, never new password + old ones.
+    await this.passwordSession.revokeAllSessions(req.user.id);
     await this.updatePassword(localCred.id, parsed.data.newPassword);
 
     this.logger.log(
       `Admin user ${req.user.username} changed password via onboarding`,
     );
-    const accessToken = await this.endSessionsAfterChange(req, res);
+    const accessToken = await this.reissueCallerSession(req, res);
     return {
       success: true,
       message: 'Password changed successfully',
@@ -213,19 +216,17 @@ export class OnboardingController {
   }
 
   /**
-   * ROK-1810: revoke every session, then re-issue the caller's own (new
-   * `rl_rt` cookie + access token). An impersonated caller is not re-issued:
-   * the cookie belongs to the impersonating admin, not to this user.
+   * ROK-1810: hand the caller a fresh session (new `rl_rt` cookie + access
+   * token) after every old one was revoked.
    */
-  private async endSessionsAfterChange(
+  private async reissueCallerSession(
     req: AuthenticatedExpressRequest,
     res: Response,
   ): Promise<string | null> {
-    if (req.user.impersonatedBy !== null) {
-      await this.passwordSession.revokeAllSessions(req.user.id);
-      return null;
-    }
-    const session = await this.passwordSession.revokeAndReissue(
+    // Defence in depth: unreachable today (AdminGuard + local-auth.service
+    // refuses to impersonate an admin). The cookie would be the admin's.
+    if (req.user.impersonatedBy !== null) return null;
+    const session = await this.passwordSession.issueSession(
       req.user,
       req.headers['user-agent'] ?? null,
     );

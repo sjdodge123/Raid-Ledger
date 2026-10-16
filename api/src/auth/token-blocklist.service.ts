@@ -34,8 +34,10 @@ export class TokenBlocklistService {
   /**
    * Block all existing tokens for a user by storing the current timestamp.
    * Tokens issued at or before this timestamp will be rejected.
+   * Resolves `false` when Redis failed (logged, never thrown) so a caller
+   * that must not report success silently (ROK-1810) can surface it.
    */
-  async blockUser(userId: number): Promise<void> {
+  async blockUser(userId: number): Promise<boolean> {
     const now = Math.floor(Date.now() / 1000);
     try {
       await this.redis.set(
@@ -44,10 +46,32 @@ export class TokenBlocklistService {
         'EX',
         BLOCK_TTL_SECONDS,
       );
+      return true;
     } catch (err) {
       this.logger.warn(
         `Failed to block tokens for user ${userId}: ${(err as Error).message}`,
       );
+      return false;
+    }
+  }
+
+  /**
+   * ROK-1810: the lowest `iat` a token minted NOW for this user may carry and
+   * still pass `isBlocked` (`stamp + 1`), or `undefined` when no block is
+   * live. A token minted in the same second as a block would otherwise be
+   * born revoked. Redis errors → `undefined` (mint with the normal iat).
+   */
+  async minIatFor(userId: number): Promise<number | undefined> {
+    try {
+      const value = await this.redis.get(`${KEY_PREFIX}${userId}`);
+      if (value === null) return undefined;
+      const stamp = Number(value);
+      return Number.isFinite(stamp) ? stamp + 1 : undefined;
+    } catch (err) {
+      this.logger.warn(
+        `Redis blocklist floor read failed for user ${userId}: ${(err as Error).message}`,
+      );
+      return undefined;
     }
   }
 

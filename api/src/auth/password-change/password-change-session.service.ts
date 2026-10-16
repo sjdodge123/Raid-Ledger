@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { UserRole } from '@raid-ledger/contract';
 import { TokenBlocklistService } from '../token-blocklist.service';
+import { signAccessToken } from '../access-token-mint.helpers';
 import {
   RefreshTokenService,
   type IssuedRefreshToken,
@@ -21,16 +22,6 @@ export interface ReissuedSession {
 }
 
 /**
- * The first whole second strictly after a `blockUser` stamp. `blockUser`
- * stamps `floor(now)` BEFORE it resolves, so `floor(now) + 1` read afterwards
- * is always greater than the stamp, and `isBlocked` (`iat <= stamp`) cannot
- * match a token minted with it. Deterministic: no wait for the clock to tick.
- */
-export function firstSecondAfterBlock(nowMs: number = Date.now()): number {
-  return Math.floor(nowMs / 1000) + 1;
-}
-
-/**
  * ROK-1810: a password change ends every existing session. Refresh families
  * are revoked (no more `/auth/refresh`) and the user is blocklisted (every
  * access JWT minted so far gets 401). The caller who changed their own
@@ -38,34 +29,49 @@ export function firstSecondAfterBlock(nowMs: number = Date.now()): number {
  */
 @Injectable()
 export class PasswordChangeSessionService {
+  private readonly logger = new Logger(PasswordChangeSessionService.name);
+
   constructor(
     private readonly refresh: RefreshTokenService,
     private readonly blocklist: TokenBlocklistService,
     private readonly jwt: JwtService,
   ) {}
 
-  /** Revoke every refresh family and access JWT the user holds. */
+  /**
+   * Revoke every refresh family and access JWT the user holds. Run it BEFORE
+   * the hash update: a failure after it leaves the old password with no live
+   * sessions, never the new password live beside old ones. A swallowed Redis
+   * error in `blockUser` is logged at error level; the refresh families are
+   * already dead in Postgres, and with Redis down `isBlocked` fails open for
+   * every token anyway, so failing the change would buy nothing.
+   */
   async revokeAllSessions(userId: number): Promise<void> {
     await this.refresh.revokeAllForUser(userId);
-    await this.blocklist.blockUser(userId);
+    const blocked = await this.blocklist.blockUser(userId);
+    if (!blocked) {
+      this.logger.error(
+        `Password change for user ${userId}: access-token blocklist write failed; existing access JWTs stay valid until they expire (<=1h)`,
+      );
+    }
   }
 
-  /** Revoke everything, then issue the caller a fresh session. */
-  async revokeAndReissue(
+  /**
+   * Issue the caller a fresh session after `revokeAllSessions`. `authMethod`
+   * is `local` even for a Discord/magic-link session: the caller just proved
+   * the local password.
+   */
+  async issueSession(
     caller: PasswordChangeCaller,
     userAgent: string | null,
   ): Promise<ReissuedSession> {
-    await this.revokeAllSessions(caller.id);
     const refresh = await this.refresh.issue(caller.id, {
       authMethod: 'local',
       userAgent,
     });
-    const accessToken = this.jwt.sign({
-      username: caller.username,
-      sub: caller.id,
-      role: caller.role,
-      iat: firstSecondAfterBlock(),
-    });
+    const accessToken = await signAccessToken(
+      { jwt: this.jwt, blocklist: this.blocklist },
+      { username: caller.username, sub: caller.id, role: caller.role },
+    );
     return { accessToken, refresh };
   }
 }
