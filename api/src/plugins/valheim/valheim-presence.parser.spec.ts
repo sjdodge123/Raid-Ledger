@@ -90,6 +90,7 @@ describe('parseValheimLine — character (ZDOID)', () => {
       kind: 'character',
       name: 'Bjorn',
       zdoidZero: false,
+      ownerId: '0',
     });
   });
 });
