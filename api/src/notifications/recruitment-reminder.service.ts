@@ -84,6 +84,20 @@ export class RecruitmentReminderService {
     }
   }
 
+  /**
+   * DEMO fixture seam (ROK-1812): post the channel bump for ONE eligible
+   * event now, skipping the grace period and dedup so a smoke test can get a
+   * live bump without backdating `created_at`. Returns false when the event
+   * is not eligible (no embed, full, out of the 48h window, no game).
+   */
+  async postBumpNowForEvent(eventId: number): Promise<boolean> {
+    const events = await findEligibleEvents(this.db);
+    const event = events.find((e) => e.id === eventId);
+    if (!event) return false;
+    await this.postChannelBump(event);
+    return true;
+  }
+
   /** Process a single eligible event for bumps and DMs. */
   private async processEvent(event: EligibleEvent): Promise<void> {
     await this.maybeBumpChannel(event);
