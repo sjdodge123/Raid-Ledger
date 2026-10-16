@@ -1,5 +1,5 @@
 {
-  "id": "ec06f6ae-0022-4a50-927c-a2cd07fe0628",
+  "id": "6b990ec4-f5d6-4ac8-aa23-f2c2b139565d",
   "prevId": "091dacf9-2cfb-4f25-8f7f-bd7c3b32a1ec",
   "version": "7",
   "dialect": "postgresql",
@@ -5437,40 +5437,7 @@
           "name": "discord_user_id",
           "type": "varchar(255)",
           "primaryKey": false,
-          "notNull": false
-        },
-        "steam_id": {
-          "name": "steam_id",
-          "type": "varchar(32)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "source": {
-          "name": "source",
-          "type": "varchar(16)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'discord'"
-        },
-        "in_voice": {
-          "name": "in_voice",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": true
-        },
-        "on_server": {
-          "name": "on_server",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
-        "pelican_server_id": {
-          "name": "pelican_server_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "discord_username": {
           "name": "discord_username",
@@ -5529,29 +5496,6 @@
             }
           ],
           "isUnique": true,
-          "where": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL",
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "ad_hoc_participants_event_steam_unique": {
-          "name": "ad_hoc_participants_event_steam_unique",
-          "columns": [
-            {
-              "expression": "event_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "steam_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"ad_hoc_participants\".\"steam_id\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
@@ -5618,12 +5562,7 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {
-        "ad_hoc_participants_identity_check": {
-          "name": "ad_hoc_participants_identity_check",
-          "value": "\"ad_hoc_participants\".\"discord_user_id\" IS NOT NULL OR \"ad_hoc_participants\".\"steam_id\" IS NOT NULL"
-        }
-      },
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "public.game_interest_suppressions": {
@@ -5690,6 +5629,89 @@
           ]
         }
       },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.game_notification_mutes": {
+      "name": "game_notification_mutes",
+      "schema": "",
+      "columns": {
+        "user_id": {
+          "name": "user_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "game_id": {
+          "name": "game_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "idx_game_notification_mutes_game_id": {
+          "name": "idx_game_notification_mutes_game_id",
+          "columns": [
+            {
+              "expression": "game_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "game_notification_mutes_user_id_users_id_fk": {
+          "name": "game_notification_mutes_user_id_users_id_fk",
+          "tableFrom": "game_notification_mutes",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "game_notification_mutes_game_id_games_id_fk": {
+          "name": "game_notification_mutes_game_id_games_id_fk",
+          "tableFrom": "game_notification_mutes",
+          "tableTo": "games",
+          "columnsFrom": [
+            "game_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "game_notification_mutes_user_id_game_id_pk": {
+          "name": "game_notification_mutes_user_id_game_id_pk",
+          "columns": [
+            "user_id",
+            "game_id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -12173,13 +12195,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "presence_tracking": {
-          "name": "presence_tracking",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
         },
         "timezone": {
           "name": "timezone",

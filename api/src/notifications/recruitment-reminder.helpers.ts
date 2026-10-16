@@ -8,6 +8,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as schema from '../drizzle/schema';
 import { NOW_UTC, utcIsoText, utcWallClock } from '../drizzle/timestamp-utils';
 import { INTERESTED_GI_ROW } from '../igdb/igdb-interest-sources.helpers';
+import { notGameMutedSql } from './game-notification-mute.helpers';
 import type { ChannelResolverService } from '../discord-bot/services/channel-resolver.service';
 import {
   createChannelEmbed,
@@ -128,6 +129,7 @@ export async function findRecipients(
         OR u.id IN (SELECT es.user_id FROM event_signups es INNER JOIN events e ON e.id = es.event_id
           WHERE e.game_id = ${gameId} AND upper(e.duration) < ${NOW_UTC} AND es.status = 'signed_up' AND e.cancelled_at IS NULL AND es.user_id IS NOT NULL))
       AND u.id NOT IN (SELECT es.user_id FROM event_signups es WHERE es.event_id = ${eventId} AND es.user_id IS NOT NULL)
+      AND ${notGameMutedSql(gameId)}
   `);
   return rows.map((r) => r.id);
 }

@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { NotificationController } from './notification.controller';
+import { GameNotificationMutesController } from './game-notification-mutes.controller';
 import { NotificationService } from './notification.service';
 import { VoiceAccessLostListener } from './voice-access-lost.listener';
 import { RosterNotificationBufferService } from './roster-notification-buffer.service';
@@ -36,7 +37,7 @@ import { SettingsModule } from '../settings/settings.module';
     SettingsModule,
     BullModule.registerQueue({ name: DISCORD_NOTIFICATION_QUEUE }),
   ],
-  controllers: [NotificationController],
+  controllers: [NotificationController, GameNotificationMutesController],
   providers: [
     NotificationService,
     VoiceAccessLostListener,

@@ -119,6 +119,8 @@ export interface BlastRadiusCounts {
   tiebreakerBracketVotes: number;
   tiebreakerVetoes: number;
   playerIntensitySnapshots: number;
+  /** ROK-1797 per-game notification mutes. */
+  notificationMutes: number;
 }
 
 export interface BlastRadiusRow extends BlastRadiusCounts {
@@ -236,6 +238,12 @@ function buildDirectCountQueries(db: Db, id: number) {
       id,
     ),
     ...extraCountQueries(db, id),
+    countDirect(
+      db,
+      schema.gameNotificationMutes,
+      schema.gameNotificationMutes.gameId,
+      id,
+    ),
   ] as const satisfies readonly Promise<number>[];
 }
 
@@ -290,6 +298,7 @@ export async function computeBlastRadiusForId(
     tiebreakerBracketVotes,
     tiebreakerVetoes,
     playerIntensitySnapshots,
+    notificationMutes,
     lineupMatchMembers,
   ] = await Promise.all([
     ...buildDirectCountQueries(db, id),
@@ -320,6 +329,7 @@ export async function computeBlastRadiusForId(
     tiebreakerBracketVotes,
     tiebreakerVetoes,
     playerIntensitySnapshots,
+    notificationMutes,
   };
 }
 
@@ -348,6 +358,7 @@ export function totalBlastRadius(row: BlastRadiusCounts): number {
     row.tiebreakerBracketWinner +
     row.tiebreakerBracketVotes +
     row.tiebreakerVetoes +
-    row.playerIntensitySnapshots
+    row.playerIntensitySnapshots +
+    row.notificationMutes
   );
 }

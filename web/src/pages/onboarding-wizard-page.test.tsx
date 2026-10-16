@@ -18,6 +18,8 @@ vi.mock('../hooks/use-auth', () => ({
     useAuth: vi.fn(),
     isAdmin: vi.fn(),
     getAuthToken: () => 'test-token',
+    // ROK-1797: the want-to-play batch hook scopes its cache key to the viewer.
+    useViewerCacheScope: () => 'anon',
 }));
 
 vi.mock('../hooks/use-onboarding-fte', () => ({

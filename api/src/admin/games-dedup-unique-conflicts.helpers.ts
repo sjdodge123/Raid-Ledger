@@ -6,7 +6,7 @@
  * would violate a UNIQUE(game_id, ...other) constraint if Phase 2's merge
  * re-pointed dup rows to the canonical id.
  *
- * 9 UNIQUE-constraint tables covered (re-grepped against schema/*.ts):
+ * 10 UNIQUE-constraint tables covered (re-grepped against schema/*.ts):
  *   - characters                       UNIQUE(user_id, game_id, name, realm)
  *                                      + UNIQUE(game_id, region, lower(name))
  *                                        WHERE ruleset IS NOT NULL (ROK-1721)
@@ -17,6 +17,7 @@
  *   - game_activity_rollups            UNIQUE(user_id, game_id, period, period_start)
  *   - game_interests                   UNIQUE(user_id, game_id, source)
  *   - game_interest_suppressions       UNIQUE(user_id, game_id)
+ *   - game_notification_mutes          PK(user_id, game_id) (ROK-1797)
  *   - game_taste_vectors               UNIQUE(game_id) — single-column
  *
  * All keys are emitted on every output (zero if no conflict) so downstream
@@ -52,6 +53,7 @@ export type UniqueConflictCounts = {
   activityRollups: number;
   interests: number;
   interestSuppressions: number;
+  notificationMutes: number;
   tasteVectors: number;
 };
 
@@ -64,6 +66,7 @@ const EMPTY: UniqueConflictCounts = {
   activityRollups: 0,
   interests: 0,
   interestSuppressions: 0,
+  notificationMutes: 0,
   tasteVectors: 0,
 };
 
@@ -173,6 +176,7 @@ export async function computeUniqueConflicts(
     activityRollups,
     interests,
     interestSuppressions,
+    notificationMutes,
     tasteVectors,
   ] = await Promise.all([
     countCompositeConflicts(db, 'characters', characterUniqueKeyJoin, input),
@@ -208,6 +212,7 @@ export async function computeUniqueConflicts(
       ['user_id'],
       input,
     ),
+    countCompositeConflicts(db, 'game_notification_mutes', ['user_id'], input),
     countSingleColumnConflict(db, 'game_taste_vectors', input),
   ]);
   return {
@@ -219,6 +224,7 @@ export async function computeUniqueConflicts(
     activityRollups,
     interests,
     interestSuppressions,
+    notificationMutes,
     tasteVectors,
   };
 }
