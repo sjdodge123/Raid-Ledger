@@ -31,42 +31,16 @@
  *   size, radius, fill or border — the caller's `className` supplies all of it.
  *   It keeps the token focus ring and the disabled treatment, and ignores
  *   `size`, `iconOnly` and `brandColor` paint. It still needs an accessible name.
- * - Link-styled actions stay `<Link>`; this is not a link.
+ * - Link-styled actions stay `<Link>`; this is not a link. A real anchor that
+ *   must LOOK like a button (a `webcal:` / external-scheme hand-off, which a
+ *   router `<Link>` cannot express) takes `buttonClass({ variant, size })` (from
+ *   `button-classes.ts`) on its own `<a>` (ROK-1599).
  */
 import { forwardRef, type ButtonHTMLAttributes, type CSSProperties, type ReactNode } from 'react';
-import { DISABLED, FOCUS_RING } from './form-classes';
+import { buttonClass, type ButtonSize, type ButtonVariant } from './button-classes';
+
+export type { ButtonClassInputs, ButtonSize, ButtonVariant } from './button-classes';
 import { brandLabelFor } from '../../lib/brand-label';
-
-export type ButtonVariant =
-    | 'primary' | 'secondary' | 'ghost' | 'destructive' | 'destructive-soft' | 'warning-soft' | 'success-soft'
-    | 'bare';
-export type ButtonSize = 'md' | 'sm' | 'lg';
-
-const VARIANT_CLS: Record<Exclude<ButtonVariant, 'bare'>, string> = {
-    primary: 'bg-emerald-600 hover:bg-emerald-500 text-foreground',
-    secondary: 'bg-panel border border-edge text-foreground hover:bg-overlay',
-    ghost: 'text-muted hover:text-foreground hover:bg-overlay',
-    destructive: 'bg-red-600 hover:bg-red-500 text-foreground',
-    'destructive-soft': 'bg-danger/10 text-danger border border-danger/30 hover:bg-danger/20',
-    'warning-soft': 'bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20',
-    'success-soft': 'bg-success/10 text-success border border-success/30 hover:bg-success/20',
-};
-
-/** A brand fill replaces the variant paint; index.css colours the label via `data-brand-label`. */
-const BRAND_CLS = 'text-foreground hover:brightness-110';
-
-const SIZE_CLS: Record<ButtonSize, string> = {
-    md: 'min-h-[44px] px-4 py-2',
-    lg: 'min-h-[44px] px-4 py-3',
-    sm: 'min-h-[44px] lg:min-h-9 px-3 py-1.5',
-};
-
-const BASE_CLS =
-    'relative inline-flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors ' +
-    `${FOCUS_RING} focus-visible:ring-offset-2 focus-visible:ring-offset-surface ${DISABLED}`;
-
-/** `bare`: no padding, min size, radius, fill or border — only layout, the focus ring and disabled. */
-const BARE_BASE_CLS = `relative inline-flex items-center justify-center ${FOCUS_RING} ${DISABLED}`;
 
 interface ButtonBaseProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
     variant?: ButtonVariant | undefined;
@@ -91,22 +65,6 @@ function InlineSpinner(): ReactNode {
             <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
         </span>
     );
-}
-
-type ClassInputs = Pick<ButtonProps, 'variant' | 'size' | 'fullWidth' | 'iconOnly' | 'className' | 'brandColor'>;
-
-function buttonClass(p: ClassInputs): string {
-    if (p.variant === 'bare') {
-        return [BARE_BASE_CLS, p.fullWidth ? 'w-full' : '', p.className ?? ''].filter(Boolean).join(' ');
-    }
-    return [
-        BASE_CLS,
-        p.brandColor ? BRAND_CLS : VARIANT_CLS[p.variant ?? 'primary'],
-        SIZE_CLS[p.size ?? 'md'],
-        p.iconOnly ? 'min-w-[44px]' : '',
-        p.fullWidth ? 'w-full' : '',
-        p.className ?? '',
-    ].filter(Boolean).join(' ');
 }
 
 /** Merge the brand fill into the caller's style without dropping its other keys. */

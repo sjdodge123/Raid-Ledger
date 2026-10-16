@@ -19,8 +19,3 @@ export function useCreateOrResetFeed() {
         },
     });
 }
-
-/** Hands the `webcal:` link to the OS (its default calendar app) — the `goToProvider` idiom. */
-export function leaveForCalendarApp(webcal: string): void {
-    window.location.assign(webcal);
-}

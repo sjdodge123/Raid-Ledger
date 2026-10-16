@@ -269,6 +269,8 @@ test('subscribe link: Get link → Copy → Reset → confirm swaps the link; th
         const first = await feedToken(page);
         expect(await feedStatus(first), 'the issued link serves the feed').toBe(200);
         await expect(page.getByTestId('calendar-feed-open')).toHaveText('Open in calendar app');
+        // Operator ruling: a real webcal:// anchor, not a scripted button.
+        await expect(page.getByRole('link', { name: 'Open in calendar app' })).toHaveAttribute('href', /^webcal:\/\/.+\.ics$/);
         await page.getByTestId('calendar-feed-copy').click();
         await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Link copied' })).toBeVisible({ timeout: 10_000 });
         await page.getByTestId('calendar-feed-reset').click();

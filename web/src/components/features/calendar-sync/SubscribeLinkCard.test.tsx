@@ -17,17 +17,12 @@ import {
 } from '../../../test/mocks/calendar-sync-handlers';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { copyWithToast } from '../../../lib/clipboard';
-import { leaveForCalendarApp } from '../../../hooks/use-calendar-feed';
 import { setAccessToken, clearAccessToken } from '../../../lib/api/access-token-store';
 import { CalendarsPage } from './CalendarsPage';
 import { FEED_COPY as F, webcalUrl } from './calendar-feed.copy';
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() } }));
 vi.mock('../../../lib/clipboard', () => ({ copyWithToast: vi.fn().mockResolvedValue(true) }));
-vi.mock('../../../hooks/use-calendar-feed', async (importOriginal) => ({
-    ...(await importOriginal<typeof import('../../../hooks/use-calendar-feed')>()),
-    leaveForCalendarApp: vi.fn(),
-}));
 
 const realMatchMedia = window.matchMedia;
 
@@ -72,7 +67,6 @@ beforeEach(() => {
     setAccessToken('test-token');
     setDesktop(true);
     vi.mocked(copyWithToast).mockClear();
-    vi.mocked(leaveForCalendarApp).mockClear();
 });
 
 afterEach(() => {
@@ -108,9 +102,11 @@ describe('SubscribeLinkCard — with a feed', () => {
         expect(screen.getByText(F.linkLabel)).toBeInTheDocument();
         fireEvent.click(screen.getByTestId('calendar-feed-copy'));
         expect(copyWithToast).toHaveBeenCalledWith(CALENDAR_FEED_URL_FIXTURE, { success: F.copied });
-        fireEvent.click(screen.getByTestId('calendar-feed-open'));
-        expect(leaveForCalendarApp).toHaveBeenCalledWith(
-            'webcal://raid.example.test/api/cal/u/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.ics',
+        const open = screen.getByRole('link', { name: F.open });
+        expect(open).toBe(screen.getByTestId('calendar-feed-open'));
+        expect(open.tagName).toBe('A');
+        expect(open).toHaveAttribute(
+            'href', 'webcal://raid.example.test/api/cal/u/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA.ics',
         );
     });
 
