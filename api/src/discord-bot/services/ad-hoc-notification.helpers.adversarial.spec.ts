@@ -129,6 +129,24 @@ describe('buildEmbedEventData — edge cases (ROK-680)', () => {
     }
   });
 
+  it('never renders a SteamID-named server player — counts it as +N on server (ROK-1801 Q4)', async () => {
+    mockEventAndGame(mockDb);
+    const participants: AdHocParticipant[] = [
+      { discordUserId: 'u1', discordUsername: 'Ana', isActive: true },
+      {
+        discordUserId: null,
+        discordUsername: '76561198000000001',
+        isActive: true,
+        anonymousOnServer: true,
+      },
+    ];
+    const result = await buildEmbedEventData(deps, 1, participants);
+    const names = (result?.signupMentions ?? []).map((m) => m.username);
+    expect(names).toEqual(['Ana']);
+    expect(result?.serverAnonymousCount).toBe(1);
+    expect(result?.signupCount).toBe(2);
+  });
+
   it('active participants do NOT have status property', async () => {
     mockEventAndGame(mockDb);
     const participants: AdHocParticipant[] = [

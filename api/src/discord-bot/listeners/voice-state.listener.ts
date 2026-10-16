@@ -18,6 +18,7 @@ import * as schema from '../../drizzle/schema';
 import { DiscordBotClientService } from '../discord-bot-client.service';
 import { AdHocEventService } from '../services/ad-hoc-event.service';
 import { AdHocParticipantService } from '../services/ad-hoc-participant.service';
+import { ServerPresenceRosterService } from '../services/server-presence-roster.service';
 import { VoiceAttendanceService } from '../services/voice-attendance.service';
 import { DepartureGraceService } from '../services/departure-grace.service';
 import { ChannelBindingsService } from '../services/channel-bindings.service';
@@ -44,13 +45,17 @@ import {
   type JoinHandlerCtx,
 } from './voice-state-join-dispatch.handlers';
 import {
-  connectRecoverySteps,
   onceOnSuccess,
   reportBindingHealth,
-  runConnectRecoverySteps,
   startBindingCacheSweep,
   stopBindingCacheSweep,
 } from './voice-state-connect.helpers';
+import { runBotConnectRecovery } from './voice-state-connect-run.helpers';
+import { handleServerPresenceChanged } from './voice-state-server-presence.handlers';
+import {
+  SERVER_PRESENCE_EVENTS,
+  type ServerPresenceChangedPayload,
+} from '../../plugins/pelican/presence/server-presence.reader';
 import {
   handleChannelLeave,
   type TimerMaps,
@@ -115,6 +120,10 @@ export class VoiceStateListener implements OnApplicationShutdown {
     @Optional()
     @Inject(AdHocParticipantService)
     private readonly adHocParticipants: AdHocParticipantService | null = null,
+    // ROK-1801: game-server presence folded into lobby groups and thresholds.
+    @Optional()
+    @Inject(ServerPresenceRosterService)
+    private readonly serverRoster: ServerPresenceRosterService | null = null,
   ) {}
 
   private get deps(): VoiceHandlerDeps {
@@ -136,6 +145,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
       // a listener built without them simply records nothing.
       db: this.db,
       adHocParticipantService: this.adHocParticipants,
+      serverRoster: this.serverRoster,
     };
   }
 
@@ -154,16 +164,16 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.registerListeners(client);
     // Each step is guarded on its own (TDB:836); ROK-1446 D7/AC8 ordering —
     // presence adoption before recoverFromVoiceChannels — lives in the helper.
-    await runConnectRecoverySteps(
-      connectRecoverySteps({
-        deps: this.deps,
-        reportBindingHealth: this.reportBindingHealthOnce,
-        resolveBinding: (ch) => this.resolveBinding(ch),
-        handleJoin: (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
-        startCacheSweep: () => this.startCacheSweep(),
-      }),
-      this.logger,
-    );
+    await runBotConnectRecovery(this.joinCtx, {
+      reportBindingHealth: this.reportBindingHealthOnce,
+      startCacheSweep: () => this.startCacheSweep(),
+    });
+  }
+
+  /** ROK-1801 D: game-server presence changed — re-run cards + thresholds. */
+  @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
+  onServerPresenceChanged(p: ServerPresenceChangedPayload): Promise<void> {
+    return handleServerPresenceChanged(this.joinCtx, p);
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
@@ -317,9 +327,6 @@ export class VoiceStateListener implements OnApplicationShutdown {
     };
   }
 
-  private async resolveBinding(ch: string): Promise<ResolvedBinding | null> {
-    return (await this.resolveAllBindings(ch))[0] ?? null;
-  }
   private resolveAllBindings(ch: string): Promise<ResolvedBinding[]> {
     return resolveAllBindings(
       {

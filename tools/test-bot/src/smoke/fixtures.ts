@@ -431,6 +431,18 @@ export interface LobbyPresenceMember {
   gameId: number | null;
   /** Links this member's game group to an existing event. */
   eventId?: number;
+  /** ROK-1801: also on `gameId`'s game server — renders ` 🖥` after the name. */
+  onServer?: boolean;
+}
+
+/**
+ * ROK-1801: a player on a game server but NOT in the voice channel. A 1:1
+ * mirror of the API's `LobbyServerOnlySchema`. `displayName: null` is an
+ * unlinked, unnamed server player — it renders only as `+N on server`.
+ */
+export interface LobbyServerOnlyPlayer {
+  displayName: string | null;
+  gameId: number;
 }
 
 /**
@@ -459,16 +471,20 @@ export interface LobbyPresenceRow {
  * @param members - The room's occupants. `[]` is an EMPTY room and drives the
  *   recap path; `null` CLEARS the override and hands the channel back to real
  *   Discord reads. The two are different requests — do not conflate them.
+ * @param serverOnly - ROK-1801: players on a game server, not in the channel.
+ *   Omitted = none (pre-1801 payload shape, which the API still accepts).
  * @returns The open presence row's ids; either may be `null`.
  */
 export async function setLobbyPresence(
   api: ApiClient,
   voiceChannelId: string,
   members: LobbyPresenceMember[] | null,
+  serverOnly?: LobbyServerOnlyPlayer[],
 ): Promise<LobbyPresenceRow> {
   return api.post<LobbyPresenceRow>("/admin/test/lobby-presence", {
     voiceChannelId,
     members,
+    ...(serverOnly !== undefined ? { serverOnly } : {}),
   });
 }
 

@@ -28,16 +28,26 @@ import {
   undetectedMemberIds,
   type LobbyGameGroup,
 } from '../listeners/voice-lobby-groups.helpers';
+import { mergeServerPresence } from '../listeners/voice-lobby-server-merge.helpers';
+import type {
+  ServerRosterEntry,
+  ServerRosterSource,
+} from './server-presence-roster.helpers';
 import {
   buildEmbedEventData,
   type AdHocNotificationDeps,
-  type AdHocParticipant,
 } from './ad-hoc-notification.helpers';
 import { fetchGameArt, type GroupGameArt } from './channel-presence-room.art';
 import type {
   DetectedGame,
   RoomMembers,
 } from './channel-presence-occupancy.helpers';
+import {
+  namesOf,
+  sortGroups,
+  eventedRoster,
+  withServerAnonymous,
+} from './channel-presence-room.roster.helpers';
 import {
   snapshotSource,
   type RoomSnapshot,
@@ -87,6 +97,10 @@ export interface RoomGroup {
    * the group has no game (Just Chatting) or its games row has vanished.
    */
   game: GroupGameArt | null;
+  /** ROK-1801: voice members on this game's server — rendered ` 🖥`. */
+  onServerIds?: string[];
+  /** ROK-1801: on the server, not in this channel — `🖥 on server` / `+N`. */
+  serverOnly?: ServerRosterEntry[];
 }
 
 /** The whole room as one flush sees it (D4). */
@@ -143,6 +157,8 @@ export interface ResolvedRoom {
 export interface RoomResolveDeps extends AdHocNotificationDeps {
   clientService: DiscordBotClientService;
   presenceDetector: PresenceGameDetectorService;
+  /** ROK-1801: game-server roster; absent/null = voice-only card (AC9). */
+  serverRoster?: ServerRosterSource | null;
 }
 
 /** Ad-hoc events under a binding that are still live or in grace (D4). */
@@ -334,6 +350,20 @@ async function buildGroups(
   return sortGroups(groups);
 }
 
+/** An evented group's embed data, with the anonymous `+N on server` (Q4). */
+async function groupEventData(
+  deps: RoomResolveDeps,
+  eventId: number,
+  group: LobbyGameGroup,
+  source: RoomSource,
+) {
+  const roster = await eventedRoster(deps.db, eventId, group, source);
+  return withServerAnonymous(
+    await buildEmbedEventData(deps, eventId, roster.participants),
+    roster.anonymousOnServer,
+  );
+}
+
 /** Build one renderable group, resolving its event and roster if it has one. */
 async function toRoomGroup(
   deps: RoomResolveDeps,
@@ -347,11 +377,7 @@ async function toRoomGroup(
   const eventData =
     eventId === null
       ? null
-      : await buildEmbedEventData(
-          deps,
-          eventId,
-          await unionParticipants(deps.db, eventId, group.memberIds, source),
-        );
+      : await groupEventData(deps, eventId, group, source);
   return {
     gameId: group.gameId,
     gameName: group.gameName,
@@ -361,6 +387,8 @@ async function toRoomGroup(
     eventId: eventData ? eventId : null,
     eventData,
     game: (group.gameId === null ? null : source.art.get(group.gameId)) ?? null,
+    ...(group.onServerIds ? { onServerIds: group.onServerIds } : {}),
+    ...(group.serverOnly ? { serverOnly: group.serverOnly } : {}),
   };
 }
 
@@ -379,64 +407,13 @@ function hintedEventId(
   return null;
 }
 
-/**
- * Roster for an evented group: the stored `ad_hoc_participants` rows (leavers
- * kept, marked inactive — ROK-1243) UNION the live group members who have no
- * row yet, so someone who just joined voice still renders before the
- * participant write lands.
- */
-async function unionParticipants(
-  db: PostgresJsDatabase<typeof schema>,
-  eventId: number,
-  memberIds: string[],
-  source: RoomSource,
-): Promise<AdHocParticipant[]> {
-  const rows = await db
-    .select({
-      discordUserId: schema.adHocParticipants.discordUserId,
-      discordUsername: schema.adHocParticipants.discordUsername,
-      leftAt: schema.adHocParticipants.leftAt,
-    })
-    .from(schema.adHocParticipants)
-    .where(eq(schema.adHocParticipants.eventId, eventId));
-  const known = new Set(rows.map((r) => r.discordUserId));
-  return [
-    ...rows.map((r) => ({
-      discordUserId: r.discordUserId,
-      discordUsername: r.discordUsername,
-      isActive: !r.leftAt,
-    })),
-    ...memberIds
-      .filter((id) => !known.has(id))
-      .map((id) => ({
-        discordUserId: id,
-        discordUsername: source.names.get(id) ?? id,
-        isActive: true,
-      })),
-  ];
-}
-
-/** Render order (D2): evented groups first, then size desc, then name asc. */
-function sortGroups(groups: RoomGroup[]): RoomGroup[] {
-  return [...groups].sort((a, b) => {
-    const evented = Number(b.eventData !== null) - Number(a.eventData !== null);
-    if (evented !== 0) return evented;
-    const size = b.memberIds.length - a.memberIds.length;
-    if (size !== 0) return size;
-    return a.gameName.localeCompare(b.gameName);
-  });
-}
-
 /** The live path: Discord members (bots already filtered) through detection. */
 async function detectSource(
   deps: RoomResolveDeps,
   members: GuildMember[],
 ): Promise<RoomSource> {
   const names = new Map(members.map((m) => [m.id, m.displayName]));
-  const detected =
-    members.length === 0
-      ? []
-      : await deps.presenceDetector.detectGames(members);
+  const detected = await detectWithServer(deps, members);
   const art = await fetchGameArt(
     deps.db,
     detected.map((g) => g.gameId).filter((id): id is number => id !== null),
@@ -450,7 +427,22 @@ async function detectSource(
   };
 }
 
-/** Map ids to display names, falling back to the raw id. */
-function namesOf(ids: string[], names: Map<string, string>): string[] {
-  return ids.map((id) => names.get(id) ?? id);
+/**
+ * Rich-presence detection, then the game-server merge (ROK-1801 L3 — the same
+ * `mergeServerPresence` the spawn gate runs). An empty room stays empty: the
+ * card only exists for a voice room, and the recap path must still close it.
+ */
+async function detectWithServer(
+  deps: RoomResolveDeps,
+  members: GuildMember[],
+): Promise<LobbyGameGroup[]> {
+  if (members.length === 0) return [];
+  const detected = await deps.presenceDetector.detectGames(members);
+  if (!deps.serverRoster) return detected;
+  const roster = await deps.serverRoster.snapshot();
+  return mergeServerPresence(
+    detected,
+    members.map((m) => m.id),
+    roster,
+  );
 }
