@@ -12,6 +12,8 @@ import {
 import {
   attachDiscordToUserRow,
   markSteamLeave,
+  markVoiceLeave,
+  rejoinJoinedAt,
   upsertSteamParticipant,
   type ServerPresenceMemberInfo,
   type SteamUpsertOutcome,
@@ -42,6 +44,20 @@ export interface VoiceMemberInfo {
   discordUsername: string;
   discordAvatarHash: string | null;
   userId: number | null;
+}
+
+/** On a Discord-id conflict: re-open the row and mark it in voice. */
+function voiceConflictSet(member: VoiceMemberInfo, now: Date) {
+  return {
+    leftAt: null,
+    // m10: a re-opened row starts its new session now.
+    joinedAt: rejoinJoinedAt(now),
+    inVoice: true,
+    discordUsername: member.discordUsername,
+    discordAvatarHash: member.discordAvatarHash,
+    userId: member.userId,
+    sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
+  };
 }
 
 @Injectable()
@@ -107,6 +123,7 @@ export class AdHocParticipantService {
     member: VoiceMemberInfo,
   ): Promise<boolean> {
     if (await this.mergeIntoServerRow(db, eventId, member)) return false;
+    const now = new Date();
     const [row] = await db
       .insert(schema.adHocParticipants)
       .values({
@@ -115,18 +132,12 @@ export class AdHocParticipantService {
         discordUserId: member.discordUserId,
         discordUsername: member.discordUsername,
         discordAvatarHash: member.discordAvatarHash,
-        joinedAt: new Date(),
+        joinedAt: now,
         sessionCount: 1,
       })
       .onConflictDoUpdate({
         ...DISCORD_CONFLICT,
-        set: {
-          leftAt: null,
-          discordUsername: member.discordUsername,
-          discordAvatarHash: member.discordAvatarHash,
-          userId: member.userId,
-          sessionCount: sql`${schema.adHocParticipants.sessionCount} + 1`,
-        },
+        set: voiceConflictSet(member, now),
       })
       .returning({ sessionCount: schema.adHocParticipants.sessionCount });
     return row?.sessionCount === 1;
@@ -147,41 +158,13 @@ export class AdHocParticipantService {
   }
 
   /**
-   * Mark a participant as having left the voice channel.
-   * Calculates session duration and accumulates total.
+   * Mark a participant as having left the voice channel. Accumulates the
+   * session — unless they are still on the game server (ROK-1800), in which
+   * case the row stays open and only its voice flag clears.
    */
   async markLeave(eventId: number, discordUserId: string): Promise<void> {
-    const now = new Date();
-
-    // Fetch current row to compute duration delta
-    const [row] = await this.db
-      .select()
-      .from(schema.adHocParticipants)
-      .where(
-        and(
-          eq(schema.adHocParticipants.eventId, eventId),
-          eq(schema.adHocParticipants.discordUserId, discordUserId),
-        ),
-      )
-      .limit(1);
-
-    if (!row) return;
-
-    // Don't double-mark if already left
-    if (row.leftAt) return;
-
-    const sessionDuration = Math.round(
-      (now.getTime() - row.joinedAt.getTime()) / 1000,
-    );
-    const totalDuration = (row.totalDurationSeconds ?? 0) + sessionDuration;
-
-    await this.db
-      .update(schema.adHocParticipants)
-      .set({
-        leftAt: now,
-        totalDurationSeconds: totalDuration,
-      })
-      .where(eq(schema.adHocParticipants.id, row.id));
+    const closed = await markVoiceLeave(this.db, eventId, discordUserId);
+    if (!closed) return;
 
     // ROK-1494 D5: the mirror of PARTICIPANT_JOINED, emitted AFTER the write so
     // a consumer that re-reads the roster sees this row already closed. Without
@@ -192,7 +175,7 @@ export class AdHocParticipantService {
     } satisfies AdHocParticipantLeftPayload);
 
     this.logger.debug(
-      `Participant ${discordUserId} left ad-hoc event ${eventId} (session: ${sessionDuration}s, total: ${totalDuration}s)`,
+      `Participant ${discordUserId} left ad-hoc event ${eventId} (session: ${closed.session}s, total: ${closed.total}s)`,
     );
   }
 

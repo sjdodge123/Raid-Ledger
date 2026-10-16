@@ -1,5 +1,5 @@
 {
-  "id": "373cc88b-d940-4ab0-9ae6-802172c5bed2",
+  "id": "ec06f6ae-0022-4a50-927c-a2cd07fe0628",
   "prevId": "091dacf9-2cfb-4f25-8f7f-bd7c3b32a1ec",
   "version": "7",
   "dialect": "postgresql",
@@ -5451,6 +5451,26 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'discord'"
+        },
+        "in_voice": {
+          "name": "in_voice",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "on_server": {
+          "name": "on_server",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "pelican_server_id": {
+          "name": "pelican_server_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         },
         "discord_username": {
           "name": "discord_username",

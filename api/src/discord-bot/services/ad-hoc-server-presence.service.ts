@@ -22,18 +22,23 @@ import { SUPPRESSION_WINDOW_EVENTS } from './suppression-window-events';
 import type { SuppressionWindowHook } from './ad-hoc-suppression.helpers';
 import { startGracePeriod } from './ad-hoc-event.handlers';
 import {
-  createAdHocEventRow,
   findAdminFallback,
   getEventById,
   resolveGameName,
   restoreFromGracePeriod,
 } from './ad-hoc-event.helpers';
+import { AD_HOC_EVENTS } from '../discord-bot.constants';
+import {
+  spawnOrFindServerQuickPlay,
+  spawnRoster,
+  type ServerSpawnInput,
+} from './ad-hoc-server-spawn.helpers';
 import {
   DEFAULT_SERVER_MIN_PLAYERS,
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
   listOpenServerPresence,
-  listOpenSteamOnlyIds,
+  listOnServerSteamIds,
   renameSteamOnlyRow,
   resolveSteamIdentity,
   serverSourceKey,
@@ -88,7 +93,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     return this.serial(source.gameId, async () => {
       if (!(await this.adHocEventService.isEnabled())) return;
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
-      if (live) return this.attach(live, player);
+      if (live) return this.attachWithPending(live, source, [player]);
       await this.joinPending(source, player);
     });
   }
@@ -98,7 +103,8 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     player: ServerPresencePlayer,
   ): Promise<void> {
     return this.serial(source.gameId, async () => {
-      this.pending.get(source.pelicanServerId)?.set(player.steamId, player);
+      const held = this.pending.get(source.pelicanServerId);
+      if (held?.has(player.steamId)) held.set(player.steamId, player);
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (!live) return;
       await renameSteamOnlyRow(this.db, live.id, player);
@@ -121,7 +127,11 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.pending.delete(source.pelicanServerId);
       const live = await findLiveGameAdHocEvent(this.db, source.gameId);
       if (!live) return;
-      const open = await listOpenSteamOnlyIds(this.db, live.id);
+      const open = await listOnServerSteamIds(
+        this.db,
+        live.id,
+        source.pelicanServerId,
+      );
       for (const steamId of open)
         await this.participantService.markServerLeave(live.id, steamId);
       if (open.length > 0) await this.afterLeave(live);
@@ -132,7 +142,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
     const live = await findLiveGameAdHocEvent(this.db, source.gameId);
-    return live ? listOpenServerPresence(this.db, live.id) : [];
+    return live
+      ? listOpenServerPresence(this.db, live.id, source.pelicanServerId)
+      : [];
   }
 
   // ─── Private ──────────────────────────────────────────
@@ -148,9 +160,26 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     return next;
   }
 
+  /**
+   * Attach `players` plus everyone this server held below the threshold — a
+   * live event that appeared meanwhile (e.g. voice-born) takes them all.
+   */
+  private async attachWithPending(
+    live: LiveGameEvent,
+    source: ServerPresenceSource,
+    players: ServerPresencePlayer[],
+  ): Promise<void> {
+    const all = new Map(this.pending.get(source.pelicanServerId));
+    for (const pl of players) all.set(pl.steamId, pl);
+    this.pending.delete(source.pelicanServerId);
+    for (const pl of all.values())
+      await this.attach(live, source.pelicanServerId, pl);
+  }
+
   /** Join the game's live event; a returning player lifts the grace period. */
   private async attach(
     live: LiveGameEvent,
+    pelicanServerId: number,
     player: ServerPresencePlayer,
   ): Promise<void> {
     const identity = await resolveSteamIdentity(this.db, player.steamId);
@@ -158,6 +187,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       steamId: player.steamId,
       displayName: player.displayName,
       userId: identity?.userId ?? null,
+      pelicanServerId,
     });
     await this.gracePeriodQueue.cancel(live.id);
     if (await restoreFromGracePeriod(this.db, live.id))
@@ -191,7 +221,11 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
       this.pending.delete(source.pelicanServerId);
   }
 
-  /** Create the event (ROK-1456: only with a fresh receipt) and enrol everyone. */
+  /**
+   * Create the event (ROK-1456: only with a fresh receipt) and enrol everyone
+   * atomically, under the game's spawn lock; a live event that won the race
+   * (voice or another process) takes the players instead.
+   */
   private async spawn(
     plan: SpawnPlan,
     clearance: SpawnClearance,
@@ -206,33 +240,41 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     const creatorId =
       ids.find((i) => i !== null)?.userId ?? (await findAdminFallback(this.db));
     if (!creatorId) return false;
-    const bindingId = binding?.id ?? null;
-    const eventId = await createAdHocEventRow(
-      this.db,
-      bindingId,
-      { gameId: source.gameId },
+    const input: ServerSpawnInput = {
+      gameId: source.gameId,
+      pelicanServerId: source.pelicanServerId,
+      bindingId: binding?.id ?? null,
       creatorId,
-    );
-    if (bindingId)
-      this.adHocEventService.adoptEvent(bindingId, source.gameId, eventId);
-    await this.enrol(eventId, players, ids);
-    await this.announce(eventId, plan, ids);
-    this.logger.log(`Server ${key} spawned Quick Play ${eventId}`);
+      players,
+      ids,
+    };
+    const result = await spawnOrFindServerQuickPlay(this.db, input);
+    if (result.kind === 'existing') {
+      await this.attachWithPending(result.live, source, players);
+      return true;
+    }
+    await this.afterSpawn(result.eventId, plan, input, result.joined);
     return true;
   }
 
-  private async enrol(
+  /** Post-commit side effects of a server-born spawn. */
+  private async afterSpawn(
     eventId: number,
-    players: ServerPresencePlayer[],
-    ids: (SteamIdentity | null)[],
+    plan: SpawnPlan,
+    input: ServerSpawnInput,
+    joined: (number | null)[],
   ): Promise<void> {
-    for (const [i, pl] of players.entries()) {
-      await this.participantService.addServerParticipant(eventId, {
-        steamId: pl.steamId,
-        displayName: pl.displayName,
-        userId: ids[i]?.userId ?? null,
+    if (input.bindingId)
+      this.adHocEventService.adoptEvent(input.bindingId, input.gameId, eventId);
+    for (const userId of joined)
+      this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_JOINED, {
+        eventId,
+        userId,
       });
-    }
+    await this.announce(eventId, plan, input.ids);
+    this.logger.log(
+      `Server ${serverSourceKey(input.pelicanServerId)} spawned Quick Play ${eventId}`,
+    );
   }
 
   /** The bound game's Quick Play channel when one exists, else web only. */
@@ -245,12 +287,6 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     if (binding) {
       const event = await getEventById(this.db, eventId);
       const gameName = await resolveGameName(this.db, source.gameId);
-      const mentions = players.flatMap((pl, i) => {
-        const discordUserId = ids[i]?.discordId;
-        return discordUserId
-          ? [{ discordUserId, discordUsername: pl.displayName }]
-          : [];
-      });
       await this.notificationService.notifySpawn(
         eventId,
         binding.id,
@@ -259,7 +295,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
           title: event?.title ?? 'Quick Play',
           ...(gameName !== undefined ? { gameName } : {}),
         },
-        mentions,
+        spawnRoster(players, ids),
         source.gameId,
       );
     }

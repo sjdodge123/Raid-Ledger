@@ -7,6 +7,8 @@
  *   (e.g. they are in voice) is ONE participant: `steam_id` is set on that row
  *   instead of inserting a second one. The dedupe key is `user_id` when known.
  * - The reverse (server first, voice second) is {@link attachDiscordToUserRow}.
+ * - Presence is tracked PER SOURCE (`in_voice` / `on_server`): a shared row
+ *   closes only once the player has left BOTH voice and the server.
  *
  * Functions take the db handle so the service stays a thin emitter.
  */
@@ -27,6 +29,8 @@ export interface ServerPresenceMemberInfo {
   displayName: string;
   /** RL user resolved from the SteamID (linked account), else null. */
   userId: number | null;
+  /** ROK-1800: the Pelican server the player is on (scopes cleanup). */
+  pelicanServerId?: number;
 }
 
 /** Discord identity of a voice member, as the voice path supplies it. */
@@ -73,11 +77,32 @@ export async function findParticipantBySteamId(
   return rows[0] ?? null;
 }
 
-/** Re-open a closed row (a new session), or leave an open one as is. */
-function reopenFields(row: AdHocParticipantRow) {
-  return row.leftAt === null
-    ? {}
-    : { leftAt: null, sessionCount: row.sessionCount + 1 };
+/** Which presence source a join or leave comes from. */
+export type PresenceSource = 'voice' | 'server';
+
+/**
+ * Mark `source` present. A closed row starts a new session NOW — its earlier
+ * span is already in `totalDurationSeconds`, so `joinedAt` must move (m10).
+ */
+function presenceFields(row: AdHocParticipantRow, source: PresenceSource) {
+  const flag = source === 'voice' ? { inVoice: true } : { onServer: true };
+  if (row.leftAt === null) return flag;
+  return {
+    leftAt: null,
+    joinedAt: new Date(),
+    sessionCount: row.sessionCount + 1,
+    inVoice: false,
+    onServer: false,
+    ...flag,
+  };
+}
+
+/**
+ * ON CONFLICT `joined_at`: keep it while the row is open, restart it when a
+ * closed row is re-opened (else the next leave re-adds the earlier span).
+ */
+export function rejoinJoinedAt(now: Date) {
+  return sql`CASE WHEN ${t.leftAt} IS NULL THEN ${t.joinedAt} ELSE ${sql.param(now, t.joinedAt)} END`;
 }
 
 /**
@@ -98,7 +123,11 @@ export async function upsertSteamParticipant(
     if (userRow && userRow.steamId === null) {
       await db
         .update(t)
-        .set({ steamId: member.steamId, ...reopenFields(userRow) })
+        .set({
+          steamId: member.steamId,
+          pelicanServerId: member.pelicanServerId ?? null,
+          ...presenceFields(userRow, 'server'),
+        })
         .where(eq(t.id, userRow.id));
       return 'merged';
     }
@@ -107,14 +136,19 @@ export async function upsertSteamParticipant(
 }
 
 /** On a SteamID conflict: re-open, refresh the name (Steam-only rows), keep the user. */
-const STEAM_CONFLICT_SET = {
+const steamConflictSet = (now: Date) => ({
   leftAt: null,
+  joinedAt: rejoinJoinedAt(now),
+  onServer: true,
+  pelicanServerId: sql`COALESCE(excluded.pelican_server_id, ${t.pelicanServerId})`,
+  // A closed row re-opens from the server alone.
+  inVoice: sql`${t.leftAt} IS NULL AND ${t.inVoice}`,
   // A merged row keeps its Discord name; a Steam-only row takes the
   // latest character name.
   discordUsername: sql`CASE WHEN ${t.discordUserId} IS NULL THEN excluded.discord_username ELSE ${t.discordUsername} END`,
   userId: sql`COALESCE(excluded.user_id, ${t.userId})`,
   sessionCount: sql`${t.sessionCount} + 1`,
-};
+});
 
 /** Insert the Steam row, or refresh it on `(event_id, steam_id)` conflict. */
 async function insertOrRejoinSteamRow(
@@ -122,6 +156,7 @@ async function insertOrRejoinSteamRow(
   eventId: number,
   member: ServerPresenceMemberInfo,
 ): Promise<SteamUpsertOutcome> {
+  const now = new Date();
   const [row] = await db
     .insert(t)
     .values({
@@ -132,13 +167,16 @@ async function insertOrRejoinSteamRow(
       source: 'steam',
       discordUsername: member.displayName,
       discordAvatarHash: null,
-      joinedAt: new Date(),
+      joinedAt: now,
       sessionCount: 1,
+      inVoice: false,
+      onServer: true,
+      pelicanServerId: member.pelicanServerId ?? null,
     })
     .onConflictDoUpdate({
       target: [t.eventId, t.steamId],
       targetWhere: sql`${t.steamId} IS NOT NULL`,
-      set: STEAM_CONFLICT_SET,
+      set: steamConflictSet(now),
     })
     .returning({ sessionCount: t.sessionCount });
   return row?.sessionCount === 1 ? 'inserted' : 'rejoined';
@@ -201,17 +239,77 @@ export async function attachDiscordToUserRow(
       discordUserId: member.discordUserId,
       discordUsername: member.discordUsername,
       discordAvatarHash: member.discordAvatarHash,
-      ...reopenFields(row),
+      ...presenceFields(row, 'voice'),
     })
     .where(eq(t.id, row.id));
   return true;
 }
 
+/** Close a row: accumulate this session and clear both presence flags. */
+async function closeRow(
+  db: Db,
+  row: AdHocParticipantRow,
+): Promise<{ session: number; total: number }> {
+  const now = new Date();
+  const session = Math.round((now.getTime() - row.joinedAt.getTime()) / 1000);
+  const total = (row.totalDurationSeconds ?? 0) + session;
+  await db
+    .update(t)
+    .set({
+      leftAt: now,
+      totalDurationSeconds: total,
+      inVoice: false,
+      onServer: false,
+    })
+    .where(eq(t.id, row.id));
+  return { session, total };
+}
+
 /**
- * Close a Steam-only row when the player leaves the server.
+ * One source left. The row closes only when the OTHER source is gone too;
+ * otherwise just this source's flag is cleared and the session carries on.
  *
- * A merged row (also in voice) is NOT closed here — voice leave owns it, so a
- * player who drops off the server but stays in voice keeps one open row.
+ * @returns The closed session's durations, or null when nothing closed.
+ */
+async function leaveSource(
+  db: Db,
+  row: AdHocParticipantRow | null,
+  source: PresenceSource,
+): Promise<{ session: number; total: number } | null> {
+  if (!row || row.leftAt !== null) return null;
+  const stillThere = source === 'voice' ? row.onServer : row.inVoice;
+  if (!stillThere) return closeRow(db, row);
+  const flag = source === 'voice' ? { inVoice: false } : { onServer: false };
+  await db.update(t).set(flag).where(eq(t.id, row.id));
+  return null;
+}
+
+/** The row holding this Discord id on the event, if any. */
+async function findParticipantByDiscordId(
+  db: Db,
+  eventId: number,
+  discordUserId: string,
+): Promise<AdHocParticipantRow | null> {
+  const rows = await db
+    .select()
+    .from(t)
+    .where(and(eq(t.eventId, eventId), eq(t.discordUserId, discordUserId)))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** A voice leave: closes the row unless the player is still on the server. */
+export async function markVoiceLeave(
+  db: Db,
+  eventId: number,
+  discordUserId: string,
+): Promise<{ session: number; total: number } | null> {
+  const row = await findParticipantByDiscordId(db, eventId, discordUserId);
+  return leaveSource(db, row, 'voice');
+}
+
+/**
+ * A server leave: closes the row unless the player is still in voice.
  *
  * @returns True when a row was closed.
  */
@@ -221,15 +319,6 @@ export async function markSteamLeave(
   steamId: string,
 ): Promise<boolean> {
   const row = await findParticipantBySteamId(db, eventId, steamId);
-  if (!row || row.leftAt !== null || row.discordUserId !== null) return false;
-  const now = new Date();
-  const session = Math.round((now.getTime() - row.joinedAt.getTime()) / 1000);
-  await db
-    .update(t)
-    .set({
-      leftAt: now,
-      totalDurationSeconds: (row.totalDurationSeconds ?? 0) + session,
-    })
-    .where(eq(t.id, row.id));
-  return true;
+  if (row && !row.onServer) return false;
+  return (await leaveSource(db, row, 'server')) !== null;
 }

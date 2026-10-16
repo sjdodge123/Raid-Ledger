@@ -14,13 +14,12 @@ import type { ChannelBindingsService } from './channel-bindings.service';
 import { bindingIdForEvent } from './ad-hoc-event-key.helpers';
 import {
   resolveGameName,
-  createAdHocEventRow,
-  findAdminFallback,
   getEventById,
   restoreFromGracePeriod,
   setGracePeriodStatus,
 } from './ad-hoc-event.helpers';
 
+import { createVoiceQuickPlay } from './ad-hoc-game-spawn-lock';
 /** In-memory state for an active ad-hoc event. */
 export interface ActiveAdHocState {
   eventId: number;
@@ -105,14 +104,26 @@ export async function spawnNewEvent(
   member: VoiceMemberInfo,
   resolvedGameName?: string,
 ): Promise<number | null> {
-  const eventId = await createAdHocEvent(
-    deps,
+  const created = await createVoiceQuickPlay(
+    deps.db,
     bindingId,
     effectiveBinding,
     member,
     resolvedGameName,
   );
-  if (!eventId) return null;
+  if (!created) return null;
+  const { eventId } = created;
+  if (created.existing) {
+    await joinRaceWinner(
+      deps,
+      eventKey,
+      bindingId,
+      effectiveGameId,
+      member,
+      eventId,
+    );
+    return eventId;
+  }
   registerNewEvent(deps, eventKey, eventId, effectiveGameId, member);
   await enrollMember(deps, eventId, member);
   await broadcastSpawn(
@@ -155,6 +166,27 @@ async function enrollMember(
 ): Promise<void> {
   await deps.participantService.addParticipant(eventId, member);
   await deps.autoSignupParticipant(eventId, member);
+}
+
+/**
+ * ROK-1800: the game-server path created this game's Quick Play while we
+ * waited on the spawn lock — adopt it under our key and join it.
+ */
+async function joinRaceWinner(
+  deps: AdHocHandlerDeps,
+  eventKey: string,
+  bindingId: string,
+  effectiveGameId: number | null | undefined,
+  member: VoiceMemberInfo,
+  eventId: number,
+): Promise<void> {
+  const state: ActiveAdHocState = {
+    eventId,
+    memberSet: new Set<string>(),
+    ...(effectiveGameId !== undefined ? { gameId: effectiveGameId } : {}),
+  };
+  deps.activeEvents.set(eventKey, state);
+  await handleJoinExisting(deps, state, eventKey, bindingId, member);
 }
 
 /** Register a new event in active state and track voice attendance. */
@@ -241,27 +273,6 @@ export async function startGracePeriod(
 }
 
 // ─── Internal helpers ──────────────────────────────────
-
-async function createAdHocEvent(
-  deps: AdHocHandlerDeps,
-  bindingId: string,
-  binding: { gameId: number | null | undefined },
-  triggerMember: VoiceMemberInfo,
-  resolvedGameName?: string,
-): Promise<number | null> {
-  let creatorId = triggerMember.userId;
-  if (!creatorId) {
-    creatorId = await findAdminFallback(deps.db);
-    if (!creatorId) return null;
-  }
-  return createAdHocEventRow(
-    deps.db,
-    bindingId,
-    { gameId: binding.gameId ?? null },
-    creatorId,
-    resolvedGameName,
-  );
-}
 
 async function notifySpawn(
   deps: AdHocHandlerDeps,

@@ -234,3 +234,30 @@ describe('AdHocServerPresenceService — leave, grace and rehydrate', () => {
     ]);
   });
 });
+
+describe('AdHocServerPresenceService — a linked player in voice AND on the server (B1)', () => {
+  it('their voice leave does not end the session while they are still in game', async () => {
+    const src = source();
+    const eventId = await spawnWithTwo(src);
+    const admin = testApp.seed.adminUser;
+    await testApp.db
+      .update(schema.users)
+      .set({ steamId: STEAM_C })
+      .where(eq(schema.users.id, admin.id));
+    await participants.addParticipant(eventId, {
+      discordUserId: 'rok1800-b1-voice',
+      discordUsername: 'VoiceName',
+      discordAvatarHash: null,
+      userId: admin.id,
+    });
+    await sink.playerJoined(src, player(STEAM_C));
+
+    await participants.markLeave(eventId, 'rok1800-b1-voice');
+    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, STEAM_B);
+    expect(enqueue).not.toHaveBeenCalled();
+
+    await sink.playerLeft(src, STEAM_C);
+    expect(enqueue).toHaveBeenCalledWith(eventId, 5 * 60 * 1000);
+  });
+});
