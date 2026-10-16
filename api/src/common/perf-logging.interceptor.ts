@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Observable, tap, catchError } from 'rxjs';
 import type { Request, Response } from 'express';
+import { scrubString } from '../sentry/sentry-scrub.helpers';
 import { isPerfEnabled, perfLog } from './perf-logger';
 
 type AuthRequest = Request & { user?: { sub?: number } };
@@ -37,6 +38,7 @@ function getErrorStatus(err: unknown): number {
 /**
  * Global HTTP request/response timing interceptor (ROK-563).
  * Logs method, URL, status, duration, and userId when DEBUG=true.
+ * ROK-1599: the URL is scrubbed — a feed/share token rides the path.
  */
 @Injectable()
 export class PerfLoggingInterceptor implements NestInterceptor {
@@ -54,7 +56,7 @@ export class PerfLoggingInterceptor implements NestInterceptor {
         const durationMs = performance.now() - start;
         const userId = (req as AuthRequest).user?.sub;
 
-        perfLog('HTTP', `${req.method} ${req.url}`, durationMs, {
+        perfLog('HTTP', `${req.method} ${scrubString(req.url)}`, durationMs, {
           status: res.statusCode,
           userId: userId ?? undefined,
         });
@@ -63,7 +65,7 @@ export class PerfLoggingInterceptor implements NestInterceptor {
         const durationMs = performance.now() - start;
         const userId = (req as AuthRequest).user?.sub;
 
-        perfLog('HTTP', `${req.method} ${req.url}`, durationMs, {
+        perfLog('HTTP', `${req.method} ${scrubString(req.url)}`, durationMs, {
           status: getErrorStatus(err),
           userId: userId ?? undefined,
         });

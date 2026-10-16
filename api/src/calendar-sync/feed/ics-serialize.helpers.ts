@@ -25,6 +25,8 @@ export interface IcsEvent {
   sequence?: number;
   /** When the source object last changed (§3.8.7.3). */
   lastModified?: Date;
+  /** Busy (`OPAQUE`, the default) or Free (`TRANSPARENT`) (§3.8.2.7). */
+  transparency?: 'OPAQUE' | 'TRANSPARENT';
 }
 
 export interface IcsCalendar {
@@ -33,6 +35,11 @@ export interface IcsCalendar {
   events: IcsEvent[];
   /** Optional display name (`X-WR-CALNAME`, widely honoured). */
   name?: string;
+  /**
+   * Suggested poll interval as an ISO 8601 duration (e.g. `PT1H`), emitted
+   * as `REFRESH-INTERVAL` (RFC 7986 §5.7) and `X-PUBLISHED-TTL` (Outlook).
+   */
+  refreshInterval?: string;
 }
 
 const CRLF = '\r\n';
@@ -92,6 +99,9 @@ function eventLines(event: IcsEvent): string[] {
   // URL is a URI value (§3.8.4.6) — not TEXT, so not escaped.
   if (event.url !== undefined) lines.push(`URL:${event.url}`);
   if (event.status !== undefined) lines.push(`STATUS:${event.status}`);
+  if (event.transparency !== undefined) {
+    lines.push(`TRANSP:${event.transparency}`);
+  }
   if (event.sequence !== undefined) lines.push(`SEQUENCE:${event.sequence}`);
   if (event.lastModified !== undefined) {
     lines.push(`LAST-MODIFIED:${formatIcsUtc(event.lastModified)}`);
@@ -111,6 +121,10 @@ export function serializeIcsCalendar(calendar: IcsCalendar): string {
   ];
   if (calendar.name !== undefined) {
     lines.push(`X-WR-CALNAME:${escapeIcsText(calendar.name)}`);
+  }
+  if (calendar.refreshInterval !== undefined) {
+    lines.push(`REFRESH-INTERVAL;VALUE=DURATION:${calendar.refreshInterval}`);
+    lines.push(`X-PUBLISHED-TTL:${calendar.refreshInterval}`);
   }
   for (const event of calendar.events) lines.push(...eventLines(event));
   lines.push('END:VCALENDAR');

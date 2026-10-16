@@ -157,3 +157,36 @@ describe('serializeIcsCalendar — revision fields (review NIT)', () => {
     expect(without).not.toMatch(/SEQUENCE|LAST-MODIFIED/);
   });
 });
+
+describe('serializeIcsCalendar — TRANSP and refresh interval (ROK-1599)', () => {
+  const lines = (ics: string) => ics.split('\r\n');
+
+  it('emits TRANSP inside the VEVENT only when transparency is set', () => {
+    const ics = serializeIcsCalendar({
+      prodId: '-//Test//EN',
+      events: [event({ transparency: 'TRANSPARENT' }), event({ uid: 'b' })],
+    });
+    expect(lines(ics).filter((l) => l.startsWith('TRANSP:'))).toEqual([
+      'TRANSP:TRANSPARENT',
+    ]);
+    const first = ics.slice(0, ics.indexOf('END:VEVENT'));
+    expect(first).toContain('TRANSP:TRANSPARENT\r\n');
+  });
+
+  it('emits REFRESH-INTERVAL and X-PUBLISHED-TTL when refreshInterval is set', () => {
+    const ics = serializeIcsCalendar({
+      prodId: '-//Test//EN',
+      refreshInterval: 'PT1H',
+      events: [],
+    });
+    expect(lines(ics)).toEqual(
+      expect.arrayContaining([
+        'REFRESH-INTERVAL;VALUE=DURATION:PT1H',
+        'X-PUBLISHED-TTL:PT1H',
+      ]),
+    );
+    const plain = serializeIcsCalendar({ prodId: '-//Test//EN', events: [] });
+    expect(plain).not.toContain('REFRESH-INTERVAL');
+    expect(plain).not.toContain('X-PUBLISHED-TTL');
+  });
+});

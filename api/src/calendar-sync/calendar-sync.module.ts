@@ -11,6 +11,8 @@ import {
   CALENDAR_WRITE_QUEUE,
 } from './calendar-sync.constants';
 import { CalendarConnectionsController } from './controllers/calendar-connections.controller';
+import { CalendarFeedController } from './controllers/calendar-feed.controller';
+import { CalendarFeedPublicController } from './controllers/calendar-feed-public.controller';
 import { CalendarDemoSeedController } from './controllers/calendar-demo-seed.controller';
 import { CalendarOAuthController } from './controllers/calendar-oauth.controller';
 import { CalendarSyncAdminController } from './controllers/calendar-sync-admin.controller';
@@ -50,6 +52,7 @@ const fakeProvider = {
  * switch. ROK-1592: Google OAuth connect/disconnect, provider registry and
  * the DEMO_MODE seed endpoint. ROK-1596: the write queue. ROK-1593: the
  * read queue + cron (`UsersModule` for `GameTimeService` cache invalidation).
+ * ROK-1599: the ICS subscribe feed (owner routes + public `cal/u/:file`).
  */
 @Module({
   imports: [
@@ -62,6 +65,10 @@ const fakeProvider = {
     BullModule.registerQueue({ name: CALENDAR_READ_QUEUE }),
   ],
   controllers: [
+    // ROK-1599: before CalendarConnectionsController — its `DELETE :id`
+    // would otherwise swallow `DELETE users/me/calendars/feed`.
+    CalendarFeedController,
+    CalendarFeedPublicController,
     CalendarConnectionsController,
     CalendarOAuthController,
     CalendarDemoSeedController,

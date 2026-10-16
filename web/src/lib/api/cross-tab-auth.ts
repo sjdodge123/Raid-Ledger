@@ -3,6 +3,7 @@ import { AUTH_METHOD_KEY } from './auth-storage-keys';
 import { clearAccessToken, isImpersonatingToken } from './access-token-store';
 import { freshRefresh } from './refresh-client';
 import { toast } from '../toast';
+import { dropViewerPrivateCaches, installViewerPrivateCacheGuard } from '../../hooks/viewer-private-caches';
 
 /**
  * ROK-1754 §3.3: tabs no longer share a token, so they share SIGNALS instead,
@@ -12,6 +13,9 @@ import { toast } from '../toast';
  * - the marker appearing (a sign-in elsewhere) → re-check `['auth','me']`.
  * - the identity epoch bumped (impersonation start/stop) → re-mint from the
  *   shared cookie, which the server now answers as the new identity.
+ * ROK-1599: the first and last drop this tab's viewer-private caches (the
+ * Calendars overview carries a bearer feed URL) before anything refetches,
+ * and the token-identity guard drops them on any other identity change.
  */
 
 /** Non-credential timestamp: "the cookie's identity changed — re-mint now". */
@@ -29,6 +33,7 @@ export function bumpIdentityEpoch(): void {
 async function followIdentityChange(queryClient: QueryClient): Promise<void> {
   const wasImpersonating = isImpersonatingToken();
   clearAccessToken();
+  dropViewerPrivateCaches(queryClient);
   // Never join a refresh POSTed under the old identity (review m1).
   const outcome = await freshRefresh();
   // Clearing memory first hides the end from use-auth's subscriber (review n1).
@@ -40,6 +45,7 @@ async function followIdentityChange(queryClient: QueryClient): Promise<void> {
 function onMarkerChange(event: StorageEvent, queryClient: QueryClient): void {
   if (event.newValue === null) {
     clearAccessToken();
+    dropViewerPrivateCaches(queryClient);
     queryClient.setQueryData(['auth', 'me'], null);
   } else if (event.oldValue === null) {
     void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
@@ -53,5 +59,9 @@ export function installCrossTabAuth(queryClient: QueryClient): () => void {
     else if (event.key === IDENTITY_EPOCH_KEY) void followIdentityChange(queryClient);
   };
   window.addEventListener('storage', onStorage);
-  return () => window.removeEventListener('storage', onStorage);
+  const uninstallGuard = installViewerPrivateCacheGuard(queryClient);
+  return () => {
+    window.removeEventListener('storage', onStorage);
+    uninstallGuard();
+  };
 }

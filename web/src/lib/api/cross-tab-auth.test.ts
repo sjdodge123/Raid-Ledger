@@ -84,6 +84,25 @@ describe('ROK-1754 B2: cross-tab auth signals', () => {
         expect(toastInfo).toHaveBeenCalledWith('Impersonation ended');
     });
 
+    it('ROK-1599: marker removed in another tab drops the bearer-carrying calendars overview', () => {
+        queryClient.setQueryData(['calendars', 'overview'], { feed: { url: 'https://x.test/api/cal/u/a.ics' } });
+        siblingTabWrote(AUTH_METHOD_KEY, 'local', null);
+        expect(queryClient.getQueryData(['calendars', 'overview'])).toBeUndefined();
+    });
+
+    it('ROK-1599: epoch bumped in another tab drops the calendars overview BEFORE the re-mint', async () => {
+        queryClient.setQueryData(['calendars', 'overview'], { feed: { url: 'https://x.test/api/cal/u/a.ics' } });
+        const seen: unknown[] = [];
+        refresh.mockImplementation(async () => {
+            seen.push(queryClient.getQueryData(['calendars', 'overview']));
+            return { kind: 'ok', token: 'next-token' };
+        });
+        const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
+        siblingTabWrote(IDENTITY_EPOCH_KEY, '1', '2');
+        await vi.waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+        expect(seen).toEqual([undefined]);
+    });
+
     it('an unrelated key leaves the token alone', () => {
         setAccessToken('kept');
         siblingTabWrote('raid_ledger_theme', 'a', 'b');

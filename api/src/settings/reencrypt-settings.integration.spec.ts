@@ -6,11 +6,16 @@
  */
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { truncateAllTables } from '../common/testing/integration-helpers';
-import { appSettings, calendarConnections } from '../drizzle/schema';
+import {
+  appSettings,
+  calendarConnections,
+  calendarFeeds,
+} from '../drizzle/schema';
 import { eq } from 'drizzle-orm';
 import {
   reencryptAllSettings,
   reencryptCalendarCredentials,
+  reencryptCalendarFeedTokens,
 } from '../../scripts/reencrypt-settings';
 import { deriveKey, encryptWithKey, decryptWithKey } from './encryption.util';
 import { nonEmpty } from '../common/testing/narrow';
@@ -107,6 +112,33 @@ function describeReencryptSettings() {
     );
     expect(decryptWithKey(after.credentialsEncrypted, newKey)).toBe(creds);
     expect(() => decryptWithKey(after.credentialsEncrypted, oldKey)).toThrow();
+  });
+
+  it('re-encrypts calendar_feeds token copies, leaving the hash alone (ROK-1599)', async () => {
+    const oldKey = deriveKey(OLD_SECRET);
+    const newKey = deriveKey(NEW_SECRET);
+    const token = 'A'.repeat(43);
+    const userId = testApp.seed.adminUser.id;
+    await testApp.db.insert(calendarFeeds).values({
+      userId,
+      tokenHash: 'f'.repeat(64),
+      tokenEncrypted: encryptWithKey(token, oldKey),
+    });
+
+    expect(await reencryptCalendarFeedTokens(testApp.db, oldKey, newKey)).toBe(
+      1,
+    );
+
+    const [after] = nonEmpty(
+      await testApp.db
+        .select()
+        .from(calendarFeeds)
+        .where(eq(calendarFeeds.userId, userId)),
+      'rotated feed',
+    );
+    expect(decryptWithKey(after.tokenEncrypted, newKey)).toBe(token);
+    expect(() => decryptWithKey(after.tokenEncrypted, oldKey)).toThrow();
+    expect(after.tokenHash).toBe('f'.repeat(64));
   });
 
   it('should handle empty app_settings table gracefully', async () => {
