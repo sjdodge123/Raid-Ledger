@@ -8,12 +8,14 @@
  * correct by construction; the price is one refetch of public data.
  *
  * Explicit drops (logout, login, session expiry, impersonation start/exit,
- * cross-tab signals) clear eagerly; `['auth','me']` itself is never removed.
+ * cross-tab signals) clear eagerly; `['auth','me']` itself is never removed,
+ * and a query a mounted component observes is reset rather than removed.
  * `installViewerPrivateCacheGuard` is the backstop for every other transition: it watches the in-memory access token and clears whenever
  * the token's identity (subject + impersonator) differs from the last one
  * held — a token refresh that ends impersonation, a re-mint after another tab
  * signed in as someone else. A same-identity refresh clears nothing.
  */
+import { notifyManager } from '@tanstack/react-query';
 import type { Query, QueryClient } from '@tanstack/react-query';
 import { getAccessToken, subscribeAccessToken } from '../lib/api/access-token-store';
 import { readClaims } from '../lib/api/token-expiry';
@@ -29,20 +31,37 @@ function isAuthMe(query: Query): boolean {
 const EVERY_QUERY_BUT_AUTH_ME = { predicate: (query: Query) => !isAuthMe(query) };
 
 /**
- * Cancel and REMOVE every query except `['auth','me']`, then empty the
- * mutation cache, so no response for the previous identity can be read or land
- * afterwards. The live `['auth','me']` Query is left in place, never recreated:
- * the mounted `useAuth()` observers stay attached to it, so the caller's re-seed
- * (or a later cross-tab null) reaches `ProtectedRoute` and every other consumer
- * (ROK-1811 Codex P1), and it keeps its own `dataUpdatedAt`.
- * Synchronous on purpose: `cancelQueries` rejects each fetch immediately and
- * the callers re-seed `['auth','me']` right after — an awaited gap would let a
- * late response or render land between the drop and the re-seed.
+ * Cancel every query except `['auth','me']`, then RESET the ones a mounted
+ * component still observes and REMOVE the rest, and empty the mutation cache,
+ * so no response for the previous identity can be read or land afterwards.
+ * Reset (not remove) for observed queries is ROK-1811 Codex r2 P1: a subtree
+ * that stays mounted across the boundary (a memoized Outlet when impersonation
+ * ends) would otherwise keep rendering the previous viewer's data, because a
+ * removed Query neither notifies its observers nor can be refetched.
+ * When a token is held (the caller swapped it in first) the observed queries
+ * refetch as the NEW identity; with none (logout, expiry, a cross-tab
+ * hand-off that re-mints later) they sit empty and nothing fires unauthenticated.
+ * Cancellation is SILENT: a reverting cancel restores the pre-fetch state on a
+ * later tick, which would put the previous viewer's data back on a reset Query.
+ * The live `['auth','me']` Query is left in place, never recreated: the mounted
+ * `useAuth()` observers stay attached to it, so the caller's re-seed reaches
+ * `ProtectedRoute`, and it keeps its own `dataUpdatedAt`.
+ * Synchronous on purpose: the callers re-seed `['auth','me']` right after — an
+ * awaited gap would let a late response or render land between drop and re-seed.
  */
 export function dropViewerPrivateCaches(queryClient: QueryClient): void {
-    void queryClient.cancelQueries(EVERY_QUERY_BUT_AUTH_ME);
-    queryClient.removeQueries(EVERY_QUERY_BUT_AUTH_ME);
+    void queryClient.cancelQueries(EVERY_QUERY_BUT_AUTH_ME, { silent: true });
+    const queries = queryClient.getQueryCache().findAll(EVERY_QUERY_BUT_AUTH_ME);
+    notifyManager.batch(() => {
+        for (const query of queries) {
+            if (query.getObserversCount() > 0) query.reset();
+            else queryClient.getQueryCache().remove(query);
+        }
+    });
     queryClient.getMutationCache().clear();
+    if (getAccessToken() !== null) {
+        void queryClient.refetchQueries({ ...EVERY_QUERY_BUT_AUTH_ME, type: 'active' });
+    }
 }
 
 function claimText(value: unknown): string {
