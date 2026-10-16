@@ -50,6 +50,7 @@ export async function findServerEnrolledEvent(
   db: Db,
   gameId: number,
   steamId: string,
+  pelicanServerId: number,
 ): Promise<LiveGameEvent | null> {
   const rows = await db
     .select(liveEventCols)
@@ -59,6 +60,8 @@ export async function findServerEnrolledEvent(
       and(
         liveGameWhere(gameId),
         eq(p.steamId, steamId),
+        // Codex r3: a player who moved servers is no longer this server's.
+        eq(p.pelicanServerId, pelicanServerId),
         eq(p.onServer, true),
         isNull(p.leftAt),
       ),

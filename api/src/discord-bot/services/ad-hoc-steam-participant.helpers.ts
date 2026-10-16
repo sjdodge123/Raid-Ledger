@@ -15,6 +15,15 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import {
+  findSteamlessUserRow,
+  lockRow,
+  mergeSteamIntoUserRow,
+  presenceFields,
+  type PresenceSource,
+} from './ad-hoc-participant-row.helpers';
+
+export type { PresenceSource } from './ad-hoc-participant-row.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.adHocParticipants;
@@ -77,26 +86,6 @@ export async function findParticipantBySteamId(
   return rows[0] ?? null;
 }
 
-/** Which presence source a join or leave comes from. */
-export type PresenceSource = 'voice' | 'server';
-
-/**
- * Mark `source` present. A closed row starts a new session NOW — its earlier
- * span is already in `totalDurationSeconds`, so `joinedAt` must move (m10).
- */
-function presenceFields(row: AdHocParticipantRow, source: PresenceSource) {
-  const flag = source === 'voice' ? { inVoice: true } : { onServer: true };
-  if (row.leftAt === null) return flag;
-  return {
-    leftAt: null,
-    joinedAt: new Date(),
-    sessionCount: row.sessionCount + 1,
-    inVoice: false,
-    onServer: false,
-    ...flag,
-  };
-}
-
 /**
  * ON CONFLICT `joined_at`: keep it while the row is open, restart it when a
  * closed row is re-opened (else the next leave re-adds the earlier span).
@@ -108,28 +97,23 @@ export function rejoinJoinedAt(now: Date) {
 /**
  * Record a game-server player on an ad-hoc event.
  *
- * Order matters: a row already carrying the SteamID wins (no second row can
- * violate the partial unique), then the linked user's row is merged into,
- * and only then is a Steam-only row inserted.
+ * A linked player's voice row (no SteamID yet) absorbs the SteamID — and any
+ * Steam-only row they left behind while unlinked (Codex r3) — under row
+ * locks. Otherwise the Steam row is inserted or re-opened on its unique key.
  */
 export async function upsertSteamParticipant(
   db: Db,
   eventId: number,
   member: ServerPresenceMemberInfo,
 ): Promise<SteamUpsertOutcome> {
-  const bySteam = await findParticipantBySteamId(db, eventId, member.steamId);
-  if (!bySteam && member.userId !== null) {
-    const userRow = await findParticipantForUser(db, eventId, member.userId);
-    if (userRow && userRow.steamId === null) {
-      await db
-        .update(t)
-        .set({
-          steamId: member.steamId,
-          pelicanServerId: member.pelicanServerId ?? null,
-          ...presenceFields(userRow, 'server'),
-        })
-        .where(eq(t.id, userRow.id));
-      return 'merged';
+  if (member.userId !== null) {
+    const userRow = await findSteamlessUserRow(db, eventId, member.userId);
+    const bySteam = await findParticipantBySteamId(db, eventId, member.steamId);
+    // A Steam row that already carries a Discord id is someone's merged row.
+    const steamOnly = bySteam?.discordUserId === null ? bySteam.id : null;
+    if (userRow && (!bySteam || steamOnly)) {
+      if (await mergeSteamIntoUserRow(db, userRow.id, steamOnly, member))
+        return 'merged';
     }
   }
   return insertOrRejoinSteamRow(db, eventId, member);
@@ -222,6 +206,8 @@ async function discordIdTaken(
  *
  * Indexed reads (`rows[0]`) rather than destructuring on purpose — it keeps the
  * drizzle chain mock in the voice-path unit spec inert (no row → no merge).
+ * Presence is computed from a FOR UPDATE re-read (Codex r3): a server leave
+ * that closed the row meanwhile must be re-opened, not left closed.
  *
  * @returns True when a Steam row absorbed the Discord identity.
  */
@@ -230,19 +216,23 @@ export async function attachDiscordToUserRow(
   eventId: number,
   member: DiscordIdentity & { userId: number },
 ): Promise<boolean> {
-  const row = await findSteamOnlyRowForUser(db, eventId, member.userId);
-  if (!row) return false;
+  const found = await findSteamOnlyRowForUser(db, eventId, member.userId);
+  if (!found) return false;
   if (await discordIdTaken(db, eventId, member.discordUserId)) return false;
-  await db
-    .update(t)
-    .set({
-      discordUserId: member.discordUserId,
-      discordUsername: member.discordUsername,
-      discordAvatarHash: member.discordAvatarHash,
-      ...presenceFields(row, 'voice'),
-    })
-    .where(eq(t.id, row.id));
-  return true;
+  return db.transaction(async (tx) => {
+    const row = await lockRow(tx, found.id);
+    if (!row || row.discordUserId !== null) return false;
+    await tx
+      .update(t)
+      .set({
+        discordUserId: member.discordUserId,
+        discordUsername: member.discordUsername,
+        discordAvatarHash: member.discordAvatarHash,
+        ...presenceFields(row, 'voice'),
+      })
+      .where(eq(t.id, row.id));
+    return true;
+  });
 }
 
 /** Close a row: accumulate this session and clear both presence flags. */
@@ -298,20 +288,6 @@ async function findParticipantByDiscordId(
   return rows[0] ?? null;
 }
 
-/**
- * Re-read a row FOR UPDATE (Codex r2 P2). A voice leave and a server leave
- * for one person serialise here, so the second sees the first's cleared flag
- * and closes the row — two unlocked reads would each clear only their own
- * flag and leave it open with both flags false.
- */
-async function lockRow(
-  tx: Db,
-  id: string,
-): Promise<AdHocParticipantRow | null> {
-  const rows = await tx.select().from(t).where(eq(t.id, id)).for('update');
-  return rows[0] ?? null;
-}
-
 /** A voice leave: closes the row unless the player is still on the server. */
 export async function markVoiceLeave(
   db: Db,
@@ -326,7 +302,9 @@ export async function markVoiceLeave(
 }
 
 /**
- * A server leave: closes the row unless the player is still in voice.
+ * A server leave: closes the row unless the player is still in voice. With
+ * `pelicanServerId`, a leave from a server that no longer owns the row (the
+ * player moved servers — Codex r3) is ignored.
  *
  * @returns True when a row was closed.
  */
@@ -334,11 +312,18 @@ export async function markSteamLeave(
   db: Db,
   eventId: number,
   steamId: string,
+  pelicanServerId?: number,
 ): Promise<boolean> {
   const closed = await db.transaction(async (tx) => {
     const found = await findParticipantBySteamId(tx, eventId, steamId);
     const row = found && (await lockRow(tx, found.id));
     if (row && !row.onServer) return null;
+    if (
+      row &&
+      pelicanServerId !== undefined &&
+      row.pelicanServerId !== pelicanServerId
+    )
+      return null;
     return leaveSource(tx, row, 'server');
   });
   return closed !== null;
