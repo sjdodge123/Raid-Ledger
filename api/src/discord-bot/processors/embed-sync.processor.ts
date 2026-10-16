@@ -26,6 +26,10 @@ import {
   buildEventData,
   computeEmbedState,
 } from './embed-sync.helpers';
+import {
+  reconcileBumpMessage,
+  type BumpSyncInput,
+} from './embed-sync-bump.helpers';
 
 /**
  * How long after an event is created a missing tracking row still counts as
@@ -246,42 +250,40 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
     context: EmbedContext,
     eventId: number,
   ): Promise<void> {
-    const { embed, row, content } = this.embedFactory.buildEventUpdate(
+    const built = this.embedFactory.buildEventUpdate(
       eventData,
       context,
       newState,
     );
+    const bump = { newState, eventData, context };
     for (const record of records) {
-      await this.syncSingleMessage(
-        record,
-        embed,
-        row,
-        content,
-        newState,
-        eventId,
-      );
+      await this.syncSingleMessage(record, built, eventId, bump);
     }
   }
 
-  /** Edit a single Discord message, persist state, and clean up bumps. */
+  /**
+   * Edit a single Discord message, persist state, then bring the record's
+   * recruitment bump in line — delete on FULL, re-count otherwise (ROK-1812).
+   */
   private async syncSingleMessage(
     record: typeof schema.discordEventMessages.$inferSelect,
-    embed: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['embed'],
-    row: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['row'],
-    content: ReturnType<DiscordEmbedFactory['buildEventUpdate']>['content'],
-    newState: EmbedState,
+    built: ReturnType<DiscordEmbedFactory['buildEventUpdate']>,
     eventId: number,
+    bump: Omit<BumpSyncInput, 'record'>,
   ): Promise<void> {
     try {
       await this.clientService.editEmbed(
         record.channelId,
         record.messageId,
-        embed,
-        row,
-        content,
+        built.embed,
+        built.row,
+        built.content,
       );
-      await this.persistState(record.id, newState);
-      await this.maybeDeleteBumpMessage(record, newState, eventId);
+      await this.persistState(record.id, bump.newState);
+      await reconcileBumpMessage(
+        { db: this.db, clientService: this.clientService, logger: this.logger },
+        { ...bump, record },
+      );
     } catch (err) {
       this.logger.warn(
         `Failed to sync embed in channel ${record.channelId} ` +
@@ -326,42 +328,6 @@ export class EmbedSyncProcessor extends WorkerHost implements OnModuleInit {
       .update(schema.discordEventMessages)
       .set({ embedState: newState, updatedAt: new Date() })
       .where(eq(schema.discordEventMessages.id, recordId));
-  }
-
-  /**
-   * Delete the recruitment bump message when the event becomes full (ROK-728).
-   *
-   * Targets `record.bumpChannelId` (the channel the bump was actually posted to)
-   * when present, falling back to `record.channelId` for legacy rows that
-   * predate the column (ROK-1335). The two diverge when channel bindings
-   * changed between initial-embed-post and bump-post.
-   */
-  private async maybeDeleteBumpMessage(
-    record: typeof schema.discordEventMessages.$inferSelect,
-    newState: EmbedState,
-    eventId: number,
-  ): Promise<void> {
-    if (newState !== EMBED_STATES.FULL || !record.bumpMessageId) return;
-    const bumpChannelId = record.bumpChannelId ?? record.channelId;
-    try {
-      await this.clientService.deleteMessage(
-        bumpChannelId,
-        record.bumpMessageId,
-      );
-      await this.db
-        .update(schema.discordEventMessages)
-        .set({
-          bumpMessageId: null,
-          bumpChannelId: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(schema.discordEventMessages.id, record.id));
-      this.logger.log(`Deleted recruitment bump message for event ${eventId}`);
-    } catch (err) {
-      this.logger.warn(
-        `Failed to delete bump message for event ${eventId} in channel ${bumpChannelId}: ${err instanceof Error ? err.message : 'Unknown'}`,
-      );
-    }
   }
 
   /** Trigger scheduled event side effects based on new state. */
