@@ -231,7 +231,10 @@ export async function listOpenServerPresence(
   );
 }
 
-/** A character line named a Steam-only player: refresh their shown name. */
+/**
+ * A character line named a Steam-only player: refresh their shown name.
+ * Unlinked rows only — a linked row shows the RL user (ROK-1821).
+ */
 export async function renameSteamOnlyRow(
   db: Db,
   eventId: number,
@@ -245,6 +248,7 @@ export async function renameSteamOnlyRow(
         eq(p.eventId, eventId),
         eq(p.steamId, player.steamId),
         isNull(p.discordUserId),
+        isNull(p.userId),
       ),
     );
 }

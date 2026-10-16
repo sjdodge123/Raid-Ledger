@@ -22,6 +22,10 @@ import {
   presenceFields,
   type PresenceSource,
 } from './ad-hoc-participant-row.helpers';
+import {
+  resolveSteamRowDisplay,
+  steamConflictDisplaySet,
+} from './ad-hoc-steam-display.helpers';
 
 export type { PresenceSource } from './ad-hoc-participant-row.helpers';
 
@@ -34,7 +38,10 @@ export type AdHocParticipantRow = typeof schema.adHocParticipants.$inferSelect;
 export interface ServerPresenceMemberInfo {
   /** SteamID64. */
   steamId: string;
-  /** In-game character name when known, else the SteamID64. */
+  /**
+   * In-game character name when known, else the SteamID64. Shown for
+   * UNLINKED players only — a linked row shows the RL user (ROK-1821).
+   */
   displayName: string;
   /** RL user resolved from the SteamID (linked account), else null. */
   userId: number | null;
@@ -119,7 +126,10 @@ export async function upsertSteamParticipant(
   return insertOrRejoinSteamRow(db, eventId, member);
 }
 
-/** On a SteamID conflict: re-open, refresh the name (Steam-only rows), keep the user. */
+/**
+ * On a SteamID conflict: re-open, keep the user, and refresh the shown name
+ * per {@link steamConflictDisplaySet} (ROK-1821: linked rows keep RL names).
+ */
 const steamConflictSet = (now: Date) => ({
   leftAt: null,
   joinedAt: rejoinJoinedAt(now),
@@ -127,9 +137,7 @@ const steamConflictSet = (now: Date) => ({
   pelicanServerId: sql`COALESCE(excluded.pelican_server_id, ${t.pelicanServerId})`,
   // A closed row re-opens from the server alone.
   inVoice: sql`${t.leftAt} IS NULL AND ${t.inVoice}`,
-  // A merged row keeps its Discord name; a Steam-only row takes the
-  // latest character name.
-  discordUsername: sql`CASE WHEN ${t.discordUserId} IS NULL THEN excluded.discord_username ELSE ${t.discordUsername} END`,
+  ...steamConflictDisplaySet(),
   userId: sql`COALESCE(excluded.user_id, ${t.userId})`,
   sessionCount: sql`${t.sessionCount} + 1`,
 });
@@ -141,6 +149,7 @@ async function insertOrRejoinSteamRow(
   member: ServerPresenceMemberInfo,
 ): Promise<SteamUpsertOutcome> {
   const now = new Date();
+  const display = await resolveSteamRowDisplay(db, member);
   const [row] = await db
     .insert(t)
     .values({
@@ -149,8 +158,7 @@ async function insertOrRejoinSteamRow(
       discordUserId: null,
       steamId: member.steamId,
       source: 'steam',
-      discordUsername: member.displayName,
-      discordAvatarHash: null,
+      ...display,
       joinedAt: now,
       sessionCount: 1,
       inVoice: false,
