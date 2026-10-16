@@ -208,11 +208,12 @@ export class PelicanPresenceSupervisor
       if (this.sessions.has(row.id) || this.emptiedStopped.has(row.id)) {
         continue;
       }
-      this.emptiedStopped.add(row.id);
       const source = { pelicanServerId: row.id, gameId: row.gameId };
       try {
         const open = (await this.sink?.openPresence(source)) ?? [];
         if (open.length > 0) await this.sink?.serverEmptied(source);
+        // Only a cleanup that succeeded counts: a failure retries next poll.
+        this.emptiedStopped.add(row.id);
       } catch (err) {
         this.logger.error(
           `Presence empty failed for stopped server ${row.id}: ${errName(err)}`,

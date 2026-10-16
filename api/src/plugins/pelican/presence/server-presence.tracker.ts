@@ -76,9 +76,7 @@ export class ServerPresenceTracker {
   /** Replace all state with a persisted roster (RL restart path). Emits nothing. */
   hydrate(players: PresentPlayer[]): void {
     this.reset();
-    for (const p of players) {
-      this.present.set(p.steamId, { name: p.name, lastSeen: 0 });
-    }
+    for (const p of players) this.addNeverSeen(p);
   }
 
   /**
@@ -91,8 +89,14 @@ export class ServerPresenceTracker {
     for (const p of players) {
       if (this.present.has(p.steamId)) continue;
       this.pending.delete(p.steamId);
-      this.present.set(p.steamId, { name: p.name, lastSeen: 0 });
+      this.addNeverSeen(p);
     }
+  }
+
+  /** Present with lastSeen 0; an unnamed one queues for the next character line. */
+  private addNeverSeen(p: PresentPlayer): void {
+    this.present.set(p.steamId, { name: p.name, lastSeen: 0 });
+    if (p.name === null) this.unnamed.push(p.steamId);
   }
 
   private onJoin(steamId: string, now: number): PresenceChange[] {

@@ -267,3 +267,17 @@ it('a reconnect fetches socket credentials from the CURRENT client (Codex r2)', 
   expect(h.supervisor.activeServerIds).toEqual([1]);
   expect(h.sink.serverEmptied).not.toHaveBeenCalled();
 });
+
+it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', async () => {
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  const h = harness({
+    rows: [row(1, { currentState: 'offline' })],
+    open: [{ steamId: 'A', displayName: 'Alice' }],
+  });
+  h.sink.serverEmptied.mockRejectedValueOnce(new Error('db down'));
+  await h.reconcile();
+  await h.reconcile();
+  await h.reconcile();
+  // Fails once, succeeds on the retry, then is done for this offline spell.
+  expect(h.sink.serverEmptied).toHaveBeenCalledTimes(2);
+});

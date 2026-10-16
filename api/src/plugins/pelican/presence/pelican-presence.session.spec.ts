@@ -230,3 +230,20 @@ it('a re-auth inside the settle window keeps the buffered replay (FB1 #2)', asyn
   ]);
   expect(h.sink.playerLeft.mock.calls).toEqual([]);
 });
+
+it('a stop during rehydrate cancels the pending start — no socket opens (Codex r3)', async () => {
+  const h = harness();
+  let release: (open: ServerPresencePlayer[]) => void = () => undefined;
+  h.sink.openPresence.mockImplementationOnce(
+    () =>
+      new Promise<ServerPresencePlayer[]>((resolve) => {
+        release = resolve;
+      }),
+  );
+  const starting = h.session.start();
+  await h.session.stop(false);
+  release([{ steamId: 'A', displayName: 'Alice' }]);
+  await starting;
+  await jest.advanceTimersByTimeAsync(0);
+  expect(h.wings.sockets).toHaveLength(0);
+});
