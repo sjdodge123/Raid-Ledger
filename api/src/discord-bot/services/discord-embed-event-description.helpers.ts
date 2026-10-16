@@ -6,6 +6,7 @@
  * trimmed, block-markdown-safe, mention-safe and truncated, so the
  * `View Event` link carries the full text.
  */
+import { balanceInlineMarkdown } from './discord-embed-markdown-balance.helpers';
 
 /** The longest excerpt an embed shows before the `…` (Lead default). */
 export const EVENT_DESCRIPTION_MAX = 300;
@@ -58,9 +59,10 @@ function truncate(text: string, max: number): string {
  *
  * @param description - The event's raw description (may be null/blank).
  * @param max - The longest excerpt to show, `…` included.
- * @returns The trimmed, block-contained, mention-escaped, truncated excerpt;
- *   null when the
- *   description is absent, whitespace-only, or `max` leaves no room.
+ * @returns The trimmed, block-contained, mention-escaped, truncated excerpt,
+ *   with any inline delimiter left unmatched escaped so it cannot pair with
+ *   the body below; null when the description is absent, whitespace-only, or
+ *   `max` leaves no room.
  */
 export function eventDescriptionExcerpt(
   description: string | null | undefined,
@@ -68,7 +70,14 @@ export function eventDescriptionExcerpt(
 ): string | null {
   const trimmed = description?.trim();
   if (!trimmed || max < 2) return null;
-  return truncate(escapeMentions(containBlocks(trimmed)), max);
+  const safe = escapeMentions(containBlocks(trimmed));
+  // Escaping an unmatched delimiter adds a `\`; re-cut shorter until it fits.
+  for (let budget = max; budget >= 2;) {
+    const excerpt = balanceInlineMarkdown(truncate(safe, budget));
+    if (excerpt.length <= max) return excerpt;
+    budget -= excerpt.length - max;
+  }
+  return null;
 }
 
 /**
