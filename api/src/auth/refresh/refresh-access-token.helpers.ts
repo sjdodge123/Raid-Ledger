@@ -11,11 +11,15 @@ import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { secondsUntil } from '../impersonation/impersonation-session.helpers';
+import type { TokenBlocklistService } from '../token-blocklist.service';
+import { signAccessToken } from '../access-token-mint.helpers';
 
 export interface RefreshAccessTokenDeps {
   db: PostgresJsDatabase<typeof schema>;
-  jwt: JwtService;
-  impersonation: ImpersonationSessionService;
+  jwt: Pick<JwtService, 'sign'>;
+  /** ROK-1810: the block floor, so a same-second mint is not born revoked. */
+  blocklist: Pick<TokenBlocklistService, 'minIatFor'>;
+  impersonation: Pick<ImpersonationSessionService, 'resolveForRefresh'>;
 }
 
 /** Mint the access token for a just-rotated refresh row. */
@@ -29,7 +33,8 @@ export async function mintRefreshAccessToken(
   );
   if (!live) return signOwnAccessToken(deps, rotated.userId);
   const { target, expiresAt } = live;
-  return deps.jwt.sign(
+  return signAccessToken(
+    deps,
     {
       sub: target.id,
       username: target.username,
@@ -55,7 +60,7 @@ async function signOwnAccessToken(
     .where(eq(schema.users.id, userId))
     .limit(1);
   if (!user) throw new UnauthorizedException('User not found');
-  return deps.jwt.sign({
+  return signAccessToken(deps, {
     username: user.username,
     sub: user.id,
     role: user.role,

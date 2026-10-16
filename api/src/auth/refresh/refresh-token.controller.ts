@@ -25,6 +25,7 @@ import { hashToken } from './refresh-token.helpers';
 import { SameOriginCookiePostGuard } from './same-origin-cookie-post.guard';
 import { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
 import { mintRefreshAccessToken } from './refresh-access-token.helpers';
+import { TokenBlocklistService } from '../token-blocklist.service';
 
 /**
  * ROK-1353: POST /auth/refresh (rotate) + POST /auth/logout (revoke).
@@ -40,6 +41,7 @@ export class RefreshTokenController {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly impersonation: ImpersonationSessionService,
+    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**
@@ -60,7 +62,12 @@ export class RefreshTokenController {
     if (!rotated) throw new UnauthorizedException('Invalid refresh token');
     setRefreshCookie(res, rotated.rawToken, rotated.maxAgeMs);
     const access_token = await mintRefreshAccessToken(
-      { db: this.db, jwt: this.jwtService, impersonation: this.impersonation },
+      {
+        db: this.db,
+        jwt: this.jwtService,
+        blocklist: this.blocklist,
+        impersonation: this.impersonation,
+      },
       rotated,
     );
     return { access_token };
