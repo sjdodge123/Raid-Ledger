@@ -23,13 +23,13 @@ function createParticipant(
 
 describe('AdHocRoster — part 1', () => {
   it('renders roster heading', () => {
-    render(<AdHocRoster participants={[]} activeCount={0} />);
+    render(<AdHocRoster participants={[]} />);
 
     expect(screen.getByText('Voice Channel Roster')).toBeInTheDocument();
   });
 
   it('shows empty state when no participants', () => {
-    render(<AdHocRoster participants={[]} activeCount={0} />);
+    render(<AdHocRoster participants={[]} />);
 
     expect(screen.getByText('No participants yet')).toBeInTheDocument();
   });
@@ -45,7 +45,7 @@ describe('AdHocRoster — part 1', () => {
       }),
     ];
 
-    render(<AdHocRoster participants={participants} activeCount={1} />);
+    render(<AdHocRoster participants={participants} />);
 
     expect(screen.getByText('1 active / 2 total')).toBeInTheDocument();
   });
@@ -63,7 +63,7 @@ describe('AdHocRoster — part 1', () => {
     });
 
     render(
-      <AdHocRoster participants={[active, left]} activeCount={1} />,
+      <AdHocRoster participants={[active, left]} />,
     );
 
     expect(screen.getByText('ActivePlayer')).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe('AdHocRoster — part 1', () => {
     });
 
     const { container } = render(
-      <AdHocRoster participants={[withAvatar]} activeCount={1} />,
+      <AdHocRoster participants={[withAvatar]} />,
     );
 
     const img = container.querySelector('img');
@@ -96,7 +96,7 @@ describe('AdHocRoster — part 2', () => {
       discordUsername: 'NoAvatarUser',
     });
 
-    render(<AdHocRoster participants={[noAvatar]} activeCount={1} />);
+    render(<AdHocRoster participants={[noAvatar]} />);
 
     expect(screen.getByText('N')).toBeInTheDocument();
   });
@@ -107,7 +107,7 @@ describe('AdHocRoster — part 2', () => {
       discordUsername: 'GuestUser',
     });
 
-    render(<AdHocRoster participants={[guest]} activeCount={1} />);
+    render(<AdHocRoster participants={[guest]} />);
 
     expect(screen.getByText('(guest)')).toBeInTheDocument();
   });
@@ -118,7 +118,7 @@ describe('AdHocRoster — part 2', () => {
       discordUsername: 'LinkedUser',
     });
 
-    render(<AdHocRoster participants={[linked]} activeCount={1} />);
+    render(<AdHocRoster participants={[linked]} />);
 
     expect(screen.queryByText('(guest)')).not.toBeInTheDocument();
   });
@@ -128,7 +128,7 @@ describe('AdHocRoster — part 2', () => {
       joinedAt: '2026-02-10T18:00:00Z',
     });
 
-    render(<AdHocRoster participants={[participant]} activeCount={1} />);
+    render(<AdHocRoster participants={[participant]} />);
 
     // The join time display uses toLocaleTimeString, so it will vary by locale
     // Just check it contains "joined"
@@ -141,7 +141,7 @@ describe('AdHocRoster — part 2', () => {
       totalDurationSeconds: 5400, // 1h 30m
     });
 
-    render(<AdHocRoster participants={[withDuration]} activeCount={0} />);
+    render(<AdHocRoster participants={[withDuration]} />);
 
     expect(screen.getByText('1h 30m')).toBeInTheDocument();
   });
@@ -152,7 +152,7 @@ describe('AdHocRoster — part 2', () => {
       totalDurationSeconds: 30,
     });
 
-    render(<AdHocRoster participants={[shortDuration]} activeCount={0} />);
+    render(<AdHocRoster participants={[shortDuration]} />);
 
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
@@ -163,7 +163,7 @@ describe('AdHocRoster — part 2', () => {
       totalDurationSeconds: 2700, // 45 min
     });
 
-    render(<AdHocRoster participants={[minDuration]} activeCount={0} />);
+    render(<AdHocRoster participants={[minDuration]} />);
 
     expect(screen.getByText('45m')).toBeInTheDocument();
   });
@@ -177,7 +177,7 @@ describe('AdHocRoster — part 3', () => {
       totalDurationSeconds: 3600, // 1h
     });
 
-    render(<AdHocRoster participants={[exactHour]} activeCount={0} />);
+    render(<AdHocRoster participants={[exactHour]} />);
 
     expect(screen.getByText('1h')).toBeInTheDocument();
   });
@@ -187,7 +187,7 @@ describe('AdHocRoster — part 3', () => {
       totalDurationSeconds: null,
     });
 
-    render(<AdHocRoster participants={[noDuration]} activeCount={1} />);
+    render(<AdHocRoster participants={[noDuration]} />);
 
     // Should not show any duration text like "Xm" or "Xh"
     expect(screen.queryByText(/<1m/)).not.toBeInTheDocument();
@@ -199,7 +199,7 @@ describe('AdHocRoster — part 3', () => {
       totalDurationSeconds: 1800,
     });
 
-    render(<AdHocRoster participants={[left]} activeCount={0} />);
+    render(<AdHocRoster participants={[left]} />);
 
     expect(screen.queryByText(/In Channel/)).not.toBeInTheDocument();
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe('AdHocRoster — part 3', () => {
   it('does not show "Left" section when all are still active', () => {
     const active = createParticipant({ leftAt: null });
 
-    render(<AdHocRoster participants={[active]} activeCount={1} />);
+    render(<AdHocRoster participants={[active]} />);
 
     expect(screen.queryByText(/Left/)).not.toBeInTheDocument();
     expect(screen.getByText(/In Channel \(1\)/)).toBeInTheDocument();
@@ -220,7 +220,7 @@ describe('AdHocRoster — part 3', () => {
       totalDurationSeconds: 0,
     });
 
-    render(<AdHocRoster participants={[zeroDuration]} activeCount={0} />);
+    render(<AdHocRoster participants={[zeroDuration]} />);
 
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });

@@ -15,6 +15,7 @@ import { checkSuppression } from './ad-hoc-spawn-clearance';
 import {
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
+  listOpenGameServerSteamIds,
   listOpenServerPresence,
   listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
@@ -29,6 +30,7 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findGameVoiceBinding: jest.fn(),
   findLiveGameAdHocEvent: jest.fn(),
+  listOpenGameServerSteamIds: jest.fn(),
   listServerEnrolledEvents: jest.fn(),
   listOpenServerPresence: jest.fn(),
 }));
@@ -88,6 +90,7 @@ beforeEach(() => {
   });
   jest.mocked(buildServerSpawnInput).mockResolvedValue(null);
   jest.mocked(listServerEnrolledEvents).mockResolvedValue([]);
+  jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([]);
 });
 
 afterEach(() => jest.resetAllMocks());

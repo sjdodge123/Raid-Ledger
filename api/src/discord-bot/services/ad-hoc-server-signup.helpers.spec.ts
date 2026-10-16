@@ -89,7 +89,7 @@ describe('spawnOrFindServerQuickPlay — signups at spawn', () => {
         { steamId: 's-linked', displayName: 'Linked' },
         { steamId: 's-unlinked', displayName: 'Stranger' },
       ],
-      ids: [{ userId: 42, discordId: 'd-42' }, null],
+      ids: [{ userId: 42, discordId: 'd-42', displayName: 'Roknua' }, null],
     });
     expect(autoSignupParticipant).toHaveBeenCalledTimes(1);
     expect(autoSignupParticipant).toHaveBeenCalledWith(

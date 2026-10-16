@@ -6,7 +6,7 @@
  * come from the game's voice-monitor binding when there is one, so a server
  * and a bound voice channel share one set of Quick Play settings.
  */
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
@@ -133,6 +133,8 @@ export async function findGameVoiceBinding(
 export interface SteamIdentity {
   userId: number;
   discordId: string | null;
+  /** The RL name a linked player shows as: `display_name`, else `username`. */
+  displayName: string;
 }
 
 /** SteamID64 → the linked RL user (`users.steam_id`), if any. */
@@ -142,7 +144,11 @@ export async function resolveSteamIdentity(
 ): Promise<SteamIdentity | null> {
   const u = schema.users;
   const rows = await db
-    .select({ userId: u.id, discordId: u.discordId })
+    .select({
+      userId: u.id,
+      discordId: u.discordId,
+      displayName: sql<string>`coalesce(${u.displayName}, ${u.username})`,
+    })
     .from(u)
     .where(eq(u.steamId, steamId))
     .limit(1);
@@ -209,14 +215,24 @@ export async function countServerOnlyPresence(
   return rows.length;
 }
 
-/** Open rows still on THIS server — the rehydrate set for its session. */
+/**
+ * Open rows still on THIS server — the rehydrate set for its session. Only an
+ * unlinked row's name is a character name; a linked or merged row's is the
+ * RL/Discord name (ROK-1821), so it rehydrates as its SteamID — nameless to
+ * the tracker until the next character line names it (Codex r3).
+ */
 export async function listOpenServerPresence(
   db: Db,
   eventId: number,
   pelicanServerId: number,
 ): Promise<ServerPresencePlayer[]> {
   const rows = await db
-    .select({ steamId: p.steamId, displayName: p.discordUsername })
+    .select({
+      steamId: p.steamId,
+      displayName: p.discordUsername,
+      userId: p.userId,
+      discordUserId: p.discordUserId,
+    })
     .from(p)
     .where(
       and(
@@ -226,12 +242,47 @@ export async function listOpenServerPresence(
         isNull(p.leftAt),
       ),
     );
-  return rows.flatMap((r) =>
-    r.steamId ? [{ steamId: r.steamId, displayName: r.displayName }] : [],
-  );
+  return rows.flatMap((r) => {
+    if (!r.steamId) return [];
+    const named = r.userId === null && r.discordUserId === null;
+    return [
+      { steamId: r.steamId, displayName: named ? r.displayName : r.steamId },
+    ];
+  });
 }
 
-/** A character line named a Steam-only player: refresh their shown name. */
+/**
+ * Codex r2 P2: SteamIDs with an open on-server row in ANY live event of the
+ * game, on ANY server — a player who moved servers keeps their enrolment.
+ */
+export async function listOpenGameServerSteamIds(
+  db: Db,
+  gameId: number,
+  pelicanServerId?: number,
+): Promise<string[]> {
+  const onThatServer =
+    pelicanServerId === undefined
+      ? undefined
+      : eq(p.pelicanServerId, pelicanServerId);
+  const rows = await db
+    .selectDistinct({ steamId: p.steamId })
+    .from(p)
+    .innerJoin(e, eq(p.eventId, e.id))
+    .where(
+      and(
+        liveGameWhere(gameId),
+        eq(p.onServer, true),
+        isNull(p.leftAt),
+        onThatServer,
+      ),
+    );
+  return rows.flatMap((r) => (r.steamId ? [r.steamId] : []));
+}
+
+/**
+ * A character line named a Steam-only player: refresh their shown name.
+ * Unlinked rows only — a linked row shows the RL user (ROK-1821).
+ */
 export async function renameSteamOnlyRow(
   db: Db,
   eventId: number,
@@ -245,6 +296,7 @@ export async function renameSteamOnlyRow(
         eq(p.eventId, eventId),
         eq(p.steamId, player.steamId),
         isNull(p.discordUserId),
+        isNull(p.userId),
       ),
     );
 }

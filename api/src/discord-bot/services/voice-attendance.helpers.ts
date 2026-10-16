@@ -136,6 +136,8 @@ function sessionToParticipant(session: InMemorySession): AdHocParticipantDto {
     eventId: session.eventId,
     userId: session.userId,
     discordUserId: session.discordUserId,
+    source: 'discord',
+    inVoice: session.isActive,
     discordUsername: session.discordUsername,
     discordAvatarHash: session.discordAvatarHash,
     joinedAt: session.firstJoinAt.toISOString(),

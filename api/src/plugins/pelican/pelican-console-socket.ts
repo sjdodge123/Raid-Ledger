@@ -13,6 +13,7 @@ import {
   type WingsSocket,
   type WingsSocketFactory,
 } from './pelican-console-socket.helpers';
+import { consoleFrameLines } from './pelican-console-lines.helpers';
 
 /** Fetches fresh Wings credentials — normally `PelicanClient.getWebsocketCredentials`. */
 export type ConsoleCredentialsSource = (
@@ -25,7 +26,10 @@ export interface PelicanConsoleSocketOptions {
   /** Panel base URL; its origin is sent as `Origin` (Wings checks it). */
   panelUrl: string;
   getCredentials: ConsoleCredentialsSource;
-  /** One raw console line. SECRET-BEARING: never log or persist it. */
+  /**
+   * One console line — ANSI-stripped and split out of its frame (ROK-1821).
+   * SECRET-BEARING: never log or persist it.
+   */
   onLine: (line: string) => void;
   /** Wings power state push (`running`, `offline`, `starting`, …). */
   onStatus?: (state: string) => void;
@@ -63,6 +67,10 @@ export class PelicanConsoleSocket {
   private running = false;
   private unreachableSince: number | null = null;
   private lines = 0;
+  /** `console output` frames on this connection since its last auth. */
+  private frames = 0;
+  /** False until this connection's first `auth success`. */
+  private authed = false;
 
   constructor(private readonly opts: PelicanConsoleSocketOptions) {
     this.origin = panelOrigin(opts.panelUrl);
@@ -97,6 +105,8 @@ export class PelicanConsoleSocket {
     if (!creds.ok) return this.fail(gen, `credentials ${creds.error.kind}`);
     const { socket, token } = creds.data;
     this.lines = 0;
+    this.frames = 0;
+    this.authed = false;
     try {
       this.socket = this.factory(socket, this.origin, {
         onOpen: () => this.whenCurrent(gen, () => this.sendAuth(token)),
@@ -151,15 +161,27 @@ export class PelicanConsoleSocket {
     this.attempt = 0;
     this.unreachableSince = null;
     this.send('send logs', [null]);
-    this.logger.log('Wings console authenticated; requested log replay');
+    if (this.authed) {
+      // F3: the ~6-min token refresh, not a reconnect.
+      this.logger.log(
+        `Wings console re-auth: ${this.frames} live frames since last auth (${this.lines} lines this connection); requested log replay`,
+      );
+    } else {
+      this.logger.log('Wings console authenticated; requested log replay');
+    }
+    this.authed = true;
+    this.frames = 0;
     this.safely('onReachable', () => this.opts.onReachable?.());
   }
 
   private deliverLine(frame: WingsFrame): void {
-    const line = firstStringArg(frame);
-    if (line === null) return;
-    this.lines += 1;
-    this.safely('onLine', () => this.opts.onLine(line));
+    const arg = firstStringArg(frame);
+    if (arg === null) return;
+    this.frames += 1;
+    for (const line of consoleFrameLines(arg)) {
+      this.lines += 1;
+      this.safely('onLine', () => this.opts.onLine(line));
+    }
   }
 
   private deliverStatus(frame: WingsFrame): void {
