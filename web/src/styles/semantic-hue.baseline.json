@@ -117,7 +117,7 @@
   "components/shared/journey-hero/JourneyHero.tsx": 1,
   "components/shared/submit-bar/SubmitBar.tsx": 1,
   "components/ui/StartupGate.tsx": 3,
-  "components/ui/button.tsx": 4,
+  "components/ui/button-classes.ts": 4,
   "components/ui/fab.tsx": 3,
   "components/ui/loading-spinner.tsx": 1,
   "components/ui/markdown-text.tsx": 1,

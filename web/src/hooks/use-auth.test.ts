@@ -127,3 +127,43 @@ describe('ROK-1366: fetchCurrentUser awaits a pending magic-link redeem', () => 
         expect(getAuthToken()).toBe('session.jwt');
     });
 });
+
+/**
+ * ROK-1599 (Codex P1): the Calendars overview carries the viewer's working
+ * subscribe-feed URL (a bearer link). Its cache key is not viewer-scoped, so
+ * every identity change must drop it or the next viewer on this browser sees
+ * the previous viewer's link.
+ */
+describe('useAuth identity change — drops viewer-private calendar caches (ROK-1599)', () => {
+    const OVERVIEW = ['calendars', 'overview'];
+    const userA = { id: 1, username: 'A', discordId: '1', displayName: null, avatar: null, customAvatarUrl: null, onboardingCompletedAt: null };
+    const userB = { ...userA, id: 2, username: 'B', discordId: '2' };
+    let queryClient: QueryClient;
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: queryClient }, children);
+
+    beforeEach(() => {
+        localStorage.clear();
+        queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+        queryClient.setQueryData(OVERVIEW, { feed: { url: 'https://x/api/cal/u/user-a-token.ics' } });
+        server.use(
+            http.post('http://localhost:3000/auth/refresh', () => new HttpResponse(null, { status: 401 })),
+            http.post('http://localhost:3000/auth/logout', () => new HttpResponse(null, { status: 204 })),
+            http.get('http://localhost:3000/auth/me', () => HttpResponse.json(userB)),
+        );
+    });
+
+    afterEach(() => { localStorage.clear(); });
+
+    it('logout removes the cached overview (and its feed link)', () => {
+        queryClient.setQueryData(['auth', 'me'], userA);
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        act(() => { result.current.logout(); });
+        expect(queryClient.getQueryData(OVERVIEW)).toBeUndefined();
+    });
+
+    it('login as another user removes the previous viewer overview', async () => {
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        await act(async () => { await result.current.login('user-b-jwt'); });
+        expect(queryClient.getQueryData(OVERVIEW)).toBeUndefined();
+    });
+});

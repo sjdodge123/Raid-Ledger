@@ -18,6 +18,8 @@ import { SendEventsEntryRow } from './SendEventsEntryRow';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';
 import { useCalendarOAuthFeedback } from './use-calendar-oauth-feedback';
+import { SubscribeLinkCard } from './SubscribeLinkCard';
+import { FEED_COPY as F } from './calendar-feed.copy';
 import { CALENDARS_COPY as C, READ_COPY as R, SEND_EVENTS_COPY as S, oauthErrorMessage } from './calendar-sync.copy';
 
 function Section({ heading, children }: { heading: string; children: ReactNode }): JSX.Element {
@@ -98,6 +100,15 @@ function PhoneWriteSection({ connections }: { connections: CalendarConnection[] 
     );
 }
 
+/**
+ * ROK-1599 K6: the subscribe link — one full-width section after Send events
+ * and "Add a calendar" at every width (operator 2026-10-16: same order on
+ * phone and desktop).
+ */
+function SubscribeLink({ feed }: { feed: CalendarsOverview['feed'] }): JSX.Element {
+    return <Section heading={F.heading}><SubscribeLinkCard feed={feed} /></Section>;
+}
+
 /** The K2 column / K4 two-card grid: Connected, (phone) Read + Write, Add a calendar. */
 function ConnectionsGrid({ data }: { data: CalendarsOverview }): JSX.Element {
     const google = data.connections.filter((c) => c.provider === 'google');
@@ -142,6 +153,7 @@ export function CalendarsPage(): JSX.Element {
             <ConnectionsGrid data={data} />
             <ReadRules connections={google} mode={data.readSettings.mode} desktopRow />
             <DesktopSendEvents connections={google} />
+            <SubscribeLink feed={data.feed} />
             <PrivacyNote />
         </PageFrame>
     );

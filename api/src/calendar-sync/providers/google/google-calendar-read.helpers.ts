@@ -254,13 +254,27 @@ export function normalizeGoogleEvent(
 ): BusyBlock | null {
   const event = asRecord(item);
   if (isDropped(event)) return null;
-  const extended = asRecord(asRecord(event.extendedProperties).private);
-  const copyId = extended.rlCopyId;
+  const copyId = ourCopyId(event);
   if (instanceId && parseCopyId(copyId, instanceId)) return null;
   const block = toBounds(asRecord(event.start), asRecord(event.end));
   if (!block) return null;
-  if (typeof copyId === 'string' && decodeCopyId(copyId)) block.ourId = copyId;
+  if (copyId !== null) block.ourId = copyId;
   return block;
+}
+
+/**
+ * The event's Raid Ledger copy id: the write path's `rlCopyId` private
+ * property, else (ROK-1599 R3) an ICS subscribe-feed VEVENT whose UID —
+ * surfaced by Google as `iCalUID` — is a copy id. Null when neither decodes.
+ */
+function ourCopyId(event: Record<string, unknown>): string | null {
+  const extended = asRecord(asRecord(event.extendedProperties).private);
+  for (const candidate of [extended.rlCopyId, event.iCalUID]) {
+    if (typeof candidate === 'string' && decodeCopyId(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 /** One `calendarList` item → a picker row (`isRaidLedger` set by the caller). */
