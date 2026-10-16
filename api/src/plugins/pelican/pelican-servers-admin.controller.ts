@@ -17,6 +17,7 @@ import {
   PelicanServerUpdateSchema,
 } from '@raid-ledger/contract';
 import type {
+  PelicanPresencePluginRef,
   PelicanServerListResponse,
   PelicanServerRowDto,
 } from '@raid-ledger/contract';
@@ -96,10 +97,16 @@ export class PelicanServersAdminController {
   /**
    * Quick Play detection (ROK-1800) is supported when the mapped game's slug
    * has an active `game-log-parser` adapter — today only Valheim. A suspended
-   * (inactive-plugin) adapter is not returned, so it reads as unsupported.
+   * (inactive-plugin) adapter is not returned, so it reads as unsupported;
+   * `presencePluginInactive` names that plugin for the admin hint (ROK-1819).
    */
   private toDto(row: PelicanAdminServerRow, now: Date): PelicanServerRowDto {
-    return toAdminServerRowDto(row, now, this.presenceSupported(row.gameSlug));
+    return toAdminServerRowDto(
+      row,
+      now,
+      this.presenceSupported(row.gameSlug),
+      this.presencePluginInactive(row.gameSlug),
+    );
   }
 
   private presenceSupported(gameSlug: string | null): boolean {
@@ -107,6 +114,16 @@ export class PelicanServersAdminController {
       gameSlug !== null &&
       this.registry.getAdapter(EXTENSION_POINTS.GAME_LOG_PARSER, gameSlug) !==
         undefined
+    );
+  }
+
+  private presencePluginInactive(
+    gameSlug: string | null,
+  ): PelicanPresencePluginRef | undefined {
+    if (gameSlug === null) return undefined;
+    return this.registry.getSuspendedAdapterOwner(
+      EXTENSION_POINTS.GAME_LOG_PARSER,
+      gameSlug,
     );
   }
 }
