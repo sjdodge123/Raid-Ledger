@@ -203,8 +203,17 @@ export class AdHocParticipantService {
   }
 
   /** ROK-1800: close a Steam-only row when the player leaves the server. */
-  async markServerLeave(eventId: number, steamId: string): Promise<boolean> {
-    const closed = await markSteamLeave(this.db, eventId, steamId);
+  async markServerLeave(
+    eventId: number,
+    steamId: string,
+    pelicanServerId?: number,
+  ): Promise<boolean> {
+    const closed = await markSteamLeave(
+      this.db,
+      eventId,
+      steamId,
+      pelicanServerId,
+    );
     if (closed) {
       this.eventEmitter.emit(AD_HOC_EVENTS.PARTICIPANT_LEFT, {
         eventId,
