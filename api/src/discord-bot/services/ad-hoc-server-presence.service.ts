@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -10,6 +10,7 @@ import type {
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { AdHocEventsGateway } from '../../events/ad-hoc-events.gateway';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { ServerPathVoiceTally } from './ad-hoc-server-voice-tally.service';
 import { AdHocEventService } from './ad-hoc-event.service';
 import { AdHocNotificationService } from './ad-hoc-notification.service';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
@@ -83,6 +84,9 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     private readonly gracePeriodQueue: AdHocGracePeriodQueueService,
     private readonly gateway: AdHocEventsGateway,
     private readonly eventEmitter: EventEmitter2,
+    @Optional()
+    @Inject(ServerPathVoiceTally)
+    private readonly voiceTally: ServerPathVoiceTally | null = null,
   ) {}
 
   playerJoined(
@@ -267,7 +271,8 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     const held = this.pending.hold(source, player);
     const binding = await findGameVoiceBinding(this.db, source.gameId);
     const min = binding?.config?.minPlayers ?? DEFAULT_SERVER_MIN_PLAYERS;
-    if (held < min) return;
+    const voice = (await this.voiceTally?.countFor(source, this.pending)) ?? 0;
+    if (held + voice < min) return;
     const clearance = await checkSuppression(
       this.db,
       serverSourceKey(source.pelicanServerId),

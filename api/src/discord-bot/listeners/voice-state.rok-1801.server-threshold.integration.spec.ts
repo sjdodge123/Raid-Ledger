@@ -1,0 +1,234 @@
+/**
+ * ROK-1801 layer D — game-server presence counts toward the Quick Play
+ * threshold on BOTH spawn paths (operator ruling Q9), each person once, and a
+ * `SERVER_PRESENCE_EVENTS.CHANGED` re-evaluates a bound voice room.
+ *
+ * Real DB + the real Nest wiring of `VoiceStateListener`, the roster service,
+ * the server-presence sink and `ServerPathVoiceTally`. Only Discord (a fake
+ * guild with one voice channel) and the Pelican reader's roster are stubbed.
+ *
+ * Regression: ROK-1801
+ */
+import { Logger } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { ActivityType, Collection, type GuildMember } from 'discord.js';
+import { and, eq } from 'drizzle-orm';
+import { getTestApp, type TestApp } from '../../common/testing/test-app';
+import { truncateAllTables } from '../../common/testing/integration-helpers';
+import { nonEmpty } from '../../common/testing/narrow';
+import * as schema from '../../drizzle/schema';
+import { SettingsService } from '../../settings/settings.service';
+import {
+  SERVER_PRESENCE_EVENTS,
+  SERVER_PRESENCE_READER,
+  type ServerPresenceReader,
+  type ServerRosterPlayer,
+} from '../../plugins/pelican/presence/server-presence.reader';
+import {
+  SERVER_PRESENCE_SINK,
+  type ServerPresenceSink,
+} from '../../plugins/pelican/presence/server-presence.sink';
+import { DiscordBotClientService } from '../discord-bot-client.service';
+import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import { AdHocNotificationService } from '../services/ad-hoc-notification.service';
+import { ChannelPresenceEmbedService } from '../services/channel-presence-embed.service';
+import { PresenceGameDetectorService } from '../services/presence-game-detector.service';
+import { VoiceStateListener } from './voice-state.listener';
+import { handleChannelJoin } from './voice-state-join-dispatch.handlers';
+import { buildDiscordMember } from './voice-state.helpers';
+import { __resetTraceState } from './voice-gate-trace';
+
+const GUILD_ID = 'guild-1801';
+const CHANNEL_ID = '1801000000000000001';
+const VALHEIM = 'Valheim';
+const VOICE_A = '1801000000000000101';
+const STEAM_A = '76561198000018011';
+const STEAM_B = '76561198000018012';
+
+type FakeMember = Record<string, unknown> & { id: string };
+
+let testApp: TestApp;
+let listener: VoiceStateListener;
+let voiceMembers: Collection<string, FakeMember>;
+let onServer: ServerRosterPlayer[];
+let valheim: number;
+let serverSeq = 18010;
+
+beforeAll(async () => {
+  testApp = await getTestApp();
+  listener = testApp.app.get(VoiceStateListener);
+});
+
+beforeEach(async () => {
+  __resetTraceState();
+  voiceMembers = new Collection();
+  onServer = [];
+  stubDiscordAndServices();
+  jest.spyOn(Logger.prototype, 'log').mockImplementation();
+  await testApp.app
+    .get(SettingsService)
+    .set(schema.SETTING_KEYS.AD_HOC_EVENTS_ENABLED, 'true');
+  testApp.app.get(PresenceGameDetectorService)['gameCache'].clear();
+  valheim = await seedGame();
+  await seedMonitor();
+});
+
+afterEach(async () => {
+  for (const t of listener['pendingSpawnTimers'].values()) clearTimeout(t);
+  listener['pendingSpawnTimers'].clear();
+  listener['channelBindingCache'].clear();
+  listener['channelMembers'].clear();
+  listener['userChannelMap'].clear();
+  listener['voiceGameTracker'].clear();
+  jest.restoreAllMocks();
+  testApp.seed = await truncateAllTables(testApp.db);
+});
+
+// ── Fixtures ─────────────────────────────────────────────────────────
+
+function stubDiscordAndServices(): void {
+  const client = testApp.app.get(DiscordBotClientService);
+  const channel = { isVoiceBased: () => true, members: voiceMembers };
+  const guild = {
+    channels: { cache: new Collection([[CHANNEL_ID, channel]]) },
+  };
+  const fake = { guilds: { cache: new Collection([[GUILD_ID, guild]]) } };
+  jest.spyOn(client, 'getGuildId').mockReturnValue(GUILD_ID);
+  jest.spyOn(client, 'getClient').mockReturnValue(fake as never);
+  jest.spyOn(client, 'sendEmbed').mockResolvedValue({ id: 'm' } as never);
+  jest.spyOn(client, 'editEmbed').mockResolvedValue({ id: 'm' } as never);
+  const presence = testApp.app.get(ChannelPresenceEmbedService);
+  jest.spyOn(presence, 'markDirty').mockImplementation(() => undefined);
+  const queue = testApp.app.get(AdHocGracePeriodQueueService);
+  jest.spyOn(queue, 'enqueue').mockResolvedValue(undefined);
+  jest.spyOn(queue, 'cancel').mockResolvedValue(undefined);
+  const notes = testApp.app.get(AdHocNotificationService);
+  jest.spyOn(notes, 'notifySpawn').mockResolvedValue(undefined);
+  jest.spyOn(notes, 'queueUpdate').mockImplementation(() => undefined);
+  const reader = testApp.app.get<ServerPresenceReader>(SERVER_PRESENCE_READER);
+  jest.spyOn(reader, 'playersOnGames').mockImplementation(() => onServer);
+}
+
+async function seedGame(): Promise<number> {
+  const [row] = nonEmpty(
+    await testApp.db
+      .insert(schema.games)
+      .values({ name: VALHEIM, slug: 'valheim', coverUrl: null, igdbId: null })
+      .returning({ id: schema.games.id }),
+    'game',
+  );
+  return row.id;
+}
+
+async function seedMonitor(): Promise<void> {
+  await testApp.db.insert(schema.channelBindings).values({
+    guildId: GUILD_ID,
+    channelId: CHANNEL_ID,
+    channelType: 'voice',
+    bindingPurpose: 'game-voice-monitor',
+    gameId: valheim,
+    config: { minPlayers: 2 },
+  });
+}
+
+/** VOICE_A is the RL user who owns STEAM_A. */
+async function linkVoiceAToSteamA(): Promise<void> {
+  await testApp.db.insert(schema.users).values({
+    discordId: VOICE_A,
+    steamId: STEAM_A,
+    username: 'Ragna',
+    role: 'member',
+  });
+}
+
+const serverPlayer = (steamId: string): ServerRosterPlayer => ({
+  pelicanServerId: serverSeq,
+  gameId: valheim,
+  steamId,
+  name: `Viking-${steamId.slice(-2)}`,
+});
+
+/** Put a member in the fake voice channel, playing Valheim. */
+function seatInVoice(id: string): GuildMember {
+  const m: FakeMember = {
+    id,
+    displayName: id,
+    user: { id, username: id, avatar: null, bot: false },
+    presence: { activities: [{ type: ActivityType.Playing, name: VALHEIM }] },
+    voice: { channelId: CHANNEL_ID },
+  };
+  voiceMembers.set(id, m);
+  return m as unknown as GuildMember;
+}
+
+async function joinVoice(id: string): Promise<void> {
+  const gm = seatInVoice(id);
+  await handleChannelJoin(
+    listener['joinCtx'],
+    CHANNEL_ID,
+    buildDiscordMember(id, gm),
+    gm,
+  );
+}
+
+const valheimQuickPlays = async (): Promise<number> =>
+  (
+    await testApp.db
+      .select({ id: schema.events.id })
+      .from(schema.events)
+      .where(
+        and(eq(schema.events.isAdHoc, true), eq(schema.events.gameId, valheim)),
+      )
+  ).length;
+
+const sink = (): ServerPresenceSink =>
+  testApp.app.get<ServerPresenceSink>(SERVER_PRESENCE_SINK);
+
+// ── Voice path ───────────────────────────────────────────────────────
+
+describe('voice path — server players count toward minPlayers (Q9)', () => {
+  it('1 in voice + 1 different person on the server meets minPlayers 2', async () => {
+    onServer = [serverPlayer(STEAM_B)];
+    await joinVoice(VOICE_A);
+    expect(await valheimQuickPlays()).toBe(1);
+  });
+
+  it('the same person in voice and on the server counts once', async () => {
+    await linkVoiceAToSteamA();
+    onServer = [serverPlayer(STEAM_A)];
+    await joinVoice(VOICE_A);
+    expect(await valheimQuickPlays()).toBe(0);
+  });
+
+  it('CHANGED re-evaluates the bound room and spawns', async () => {
+    await joinVoice(VOICE_A);
+    expect(await valheimQuickPlays()).toBe(0);
+    onServer = [serverPlayer(STEAM_B)];
+    await testApp.app
+      .get(EventEmitter2)
+      .emitAsync(SERVER_PRESENCE_EVENTS.CHANGED, {
+        pelicanServerId: serverSeq,
+        gameId: valheim,
+      });
+    expect(await valheimQuickPlays()).toBe(1);
+  });
+});
+
+// ── Server path ──────────────────────────────────────────────────────
+
+describe('server path — voice members count toward minPlayers (Q9)', () => {
+  it('1 on the server + 1 different person in voice meets minPlayers 2', async () => {
+    seatInVoice(VOICE_A);
+    const src = { pelicanServerId: ++serverSeq, gameId: valheim };
+    await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
+    expect(await valheimQuickPlays()).toBe(1);
+  });
+
+  it('the same person on the server and in voice counts once', async () => {
+    await linkVoiceAToSteamA();
+    seatInVoice(VOICE_A);
+    const src = { pelicanServerId: ++serverSeq, gameId: valheim };
+    await sink().playerJoined(src, { steamId: STEAM_A, displayName: 'Ragna' });
+    expect(await valheimQuickPlays()).toBe(0);
+  });
+});

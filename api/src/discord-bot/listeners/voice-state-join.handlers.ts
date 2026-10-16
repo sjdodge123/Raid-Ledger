@@ -2,7 +2,6 @@ import type { GuildMember } from 'discord.js';
 import type { VoiceMemberInfo } from '../services/ad-hoc-participant.service';
 import type { DiscordMemberInfo, ResolvedBinding } from './voice-state.helpers';
 import {
-  getGameFilteredCount,
   shouldSpawnImmediately,
   startVoiceGameTracking,
   type VoiceHandlerDeps,
@@ -11,6 +10,7 @@ import {
   handleGameSpecificGroupRoster,
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
+import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import { isBotMember, lobbyGroupSize } from './voice-lobby-groups.helpers';
 import {
   gateCtx,
@@ -255,7 +255,7 @@ async function resolveThresholdSpawnGameId(
   binding: ResolvedBinding,
   minPlayers: number,
 ): Promise<ThresholdSpawnDecision> {
-  const { counted, confirmedCount } = await getGameFilteredCount(
+  const { counted, confirmedCount } = await serverAwareGameCount(
     deps,
     channelId,
     binding,

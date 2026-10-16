@@ -45,13 +45,17 @@ import {
   type JoinHandlerCtx,
 } from './voice-state-join-dispatch.handlers';
 import {
-  connectRecoverySteps,
   onceOnSuccess,
   reportBindingHealth,
-  runConnectRecoverySteps,
   startBindingCacheSweep,
   stopBindingCacheSweep,
 } from './voice-state-connect.helpers';
+import { runBotConnectRecovery } from './voice-state-connect-run.helpers';
+import { handleServerPresenceChanged } from './voice-state-server-presence.handlers';
+import {
+  SERVER_PRESENCE_EVENTS,
+  type ServerPresenceChangedPayload,
+} from '../../plugins/pelican/presence/server-presence.reader';
 import {
   handleChannelLeave,
   type TimerMaps,
@@ -160,16 +164,16 @@ export class VoiceStateListener implements OnApplicationShutdown {
     this.registerListeners(client);
     // Each step is guarded on its own (TDB:836); ROK-1446 D7/AC8 ordering —
     // presence adoption before recoverFromVoiceChannels — lives in the helper.
-    await runConnectRecoverySteps(
-      connectRecoverySteps({
-        deps: this.deps,
-        reportBindingHealth: this.reportBindingHealthOnce,
-        resolveBinding: (ch) => this.resolveBinding(ch),
-        handleJoin: (ch, dm, gm) => handleChannelJoin(this.joinCtx, ch, dm, gm),
-        startCacheSweep: () => this.startCacheSweep(),
-      }),
-      this.logger,
-    );
+    await runBotConnectRecovery(this.joinCtx, {
+      reportBindingHealth: this.reportBindingHealthOnce,
+      startCacheSweep: () => this.startCacheSweep(),
+    });
+  }
+
+  /** ROK-1801 D: game-server presence changed — re-run cards + thresholds. */
+  @OnEvent(SERVER_PRESENCE_EVENTS.CHANGED)
+  onServerPresenceChanged(p: ServerPresenceChangedPayload): Promise<void> {
+    return handleServerPresenceChanged(this.joinCtx, p);
   }
 
   @OnEvent(DISCORD_BOT_EVENTS.DISCONNECTED)
@@ -323,9 +327,6 @@ export class VoiceStateListener implements OnApplicationShutdown {
     };
   }
 
-  private async resolveBinding(ch: string): Promise<ResolvedBinding | null> {
-    return (await this.resolveAllBindings(ch))[0] ?? null;
-  }
   private resolveAllBindings(ch: string): Promise<ResolvedBinding[]> {
     return resolveAllBindings(
       {
