@@ -94,7 +94,7 @@ export class DiscordAuthController {
     @Res() res: Response,
   ) {
     if (res.headersSent) return;
-    const { access_token } = this.authService.login(req.user);
+    const { access_token } = await this.authService.login(req.user);
     const authCode = crypto.randomBytes(32).toString('hex');
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
     const clientUrl = this.getClientUrl(req);

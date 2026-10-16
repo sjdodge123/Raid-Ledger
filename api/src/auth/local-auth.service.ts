@@ -19,6 +19,8 @@ import {
 } from './auth-status.helpers';
 import { defined } from '../common/defined.helpers';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
+import { TokenBlocklistService } from './token-blocklist.service';
+import { signAccessToken } from './access-token-mint.helpers';
 import {
   IMPERSONATION_TTL_MS,
   secondsUntil,
@@ -78,6 +80,7 @@ export class LocalAuthService {
     @Inject(DrizzleAsyncProvider) private db: PostgresJsDatabase<typeof schema>,
     @Inject(JwtService) private jwtService: JwtService,
     private sessions: ImpersonationSessionService,
+    private readonly blocklist: TokenBlocklistService,
   ) {}
 
   /**
@@ -176,14 +179,12 @@ export class LocalAuthService {
   /**
    * Generate JWT for authenticated user
    */
-  login(user: typeof users.$inferSelect) {
-    const payload = {
-      username: user.username,
-      sub: user.id,
-      role: user.role,
-    };
+  async login(user: typeof users.$inferSelect) {
     return {
-      access_token: this.jwtService.sign(payload),
+      access_token: await signAccessToken(
+        { jwt: this.jwtService, blocklist: this.blocklist },
+        { username: user.username, sub: user.id, role: user.role },
+      ),
       user: {
         id: user.id,
         username: user.username,
@@ -267,13 +268,14 @@ export class LocalAuthService {
     return target;
   }
 
-  private buildImpersonationToken(
+  private async buildImpersonationToken(
     adminUser: { id: number },
     target: typeof users.$inferSelect,
     expiresInSeconds: number,
-  ): ImpersonationStartResult {
+  ): Promise<ImpersonationStartResult> {
     return {
-      access_token: this.jwtService.sign(
+      access_token: await signAccessToken(
+        { jwt: this.jwtService, blocklist: this.blocklist },
         {
           username: target.username,
           sub: target.id,

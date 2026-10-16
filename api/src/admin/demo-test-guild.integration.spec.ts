@@ -10,7 +10,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { AuthService } from '../auth/auth.service';
+import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { ALL_WOW_GAME_SLUGS } from '../plugins/wow-common/manifest';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
@@ -75,9 +75,8 @@ async function seedGuild(
 
 function tokenFor(user: { userId: number; username: string }): string {
   return testApp.app
-    .get(AuthService)
-    .login({ id: user.userId, username: user.username, role: 'member' })
-    .access_token;
+    .get(JwtService)
+    .sign({ sub: user.userId, username: user.username, role: 'member' });
 }
 
 function viewGuild(guildId: number, token: string) {

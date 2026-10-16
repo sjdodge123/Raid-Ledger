@@ -11,7 +11,9 @@ import {
   Logger,
   BadRequestException,
   UnauthorizedException,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from '../auth/admin.guard';
 import { SettingsService } from '../settings/settings.service';
@@ -36,6 +38,15 @@ import {
 import type { UpdateStepDto } from '@raid-ledger/contract';
 import { Req } from '@nestjs/common';
 import type { AuthenticatedExpressRequest } from '../auth/types';
+import { PasswordChangeSessionService } from '../auth/password-change/password-change-session.service';
+import { setRefreshCookie } from '../auth/refresh/refresh-cookie.helpers';
+
+/** Change-password response; `access_token` replaces the caller's revoked one. */
+type ChangePasswordResult = {
+  success: boolean;
+  message: string;
+  access_token?: string;
+};
 
 /**
  * Admin Onboarding Wizard Controller (ROK-204)
@@ -49,6 +60,7 @@ export class OnboardingController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly localAuthService: LocalAuthService,
+    private readonly passwordSession: PasswordChangeSessionService,
     @Inject(DrizzleAsyncProvider)
     private db: PostgresJsDatabase<typeof schema>,
   ) {}
@@ -165,14 +177,16 @@ export class OnboardingController {
 
   /**
    * POST /admin/onboarding/change-password
-   * Change the admin's password.
+   * Change the admin's password. ROK-1810: every existing session (refresh
+   * families + access JWTs) is revoked and the caller gets a fresh one.
    */
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   async changePassword(
     @Body() body: ChangePasswordDto,
     @Req() req: AuthenticatedExpressRequest,
-  ): Promise<{ success: boolean; message: string }> {
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<ChangePasswordResult> {
     const parsed = ChangePasswordSchema.safeParse(body);
     if (!parsed.success) {
       throw new BadRequestException(
@@ -185,12 +199,39 @@ export class OnboardingController {
       parsed.data.currentPassword,
       localCred.passwordHash,
     );
+    // ROK-1810: revoke BEFORE the hash update so a failure in between leaves
+    // the old password with no live sessions, never new password + old ones.
+    await this.passwordSession.revokeAllSessions(req.user.id);
     await this.updatePassword(localCred.id, parsed.data.newPassword);
 
     this.logger.log(
       `Admin user ${req.user.username} changed password via onboarding`,
     );
-    return { success: true, message: 'Password changed successfully' };
+    const accessToken = await this.reissueCallerSession(req, res);
+    return {
+      success: true,
+      message: 'Password changed successfully',
+      ...(accessToken ? { access_token: accessToken } : {}),
+    };
+  }
+
+  /**
+   * ROK-1810: hand the caller a fresh session (new `rl_rt` cookie + access
+   * token) after every old one was revoked.
+   */
+  private async reissueCallerSession(
+    req: AuthenticatedExpressRequest,
+    res: Response,
+  ): Promise<string | null> {
+    // Defence in depth: unreachable today (AdminGuard + local-auth.service
+    // refuses to impersonate an admin). The cookie would be the admin's.
+    if (req.user.impersonatedBy !== null) return null;
+    const session = await this.passwordSession.issueSession(
+      req.user,
+      req.headers['user-agent'] ?? null,
+    );
+    setRefreshCookie(res, session.refresh.rawToken, session.refresh.maxAgeMs);
+    return session.accessToken;
   }
 
   private async findLocalCredential(userId: number) {
