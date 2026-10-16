@@ -15,6 +15,7 @@ import {
   openEventLink,
 } from './discord-embed-event-chrome.helpers';
 import type { EmbedEventData } from './discord-embed.factory';
+import { withDescription } from './discord-embed-event-description.helpers';
 
 const CALENDAR = '\u{1F4C6}'; // 📆
 const SPEAKER = '\u{1F50A}'; // 🔊
@@ -85,6 +86,9 @@ export interface EventBodyOptions {
 /**
  * Build the description for one lifecycle state of a scheduled event.
  *
+ * ROK-1804: every state but RESCHEDULING opens with the event's own
+ * description excerpt (trimmed, truncated, mention-safe), then a blank line.
+ *
  * @param event - The event being rendered.
  * @param options - State, resolved client URL, roster block, poll URL and
  *   whether the trailing masked event link should be emitted.
@@ -94,11 +98,15 @@ export function buildEventBody(
   event: EmbedEventData,
   options: EventBodyOptions,
 ): string {
-  const { state, clientUrl, roster, pollUrl, eventLink } = options;
-  if (state === EMBED_STATES.CANCELLED) return cancelledLines(event).join('\n');
-  if (state === EMBED_STATES.RESCHEDULING)
-    return reschedulingLines(pollUrl).join('\n');
+  if (options.state === EMBED_STATES.RESCHEDULING)
+    return reschedulingLines(options.pollUrl).join('\n');
+  return withDescription(event.description, stateLines(event, options));
+}
 
+/** The lines below the description excerpt, for every non-poll state. */
+function stateLines(event: EmbedEventData, options: EventBodyOptions): string {
+  const { state, clientUrl, roster, eventLink } = options;
+  if (state === EMBED_STATES.CANCELLED) return cancelledLines(event).join('\n');
   const lines: string[] = [];
   if (TIMING_STATES.includes(state)) lines.push(timingLine(event));
   if (event.voiceChannelId) lines.push(`${SPEAKER} <#${event.voiceChannelId}>`);
