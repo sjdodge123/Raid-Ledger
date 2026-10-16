@@ -281,3 +281,17 @@ it('retries a failed stopped-server cleanup on the next reconcile (Codex r3)', a
   // Fails once, succeeds on the retry, then is done for this offline spell.
   expect(h.sink.serverEmptied).toHaveBeenCalledTimes(2);
 });
+
+it("retries a stopping session's failed serverEmptied on a later pass (Codex r4)", async () => {
+  jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+  const h = harness({ open: [{ steamId: 'A', displayName: 'Alice' }] });
+  await h.reconcile();
+  h.sink.serverEmptied.mockRejectedValueOnce(new Error('db down'));
+  h.state.rows = [row(1, { currentState: 'offline' })];
+  await h.reconcile();
+  await h.reconcile();
+  // The session's own empty fails; the server must not count as emptied, so
+  // the stopped-server cleanup runs it again and the rows really close.
+  expect(h.sink.serverEmptied).toHaveBeenCalledTimes(2);
+  expect(await h.sink.openPresence()).toEqual([]);
+});

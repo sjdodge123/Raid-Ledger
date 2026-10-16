@@ -45,14 +45,19 @@ export function arrive(
   ];
 }
 
+/** Like the real sink, a successful `serverEmptied` closes every open row. */
 export function fakeSink(open: ServerPresencePlayer[] = []) {
   const ok = () => Promise.resolve();
+  let current = [...open];
   return {
     playerJoined: jest.fn(ok),
     playerRenamed: jest.fn(ok),
     playerLeft: jest.fn(ok),
-    serverEmptied: jest.fn(ok),
-    openPresence: jest.fn(() => Promise.resolve(open)),
+    serverEmptied: jest.fn(() => {
+      current = [];
+      return Promise.resolve();
+    }),
+    openPresence: jest.fn(() => Promise.resolve(current)),
   };
 }
 
