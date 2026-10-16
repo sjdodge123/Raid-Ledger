@@ -6,6 +6,7 @@ import {
   isNotNull,
   isNull,
   notInArray,
+  or,
   sql,
 } from 'drizzle-orm';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -119,6 +120,27 @@ export class PelicanServersRepository {
         and(
           isNotNull(pelicanServers.gameId),
           eq(pelicanServers.showOnCalendar, true),
+          isNull(pelicanServers.missingSince),
+        ),
+      );
+  }
+
+  /**
+   * Rows the status POLL covers: the calendar set plus presence-tracked
+   * servers hidden from the calendar, whose power state the presence
+   * supervisor needs (ROK-1800). The calendar feed keeps `listPollable`.
+   */
+  listStatusPollable(): Promise<PelicanServerRow[]> {
+    return this.db
+      .select()
+      .from(pelicanServers)
+      .where(
+        and(
+          isNotNull(pelicanServers.gameId),
+          or(
+            eq(pelicanServers.showOnCalendar, true),
+            eq(pelicanServers.presenceTracking, true),
+          ),
           isNull(pelicanServers.missingSince),
         ),
       );

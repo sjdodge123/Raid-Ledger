@@ -31,7 +31,8 @@ function isFresh(row: PelicanServerRow, now: Date): boolean {
 
 /**
  * Status poll (ROK-1772 Lane 3): `GET /servers/{id}/resources` for every
- * mapped, visible, present server (D6), 4 at a time, skipping any checked in
+ * mapped, present server that is calendar-visible (D6) or presence-tracked
+ * (ROK-1800), 4 at a time, skipping any checked in
  * the last 20 s. A failed call writes nothing (D7). Logs counts and host
  * only — never the key, a uuid or a server name (Q6).
  */
@@ -69,7 +70,7 @@ export class PelicanStatusService {
     if (!this.registry.isActive(PELICAN_PLUGIN_ID)) return { ...NONE };
     const conn = await this.factory.connect();
     if (!conn) return { ...NONE };
-    const rows = await this.repo.listPollable();
+    const rows = await this.repo.listStatusPollable();
     const now = new Date();
     const due = rows.filter((row) => !isFresh(row, now));
     const outcome = { polled: 0, failed: 0, skipped: rows.length - due.length };

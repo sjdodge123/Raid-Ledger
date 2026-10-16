@@ -1,4 +1,4 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import type { CronRegistrar } from '../plugin-host/extension-points';
 import type { CronJobDefinition } from '../plugin-host/extension-types';
 import { PELICAN_STATUS_CRON, PELICAN_SYNC_CRON } from './pelican.constants';
@@ -18,7 +18,10 @@ export class PelicanCronRegistrar implements CronRegistrar {
   constructor(
     private readonly sync: PelicanSyncService,
     private readonly status: PelicanStatusService,
+    // Explicit token: a `T | null` param emits `Object` metadata, which
+    // `@Optional()` silently resolves to null (ROK-1800 Codex r2).
     @Optional()
+    @Inject(PelicanPresenceSupervisor)
     private readonly presence: PelicanPresenceSupervisor | null = null,
   ) {}
 

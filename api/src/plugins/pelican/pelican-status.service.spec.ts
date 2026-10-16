@@ -48,7 +48,7 @@ function build(
     ),
   };
   const repo = {
-    listPollable: jest.fn(() => Promise.resolve(rows)),
+    listStatusPollable: jest.fn(() => Promise.resolve(rows)),
     writeStatus: jest.fn(() => Promise.resolve()),
   };
   const service = new PelicanStatusService(
@@ -169,7 +169,7 @@ describe('PelicanStatusService guards and logging', () => {
       skipped: 0,
     });
     expect(fetchImpl).not.toHaveBeenCalled();
-    expect(repo.listPollable).not.toHaveBeenCalled();
+    expect(repo.listStatusPollable).not.toHaveBeenCalled();
   });
 
   it('never logs the key, a uuid, an identifier or a server name', async () => {
