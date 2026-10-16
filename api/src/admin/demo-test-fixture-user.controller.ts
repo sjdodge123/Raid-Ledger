@@ -99,7 +99,7 @@ export class DemoTestFixtureUserController {
     await this.assertDemoMode();
     const identity = fixtureIdentity(parseFixtureSlot(body));
     const user = await this.upsertFixtureUser(identity);
-    const { access_token } = this.authService.login({
+    const { access_token } = await this.authService.login({
       id: user.id,
       username: user.username,
       role: user.role,

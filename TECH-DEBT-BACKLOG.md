@@ -2754,3 +2754,17 @@ same day (#1278, #1279, #1280).
 ### 2026-10-16 — fix/rok-1711-voice-bots-minplayers (resolution note)
 
 - **[resolved]** The 2026-09-01 rok-1445 entry "`getGameFilteredCount` counts bot members" (`voice-state.handlers.ts:270`) is fixed by ROK-1711: bots are skipped in `voice-threshold-count.helpers.ts` unless DEMO_MODE-allowlisted (`VOICE_THRESHOLD_BOT_ALLOWLIST`).
+
+### 2026-10-16 — fleet env slot-1 (surfaced during the ROK-1808 test plan)
+
+- **low** `rl-infra/` fleet ingress (traefik in front of each env's allinone nginx) — fleet envs don't receive `X-Forwarded-Proto: https`, so nginx's `$csp_upgrade` map (`nginx/monolith.conf.template:26`) and Express's `req.secure` both see plain HTTP on `https://slot-N.gamernight.net`. Evidence 2026-10-16: prod's `/` response carries `upgrade-insecure-requests` and slot-1's doesn't; the ROK-1808 login-state cookie is Secure on prod's path but not on slot-1. Pre-existing fleet config, not app code. Fleet envs diverge from prod on HTTPS-only behaviour (CSP upgrade, Secure cookies keyed on `req.secure`). Suggested: have the fleet ingress set `X-Forwarded-Proto: https` (traefik `forwardedHeaders` / a headers middleware) for slot hosts.
+
+### 2026-10-16 — fix/rok-1810-password-change-revokes (follow-up left out of ROK-1809/1810)
+
+- **med** `api/scripts/bootstrap-admin.ts:237-242` and `:297` — the boot-time admin password reset (`RESET_PASSWORD` + `ADMIN_PASSWORD`) rewrites the hash without revoking the admin's refresh families or blocklisting their access tokens, the same gap ROK-1810 closed for the in-app change. Pre-existing on origin/main. It was left out because this pre-Nest script has no clean route to the Redis blocklist, and it must first compare the new password with the current hash: fleet env spins re-seed the admin through this path, so revoking unconditionally would kill sessions on every spin. Suggested: bcrypt-compare first, and only when the password actually changes, revoke `refresh_tokens` in SQL and write the `jwt_block:<id>` key through a small Redis client.
+### 2026-10-16 — fix/rok-1811-logout-clears-caches (review MINOR left out of ROK-1811)
+
+- **low** `web/src/hooks/use-notifications.ts:122-124` — an optimistic mutation still in flight at logout can run its `onError` rollback after the identity drop and write the previous user's notification list back into the cache. ROK-1811 clears the mutation cache, but closures already running still call `setQueryData`. The window is narrow (a failed mark-read racing a logout). Suggested: have rollbacks check the current identity (or a generation counter bumped by `dropViewerPrivateCaches`) before writing.
+
+### 2026-10-16 — fix/rok-1811-logout-clears-caches (surfaced during Codex r3–r5)
+- **med** `web/src/hooks/viewer-private-caches.ts` `VIEWER_INDEPENDENT_PREFIXES` — a hand-kept allowlist of token-less public query keys (public lineup, system status, poll-share preview). Codex found one missing key per round; any future public query left off the list sits pending after a cross-tab logout until reload (no leak, a stuck page). Suggested: tag public queries with `meta: { viewerIndependent: true }` at their `useQuery` and add a guard test that every query hook used by an un-authed route (`/p/*`, `/privacy`) carries the tag.

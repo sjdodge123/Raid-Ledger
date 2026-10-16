@@ -59,7 +59,13 @@ export class AiRequestLogService {
    */
   async getLastSuccessfulChatAt(providerKey: string): Promise<Date | null> {
     const [row] = await this.db
-      .select({ lastAt: sql<Date | null>`max(${aiRequestLogs.createdAt})` })
+      // A raw `sql` select has no column decoder, so postgres.js would hand
+      // back the timestamp as a string. mapWith reuses the column's decoder.
+      .select({
+        lastAt: sql<Date | null>`max(${aiRequestLogs.createdAt})`.mapWith(
+          aiRequestLogs.createdAt,
+        ),
+      })
       .from(aiRequestLogs)
       .where(
         and(

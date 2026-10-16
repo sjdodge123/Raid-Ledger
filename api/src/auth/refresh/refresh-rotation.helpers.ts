@@ -6,7 +6,7 @@
  * not the app's `Date.now()` (a different clock from the one that stamped
  * `rotated_at`).
  */
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { IN_FLIGHT_MAX_MS } from './refresh-grace.helpers';
@@ -69,4 +69,101 @@ export async function markFirstChildIssued(
       rotatedAt: sql`LEAST(${DB_CLOCK}, ${t.rotatedAt} + ${IN_FLIGHT_INTERVAL})`,
     })
     .where(and(eq(t.id, parentId), isNull(t.replacedBy)));
+}
+
+// ── ROK-1809: per-family serialisation of rotation vs revocation ─────────
+
+/**
+ * Advisory-lock class for refresh families. The two-argument
+ * `pg_advisory_xact_lock(int4, int4)` keyspace is disjoint from the one-arg
+ * form and from `GAMES_NAME_LOCK_CLASS`, so no other lock user can collide.
+ */
+export const REFRESH_FAMILY_LOCK_CLASS = 1809;
+
+/**
+ * Take the family's transaction-scoped lock. Every path that consumes,
+ * mints into or revokes a family holds it, so a revoke's UPDATE (a new
+ * READ COMMITTED snapshot taken AFTER the lock) always sees a child minted
+ * by a rotation that held the lock first — and a rotation that waits behind
+ * a revoke sees the revocation on its conditional consume.
+ */
+export async function lockFamily(tx: Db, familyId: string): Promise<void> {
+  await tx.execute(
+    sql`SELECT pg_advisory_xact_lock(${REFRESH_FAMILY_LOCK_CLASS}::int4, hashtext(${familyId}::text))`,
+  );
+}
+
+/**
+ * Lock the family of the presented token. Returns its family id, or null
+ * (no lock taken) when no row has that hash. `family_id` never changes, so
+ * reading it before the lock is safe.
+ */
+export async function lockFamilyOfToken(
+  tx: Db,
+  tokenHash: string,
+): Promise<string | null> {
+  const [row] = await tx
+    .select({ familyId: t.familyId })
+    .from(t)
+    .where(eq(t.tokenHash, tokenHash))
+    .limit(1);
+  if (!row) return null;
+  await lockFamily(tx, row.familyId);
+  return row.familyId;
+}
+
+/**
+ * Lock every family of `userId` that still has a live row, in lock-KEY
+ * order: any two multi-family lockers then acquire overlapping keys in the
+ * same order and cannot deadlock (single-family lockers hold one key and
+ * take it before any row lock). A family with no live row cannot mint, so
+ * it needs no lock.
+ */
+export async function lockUserFamilies(tx: Db, userId: number): Promise<void> {
+  const rows = await tx
+    .selectDistinct({
+      familyId: sql<string>`${t.familyId}::text`,
+      lockKey: sql<number>`hashtext(${t.familyId}::text)`.mapWith(Number),
+    })
+    .from(t)
+    .where(and(eq(t.userId, userId), isNull(t.revokedAt)));
+  const ordered = [...rows].sort(
+    (a, b) => a.lockKey - b.lockKey || (a.familyId < b.familyId ? -1 : 1),
+  );
+  for (const { familyId } of ordered) await lockFamily(tx, familyId);
+}
+
+/** Atomically consume the row if it is live; returns it or undefined. */
+export async function consumeRow(tx: Db, tokenHash: string) {
+  const [row] = await tx
+    .update(t)
+    .set({ rotatedAt: DB_CLOCK })
+    .where(
+      and(
+        eq(t.tokenHash, tokenHash),
+        isNull(t.rotatedAt),
+        isNull(t.revokedAt),
+        sql`${t.expiresAt} > NOW()`,
+      ),
+    )
+    .returning();
+  return row;
+}
+
+/** Has the row been revoked? Re-checked under the family lock. */
+export async function rowIsRevoked(tx: Db, id: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ revokedAt: t.revokedAt })
+    .from(t)
+    .where(eq(t.id, id))
+    .limit(1);
+  return row?.revokedAt != null;
+}
+
+/** Revoke every live row matching `scope` (a family or a user). */
+export async function revokeActiveRows(tx: Db, scope: SQL): Promise<void> {
+  await tx
+    .update(t)
+    .set({ revokedAt: sql`NOW()` })
+    .where(and(scope, isNull(t.revokedAt)));
 }

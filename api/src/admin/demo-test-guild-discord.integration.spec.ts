@@ -10,7 +10,7 @@ import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import { loginAsAdmin } from '../common/testing/integration-helpers';
 import * as schema from '../drizzle/schema';
-import { AuthService } from '../auth/auth.service';
+import { JwtService } from '@nestjs/jwt';
 import { SettingsService } from '../settings/settings.service';
 import { WOW_FOREVER_GAME_SLUG } from '../plugins/wow-common/wow-forever-identity.helpers';
 import type { SeedGuildResponse } from './demo-test-guild.controller';
@@ -43,8 +43,8 @@ function guildRoute(path: string): string {
 function memberToken(): string {
   const { userId, username } = guild.users.member;
   return testApp.app
-    .get(AuthService)
-    .login({ id: userId, username, role: 'member' }).access_token;
+    .get(JwtService)
+    .sign({ sub: userId, username, role: 'member' });
 }
 
 function bind(body: Record<string, unknown>) {

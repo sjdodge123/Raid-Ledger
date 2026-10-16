@@ -1,5 +1,5 @@
 import { useCallback, useSyncExternalStore } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { API_BASE_URL } from '../lib/config';
 import { bumpRefreshGeneration, freshRefresh, refreshWithOutcome } from '../lib/api/refresh-client';
 import { nativeFetch } from '../lib/api/native-fetch';
@@ -104,9 +104,12 @@ function fetchMe(token: string): Promise<Response> {
 /**
  * ROK-1353: refresh failed — clear storage and, for a Discord-linked user,
  * attempt ONE silent re-auth redirect before settling on the login screen.
+ * ROK-1811: the session ended, so the previous viewer's caches go with it
+ * (when called as a query function, which hands over its client).
  */
-function handleRefreshFailure(): null {
+function handleRefreshFailure(client: QueryClient | undefined): null {
     clearAllAuthStorage();
+    if (client) dropViewerPrivateCaches(client);
     attemptSilentReauth(window.location.pathname + window.location.search);
     return null;
 }
@@ -123,7 +126,9 @@ async function refreshOrThrow(): Promise<string | null> {
     throw new Error('session refresh indeterminate');
 }
 
-export async function fetchCurrentUser(): Promise<User | null> {
+/** Also a query function: React Query's context supplies `client` for the expiry drop. */
+export async function fetchCurrentUser(context?: { client: QueryClient }): Promise<User | null> {
+    const client = context?.client;
     // ROK-1366: a magic-link exchange started at module load may still be in
     // flight — decide only once it has settled, so a deep link lands signed in.
     await awaitMagicLinkRedeem();
@@ -137,7 +142,7 @@ export async function fetchCurrentUser(): Promise<User | null> {
         // the username form under the user's cursor).
         if (!getAuthMethod()) return null;
         token = await refreshOrThrow();
-        if (!token) return handleRefreshFailure();
+        if (!token) return handleRefreshFailure(client);
     }
 
     let response = await fetchMe(token);
@@ -151,9 +156,9 @@ export async function fetchCurrentUser(): Promise<User | null> {
     // httpOnly cookie and retry once before clearing storage.
     if (response.status === 401) {
         const refreshed = await refreshOrThrow();
-        if (!refreshed) return handleRefreshFailure();
+        if (!refreshed) return handleRefreshFailure(client);
         response = await fetchMe(refreshed);
-        if (response.status === 401) return handleRefreshFailure();
+        if (response.status === 401) return handleRefreshFailure(client);
     }
 
     if (!response.ok) {
@@ -264,6 +269,7 @@ async function performExitImpersonation(queryClient: ReturnType<typeof useQueryC
     const outcome = await freshRefresh();
     if (outcome.kind === 'rejected') {
         clearAllAuthStorage();
+        dropViewerPrivateCaches(queryClient);
         queryClient.setQueryData(['auth', 'me'], null);
         return false;
     }
@@ -279,7 +285,7 @@ async function performExitImpersonation(queryClient: ReturnType<typeof useQueryC
  * The `/games` discover, search and detail responses used to be identical for
  * everyone, so a shared React Query key was correct. They now carry
  * `currentUserOwns` / `currentUserWishlisted`, which makes a shared key a
- * cross-viewer leak: `logout()` only resets `['auth','me']`, so the previous
+ * cross-viewer leak: `logout()` then only reset `['auth','me']` (pre-ROK-1811), so the previous
  * user's personalized payload stayed cached and the next anonymous viewer on
  * that browser saw their `You own` badges until the stale window expired.
  *
