@@ -20,6 +20,7 @@ import {
 } from './voice-state-join-dispatch.handlers';
 import { serverAwareGameCount } from './voice-threshold-server-count.helpers';
 import { suppressOrCheckThreshold } from './voice-state-gate.handlers';
+import { switchLobbyMemberGame } from './voice-lobby-switch.helpers';
 
 jest.mock('./voice-state.handlers', () => ({
   handlePresenceChange: jest.fn(() => Promise.resolve()),
@@ -42,6 +43,9 @@ jest.mock('./voice-state-join-dispatch.handlers', () => ({
   lobbySpawnFns: jest.fn(),
   monitorSpawnFns: jest.fn(),
 }));
+jest.mock('./voice-lobby-switch.helpers', () => ({
+  switchLobbyMemberGame: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('./voice-threshold-server-count.helpers', () => ({
   serverAwareGameCount: jest.fn(),
 }));
@@ -58,17 +62,32 @@ const LOBBY = {
   config: { minPlayers: 2 },
 } as unknown as ResolvedBinding;
 
-function ctxWith(activeMembers: string[] | null): JoinHandlerCtx {
+function ctxWith(
+  activeMembers: string[] | null,
+  trackedOn: Record<string, number> = {},
+): JoinHandlerCtx {
   const state = activeMembers ? { memberSet: new Set(activeMembers) } : null;
+  const tracker = new Map(
+    Object.entries(trackedOn).map(([id, gameId]) => [
+      id,
+      { gameId, gameName: `game-${gameId}`, userId: 7 },
+    ]),
+  );
   return {
-    channelMembers: new Map([['vc', new Set(['a', 'b'])]]),
+    channelMembers: new Map([['vc', new Set(['a', 'b', 'c'])]]),
     resolveAllBindings: () => Promise.resolve([LOBBY]),
     logger: { warn: jest.fn() },
     deps: {
       clientService: {},
+      voiceGameTracker: tracker,
       adHocEventService: {
         getActiveState: jest.fn(() => state),
         handleVoiceLeave: jest.fn(() => Promise.resolve()),
+      },
+      usersService: {
+        findByDiscordId: jest.fn((id: string) =>
+          Promise.resolve(id === 'a' ? { id: 7 } : null),
+        ),
       },
     },
   } as unknown as JoinHandlerCtx;
@@ -87,6 +106,9 @@ const fns = { scheduleSpawn: jest.fn(), cancelSpawn: jest.fn() };
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Review MINOR 4: clearAllMocks keeps unconsumed `*Once` values, which then
+  // leak into the next test's branch choice. Reset the queue every test.
+  jest.mocked(shouldSpawnImmediately).mockReset().mockResolvedValue(false);
   jest.mocked(lobbySpawnFns).mockReturnValue(fns);
 });
 
@@ -195,24 +217,89 @@ describe('handleServerPresenceChanged — general lobby switches (Codex r3 P2)',
     ]);
   });
 
-  it('immediate spawn: every group member leaves their prior event before the group is rostered (Codex r3 P2)', async () => {
+  it('immediate spawn: every group member switches off their prior event before the group is rostered (Codex r3 P2)', async () => {
     jest.mocked(shouldSpawnImmediately).mockResolvedValueOnce(true);
     mockGroup({ gameId: G, gameName: 'Valheim', memberIds: ['a', 'b'] });
     const order: string[] = [];
-    const ctx = ctxWith(null);
-    jest
-      .mocked(ctx.deps.adHocEventService.handleVoiceLeave)
-      .mockImplementation((_b, id) => {
-        order.push(`leave:${id}`);
-        return Promise.resolve();
-      });
+    jest.mocked(switchLobbyMemberGame).mockImplementation((_d, _b, id) => {
+      order.push(`switch:${id}`);
+      return Promise.resolve();
+    });
     jest.mocked(handleGeneralLobbyGroupDetection).mockImplementation(() => {
       order.push('spawn');
       return Promise.resolve();
     });
-    await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
-    expect(order).toEqual(['leave:a', 'leave:b', 'spawn']);
+    await handleServerPresenceChanged(ctxWith(null), {
+      pelicanServerId: 1,
+      gameId: G,
+    });
+    expect(order).toEqual(['switch:a', 'switch:b', 'spawn']);
   });
+});
+
+describe('handleServerPresenceChanged — a server-driven switch leaves the prior game on every branch (ROK-1805)', () => {
+  const VALHEIM_GROUP = { gameId: G, gameName: 'Valheim' };
+
+  it.each([
+    ['below threshold', ['a'], false, [1, 0, 0]],
+    ['delayed spawn', ['a', 'b'], false, [0, 1, 0]],
+    ['immediate spawn', ['a', 'b'], true, [1, 0, 1]],
+  ] as const)(
+    '%s: each group voice member is switched onto the game (leave old event + retrack)',
+    async (_branch, memberIds, immediate, [cancels, schedules, spawns]) => {
+      jest.mocked(shouldSpawnImmediately).mockResolvedValue(immediate);
+      const group = { ...VALHEIM_GROUP, memberIds: [...memberIds] };
+      mockGroup(group);
+      const ctx = ctxWith(null);
+      await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+      expect(jest.mocked(switchLobbyMemberGame).mock.calls).toEqual(
+        memberIds.map((id) => [
+          ctx.deps,
+          LOBBY,
+          id,
+          group,
+          id === 'a' ? 7 : null,
+        ]),
+      );
+      // Each row takes its own branch (review MINOR 4).
+      expect(fns.cancelSpawn).toHaveBeenCalledTimes(cancels);
+      expect(fns.scheduleSpawn).toHaveBeenCalledTimes(schedules);
+      expect(handleGeneralLobbyGroupDetection).toHaveBeenCalledTimes(spawns);
+    },
+  );
+});
+
+describe('handleServerPresenceChanged — the return trip when no event exists (ROK-1805 review BLOCKER 1)', () => {
+  it.each([
+    [
+      'the group is below threshold',
+      { gameId: G, gameName: 'Valheim', memberIds: ['b'] },
+      ['a'],
+    ],
+    // b is tracked on G too, and with no group it is out of it as well.
+    ['no group is left for the game', null, ['a', 'b']],
+  ] as const)(
+    'return trip (review BLOCKER 1): %s → a member tracked on the game but out of its group goes back through the presence path',
+    async (_case, group, returned) => {
+      const members = new Map(['a', 'b', 'c'].map((id) => [id, { id }]));
+      jest
+        .mocked(resolveVoiceChannel)
+        .mockReturnValueOnce({ id: 'vc', members } as never);
+      jest.mocked(resolveLobbyGroups).mockResolvedValue({
+        qualifying: [],
+        dropped: group ? [{ ...group, memberIds: [...group.memberIds] }] : [],
+        minPlayers: 2,
+        channelMemberCount: 3,
+      });
+      // a: switched onto G, left its server. b: tracked on G. c: another game.
+      const ctx = ctxWith(null, { a: G, b: G, c: G + 1 });
+      await handleServerPresenceChanged(ctx, { pelicanServerId: 1, gameId: G });
+      expect(jest.mocked(handlePresenceChange).mock.calls).toEqual(
+        returned.map((id) => [ctx.deps, id, LOBBY, members.get(id)]),
+      );
+      expect(fns.cancelSpawn).toHaveBeenCalledWith(G);
+    },
+  );
 });
 
 describe('handleServerPresenceChanged — game monitor (ROK-1801)', () => {

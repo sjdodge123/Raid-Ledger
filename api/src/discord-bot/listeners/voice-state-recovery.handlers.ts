@@ -5,17 +5,17 @@ import {
   resolveVoiceChannel,
   type ResolvedBinding,
 } from './voice-state.helpers';
-import {
-  markLobbyDirty,
-  startVoiceGameTracking,
-  type VoiceHandlerDeps,
-} from './voice-state.handlers';
+import { markLobbyDirty, type VoiceHandlerDeps } from './voice-state.handlers';
 import {
   isBotMember,
   resolveLobbyGroups,
   traceDroppedGroups,
   type LobbyGameGroup,
 } from './voice-lobby-groups.helpers';
+import {
+  retrackVoiceGame,
+  switchLobbyMemberGame,
+} from './voice-lobby-switch.helpers';
 
 /** Discord member info shape. */
 type DiscordMember = {
@@ -192,13 +192,7 @@ async function trackDroppedMembers(
       const gm = channel.members.get(memberId);
       if (!gm || isBotMember(gm)) continue;
       const rlUser = await deps.usersService.findByDiscordId(memberId);
-      startVoiceGameTracking(
-        deps,
-        memberId,
-        group.gameId,
-        group.gameName,
-        rlUser?.id ?? null,
-      );
+      retrackVoiceGame(deps, memberId, group, rlUser?.id ?? null);
     }
   }
 }
@@ -222,7 +216,12 @@ export async function addDetectedMembers(
   }
 }
 
-/** Add a single member from a detected game group. */
+/**
+ * Add a single member from a detected game group. ROK-1805 (Codex r4 P2 1):
+ * a member still in another game's event (a delayed spawn firing after they
+ * switched) leaves it first, and their old voice session closes before the
+ * new one opens — never enrolled or tracked in two games at once.
+ */
 async function addGroupMember(
   deps: VoiceHandlerDeps,
   memberId: string,
@@ -232,20 +231,14 @@ async function addGroupMember(
   channelId?: string,
 ): Promise<void> {
   const rlUser = await deps.usersService.findByDiscordId(memberId);
-  const mi = buildMemberInfo(memberId, gm, rlUser?.id ?? null);
+  const uid = rlUser?.id ?? null;
+  await switchLobbyMemberGame(deps, binding, memberId, group, uid);
   await deps.adHocEventService.handleVoiceJoin(
     binding.bindingId,
-    mi,
+    buildMemberInfo(memberId, gm, uid),
     binding,
     group.gameId,
     group.gameName,
     channelId,
-  );
-  startVoiceGameTracking(
-    deps,
-    memberId,
-    group.gameId,
-    group.gameName,
-    rlUser?.id ?? null,
   );
 }
