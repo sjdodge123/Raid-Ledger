@@ -7,12 +7,11 @@
  * the read-only Discord channel mirror (span 2, after the GM post). Raid widgets
  * wait for their payload (no layout jump).
  */
-import type { JSX } from 'react';
+import { lazy, Suspense, type JSX } from 'react';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { WidgetCard } from './guild-bits';
 import { GuildAttendance } from './guild-attendance';
-import { GuildDiscordMirror } from './guild-discord-mirror';
 import { GuildEditorsCard } from './guild-editors-panel';
 import { GuildEvents } from './guild-events';
 import { GuildRaidSchedule } from './guild-raid-schedule';
@@ -55,6 +54,13 @@ function MembersSummary({ page }: { page: GuildPage }): JSX.Element {
     );
 }
 
+/**
+ * ROK-1788: lazy so the mirror (and its editor-only picker, a further lazy
+ * chunk) stays out of the guild-page chunk. Fallback `null` matches the card's
+ * own loading state, which renders nothing until the mirror query settles.
+ */
+const GuildDiscordMirror = lazy(() => import('./guild-discord-mirror').then((m) => ({ default: m.GuildDiscordMirror })));
+
 const SPAN_2 = 'md:col-span-2';
 const OVERVIEW_ATTENDANCE_TOP = 5;
 
@@ -62,7 +68,7 @@ export function GuildOverview({ page, raids }: { page: GuildPage; raids: GuildRa
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} />
-            <GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} />
+            <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} /></Suspense>
             {raids && <GuildRaidSchedule schedule={raids.schedule} />}
             {raids && <div className={SPAN_2}><GuildEvents raids={raids} compact /></div>}
             {raids && <GuildRoleComposition composition={raids.composition} />}

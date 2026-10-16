@@ -6,7 +6,7 @@
  * Messages reuse the ROK-1483 `ThreadMessageRow`; the embed block rides in
  * its `children` slot.
  */
-import { useState, type JSX, type ReactNode } from 'react';
+import { lazy, Suspense, useState, type JSX, type ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
 import { ThreadMessageRow } from '../../../components/discord/ThreadMessageRow';
@@ -14,8 +14,10 @@ import { Button } from '../../../components/ui/button';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { Card, SectionTitle } from './guild-bits';
 import { boundChannelId, latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
-import { GuildDiscordPicker } from './guild-discord-picker';
 import { useGuildDiscord } from './use-guild-discord';
+
+/** Editor-only: its own lazy chunk, fetched when an editor opens it. The modal mounts on load. */
+const GuildDiscordPicker = lazy(() => import('./guild-discord-picker').then((m) => ({ default: m.GuildDiscordPicker })));
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
@@ -114,7 +116,9 @@ export function GuildDiscordMirror({ guildId, canEdit }: { guildId: number; canE
                 blurb={mirrorBlurb(mirror)} action={change} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
             {canEdit && picking && (
-                <GuildDiscordPicker guildId={guildId} currentId={boundChannelId(mirror)} onClose={() => setPicking(false)} />
+                <Suspense fallback={null}>
+                    <GuildDiscordPicker guildId={guildId} currentId={boundChannelId(mirror)} onClose={() => setPicking(false)} />
+                </Suspense>
             )}
         </section>
     );
