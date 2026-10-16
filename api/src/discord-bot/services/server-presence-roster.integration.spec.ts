@@ -5,6 +5,7 @@
  * maps server SteamIDs to linked users (id, Discord id, username), unlinked
  * SteamIDs stay anonymous-capable, and the games-row join names the group.
  */
+import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../../common/testing/test-app';
 import { truncateAllTables } from '../../common/testing/integration-helpers';
 import { nonEmpty } from '../../common/testing/narrow';
@@ -126,5 +127,37 @@ describe('ServerPresenceRosterService.snapshot (real DB)', () => {
     ).snapshot();
     expect(roster.byGame.size).toBe(0);
     expect(roster.gameNames.size).toBe(0);
+  });
+
+  it('treats a deactivated linked user as unlinked (character name / anonymous)', async () => {
+    const userId = await insertLinkedUser();
+    await testApp.db
+      .update(schema.users)
+      .set({ deactivatedAt: new Date('2026-10-01T00:00:00Z') })
+      .where(eq(schema.users.id, userId));
+    const gameId = testApp.seed.game.id;
+    const service = new ServerPresenceRosterService(
+      testApp.db,
+      readerOf([
+        {
+          pelicanServerId: 1,
+          gameId,
+          steamId: STEAM_LINKED,
+          name: 'PariahChar',
+        },
+      ]),
+    );
+
+    const roster = await service.snapshot();
+
+    expect(roster.byGame.get(gameId)).toEqual([
+      {
+        key: `steam:${STEAM_LINKED}`,
+        steamId: STEAM_LINKED,
+        userId: null,
+        discordUserId: null,
+        name: 'PariahChar',
+      },
+    ]);
   });
 });

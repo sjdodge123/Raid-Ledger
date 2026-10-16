@@ -79,6 +79,24 @@ function unrowedServerOnly(
   );
 }
 
+/** Every stored participant row of an event, with its server flags. */
+function readParticipantRows(
+  db: PostgresJsDatabase<typeof schema>,
+  eventId: number,
+): Promise<ParticipantRow[]> {
+  const t = schema.adHocParticipants;
+  return db
+    .select({
+      discordUserId: t.discordUserId,
+      discordUsername: t.discordUsername,
+      steamId: t.steamId,
+      leftAt: t.leftAt,
+      onServer: t.onServer,
+    })
+    .from(t)
+    .where(eq(t.eventId, eventId));
+}
+
 /**
  * Roster for an evented group: the stored `ad_hoc_participants` rows (leavers
  * kept, marked inactive — ROK-1243) UNION the live group members who have no
@@ -92,17 +110,7 @@ export async function unionParticipants(
   group: RosterGroup,
   source: RoomSource,
 ): Promise<AdHocParticipant[]> {
-  const t = schema.adHocParticipants;
-  const rows: ParticipantRow[] = await db
-    .select({
-      discordUserId: t.discordUserId,
-      discordUsername: t.discordUsername,
-      steamId: t.steamId,
-      leftAt: t.leftAt,
-      onServer: t.onServer,
-    })
-    .from(t)
-    .where(eq(t.eventId, eventId));
+  const rows = await readParticipantRows(db, eventId);
   const known = new Set(rows.map((r) => r.discordUserId));
   const onServer = new Set(group.onServerIds ?? []);
   return [
