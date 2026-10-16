@@ -52,10 +52,15 @@ function build(result: PelicanMappingUpdateResult = { kind: 'not_found' }) {
       ? {}
       : undefined,
   );
+  // No parser is suspended behind an inactive plugin by default (ROK-1819).
+  const getSuspendedAdapterOwner = jest.fn(() => undefined);
   const emit = jest.fn();
   const controller = new PelicanServersAdminController(
     repo as unknown as PelicanServersAdminRepository,
-    { getAdapter } as unknown as PluginRegistryService,
+    {
+      getAdapter,
+      getSuspendedAdapterOwner,
+    } as unknown as PluginRegistryService,
     { emit } as unknown as EventEmitter2,
   );
   return { controller, listForAdmin, updateMapping, emit };
@@ -100,6 +105,15 @@ describe('toAdminServerRowDto (ROK-1094)', () => {
     const dto = toAdminServerRowDto(makeRow(over), NOW, false);
     expect(dto.state).toBe(state);
     expect(dto.isSuspended).toBe(suspended);
+  });
+
+  it('carries presencePluginInactive only when the caller names an inactive plugin (ROK-1819)', () => {
+    const plugin = { pluginId: 'valheim', pluginName: 'Valheim' };
+    const inactive = toAdminServerRowDto(makeRow(), NOW, false, plugin);
+    expect(inactive.presencePluginInactive).toEqual(plugin);
+    expect(PelicanServerRowSchema.parse(inactive)).toEqual(inactive);
+    const plain = toAdminServerRowDto(makeRow(), NOW, true);
+    expect('presencePluginInactive' in plain).toBe(false);
   });
 
   it('flags a row with missing_since as missing', () => {

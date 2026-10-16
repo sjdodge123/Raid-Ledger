@@ -145,3 +145,57 @@ describe('PluginAdapterStore — removeByKeys() — legacy game-slug removal', (
     expect(store.getAdapter('character-sync', 'ffxiv')).toBe(ffxiv);
   });
 });
+
+describe('PluginAdapterStore — findSuspendedOwner() (ROK-1819)', () => {
+  const PARSER = 'game-log-parser';
+
+  it('names the owner of an adapter suspended because its plugin is inactive', () => {
+    const inactiveStore = new PluginAdapterStore((id) => id !== 'valheim');
+    inactiveStore.registerAdapter(
+      PARSER,
+      'valheim',
+      { id: 'parser' },
+      {
+        ownerPluginId: 'valheim',
+      },
+    );
+    expect(inactiveStore.getAdapter(PARSER, 'valheim')).toBeUndefined();
+    expect(inactiveStore.findSuspendedOwner(PARSER, 'valheim')).toBe('valheim');
+  });
+
+  it('returns undefined when no adapter was ever registered for the key', () => {
+    store.registerAdapter(PARSER, 'valheim', { id: 'parser' });
+    expect(store.findSuspendedOwner(PARSER, 'minecraft')).toBeUndefined();
+    expect(store.findSuspendedOwner('cron-registrar', 'valheim')).toBe(
+      undefined,
+    );
+  });
+
+  it('returns undefined while the owner is active, and again once restored', () => {
+    const parser = { id: 'parser' };
+    store.registerAdapter(PARSER, 'valheim', parser, {
+      ownerPluginId: 'valheim',
+    });
+    expect(store.findSuspendedOwner(PARSER, 'valheim')).toBeUndefined();
+
+    store.suspendAdaptersOwnedBy('valheim');
+    expect(store.findSuspendedOwner(PARSER, 'valheim')).toBe('valheim');
+
+    store.restoreAdaptersOwnedBy('valheim');
+    expect(store.getAdapter(PARSER, 'valheim')).toBe(parser);
+    expect(store.findSuspendedOwner(PARSER, 'valheim')).toBeUndefined();
+  });
+
+  it('ignores a suspended multi adapter under the same point/key', () => {
+    store.registerMultiAdapter(
+      PARSER,
+      'valheim',
+      { id: 'multi' },
+      {
+        ownerPluginId: 'valheim',
+      },
+    );
+    store.suspendAdaptersOwnedBy('valheim');
+    expect(store.findSuspendedOwner(PARSER, 'valheim')).toBeUndefined();
+  });
+});
