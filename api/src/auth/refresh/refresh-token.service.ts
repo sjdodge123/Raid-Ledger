@@ -103,16 +103,20 @@ export class RefreshTokenService {
    * resumes the token. A banned holder keeps the original ban behaviour.
    * ROK-1809: consume + mint run in ONE transaction under the family lock,
    * so a concurrent revokeFamily/revokeAllForUser cannot miss the child.
+   * Codex r2: the session length is read BEFORE the transaction — its
+   * settings reload uses the outer pool, which would wait on the connection
+   * this transaction holds (deadlock at `DB_POOL_MAX=1`).
    */
   async rotate(rawToken: string): Promise<IssuedRefreshToken | null> {
     const presentedHash = hashToken(rawToken);
     if (await this.holderIsDeactivated(presentedHash)) {
       throw deactivatedException();
     }
+    const maxAgeMs = await this.sessionMaxAgeMs();
     const rotated = await this.db.transaction(async (tx) => {
       if (!(await lockFamilyOfToken(tx, presentedHash))) return null;
       const consumed = await consumeRow(tx, presentedHash);
-      return consumed ? this.mintChild(tx, consumed, true) : null;
+      return consumed ? this.mintChild(tx, consumed, maxAgeMs, true) : null;
     });
     return rotated ?? this.handleNoConsume(presentedHash);
   }
@@ -207,13 +211,15 @@ export class RefreshTokenService {
    * Mint the child row for a consumed parent. Only the FIRST child links and
    * re-stamps the parent (`markFirstChildIssued` — the race grace runs from
    * here, see `rotationAgeMs`); a grace sibling leaves the parent untouched.
+   * Runs inside a locked transaction: it touches ONLY `tx` — `maxAgeMs` is
+   * resolved by the caller before the transaction opens (Codex r2).
    */
   private async mintChild(
     tx: PostgresJsDatabase<typeof schema>,
     parent: ParentRow,
+    maxAgeMs: number,
     firstChild = false,
   ) {
-    const maxAgeMs = await this.sessionMaxAgeMs();
     const rawToken = generateRawToken();
     const [child] = await tx
       .insert(schema.refreshTokens)
@@ -282,11 +288,14 @@ export class RefreshTokenService {
    * parent's revocation AFTER the lock — a logout/revoke that landed since
    * `findReplayCandidate` wins, and the replay gets a plain 401.
    */
-  private mintSibling(parent: ParentRow): Promise<IssuedRefreshToken | null> {
+  private async mintSibling(
+    parent: ParentRow,
+  ): Promise<IssuedRefreshToken | null> {
+    const maxAgeMs = await this.sessionMaxAgeMs();
     return this.db.transaction(async (tx) => {
       await lockFamily(tx, parent.familyId);
       if (await rowIsRevoked(tx, parent.id)) return null;
-      return this.mintChild(tx, parent);
+      return this.mintChild(tx, parent, maxAgeMs);
     });
   }
 
