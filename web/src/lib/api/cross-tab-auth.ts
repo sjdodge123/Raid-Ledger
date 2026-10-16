@@ -13,9 +13,9 @@ import { dropViewerPrivateCaches, installViewerPrivateCacheGuard } from '../../h
  * - the marker appearing (a sign-in elsewhere) → re-check `['auth','me']`.
  * - the identity epoch bumped (impersonation start/stop) → re-mint from the
  *   shared cookie, which the server now answers as the new identity.
- * ROK-1599: the first and last drop this tab's viewer-private caches (the
- * Calendars overview carries a bearer feed URL) before anything refetches,
- * and the token-identity guard drops them on any other identity change.
+ * ROK-1599/ROK-1811: the first and last drop every query this tab holds
+ * except `['auth','me']` before anything refetches, and the token-identity
+ * guard drops them on any other identity change.
  */
 
 /** Non-credential timestamp: "the cookie's identity changed — re-mint now". */
