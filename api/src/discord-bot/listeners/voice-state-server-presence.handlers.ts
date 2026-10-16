@@ -25,9 +25,10 @@ import {
   handleGeneralLobbyGroupDetection,
 } from './voice-state-recovery.handlers';
 import {
-  lobbyGroupSize,
   resolveLobbyGroups,
+  type LobbyGameGroup,
 } from './voice-lobby-groups.helpers';
+import { groupSize } from './voice-lobby-server-merge.helpers';
 import {
   lobbySpawnFns,
   monitorSpawnFns,
@@ -103,8 +104,12 @@ async function reevaluateLobby(
   const state = ctx.deps.adHocEventService.getActiveState(b.bindingId, gameId);
   if (state) return joinNewLobbyMembers(ctx, chId, b, gameId, state.memberSet);
   const fns = lobbySpawnFns(ctx, chId, b);
-  const size = await lobbyGroupSize(ctx.deps, chId, b, gameId);
-  if (size < (b.config?.minPlayers ?? 2)) return fns.cancelSpawn(gameId);
+  const group = await lobbyGroupOf(ctx, chId, b, gameId);
+  if (!group || groupSize(group) < (b.config?.minPlayers ?? 2))
+    return fns.cancelSpawn(gameId);
+  // Review MINOR 3: a server-only group (Q1) renders on the card, but its
+  // spawn belongs to the server path — a lobby timer would roster nobody.
+  if (group.memberIds.length === 0) return;
   if (await shouldSpawnImmediately(ctx.deps, chId, b)) {
     fns.cancelSpawn(gameId);
     return handleGeneralLobbyGroupDetection(ctx.deps, chId, b, gameId);
@@ -122,10 +127,20 @@ async function joinNewLobbyMembers(
 ): Promise<void> {
   const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
   if (!channel) return;
-  const { qualifying, dropped } = await resolveLobbyGroups(ctx.deps, chId, b);
-  const group = [...qualifying, ...dropped].find((g) => g.gameId === gameId);
+  const group = await lobbyGroupOf(ctx, chId, b, gameId);
   const fresh = group?.memberIds.filter((id) => !joined.has(id)) ?? [];
   if (!group || fresh.length === 0) return;
   const pending = [{ ...group, memberIds: fresh }];
   await addDetectedMembers(ctx.deps, channel, pending, b, chId);
+}
+
+/** This lobby's detected group for `gameId` (voice + server), if any. */
+async function lobbyGroupOf(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gameId: number,
+): Promise<LobbyGameGroup | undefined> {
+  const { qualifying, dropped } = await resolveLobbyGroups(ctx.deps, chId, b);
+  return [...qualifying, ...dropped].find((g) => g.gameId === gameId);
 }

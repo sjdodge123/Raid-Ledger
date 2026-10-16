@@ -6,10 +6,8 @@
 import { handleServerPresenceChanged } from './voice-state-server-presence.handlers';
 import type { JoinHandlerCtx } from './voice-state-join-dispatch.handlers';
 import type { ResolvedBinding } from './voice-state.helpers';
-import {
-  lobbyGroupSize,
-  resolveLobbyGroups,
-} from './voice-lobby-groups.helpers';
+import type { LobbyGameGroup } from './voice-lobby-groups.helpers';
+import { resolveLobbyGroups } from './voice-lobby-groups.helpers';
 import { addDetectedMembers } from './voice-state-recovery.handlers';
 import { lobbySpawnFns } from './voice-state-join-dispatch.handlers';
 
@@ -28,7 +26,6 @@ jest.mock('./voice-state-recovery.handlers', () => ({
   handleGeneralLobbyGroupDetection: jest.fn(),
 }));
 jest.mock('./voice-lobby-groups.helpers', () => ({
-  lobbyGroupSize: jest.fn(),
   resolveLobbyGroups: jest.fn(),
 }));
 jest.mock('./voice-state-join-dispatch.handlers', () => ({
@@ -61,6 +58,15 @@ function ctxWith(activeMembers: string[] | null): JoinHandlerCtx {
   } as unknown as JoinHandlerCtx;
 }
 
+function mockGroup(group: LobbyGameGroup): void {
+  jest.mocked(resolveLobbyGroups).mockResolvedValue({
+    qualifying: [],
+    dropped: [group],
+    minPlayers: 2,
+    channelMemberCount: group.memberIds.length,
+  });
+}
+
 const fns = { scheduleSpawn: jest.fn(), cancelSpawn: jest.fn() };
 
 beforeEach(() => {
@@ -86,12 +92,34 @@ describe('handleServerPresenceChanged — general lobby (ROK-1801)', () => {
   });
 
   it('cancels the game pending spawn when the group falls below minPlayers', async () => {
-    jest.mocked(lobbyGroupSize).mockResolvedValue(1);
+    mockGroup({ gameId: G, gameName: 'Valheim', memberIds: ['a'] });
     await handleServerPresenceChanged(ctxWith(null), {
       pelicanServerId: 1,
       gameId: G,
     });
     expect(fns.cancelSpawn).toHaveBeenCalledWith(G);
     expect(fns.scheduleSpawn).not.toHaveBeenCalled();
+  });
+
+  it('a server-only group (no voice members) arms no lobby timer (review MINOR 3)', async () => {
+    const player = {
+      key: 'steam:s',
+      steamId: 's',
+      userId: null,
+      discordUserId: null,
+      name: null,
+    };
+    mockGroup({
+      gameId: G,
+      gameName: 'Valheim',
+      memberIds: [],
+      serverOnly: [player, { ...player, key: 'steam:t', steamId: 't' }],
+    });
+    await handleServerPresenceChanged(ctxWith(null), {
+      pelicanServerId: 1,
+      gameId: G,
+    });
+    expect(fns.scheduleSpawn).not.toHaveBeenCalled();
+    expect(fns.cancelSpawn).not.toHaveBeenCalled();
   });
 });
