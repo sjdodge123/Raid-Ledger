@@ -31,6 +31,7 @@ import {
   injectVoiceSession,
   linkDiscord,
   type LobbyPresenceMember,
+  type LobbyServerOnlyPlayer,
 } from '../fixtures.js';
 import {
   assertEmbedColor,
@@ -57,7 +58,7 @@ const SYSTEM_SLATE = 0x64748b;
 /** `EMBED_COLORS.REMINDER` — a group that has not cleared `minPlayers` (D2). */
 const NEEDS_AMBER = 0xf59e0b;
 
-async function withVoiceBinding(
+export async function withVoiceBinding(
   ctx: TestContext,
   index: number,
   purpose: string,
@@ -182,13 +183,13 @@ const voiceLeaveRecorded: SmokeTest = {
 // rather than a render unit test wearing a costume.
 
 /** The tracked presence message: the ids the seam reported for the room. */
-interface PresenceTarget {
+export interface PresenceTarget {
   textChannelId: string;
   messageId: string;
 }
 
 /** Assert an embed's author line, naming the pattern and what it actually read. */
-function assertAuthor(embed: SimpleEmbed, pattern: RegExp, label: string): void {
+export function assertAuthor(embed: SimpleEmbed, pattern: RegExp, label: string): void {
   const author = embed.author ?? '';
   if (!pattern.test(author)) {
     throw new Error(
@@ -229,14 +230,14 @@ function assertRosterSize(
 }
 
 /** Assert a rendered string contains a substring, quoting what it read. */
-function assertContains(haystack: string, needle: string, label: string): void {
+export function assertContains(haystack: string, needle: string, label: string): void {
   if (!haystack.includes(needle)) {
     throw new Error(`${label}: expected to find "${needle}" in "${haystack}"`);
   }
 }
 
 /** Assert a rendered string does NOT contain a substring, quoting what it read. */
-function assertLacks(haystack: string, needle: string, label: string): void {
+export function assertLacks(haystack: string, needle: string, label: string): void {
   if (haystack.includes(needle)) {
     throw new Error(
       `${label}: expected NOT to find "${needle}", but read "${haystack}"`,
@@ -281,7 +282,7 @@ function lobbyRoom(
  * source the rest of this file already uses (`multiGameVoiceDetected`,
  * `siblingBindingSuppression`) and is the only one that can actually be met.
  */
-async function twoGames(ctx: TestContext): Promise<[number, number]> {
+export async function twoGames(ctx: TestContext): Promise<[number, number]> {
   const res = await ctx.api.get<{ data: { id: number }[] }>(
     '/admin/settings/games?limit=2',
   );
@@ -304,15 +305,21 @@ async function twoGames(ctx: TestContext): Promise<[number, number]> {
  * same snapshot is idempotent (an unchanged payload hash issues no edit at
  * all), so this polls the seam itself rather than waiting on a timer.
  */
-async function openLobbyRoom(
+export async function openLobbyRoom(
   ctx: TestContext,
   voiceChannelId: string,
   members: LobbyPresenceMember[],
+  serverOnly?: LobbyServerOnlyPlayer[],
 ): Promise<PresenceTarget> {
   try {
     return await pollForCondition(
       async () => {
-        const row = await setLobbyPresence(ctx.api, voiceChannelId, members);
+        const row = await setLobbyPresence(
+          ctx.api,
+          voiceChannelId,
+          members,
+          serverOnly,
+        );
         return row.textChannelId && row.messageId
           ? { textChannelId: row.textChannelId, messageId: row.messageId }
           : null;
@@ -357,7 +364,7 @@ async function describeMessage(target: PresenceTarget): Promise<string> {
  * re-reads the message and reports what it actually holds, so the failure names
  * the expectation against the observed render.
  */
-async function expectMessageState(
+export async function expectMessageState(
   ctx: TestContext,
   target: PresenceTarget,
   predicate: (m: SimpleMessage) => boolean,
