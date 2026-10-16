@@ -143,16 +143,15 @@ describe('DiscordEmbedFactory — buildEventInvite details', () => {
     factory = createFeaturesFactory();
   });
 
-  it('should include description excerpt', () => {
-    expect(
-      factory
-        .buildEventInvite(
-          { ...baseEvent, description: 'Weekly mythic progression' },
-          baseContext,
-          'inviter',
-        )
-        .embed.toJSON().description,
-    ).toContain('Weekly mythic progression');
+  it('should open the body with the description excerpt, then a blank line (ROK-1804)', () => {
+    const description = factory
+      .buildEventInvite(
+        { ...baseEvent, description: 'Weekly mythic progression' },
+        baseContext,
+        'inviter',
+      )
+      .embed.toJSON().description;
+    expect(description?.startsWith('Weekly mythic progression\n\n')).toBe(true);
   });
 
   it('should truncate long descriptions to 300 chars with an ellipsis (ROK-1804)', () => {

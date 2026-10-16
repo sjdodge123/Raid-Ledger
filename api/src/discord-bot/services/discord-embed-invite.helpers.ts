@@ -54,12 +54,13 @@ export function createInviteEmbed(
 function buildInviteBodyLines(event: EmbedEventData): string[] {
   const startUnix = Math.floor(new Date(event.startTime).getTime() / 1000);
   const lines: string[] = [];
+  // ROK-1804: the same excerpt as the announce, in the same place — it opens
+  // the body, then a blank line.
+  const excerpt = eventDescriptionExcerpt(event.description);
+  if (excerpt) lines.push(excerpt, '');
   if (event.game?.name) lines.push(`\uD83C\uDFAE **${event.game.name}**`);
   lines.push(`\uD83D\uDCC6 <t:${startUnix}:f> (<t:${startUnix}:R>)`);
   if (event.voiceChannelId)
     lines.push(`\uD83D\uDD0A <#${event.voiceChannelId}>`);
-  // ROK-1804: the same excerpt (300 chars, `…`, mention-safe) as the announce.
-  const excerpt = eventDescriptionExcerpt(event.description);
-  if (excerpt) lines.push('', excerpt);
   return lines;
 }

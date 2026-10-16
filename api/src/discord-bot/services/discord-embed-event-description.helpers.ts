@@ -2,8 +2,9 @@
  * ROK-1804 — the event's own description, as it opens an event embed body.
  *
  * Every surface that renders a scheduled event (the channel announce and its
- * lifecycle edits, the invite unfurl) shows the same excerpt: trimmed, mention-
- * safe and truncated, so the `View Event` link carries the full text.
+ * lifecycle edits, the invite unfurl) opens its body with the same excerpt:
+ * trimmed, block-markdown-safe, mention-safe and truncated, so the
+ * `View Event` link carries the full text.
  */
 
 /** The longest excerpt an embed shows before the `…` (Lead default). */
@@ -16,14 +17,26 @@ const ELLIPSIS = '\u2026'; // …
 const ZWSP = '\u200B';
 
 /**
- * Break every mass / role mention so it can never resolve, even if the text
- * is later reused outside an embed: a zero-width space (U+200B) goes after
- * the `@` of `@everyone`, `@here` and a `<@&id>` role mention.
+ * Defensive only — embeds never ping, so this is not the ping guard. Breaks
+ * every mass / role mention so it cannot resolve if the text is later reused
+ * outside an embed: a zero-width space (U+200B) goes after the `@` of
+ * `@everyone`, `@here` and a `<@&id>` role mention.
  */
 function escapeMentions(text: string): string {
   return text
     .replace(/@(everyone|here)/g, `@${ZWSP}$1`)
     .replace(/<@&/g, `<@${ZWSP}&`);
+}
+
+/**
+ * Keep the excerpt's block markdown inside the excerpt: a line-leading `>>>`
+ * (Discord's multi-line quote, which would swallow the timing and roster lines
+ * below) becomes a single-line `>`, and runs of blank lines collapse to one.
+ */
+function containBlocks(text: string): string {
+  return text
+    .replace(/^([ \t]*)>>>/gm, '$1>')
+    .replace(/\n(?:[ \t]*\n){2,}/g, '\n\n');
 }
 
 /**
@@ -45,7 +58,8 @@ function truncate(text: string, max: number): string {
  *
  * @param description - The event's raw description (may be null/blank).
  * @param max - The longest excerpt to show, `…` included.
- * @returns The trimmed, mention-escaped, truncated excerpt; null when the
+ * @returns The trimmed, block-contained, mention-escaped, truncated excerpt;
+ *   null when the
  *   description is absent, whitespace-only, or `max` leaves no room.
  */
 export function eventDescriptionExcerpt(
@@ -54,7 +68,7 @@ export function eventDescriptionExcerpt(
 ): string | null {
   const trimmed = description?.trim();
   if (!trimmed || max < 2) return null;
-  return truncate(escapeMentions(trimmed), max);
+  return truncate(escapeMentions(containBlocks(trimmed)), max);
 }
 
 /**

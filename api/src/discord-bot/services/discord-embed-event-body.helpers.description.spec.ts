@@ -56,7 +56,7 @@ describe('buildEventBody — event description (ROK-1804)', () => {
   );
 
   it.each(SHOWING_STATES)(
-    '%s without a description renders exactly as before',
+    '%s renders null and undefined descriptions identically',
     (state) => {
       expect(body(state, null)).toBe(body(state, undefined));
       expect(body(state, null)).not.toContain(DESCRIPTION);
@@ -120,6 +120,33 @@ describe('buildEventBody — description excerpt shaping (ROK-1804)', () => {
     expect(out).toContain(roster);
     expect(out.startsWith('d')).toBe(true);
     expect(out.split('\n')[0]?.endsWith('…')).toBe(true);
+  });
+
+  it('keeps a >>> quote inside the excerpt: the timing line still follows', () => {
+    const lines = body(
+      EMBED_STATES.FILLING,
+      'Read this:\n>>> bring flasks\nand food',
+    ).split('\n');
+    expect(lines.slice(0, 3)).toEqual([
+      'Read this:',
+      '> bring flasks',
+      'and food',
+    ]);
+    expect(lines.some((l) => l.includes('>>>'))).toBe(false);
+    expect(lines[3]).toBe('');
+    expect(lines[4]?.startsWith('\u{1F4C6}')).toBe(true);
+  });
+
+  it('neutralises a description that opens with >>> and keeps a single > quote', () => {
+    const first = body(EMBED_STATES.POSTED, '>>> all quoted').split('\n')[0];
+    expect(first).toBe('> all quoted');
+    const single = body(EMBED_STATES.POSTED, '> just this').split('\n')[0];
+    expect(single).toBe('> just this');
+  });
+
+  it('collapses runs of 3+ newlines in the excerpt to one blank line', () => {
+    const out = body(EMBED_STATES.POSTED, 'top\n\n\n\n \n\nbottom\n\nend');
+    expect(out.startsWith('top\n\nbottom\n\nend\n\n')).toBe(true);
   });
 
   it('drops the description when the roster leaves no room', () => {
