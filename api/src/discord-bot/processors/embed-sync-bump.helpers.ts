@@ -5,8 +5,14 @@
  * carries an "N/M spots filled" snapshot. Every embed sync brings it in line
  * with the event, piggybacking the existing job (no timer of its own):
  *
- * - FULL / CANCELLED / COMPLETED → the bump is deleted and its ids cleared
- *   (ROK-728; a cancelled or finished event has no spots to advertise either).
+ * - FULL / COMPLETED → the bump is deleted and its ids cleared (ROK-728; a
+ *   finished event has no spots to advertise either). COMPLETED arrives here
+ *   through the completion cron: `ScheduledEventService.completeExpiredEvents`
+ *   enqueues a `cron-complete` sync per ended event, and the processor computes
+ *   COMPLETED from the end time.
+ * - CANCELLED never arrives here: `EmbedSyncProcessor.process` skips cancelled
+ *   rows and cancelled events. A cancel deletes its bump in
+ *   `cancelEmbedRecord` (event.listener.handlers.ts) via `deleteRecordBump`.
  * - otherwise → the card is rebuilt with the SAME builder the reminder used
  *   and edited in place, so its count tracks the event embed (ROK-1812).
  *   The edit is skipped when the posted card already reads the same: the
@@ -52,14 +58,17 @@ export interface BumpSyncInput {
   context: EmbedContext;
 }
 
-/** States in which a "Spots still available" card is wrong — delete it. */
+/**
+ * States the embed sync reaches in which a "Spots still available" card is
+ * wrong — delete it. CANCELLED is deliberately absent: the sync never sees it
+ * (see the file header); `deleteRecordBump` is the cancel path.
+ */
 const BUMP_DELETE_STATES: ReadonlySet<EmbedState> = new Set<EmbedState>([
   EMBED_STATES.FULL,
-  EMBED_STATES.CANCELLED,
   EMBED_STATES.COMPLETED,
 ]);
 
-/** Delete (FULL/CANCELLED/COMPLETED) or re-count the record's bump. Never throws. */
+/** Delete (FULL/COMPLETED) or re-count the record's bump. Never throws. */
 export async function reconcileBumpMessage(
   deps: BumpSyncDeps,
   input: BumpSyncInput,
@@ -81,6 +90,26 @@ interface BumpTarget {
   messageId: string;
 }
 
+/**
+ * Delete a record's bump outright, whatever the event state — the cancel
+ * path (ROK-1812), which the embed sync never reaches. No-op without a bump;
+ * a 10008 clears the ids; any other failure is logged. Never throws.
+ */
+export async function deleteRecordBump(
+  deps: BumpSyncDeps,
+  record: EventMessageRow,
+  eventId: number,
+): Promise<void> {
+  if (!record.bumpMessageId) return;
+  const channelId = record.bumpChannelId ?? record.channelId;
+  await deleteBump(
+    deps,
+    record.id,
+    { channelId, messageId: record.bumpMessageId },
+    eventId,
+  );
+}
+
 /** ROK-728: the event filled up (or ended) — the "spots available" card is now wrong. */
 async function deleteBump(
   deps: BumpSyncDeps,
@@ -93,6 +122,10 @@ async function deleteBump(
     await clearBumpIds(deps.db, recordId);
     deps.logger.log(`Deleted recruitment bump message for event ${eventId}`);
   } catch (err) {
+    if (isUnknownMessage(err)) {
+      await forgetMissingBump(deps, recordId, eventId);
+      return;
+    }
     deps.logger.warn(
       `Failed to delete bump message for event ${eventId} in channel ${target.channelId}: ${errorText(err)}`,
     );

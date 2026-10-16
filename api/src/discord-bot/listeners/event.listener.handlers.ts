@@ -12,6 +12,7 @@ import type { EmbedPosterService } from '../services/embed-poster.service';
 import type { ChannelResolverService } from '../services/channel-resolver.service';
 import { getEphemeralChannelId } from '../services/ephemeral-voice.db-helpers';
 import { EMBED_STATES } from '../discord-bot.constants';
+import { deleteRecordBump } from '../processors/embed-sync-bump.helpers';
 import type { EventPayload } from './event.listener';
 
 /** Dependencies for event listener handlers. */
@@ -227,6 +228,9 @@ export async function cancelEmbedRecord(
   deps.logger.log(
     `Cancelled event embed for event ${eventId} (msg: ${record.messageId})`,
   );
+  // ROK-1812: the embed sync skips cancelled events, so this is the only
+  // place a cancel can take down the "Spots still available" card.
+  await deleteRecordBump(deps, record, eventId);
 }
 
 /** Delete a Discord message and remove the DB record. */

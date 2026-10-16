@@ -648,6 +648,36 @@ describe('EmbedSyncProcessor — bump message cleanup (ROK-728)', () => {
     expect(clientService.deleteMessage).not.toHaveBeenCalled();
   });
 
+  it('deletes the bump when the completion cron syncs an ended, not-full event (ROK-1812)', async () => {
+    // The real COMPLETED entry point: ScheduledEventService's completion pass
+    // enqueues a `cron-complete` sync, and the end time puts it in COMPLETED.
+    const endedEvent = {
+      ...fullEvent,
+      maxAttendees: 10,
+      duration: [
+        new Date(Date.now() - 4 * 60 * 60 * 1000),
+        new Date(Date.now() - 60 * 60 * 1000),
+      ],
+    };
+    mockDb.select
+      .mockReturnValueOnce(makeSelectChain([recordWithBump]))
+      .mockReturnValueOnce(makeSelectChain([endedEvent]))
+      .mockReturnValueOnce(makeSelectChain(makeSignupRows(3)))
+      .mockReturnValueOnce(makeSelectChain([]))
+      .mockReturnValueOnce(makeSelectChain([{ name: 'WoW', coverUrl: null }]));
+    mockDb.update.mockReturnValue(makeUpdateChain());
+
+    const job = {
+      data: { eventId: 42, reason: 'cron-complete' },
+    } as Job<EmbedSyncJobData>;
+    await processor.process(job);
+
+    expect(clientService.deleteMessage).toHaveBeenCalledWith(
+      'channel-789',
+      'bump-msg-001',
+    );
+  });
+
   it('edits the bump with the live count when state is not FULL (ROK-1812)', async () => {
     const fillingEvent = { ...fullEvent, maxAttendees: 10 };
     mockDb.select

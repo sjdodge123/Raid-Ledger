@@ -10,6 +10,7 @@ import { DiscordAPIError, type EmbedBuilder } from 'discord.js';
 import { EMBED_STATES } from '../discord-bot.constants';
 import type { EmbedEventData } from '../services/discord-embed.factory';
 import {
+  deleteRecordBump,
   reconcileBumpMessage,
   type BumpSyncDeps,
   type BumpSyncInput,
@@ -207,8 +208,8 @@ describe('reconcileBumpMessage — skips (ROK-1812)', () => {
   });
 });
 
-describe('reconcileBumpMessage — FULL / CANCELLED / COMPLETED delete the bump', () => {
-  it.each([EMBED_STATES.FULL, EMBED_STATES.CANCELLED, EMBED_STATES.COMPLETED])(
+describe('reconcileBumpMessage — FULL / COMPLETED delete the bump', () => {
+  it.each([EMBED_STATES.FULL, EMBED_STATES.COMPLETED])(
     '%s deletes the bump and clears its ids instead of editing it',
     async (newState) => {
       const { deps, editEmbed, deleteMessage, set, where } = makeDeps(
@@ -268,5 +269,52 @@ describe('reconcileBumpMessage — failures never fail the sync', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('Missing Permissions'),
     );
+  });
+});
+
+// The cancel path (cancelEmbedRecord) calls this directly: the embed sync
+// skips cancelled events, so reconcileBumpMessage never sees CANCELLED.
+describe('deleteRecordBump — record-only delete (ROK-1812)', () => {
+  it('deletes the bump in its own channel and clears its ids', async () => {
+    const { deps, deleteMessage, set } = makeDeps();
+    await deleteRecordBump(deps, makeInput().record, 42);
+    expect(deleteMessage).toHaveBeenCalledWith('channel-bump', 'bump-msg-001');
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ bumpMessageId: null, bumpChannelId: null }),
+    );
+  });
+
+  it('clears the ids when the bump is already gone (10008)', async () => {
+    const { deps, deleteMessage, set } = makeDeps();
+    deleteMessage.mockRejectedValue(
+      makeDiscordApiError(10008, 'Unknown Message'),
+    );
+    await expect(
+      deleteRecordBump(deps, makeInput().record, 42),
+    ).resolves.toBeUndefined();
+    expect(set).toHaveBeenCalledWith(
+      expect.objectContaining({ bumpMessageId: null, bumpChannelId: null }),
+    );
+  });
+
+  it('logs and keeps the ids on any other Discord error', async () => {
+    const { deps, deleteMessage, update, logger } = makeDeps();
+    deleteMessage.mockRejectedValue(
+      makeDiscordApiError(50013, 'Missing Permissions'),
+    );
+    await expect(
+      deleteRecordBump(deps, makeInput().record, 42),
+    ).resolves.toBeUndefined();
+    expect(update).not.toHaveBeenCalled();
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Missing Permissions'),
+    );
+  });
+
+  it('does nothing when the record has no bump', async () => {
+    const { deps, deleteMessage } = makeDeps();
+    const record = { ...makeInput().record, bumpMessageId: null };
+    await deleteRecordBump(deps, record, 42);
+    expect(deleteMessage).not.toHaveBeenCalled();
   });
 });
