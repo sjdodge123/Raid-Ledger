@@ -291,3 +291,86 @@ describe('AdHocServerPresenceService — a linked player in voice AND on the ser
     expect(enqueue).toHaveBeenCalledWith(eventId, 5 * 60 * 1000);
   });
 });
+
+const signupsOf = (eventId: number) =>
+  testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, eventId));
+
+async function linkAdminTo(steamId: string): Promise<number> {
+  const admin = testApp.seed.adminUser;
+  await testApp.db
+    .update(schema.users)
+    .set({ steamId })
+    .where(eq(schema.users.id, admin.id));
+  return admin.id;
+}
+
+describe('AdHocServerPresenceService — held players across a session restart (ROK-1802)', () => {
+  it('a player held before a session restart is not a phantom in the next spawn', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    // Plugin reactivated: the new session rehydrates; STEAM_A left meanwhile.
+    await sink.openPresence(src);
+    await sink.playerJoined(src, player(STEAM_B));
+    expect(await adHocEvents()).toHaveLength(0);
+
+    await sink.playerJoined(src, player(STEAM_C));
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+    const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
+    expect(steamIds).toEqual([STEAM_B, STEAM_C]);
+  });
+
+  it('a held player still on the server is enrolled once a heartbeat covers the count', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    // Reactivated; STEAM_A's join is older than the replay, so only a count vouches for them.
+    await sink.openPresence(src);
+    await sink.playerJoined(src, player(STEAM_B));
+    expect(await adHocEvents()).toHaveLength(0);
+
+    await sink.playerCount(src, 2);
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+    const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
+    expect(steamIds).toEqual([STEAM_A, STEAM_B]);
+  });
+
+  it('reports a held player to the new session, and their leave after a heartbeat enrolled them starts grace (Codex r4)', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    await sink.openPresence(src);
+    // The session seeds its departure tracking from this.
+    expect(await sink.heldPresence(src)).toEqual([player(STEAM_A)]);
+    await sink.playerJoined(src, player(STEAM_B));
+    await sink.playerCount(src, 2);
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+
+    await sink.playerLeft(src, STEAM_A);
+    await sink.playerLeft(src, STEAM_B);
+    const open = (await rowsOf(event.id)).filter((r) => r.leftAt === null);
+    expect(open).toEqual([]);
+    expect(enqueue).toHaveBeenCalledWith(event.id, 5 * 60 * 1000);
+  });
+});
+
+describe('AdHocServerPresenceService — linked players are signed up (ROK-1802)', () => {
+  it('signs a linked server player up at spawn; the unlinked one gets none', async () => {
+    const adminId = await linkAdminTo(STEAM_A);
+    const eventId = await spawnWithTwo(source());
+    const signups = await signupsOf(eventId);
+    expect(signups.map((s) => s.userId)).toEqual([adminId]);
+    expect(signups[0]).toMatchObject({ status: 'signed_up' });
+  });
+
+  it('signs a linked server player up when they attach to a live Quick Play', async () => {
+    const adminId = await linkAdminTo(STEAM_C);
+    const src = source();
+    const eventId = await spawnWithTwo(src);
+    expect(await signupsOf(eventId)).toHaveLength(0);
+
+    await sink.playerJoined(src, player(STEAM_C));
+    const signups = await signupsOf(eventId);
+    expect(signups.map((s) => s.userId)).toEqual([adminId]);
+  });
+});
