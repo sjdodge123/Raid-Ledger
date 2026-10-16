@@ -12,13 +12,13 @@ export const EVENT_DESCRIPTION_MAX = 300;
 /** Discord's hard cap on an embed description. */
 export const EMBED_DESCRIPTION_LIMIT = 4096;
 
-const ELLIPSIS = '…'; // …
-const ZWSP = '​';
+const ELLIPSIS = '\u2026'; // …
+const ZWSP = '\u200B';
 
 /**
  * Break every mass / role mention so it can never resolve, even if the text
- * is later reused outside an embed. `@everyone` → `@​everyone`, and
- * `<@&123>` → `<@​&123>` (a zero-width space after the `@`).
+ * is later reused outside an embed: a zero-width space (U+200B) goes after
+ * the `@` of `@everyone`, `@here` and a `<@&id>` role mention.
  */
 function escapeMentions(text: string): string {
   return text
