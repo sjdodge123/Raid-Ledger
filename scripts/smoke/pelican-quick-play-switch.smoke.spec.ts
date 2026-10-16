@@ -31,17 +31,23 @@ interface Row {
 }
 
 /**
- * Install + activate the Valheim plugin via the real admin plugin API (the
+ * Install + activate a plugin via the real admin plugin API (the
  * `ai-suggestions-fixtures.ts::ensureAiPluginActive` pattern). A failed install
  * (already installed, or the sibling worker won the race) falls through to
  * activate, which must succeed.
  */
-async function ensureValheimActive(token: string): Promise<void> {
+async function ensurePluginActive(token: string, pluginId: string): Promise<void> {
     const init = { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` } };
-    const install = await fetch(`${API_BASE}/admin/plugins/valheim/install`, init);
+    const install = await fetch(`${API_BASE}/admin/plugins/${pluginId}/install`, init);
     if (install.ok) return;
-    const activate = await fetch(`${API_BASE}/admin/plugins/valheim/activate`, init);
-    if (!activate.ok) throw new Error(`failed to enable the Valheim plugin: install ${install.status}, activate ${activate.status}`);
+    const activate = await fetch(`${API_BASE}/admin/plugins/${pluginId}/activate`, init);
+    if (!activate.ok) throw new Error(`failed to enable the ${pluginId} plugin: install ${install.status}, activate ${activate.status}`);
+}
+
+/** Valheim depends on Pelican (valheim.manifest.ts), so Pelican goes first. */
+async function ensureValheimActive(token: string): Promise<void> {
+    await ensurePluginActive(token, 'pelican');
+    await ensurePluginActive(token, 'valheim');
 }
 
 async function serverById(token: string, id: number): Promise<Row> {
