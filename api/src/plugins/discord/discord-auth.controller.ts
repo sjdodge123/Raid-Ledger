@@ -97,7 +97,7 @@ export class DiscordAuthController {
     if (res.headersSent) return;
     const { access_token } = this.authService.login(req.user);
     // ROK-1808: the code is bound to this browser (cookie of its hash).
-    const authCode = mintBrowserBoundAuthCode(res);
+    const authCode = mintBrowserBoundAuthCode(req, res);
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
     const clientUrl = this.getClientUrl(req);
     // ROK-1353: mint a refresh family + set the httpOnly cookie before the
@@ -141,6 +141,7 @@ export class DiscordAuthController {
 
     // ROK-1808: bound to this browser; the callback's strategy checks it.
     const state = signBrowserBoundLoginState(
+      req,
       res,
       { action: 'invite', inviteCode },
       this.getSecret(),
@@ -177,7 +178,8 @@ export class DiscordAuthController {
     res.redirect(
       buildSilentLoginRedirect({
         oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
-        signState: (p) => signBrowserBoundLoginState(res, p, this.getSecret()),
+        signState: (p) =>
+          signBrowserBoundLoginState(req, res, p, this.getSecret()),
         returnTo: returnTo ?? '/',
         clientUrl: this.getClientUrl(req),
       }),

@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import type { Request, Response } from 'express';
-import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
+import { readCookie } from './link-nonce-cookie.helpers';
+import { browserBoundCookieAttrs } from './browser-bound-cookie.helpers';
 
 /**
  * ROK-1808 (review M1): the one-time `auth_code` the OAuth callback hands to
@@ -13,7 +14,8 @@ import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
  * So the callback sets an httpOnly cookie of sha256(code) on the same
  * response, and `POST /auth/exchange-code` accepts the code only from a
  * browser holding that cookie. Path '/' for the dev `/auth` vs prod
- * `/api/auth` split (same as the link-state cookies).
+ * `/api/auth` split (same as the link-state cookies). Secure follows the
+ * request's scheme, so a plain-HTTP install still logs in (Codex r2 P2).
  */
 export const AUTH_CODE_COOKIE = 'rl_auth_code';
 
@@ -25,12 +27,16 @@ function sha256(value: string): string {
 }
 
 /** Callback: mint a fresh hex code and remember it in this browser. */
-export function mintBrowserBoundAuthCode(res: Response): string {
+export function mintBrowserBoundAuthCode(
+  req: Pick<Request, 'secure'>,
+  res: Response,
+): string {
   const code = crypto.randomBytes(32).toString('hex');
-  res.cookie(AUTH_CODE_COOKIE, sha256(code), {
-    ...linkCookieAttrs(),
-    maxAge: AUTH_CODE_TTL_MS,
-  });
+  res.cookie(
+    AUTH_CODE_COOKIE,
+    sha256(code),
+    browserBoundCookieAttrs(req, AUTH_CODE_TTL_MS),
+  );
   return code;
 }
 
@@ -45,6 +51,9 @@ export function authCodeBoundToBrowser(req: Request, code: unknown): boolean {
 }
 
 /** Exchange succeeded: the code is spent, drop its cookie. */
-export function clearAuthCodeCookie(res: Response): void {
-  res.clearCookie(AUTH_CODE_COOKIE, linkCookieAttrs());
+export function clearAuthCodeCookie(
+  req: Pick<Request, 'secure'>,
+  res: Response,
+): void {
+  res.clearCookie(AUTH_CODE_COOKIE, browserBoundCookieAttrs(req));
 }

@@ -26,16 +26,25 @@ interface Browser {
   jar: Record<string, string>;
   req: Request;
   res: Response;
+  setCalls: unknown[][];
+  clearCalls: unknown[][];
 }
 
-/** A browser: `res.cookie`/`clearCookie` write the jar `req.cookies` reads. */
-function browser(): Browser {
+/**
+ * A browser: `res.cookie`/`clearCookie` write the jar `req.cookies` reads.
+ * `secure` is the request scheme Express reports (`req.secure`).
+ */
+function browser(secure = false): Browser {
   const jar: Record<string, string> = {};
+  const setCalls: unknown[][] = [];
+  const clearCalls: unknown[][] = [];
   const res = {
-    cookie: jest.fn((name: string, value: string) => {
+    cookie: jest.fn((name: string, value: string, attrs?: unknown) => {
+      setCalls.push([name, value, attrs]);
       jar[name] = value;
     }),
-    clearCookie: jest.fn((name: string) => {
+    clearCookie: jest.fn((name: string, attrs?: unknown) => {
+      clearCalls.push([name, attrs]);
       delete jar[name];
     }),
   } as unknown as Response;
@@ -44,8 +53,9 @@ function browser(): Browser {
     query: {},
     cookies: jar,
     res,
+    secure,
   } as unknown as Request;
-  return { jar, req, res };
+  return { jar, req, res, setCalls, clearCalls };
 }
 
 function decode(state: string): Record<string, unknown> {
@@ -71,6 +81,7 @@ describe('Discord login state (ROK-1808)', () => {
   it('signs r with the payload and sets an httpOnly lax sha256(r) cookie', () => {
     const b = browser();
     const state = signBrowserBoundLoginState(
+      b.req,
       b.res,
       { action: 'invite', inviteCode: 'INV' },
       SECRET,
@@ -93,6 +104,7 @@ describe('Discord login state (ROK-1808)', () => {
   it('accepts the state in the browser that minted it and clears the cookie', () => {
     const b = browser();
     const state = signBrowserBoundLoginState(
+      b.req,
       b.res,
       { action: 'login' },
       SECRET,
@@ -105,6 +117,7 @@ describe('Discord login state (ROK-1808)', () => {
   it('refuses a replay of the same state (single use)', () => {
     const b = browser();
     const state = signBrowserBoundLoginState(
+      b.req,
       b.res,
       { action: 'login' },
       SECRET,
@@ -119,6 +132,7 @@ describe('Discord login state (ROK-1808)', () => {
   it('refuses a state forwarded to a browser without the cookie', () => {
     const attacker = browser();
     const state = signBrowserBoundLoginState(
+      attacker.req,
       attacker.res,
       { action: 'login' },
       SECRET,
@@ -131,10 +145,16 @@ describe('Discord login state (ROK-1808)', () => {
 
   it('refuses a mismatched cookie and leaves it in place', () => {
     const victim = browser();
-    signBrowserBoundLoginState(victim.res, { action: 'login' }, SECRET);
+    signBrowserBoundLoginState(
+      victim.req,
+      victim.res,
+      { action: 'login' },
+      SECRET,
+    );
     const own = victim.jar[COOKIE];
     const attacker = browser();
     const state = signBrowserBoundLoginState(
+      attacker.req,
       attacker.res,
       { action: 'login' },
       SECRET,
@@ -157,6 +177,7 @@ describe('Discord login state (ROK-1808)', () => {
     const now = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
     const state = signBrowserBoundLoginState(
+      b.req,
       b.res,
       { action: 'login' },
       SECRET,
@@ -170,7 +191,12 @@ describe('Discord login state (ROK-1808)', () => {
 
   it('refuses a state signed with another secret', () => {
     const b = browser();
-    const state = signBrowserBoundLoginState(b.res, { action: 'login' }, 'x');
+    const state = signBrowserBoundLoginState(
+      b.req,
+      b.res,
+      { action: 'login' },
+      'x',
+    );
     expect(verifyBrowserBoundLoginState(b.req, b.res, state, opts)).toEqual({
       ok: false,
       reason: 'invalid or expired state',
@@ -268,5 +294,57 @@ describe('DiscordLoginStateStore (ROK-1808)', () => {
     expect(cb).toHaveBeenCalledWith(null, false, {
       message: 'state not bound to this browser',
     });
+  });
+});
+
+const LAX_ATTRS = { httpOnly: true, sameSite: 'lax', path: '/' };
+
+function setAttrs(b: Browser): unknown {
+  return defined(b.setCalls[0], 'res.cookie call')[2];
+}
+
+function clearAttrs(b: Browser): unknown {
+  return defined(b.clearCalls[0], 'res.clearCookie call')[1];
+}
+
+/**
+ * Codex r2 P2: the all-in-one image runs NODE_ENV=production and documents
+ * plain `http://<host>:8080`. A Secure cookie set over HTTP is dropped by the
+ * browser, so Secure must follow the request's scheme, not NODE_ENV.
+ */
+describe('Discord login state cookie follows the request scheme', () => {
+  const savedEnv = process.env.NODE_ENV;
+  beforeEach(() => {
+    process.env.NODE_ENV = 'production';
+  });
+  afterEach(() => {
+    process.env.NODE_ENV = savedEnv;
+  });
+
+  it.each([
+    ['plain HTTP under NODE_ENV=production: not Secure', false],
+    ['HTTPS request: Secure', true],
+  ])('%s — set, then cleared with matching attributes', (_label, secure) => {
+    const b = browser(secure);
+    const state = signBrowserBoundLoginState(
+      b.req,
+      b.res,
+      { action: 'login' },
+      SECRET,
+    );
+    expect(setAttrs(b)).toMatchObject({ ...LAX_ATTRS, secure });
+    const check = verifyBrowserBoundLoginState(b.req, b.res, state, opts);
+    expect(check.ok).toBe(true);
+    expect(clearAttrs(b)).toEqual({ ...LAX_ATTRS, secure });
+  });
+
+  it('the passport store binds with the request scheme too', () => {
+    const http = browser(false);
+    const https = browser(true);
+    const store = new DiscordLoginStateStore(() => SECRET, logger);
+    store.store(http.req, META, jest.fn());
+    store.store(https.req, META, jest.fn());
+    expect(setAttrs(http)).toMatchObject({ secure: false });
+    expect(setAttrs(https)).toMatchObject({ secure: true });
   });
 });

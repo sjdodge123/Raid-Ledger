@@ -11,6 +11,7 @@ import {
   assertLinkStateBoundToBrowser,
   bindLinkStateToBrowser,
 } from '../../auth/link-state-cookie.helpers';
+import { browserBoundCookieAttrs } from '../../auth/browser-bound-cookie.helpers';
 
 /**
  * ROK-1808: Discord LOGIN state is bound to the browser that started the
@@ -38,13 +39,21 @@ const LOGIN_ACTIONS: ReadonlySet<string> = new Set([
 export type LoginStateCheck =
   { ok: true; state: Record<string, unknown> } | { ok: false; reason: string };
 
-/** Login entry: bind a fresh `r` to this browser and sign it into the state. */
+/**
+ * Login entry: bind a fresh `r` to this browser and sign it into the state.
+ * The cookie's Secure flag follows `req`'s scheme (Codex r2 P2).
+ */
 export function signBrowserBoundLoginState(
+  req: Pick<Request, 'secure'>,
   res: Response,
   payload: Record<string, unknown>,
   secret: string,
 ): string {
-  const r = bindLinkStateToBrowser(res, DISCORD_LOGIN_STATE_PROVIDER);
+  const r = bindLinkStateToBrowser(
+    res,
+    DISCORD_LOGIN_STATE_PROVIDER,
+    browserBoundCookieAttrs(req),
+  );
   return signOAuthState({ ...payload, timestamp: Date.now(), r }, secret);
 }
 
@@ -69,6 +78,7 @@ export function verifyBrowserBoundLoginState(
       res,
       DISCORD_LOGIN_STATE_PROVIDER,
       data.r,
+      browserBoundCookieAttrs(req),
     );
   } catch {
     return { ok: false, reason: 'state not bound to this browser' };
@@ -111,7 +121,10 @@ export class DiscordLoginStateStore implements StateStore {
       cb(secret, undefined);
       return;
     }
-    cb(null, signBrowserBoundLoginState(req.res, { action: 'login' }, secret));
+    cb(
+      null,
+      signBrowserBoundLoginState(req, req.res, { action: 'login' }, secret),
+    );
   }
 
   verify(req: Request, state: string, callback: StateStoreVerifyCallback): void;

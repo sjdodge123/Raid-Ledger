@@ -73,7 +73,7 @@ export class AuthController {
     if (!token) {
       throw new UnauthorizedException('Invalid or expired auth code');
     }
-    clearAuthCodeCookie(res);
+    clearAuthCodeCookie(req, res);
     return { access_token: token };
   }
 

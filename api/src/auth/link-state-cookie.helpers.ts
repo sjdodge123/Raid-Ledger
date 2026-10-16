@@ -1,5 +1,5 @@
 import * as crypto from 'crypto';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import {
   LINK_REQUEST_EXPIRED_MESSAGE,
   type LinkProvider,
@@ -47,15 +47,17 @@ function sha256(value: string): string {
 
 /**
  * GET /link hop, after the nonce matched: remember in this browser a fresh
- * `r` and return it for the signed state.
+ * `r` and return it for the signed state. `attrs` defaults to the link
+ * flows' attributes; Discord login passes scheme-following ones (ROK-1808).
  */
 export function bindLinkStateToBrowser(
   res: Response,
   provider: LinkStateProvider,
+  attrs: CookieOptions = linkCookieAttrs(),
 ): string {
   const r = crypto.randomBytes(32).toString('base64url');
   res.cookie(linkStateCookieName(provider), sha256(r), {
-    ...linkCookieAttrs(),
+    ...attrs,
     maxAge: LINK_STATE_TTL_MS,
   });
   return r;
@@ -80,15 +82,17 @@ function stateCookieMatches(
  * the cookie minted for the state's `r` (a forwarded authorize/OpenID URL
  * arrives without it). A match clears the cookie so the state is single-use;
  * a mismatch leaves it (it may be this browser's own in-flight link).
+ * `clearAttrs` must match the attributes the cookie was set with.
  */
 export function assertLinkStateBoundToBrowser(
   req: Request,
   res: Response,
   provider: LinkStateProvider,
   r: unknown,
+  clearAttrs: CookieOptions = linkCookieAttrs(),
 ): void {
   if (!stateCookieMatches(req, provider, r)) {
     throw new Error(LINK_REQUEST_EXPIRED_MESSAGE);
   }
-  res.clearCookie(linkStateCookieName(provider), linkCookieAttrs());
+  res.clearCookie(linkStateCookieName(provider), clearAttrs);
 }
