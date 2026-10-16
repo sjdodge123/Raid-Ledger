@@ -106,9 +106,15 @@ function clockRange(event: EmbedEventData, timezone?: string | null): string {
   return `${trimmed}${EN_DASH}${end}`;
 }
 
-/** Participants still in voice — the head-count the LIVE author line reports. */
+/**
+ * Participants still present plus anonymous server players (ROK-1801 Q4: they
+ * count) — the head-count the LIVE author line reports.
+ */
 function activeCount(event: EmbedEventData): number {
-  return (event.signupMentions ?? []).filter((m) => m.status !== 'left').length;
+  const present = (event.signupMentions ?? []).filter(
+    (m) => m.status !== 'left',
+  ).length;
+  return present + (event.serverAnonymousCount ?? 0);
 }
 
 /** `▸ LIVE · Quick Play · 3 playing` / `■ ENDED · Quick Play · 2h 45m`. */

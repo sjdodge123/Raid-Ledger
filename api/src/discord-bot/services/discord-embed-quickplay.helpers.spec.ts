@@ -597,4 +597,14 @@ describe('buildQuickPlayEmbed — anonymous server players (ROK-1801 Q4)', () =>
     const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
     expect(bodyLines(embed.data.description)[0]).toBe('+1 on server');
   });
+
+  it('counts anonymous server players in the LIVE author line', () => {
+    const left = { ...player('Bo'), status: 'left' as const };
+    const data = event({
+      signupMentions: [player('Ana'), left],
+      serverAnonymousCount: 2,
+    });
+    const { embed } = buildQuickPlayEmbed(data, CONTEXT, 'live');
+    expect(embed.data.author?.name).toBe('▸ LIVE · Quick Play · 3 playing');
+  });
 });
