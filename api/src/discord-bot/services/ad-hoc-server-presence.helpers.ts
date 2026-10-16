@@ -6,7 +6,7 @@
  * come from the game's voice-monitor binding when there is one, so a server
  * and a bound voice channel share one set of Quick Play settings.
  */
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
@@ -133,6 +133,8 @@ export async function findGameVoiceBinding(
 export interface SteamIdentity {
   userId: number;
   discordId: string | null;
+  /** The RL name a linked player shows as: `display_name`, else `username`. */
+  displayName: string;
 }
 
 /** SteamID64 → the linked RL user (`users.steam_id`), if any. */
@@ -142,7 +144,11 @@ export async function resolveSteamIdentity(
 ): Promise<SteamIdentity | null> {
   const u = schema.users;
   const rows = await db
-    .select({ userId: u.id, discordId: u.discordId })
+    .select({
+      userId: u.id,
+      discordId: u.discordId,
+      displayName: sql<string>`coalesce(${u.displayName}, ${u.username})`,
+    })
     .from(u)
     .where(eq(u.steamId, steamId))
     .limit(1);

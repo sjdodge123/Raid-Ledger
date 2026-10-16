@@ -98,8 +98,9 @@ async function enrolOn(
 }
 
 /**
- * The spawn card's roster: EVERY enrolled player, linked or not. An unlinked
- * player shows by character name (spike ruling) with no Discord id.
+ * The spawn card's roster: EVERY enrolled player, linked or not. A linked
+ * player shows by their Raid Ledger name; an unlinked one by character name
+ * (spike ruling) with no Discord id.
  */
 export function spawnRoster(
   players: ServerPresencePlayer[],
@@ -107,6 +108,6 @@ export function spawnRoster(
 ): { discordUserId: string | null; discordUsername: string }[] {
   return players.map((pl, i) => ({
     discordUserId: ids[i]?.discordId ?? null,
-    discordUsername: pl.displayName,
+    discordUsername: ids[i]?.displayName ?? pl.displayName,
   }));
 }
