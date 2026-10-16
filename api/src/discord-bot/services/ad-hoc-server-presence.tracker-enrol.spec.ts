@@ -63,7 +63,7 @@ function serviceWith(
     {},
     { emit: jest.fn() },
     null,
-    readerOf(players),
+    { get: () => readerOf(players) },
   ] as unknown as ConstructorParameters<typeof AdHocServerPresenceService>;
   return new AdHocServerPresenceService(...deps);
 }
@@ -124,6 +124,24 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
       svc.onTrackerEnrol({ eventId: 278, gameId: 10 }),
     ).resolves.toBe(true);
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);
+  });
+
+  it('an unbound reader (ModuleRef.get throws) reads as nobody tracked', async () => {
+    const deps = [
+      {} as PostgresJsDatabase<typeof schema>,
+      ...Array.from({ length: 7 }, () => ({})),
+      null,
+      {
+        get: () => {
+          throw new Error('Nest could not find SERVER_PRESENCE_READER');
+        },
+      },
+    ] as unknown as ConstructorParameters<typeof AdHocServerPresenceService>;
+    const svc = new AdHocServerPresenceService(...deps);
+    await expect(
+      svc.onTrackerEnrol({ eventId: 278, gameId: 10 }),
+    ).resolves.toBe(false);
+    expect(getEventById).not.toHaveBeenCalled();
   });
 
   it('the safety net answers false when the tracker reports nobody', async () => {

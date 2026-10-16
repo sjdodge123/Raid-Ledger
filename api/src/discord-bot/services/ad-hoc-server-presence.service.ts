@@ -1,4 +1,5 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { EventEmitter2, OnEvent } from '@nestjs/event-emitter';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -100,8 +101,7 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     @Inject(ServerPathVoiceTally)
     private readonly voiceTally: ServerPathVoiceTally | null = null,
     @Optional()
-    @Inject(SERVER_PRESENCE_READER)
-    private readonly reader: ServerPresenceReader | null = null,
+    private readonly moduleRef: ModuleRef | null = null,
   ) {}
 
   playerJoined(
@@ -235,6 +235,24 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
   }
 
   // ─── Private ──────────────────────────────────────────
+
+  /**
+   * The tracker, resolved at call time (review BLOCKER 1): a constructor
+   * inject closes sink -> reader -> supervisor -> sink and hangs Nest boot.
+   * Unbound (plugin absent) reads as no reader.
+   */
+  private get reader(): ServerPresenceReader | null {
+    try {
+      const opts = { strict: false };
+      const r = this.moduleRef?.get<ServerPresenceReader>(
+        SERVER_PRESENCE_READER,
+        opts,
+      );
+      return r ?? null;
+    } catch {
+      return null;
+    }
+  }
 
   private get enrol(): EnrolDeps {
     return { fx: this.fx, pending: this.pending, reader: this.reader };
