@@ -32,7 +32,9 @@ function NoFeed({ onGet, pending, failed }: { onGet: () => void; pending: boolea
 
 function FeedLink({ url, onReset }: { url: string; onReset: () => void }): JSX.Element {
     return (
-        <div className="space-y-3" data-testid="calendar-feed-link">
+        // data-sentry-block: the link is a bearer credential — Session Replay
+        // records a placeholder, never the href or the input (ROK-1599).
+        <div className="space-y-3" data-testid="calendar-feed-link" data-sentry-block="">
             <p className="text-xs font-medium text-secondary">{F.linkLabel}</p>
             <Input type="text" readOnly value={url} aria-label={F.linkLabel} fieldSize="sm"
                 data-testid="calendar-feed-url" onClick={(e) => e.currentTarget.select()} />

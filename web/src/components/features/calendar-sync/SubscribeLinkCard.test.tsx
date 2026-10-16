@@ -110,6 +110,16 @@ describe('SubscribeLinkCard — with a feed', () => {
         );
     });
 
+    it('ROK-1599 Codex P1: the whole link block is blocked from Session Replay (anchor AND input)', async () => {
+        useStatefulFeed(calendarsOverviewVariants.withFeed);
+        renderPage();
+        const input = await screen.findByDisplayValue(CALENDAR_FEED_URL_FIXTURE);
+        const block = screen.getByTestId('calendar-feed-link');
+        expect(block).toHaveAttribute('data-sentry-block');
+        expect(screen.getByTestId('calendar-feed-open').closest('[data-sentry-block]')).toBe(block);
+        expect(input.closest('[data-sentry-block]')).toBe(block);
+    });
+
     it.each([true, false])('desktop=%s: Reset → confirm → POST → the new link', async (desktop) => {
         setDesktop(desktop);
         const api = useStatefulFeed(calendarsOverviewVariants.withFeed);
