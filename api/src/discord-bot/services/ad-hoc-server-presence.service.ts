@@ -27,6 +27,7 @@ import {
   type AdHocParticipantJoinedPayload,
 } from '../discord-bot.constants';
 import { PendingServerPlayers } from './ad-hoc-server-pending';
+import { signupLinkedServerPlayer } from './ad-hoc-server-signup.helpers';
 import {
   afterServerLeave,
   announceServerSpawn,
@@ -247,12 +248,14 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     player: ServerPresencePlayer,
   ): Promise<void> {
     const identity = await resolveSteamIdentity(this.db, player.steamId);
+    const userId = identity?.userId ?? null;
     await this.participantService.addServerParticipant(live.id, {
       steamId: player.steamId,
       displayName: player.displayName,
-      userId: identity?.userId ?? null,
+      userId,
       pelicanServerId,
     });
+    await signupLinkedServerPlayer(this.db, live.id, userId);
     await this.gracePeriodQueue.cancel(live.id);
     if (await restoreFromGracePeriod(this.db, live.id))
       this.gateway.emitStatusChange(live.id, 'live');

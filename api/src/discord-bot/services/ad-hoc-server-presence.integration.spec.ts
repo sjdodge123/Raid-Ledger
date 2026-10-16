@@ -291,3 +291,55 @@ describe('AdHocServerPresenceService — a linked player in voice AND on the ser
     expect(enqueue).toHaveBeenCalledWith(eventId, 5 * 60 * 1000);
   });
 });
+
+const signupsOf = (eventId: number) =>
+  testApp.db
+    .select()
+    .from(schema.eventSignups)
+    .where(eq(schema.eventSignups.eventId, eventId));
+
+async function linkAdminTo(steamId: string): Promise<number> {
+  const admin = testApp.seed.adminUser;
+  await testApp.db
+    .update(schema.users)
+    .set({ steamId })
+    .where(eq(schema.users.id, admin.id));
+  return admin.id;
+}
+
+describe('AdHocServerPresenceService — held players across a session restart (ROK-1802)', () => {
+  it('a player held before a session restart is not a phantom in the next spawn', async () => {
+    const src = source();
+    await sink.playerJoined(src, player(STEAM_A));
+    // Plugin reactivated: the new session rehydrates; STEAM_A left meanwhile.
+    await sink.openPresence(src);
+    await sink.playerJoined(src, player(STEAM_B));
+    expect(await adHocEvents()).toHaveLength(0);
+
+    await sink.playerJoined(src, player(STEAM_C));
+    const [event] = nonEmpty(await adHocEvents(), 'spawned ad-hoc event');
+    const steamIds = (await rowsOf(event.id)).map((r) => r.steamId).sort();
+    expect(steamIds).toEqual([STEAM_B, STEAM_C]);
+  });
+});
+
+describe('AdHocServerPresenceService — linked players are signed up (ROK-1802)', () => {
+  it('signs a linked server player up at spawn; the unlinked one gets none', async () => {
+    const adminId = await linkAdminTo(STEAM_A);
+    const eventId = await spawnWithTwo(source());
+    const signups = await signupsOf(eventId);
+    expect(signups.map((s) => s.userId)).toEqual([adminId]);
+    expect(signups[0]).toMatchObject({ status: 'signed_up' });
+  });
+
+  it('signs a linked server player up when they attach to a live Quick Play', async () => {
+    const adminId = await linkAdminTo(STEAM_C);
+    const src = source();
+    const eventId = await spawnWithTwo(src);
+    expect(await signupsOf(eventId)).toHaveLength(0);
+
+    await sink.playerJoined(src, player(STEAM_C));
+    const signups = await signupsOf(eventId);
+    expect(signups.map((s) => s.userId)).toEqual([adminId]);
+  });
+});
