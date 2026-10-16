@@ -132,10 +132,15 @@ describe('readChannelMirror never rejects (review MINOR 1 + 2)', () => {
       { ...CTX, onError },
     );
     await jest.advanceTimersByTimeAsync(CHANNEL_MIRROR_READ_TIMEOUT_MS);
-    const outcome = await Promise.race([stuck, Promise.resolve('still pending')]);
+    const outcome = await Promise.race([
+      stuck,
+      Promise.resolve('still pending'),
+    ]);
     expect(outcome).toEqual({ state: 'disconnected', channelId: '555' });
     expect(onError).toHaveBeenCalledWith(
-      expect.objectContaining({ message: expect.stringContaining('timed out') }),
+      expect.objectContaining({
+        message: expect.stringContaining('timed out'),
+      }),
     );
   });
 

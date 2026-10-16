@@ -311,7 +311,7 @@ describe('server name (review MINOR 5)', () => {
       .mockReturnValue({ name: 'Keepers HQ', memberCount: 12 });
   });
 
-  it('the ok read names the bot\'s server', async () => {
+  it("the ok read names the bot's server", async () => {
     await bindDirect(PUBLIC.id);
     const res = await call('get', '/discord', 'plain');
     expect(res.body).toEqual({
@@ -320,7 +320,7 @@ describe('server name (review MINOR 5)', () => {
     });
   });
 
-  it('the channel list names the bot\'s server', async () => {
+  it("the channel list names the bot's server", async () => {
     const res = await call('get', '/discord/channels', 'editor');
     expect(res.body).toEqual({
       connected: true,
