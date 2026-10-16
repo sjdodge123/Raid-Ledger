@@ -4,8 +4,8 @@
  * on the binding, then stop the old game's voice activity before starting the
  * new one. Shared by the server-presence re-evaluation (every branch: below
  * threshold, delayed, immediate) and the group roster (a delayed spawn that
- * fires after the member switched), so neither can leave a member enrolled in
- * two events or two voice play-time sessions.
+ * fires after the member switched). Each switch leaves the member's current
+ * event on the binding and closes the old game's voice play-time session.
  */
 import type { ResolvedBinding } from './voice-state.helpers';
 import {
@@ -41,7 +41,9 @@ export async function switchLobbyMemberGame(
 /**
  * Start voice tracking for `target`, first closing a different game's open
  * voice session (Codex r4 P2 2 — a bare start overwrote the tracker and left
- * the old game's session open). The same game keeps its session.
+ * the old game's session open). The same game keeps its session. Review
+ * MINOR 1: games compare by id — the roster and presence paths can name the
+ * same game differently ('Unknown game' vs the rich-presence name).
  */
 export function retrackVoiceGame(
   deps: VoiceHandlerDeps,
@@ -50,7 +52,7 @@ export function retrackVoiceGame(
   rlUserId: number | null,
 ): void {
   const current = deps.voiceGameTracker.get(memberId);
-  if (current && current.gameName !== target.gameName)
+  if (current && current.gameId !== target.gameId)
     stopVoiceGameTracking(deps, memberId);
   startVoiceGameTracking(
     deps,

@@ -78,7 +78,7 @@ export class VoiceStateListener implements OnApplicationShutdown {
   private userChannelMap = new Map<string, string>();
   private voiceGameTracker = new Map<
     string,
-    { gameName: string; userId: number }
+    { gameId: number; gameName: string; userId: number }
   >();
   private pendingRechecks = new Map<string, NodeJS.Timeout>();
   private pendingSpawnTimers = new Map<string, NodeJS.Timeout>();

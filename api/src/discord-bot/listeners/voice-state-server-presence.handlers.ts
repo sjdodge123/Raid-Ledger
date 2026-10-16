@@ -119,6 +119,7 @@ async function monitorBelowThreshold(
  * switched onto this game BEFORE the branch — below threshold, delayed and
  * immediate alike — so a member who joined this game's server leaves their
  * prior game's event and voice session instead of keeping its attendance.
+ * The return trip (review BLOCKER 1) runs first: see `returnSwitchedLeavers`.
  */
 async function reevaluateLobby(
   ctx: JoinHandlerCtx,
@@ -131,6 +132,7 @@ async function reevaluateLobby(
   if (state) return reconcileLobbyEvent(ctx, chId, b, gameId, state.memberSet);
   const fns = lobbySpawnFns(ctx, chId, b);
   const group = await lobbyGroupOf(ctx, chId, b, gameId);
+  await returnSwitchedLeavers(ctx, chId, b, gameId, group);
   if (group) await switchGroupOntoGame(ctx, b, group);
   if (!group || groupSize(group) < (b.config?.minPlayers ?? 2))
     return fns.cancelSpawn(gameId);
@@ -142,6 +144,31 @@ async function reevaluateLobby(
     return handleGeneralLobbyGroupDetection(ctx.deps, chId, b, gameId);
   }
   fns.scheduleSpawn(gameId);
+}
+
+/**
+ * ROK-1805 review BLOCKER 1 — the no-event twin of `reconcileLobbyEvent`'s
+ * leavers. A voice member still tracked on this game but no longer in its
+ * group (they left the server before its event spawned, presence unchanged)
+ * goes back through the presence-switch path, which re-attaches them to the
+ * game their presence says and re-tracks their voice session. Without it they
+ * stay out of every event with an open session on this game.
+ */
+async function returnSwitchedLeavers(
+  ctx: JoinHandlerCtx,
+  chId: string,
+  b: ResolvedBinding,
+  gameId: number,
+  group: LobbyGameGroup | undefined,
+): Promise<void> {
+  const inGroup = new Set(group?.memberIds);
+  const channel = resolveVoiceChannel(ctx.deps.clientService, chId);
+  for (const id of [...(ctx.channelMembers.get(chId) ?? [])]) {
+    if (inGroup.has(id)) continue;
+    if (ctx.deps.voiceGameTracker.get(id)?.gameId !== gameId) continue;
+    const gm = channel?.members.get(id);
+    if (gm) await handlePresenceChange(ctx.deps, id, b, gm);
+  }
 }
 
 /**

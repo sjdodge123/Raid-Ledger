@@ -147,7 +147,11 @@ export function startVoiceGameTracking(
   rlUserId: number | null,
 ): void {
   if (gameId !== null && rlUserId) {
-    deps.voiceGameTracker.set(discordUserId, { gameName, userId: rlUserId });
+    deps.voiceGameTracker.set(discordUserId, {
+      gameId,
+      gameName,
+      userId: rlUserId,
+    });
     deps.gameActivityService.bufferStart(
       rlUserId,
       gameName,
