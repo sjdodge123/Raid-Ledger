@@ -20,6 +20,8 @@ import { PelicanCronRegistrar } from './pelican-cron.registrar';
 import { PelicanGameServerProvider } from './pelican-game-server.provider';
 import { PelicanAdapterRegistration } from './pelican-adapters';
 import { PelicanDemoSeedController } from './pelican-demo-seed.controller';
+import { PelicanPresenceRepository } from './presence/pelican-presence.repository';
+import { PelicanPresenceSupervisor } from './presence/pelican-presence.supervisor';
 
 type UninstalledPayload = { slug: string };
 
@@ -48,6 +50,8 @@ type UninstalledPayload = { slug: string };
     PelicanCronRegistrar,
     PelicanGameServerProvider,
     PelicanAdapterRegistration,
+    PelicanPresenceRepository,
+    PelicanPresenceSupervisor,
   ],
   exports: [
     PelicanClientFactory,

@@ -13,7 +13,13 @@ export const AdHocParticipantSchema = z.object({
     id: z.string().uuid(),
     eventId: z.number(),
     userId: z.number().nullable(),
-    discordUserId: z.string(),
+    /** Null for a Steam-only (game-server) participant (ROK-1800). */
+    discordUserId: z.string().nullable(),
+    /** SteamID64 of a game-server participant (ROK-1800). */
+    steamId: z.string().nullable().optional(),
+    /** Where the participant was first seen (ROK-1800). */
+    source: z.enum(['discord', 'steam']).optional(),
+    /** Display name: Discord username, or character name / SteamID64. */
     discordUsername: z.string(),
     discordAvatarHash: z.string().nullable(),
     joinedAt: z.string().datetime(),
