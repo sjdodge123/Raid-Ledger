@@ -1527,6 +1527,13 @@
       "when": 1792101320942,
       "tag": "0218_game_notification_mutes",
       "breakpoints": true
+    },
+    {
+      "idx": 219,
+      "version": "7",
+      "when": 1792109595724,
+      "tag": "0219_valheim_presence",
+      "breakpoints": true
     }
   ]
 }
