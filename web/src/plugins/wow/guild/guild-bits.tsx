@@ -22,12 +22,27 @@ export function Pill({ tone = 'neutral', children }: { tone?: PillTone; children
     );
 }
 
+interface SectionTitleProps {
+    title: string;
+    blurb?: string;
+    /** Optional trailing control (prototype: the Discord mirror's "Change channel"). */
+    action?: ReactNode;
+    headingId?: string;
+}
+
 /** Section title, design-system §4.10. */
-export function SectionTitle({ title, blurb }: { title: string; blurb?: string }): JSX.Element {
-    return (
-        <div className="mb-4 border-b border-edge pb-2">
-            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+export function SectionTitle({ title, blurb, action, headingId }: SectionTitleProps): JSX.Element {
+    const text = (
+        <>
+            <h2 id={headingId} className="text-lg font-semibold text-foreground">{title}</h2>
             {blurb && <p className="text-sm text-secondary">{blurb}</p>}
+        </>
+    );
+    if (!action) return <div className="mb-4 border-b border-edge pb-2">{text}</div>;
+    return (
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-2 border-b border-edge pb-2">
+            <div className="min-w-0">{text}</div>
+            {action}
         </div>
     );
 }
