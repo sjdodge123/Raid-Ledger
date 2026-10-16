@@ -2754,3 +2754,7 @@ same day (#1278, #1279, #1280).
 ### 2026-10-16 — fix/rok-1711-voice-bots-minplayers (resolution note)
 
 - **[resolved]** The 2026-09-01 rok-1445 entry "`getGameFilteredCount` counts bot members" (`voice-state.handlers.ts:270`) is fixed by ROK-1711: bots are skipped in `voice-threshold-count.helpers.ts` unless DEMO_MODE-allowlisted (`VOICE_THRESHOLD_BOT_ALLOWLIST`).
+
+### 2026-10-16 — fix/rok-1808-discord-login-state (surfaced during the ROK-1808 Codex re-run)
+
+- **med** `api/src/auth/refresh/refresh-cookie.helpers.ts:31` and `api/src/auth/link-state-cookie.helpers.ts` (`linkCookieAttrs`), plus `api/src/auth/link-nonce-cookie.helpers.ts:39` — `secure: process.env.NODE_ENV === 'production'`. The allinone image runs NODE_ENV=production, and the README's documented default is plain `http://<host>:8080` (README.md:80, :169). Browsers drop Secure cookies over HTTP, so on a plain-HTTP install the `rl_rt` refresh cookie never sticks (a reload signs you out) and account linking's state cookie is dropped. Pre-existing on origin/main cadf7ba7d; ROK-1808 fixed it only for its two new cookies. Suggested: derive `secure` from `req.secure` (trust-proxy aware) for every auth cookie, and pick `sameSite` for `rl_rt` the same way.
