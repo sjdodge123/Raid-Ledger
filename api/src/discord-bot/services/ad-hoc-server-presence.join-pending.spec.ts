@@ -15,6 +15,7 @@ import { checkSuppression } from './ad-hoc-spawn-clearance';
 import {
   findGameVoiceBinding,
   findLiveGameAdHocEvent,
+  listServerEnrolledEvents,
 } from './ad-hoc-server-presence.helpers';
 import { buildServerSpawnInput } from './ad-hoc-server-spawn.helpers';
 
@@ -23,6 +24,7 @@ jest.mock('./ad-hoc-server-presence.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-presence.helpers'),
   findGameVoiceBinding: jest.fn(),
   findLiveGameAdHocEvent: jest.fn(),
+  listServerEnrolledEvents: jest.fn(),
 }));
 jest.mock('./ad-hoc-server-spawn.helpers', () => ({
   ...jest.requireActual<object>('./ad-hoc-server-spawn.helpers'),
@@ -66,6 +68,7 @@ beforeEach(() => {
     config: { minPlayers: 2 },
   });
   jest.mocked(buildServerSpawnInput).mockResolvedValue(null);
+  jest.mocked(listServerEnrolledEvents).mockResolvedValue([]);
 });
 
 afterEach(() => jest.resetAllMocks());
@@ -111,5 +114,37 @@ describe('AdHocServerPresenceService.joinPending — merge order', () => {
     const { svc } = serviceWith(1, 1);
     await svc.playerJoined(SOURCE, PLAYER);
     expect(buildServerSpawnInput).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdHocServerPresenceService — held players across a session restart (ROK-1802)', () => {
+  const OTHER = {
+    steamId: '76561198000000002',
+    displayName: 'Freya',
+  } satisfies ServerPresencePlayer;
+
+  it('a fresh session (openPresence) drops the held set, so a stale hold never counts toward a spawn', async () => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.openPresence(SOURCE);
+    await svc.playerJoined(SOURCE, OTHER);
+    expect(buildServerSpawnInput).not.toHaveBeenCalled();
+  });
+
+  it('a hold that survives (no session restart) still reaches the threshold', async () => {
+    jest
+      .mocked(checkSuppression)
+      .mockResolvedValue(
+        CLEARANCE as unknown as Awaited<ReturnType<typeof checkSuppression>>,
+      );
+    const { svc } = serviceWith(0);
+    await svc.playerJoined(SOURCE, PLAYER);
+    await svc.playerJoined(SOURCE, OTHER);
+    expect(buildServerSpawnInput).toHaveBeenCalledTimes(1);
   });
 });

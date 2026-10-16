@@ -130,9 +130,16 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
     });
   }
 
+  /**
+   * ROK-1802: only a fresh session (or a stopped server's cleanup) asks, so
+   * this server's held players are stale — one who left while nobody watched
+   * would be a phantom in the next spawn. Drop them: the new session's first
+   * replay re-reports anyone still on the server as a join, re-holding them.
+   */
   async openPresence(
     source: ServerPresenceSource,
   ): Promise<ServerPresencePlayer[]> {
+    this.pending.clear(source.pelicanServerId);
     const out: ServerPresencePlayer[] = [];
     for (const live of await this.enrolledEvents(source))
       out.push(
