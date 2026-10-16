@@ -107,13 +107,15 @@ describe('TokenBlocklistService', () => {
       expect(result).toBe(false);
     });
   });
+});
 
-  describe('blockUser — Redis error', () => {
-    it('should not throw when the Redis write fails', async () => {
-      mockRedis.eval.mockRejectedValue(new Error('Connection refused'));
+describe('TokenBlocklistService blockUser — Redis error', () => {
+  beforeEach(() => setupModule());
 
-      await expect(service.blockUser(42)).resolves.not.toThrow();
-    });
+  it('should not throw when the Redis write fails', async () => {
+    mockRedis.eval.mockRejectedValue(new Error('Connection refused'));
+
+    await expect(service.blockUser(42)).resolves.not.toThrow();
   });
 });
 

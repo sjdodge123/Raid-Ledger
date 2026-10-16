@@ -70,6 +70,12 @@ export class RefreshTokenController {
       },
       rotated,
     );
+    if (!access_token) {
+      // Codex r2: the just-rotated row was revoked by a concurrent
+      // revoke + block — drop the dead cookie we just set and 401.
+      clearRefreshCookie(res);
+      throw new UnauthorizedException('Invalid refresh token');
+    }
     return { access_token };
   }
 

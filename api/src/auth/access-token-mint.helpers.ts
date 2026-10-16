@@ -48,12 +48,18 @@ async function blockFloor(
   return max;
 }
 
-/** Sign an access JWT whose `iat` a live block can never reject. */
+/**
+ * Sign an access JWT whose `iat` a live block can never reject. `nowMs` lets
+ * a caller pin the clock to the moment it read the block floor (the refresh
+ * path's revoke-race guard), so a block written after that read still
+ * covers the token.
+ */
 export async function signAccessToken(
   deps: MintDeps,
   claims: AccessTokenClaims,
   options?: JwtSignOptions,
+  nowMs: number = Date.now(),
 ): Promise<string> {
-  const iat = issuedAtFor(await blockFloor(deps.blocklist, claims));
+  const iat = issuedAtFor(await blockFloor(deps.blocklist, claims), nowMs);
   return deps.jwt.sign({ ...claims, iat }, options);
 }

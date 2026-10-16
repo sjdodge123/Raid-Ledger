@@ -51,6 +51,16 @@ function build(live: { target: typeof TARGET; expiresAt: Date } | null) {
   return { deps, blocklist, jwt };
 }
 
+const ROTATED = { userId: USER.id, familyId: 'fam-1', rawToken: 'raw-child' };
+
+async function mintOrFail(
+  deps: Parameters<typeof mintRefreshAccessToken>[0],
+): Promise<string> {
+  const token = await mintRefreshAccessToken(deps, ROTATED);
+  if (token === null) throw new Error('expected a token, got null (401)');
+  return token;
+}
+
 function iatOf(jwt: JwtService, token: string): number {
   return jwt.decode<{ iat: number }>(token).iat;
 }
@@ -62,10 +72,7 @@ describe('ROK-1810 mintRefreshAccessToken — same-second mint after a block', (
   it('the own-token path minted in the block second is NOT rejected by isBlocked', async () => {
     const t = build(null);
     await t.blocklist.blockUser(USER.id);
-    const token = await mintRefreshAccessToken(t.deps, {
-      userId: USER.id,
-      familyId: 'fam-1',
-    });
+    const token = await mintOrFail(t.deps);
     const iat = iatOf(t.jwt, token);
     expect(await t.blocklist.isBlocked(USER.id, iat)).toBe(false);
   });
@@ -74,10 +81,7 @@ describe('ROK-1810 mintRefreshAccessToken — same-second mint after a block', (
     const expiresAt = new Date(NOW.getTime() + 30 * 60 * 1000);
     const t = build({ target: TARGET, expiresAt });
     await t.blocklist.blockUser(USER.id);
-    const token = await mintRefreshAccessToken(t.deps, {
-      userId: USER.id,
-      familyId: 'fam-1',
-    });
+    const token = await mintOrFail(t.deps);
     const iat = iatOf(t.jwt, token);
     expect(await t.blocklist.isBlocked(USER.id, iat)).toBe(false);
     expect(t.jwt.decode<{ sub: number }>(token).sub).toBe(TARGET.id);
@@ -85,10 +89,52 @@ describe('ROK-1810 mintRefreshAccessToken — same-second mint after a block', (
 
   it('with no block the iat is the current second', async () => {
     const t = build(null);
-    const token = await mintRefreshAccessToken(t.deps, {
-      userId: USER.id,
-      familyId: 'fam-1',
-    });
+    const token = await mintOrFail(t.deps);
     expect(iatOf(t.jwt, token)).toBe(Math.floor(NOW.getTime() / 1000));
+  });
+});
+
+/** A db fake whose successive `.limit()` reads resolve the queued rows. */
+function queuedDb(...reads: unknown[][]) {
+  const limit = jest.fn(() => Promise.resolve(reads.shift() ?? []));
+  const chain = {
+    select: () => chain,
+    from: () => chain,
+    where: () => chain,
+    limit,
+  };
+  return { db: chain as unknown as PostgresJsDatabase<typeof schema>, limit };
+}
+
+describe('ROK-1810 Codex r2 — refresh mint after a concurrent revoke', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  it('floor present + rotated row revoked → null (401), nothing signed', async () => {
+    const t = build(null);
+    await t.blocklist.blockUser(USER.id);
+    const q = queuedDb([{ revokedAt: new Date(NOW) }], [USER]);
+    const sign = jest.spyOn(t.jwt, 'sign');
+    const deps = { ...t.deps, db: q.db };
+    await expect(mintRefreshAccessToken(deps, ROTATED)).resolves.toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('floor present + rotated row live → a token that survives the floor', async () => {
+    const t = build(null);
+    await t.blocklist.blockUser(USER.id);
+    const q = queuedDb([{ revokedAt: null }], [USER]);
+    const token = await mintOrFail({ ...t.deps, db: q.db });
+    expect(await t.blocklist.isBlocked(USER.id, iatOf(t.jwt, token))).toBe(
+      false,
+    );
+    expect(q.limit).toHaveBeenCalledTimes(2);
+  });
+
+  it('no floor → no revoke re-check query (only the user lookup)', async () => {
+    const t = build(null);
+    const q = queuedDb([USER]);
+    await mintOrFail({ ...t.deps, db: q.db });
+    expect(q.limit).toHaveBeenCalledTimes(1);
   });
 });
