@@ -12,10 +12,11 @@
  *  5. Poll the SAME bump message until it reads "N+1/10 spots filled".
  */
 import { getTextChannel } from "../../client.js";
-import { pollForEmbed } from "../../helpers/polling.js";
-import type { SimpleMessage } from "../../helpers/messages.js";
+import { pollForCondition, pollForEmbed } from "../../helpers/polling.js";
+import { messageExists, type SimpleMessage } from "../../helpers/messages.js";
 import {
   awaitProcessing,
+  cancelEvent,
   channelForGame,
   createEvent,
   deleteEvent,
@@ -82,16 +83,43 @@ async function awaitBumpCount(
   }
 }
 
+/** Poll until Discord answers 10008 for the bump (it was deleted). */
+async function awaitBumpGone(channelId: string, bumpId: string): Promise<void> {
+  await pollForCondition(
+    async () => ((await messageExists(channelId, bumpId)) ? null : true),
+    30_000,
+  );
+}
+
 /**
- * Nothing deletes a bump when its event is deleted (only FULL does), so the
- * smoke removes its own card from the shared channel. Never throws — it runs
- * in `finally` and must not mask the failure that got us there.
+ * Remove the bump through the product path: cancelling the event deletes
+ * its bump (ROK-1812). The companion bot can't delete the RL bot's message
+ * (50013), so the direct delete is a best-effort fallback only. Never
+ * throws — it runs in `finally` and must not mask the failure that got us
+ * there.
  */
-async function deleteBump(channelId: string, bumpId: string): Promise<void> {
+async function cancelAndClearBump(
+  ctx: TestContext,
+  eventId: number,
+  channelId: string,
+  bumpId: string,
+): Promise<void> {
+  try {
+    await cancelEvent(ctx.api, eventId);
+    await awaitProcessing(ctx.api);
+    await awaitBumpGone(channelId, bumpId);
+    return;
+  } catch (err) {
+    console.warn(
+      `    ROK-1812: bump ${bumpId} not removed by cancel: ${String(err)}`,
+    );
+  }
   try {
     await getTextChannel(channelId).messages.delete(bumpId);
   } catch (err) {
-    console.warn(`    ROK-1812: bump ${bumpId} cleanup failed: ${String(err)}`);
+    console.warn(
+      `    ROK-1812: bump ${bumpId} fallback delete failed: ${String(err)}`,
+    );
   }
 }
 
@@ -126,7 +154,7 @@ const bumpCountFollowsSignups: SmokeTest = {
       await awaitProcessing(ctx.api);
       await awaitBumpCount(channelId, bump.id, event.title, bump.filled + 1);
     } finally {
-      if (bumpId) await deleteBump(channelId, bumpId);
+      if (bumpId) await cancelAndClearBump(ctx, event.id, channelId, bumpId);
       await deleteEvent(ctx.api, event.id);
     }
   },
