@@ -14,6 +14,7 @@ import {
   toPresentPlayers,
 } from './pelican-presence.helpers';
 import type { GamePresenceEvent } from './presence-events';
+import type { ServerRosterPlayer } from './server-presence.reader';
 import type {
   ServerPresenceSink,
   ServerPresenceSource,
@@ -42,6 +43,8 @@ export interface PresenceSessionOptions {
   logger: PresenceLogger;
   socketFactory?: WingsSocketFactory;
   now?: () => number;
+  /** Roster changed; called once the queued sink calls settled (ROK-1801). */
+  onChanged?: (source: ServerPresenceSource) => void;
 }
 
 interface Buffered {
@@ -75,6 +78,14 @@ export class PelicanPresenceSession {
     return this.opts.source.pelicanServerId;
   }
 
+  /** Who is on this server now, tagged with its source (ROK-1801 read port). */
+  players(): ServerRosterPlayer[] {
+    const { pelicanServerId, gameId } = this.opts.source;
+    return this.tracker
+      .snapshot()
+      .map((p) => ({ pelicanServerId, gameId, ...p }));
+  }
+
   async start(): Promise<void> {
     await this.rehydrate();
     const o = this.opts;
@@ -99,6 +110,8 @@ export class PelicanPresenceSession {
     this.clearSettle();
     this.replay = null;
     if (empty) this.emptyAll();
+    // Not emptied, but no longer read: the roster readers saw is gone.
+    else if (this.tracker.snapshot().length > 0) this.notify();
     await this.idle();
   }
 
@@ -111,6 +124,7 @@ export class PelicanPresenceSession {
     try {
       const open = await this.opts.sink.openPresence(this.opts.source);
       this.tracker.hydrate(toPresentPlayers(open));
+      if (open.length > 0) this.notify();
     } catch (err) {
       this.opts.logger.error(
         `Presence rehydrate failed for server ${this.serverId}: ${errName(err)}`,
@@ -219,6 +233,7 @@ export class PelicanPresenceSession {
     this.tracker.hydrate([]);
     if (!hadPlayers) return;
     this.enqueue('serverEmptied', (s, src) => s.serverEmptied(src));
+    this.notify();
   }
 
   private forward(changes: PresenceChange[]): void {
@@ -237,6 +252,28 @@ export class PelicanPresenceSession {
         );
       }
     }
+    if (changes.length > 0) this.notify();
+  }
+
+  /**
+   * Queued behind the sink calls, so a reader reacting to the signal sees
+   * the sink's own spawn/attach outcome. One signal per net change batch.
+   */
+  private notify(): void {
+    const { onChanged, source, logger } = this.opts;
+    if (!onChanged) return;
+    this.queue = this.queue.then(() => {
+      try {
+        onChanged({
+          pelicanServerId: source.pelicanServerId,
+          gameId: source.gameId,
+        });
+      } catch (err) {
+        logger.error(
+          `Presence change signal failed for server ${this.serverId}: ${errName(err)}`,
+        );
+      }
+    });
   }
 
   /** Serialised, per-call isolated: one failing sink call never stops the next. */

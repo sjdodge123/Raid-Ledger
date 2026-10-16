@@ -27,6 +27,7 @@ function harness(
   const sink = fakeSink(open);
   const logger = fakeLogger();
   const wings = fakeWings();
+  const onChanged = jest.fn();
   const session = new PelicanPresenceSession({
     source: SRC,
     serverIdentifier: 'abc123',
@@ -36,6 +37,7 @@ function harness(
     sink,
     logger,
     socketFactory: wings.factory,
+    onChanged,
   });
   /** start → socket open → auth → replay `lines` → replay settles. */
   const connect = async (replay: string[] = []) => {
@@ -53,7 +55,7 @@ function harness(
     wings.lines(ls);
     await session.idle();
   };
-  return { sink, logger, wings, session, connect, settle, live };
+  return { sink, logger, wings, session, onChanged, connect, settle, live };
 }
 
 beforeEach(() => jest.useFakeTimers());
@@ -229,4 +231,81 @@ it('a re-auth inside the settle window keeps the buffered replay (FB1 #2)', asyn
     [SRC, { steamId: 'A', displayName: 'Alice' }],
   ]);
   expect(h.sink.playerLeft.mock.calls).toEqual([]);
+});
+
+describe('ROK-1801 read port', () => {
+  it('players() lists who is on the server now, tagged with its source', async () => {
+    const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+    await h.connect();
+    await h.live([
+      line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+      line({ kind: 'heartbeat', count: 2, loggedAt: T(3) }),
+    ]);
+    expect(h.session.players()).toEqual([
+      { pelicanServerId: 7, gameId: 42, steamId: 'A', name: 'Alice' },
+      { pelicanServerId: 7, gameId: 42, steamId: 'B', name: null },
+    ]);
+  });
+
+  it('signals a change only after its sink call settled', async () => {
+    const h = harness();
+    await h.connect();
+    let settled = 0;
+    h.sink.playerJoined.mockImplementation(async () => {
+      await Promise.resolve();
+      settled += 1;
+    });
+    const seenSettled: number[] = [];
+    h.onChanged.mockImplementation(() => seenSettled.push(settled));
+    await h.live([...arrive('A', 'Alice', T(1)), ...arrive('B', 'Bob', T(2))]);
+    expect(seenSettled).toEqual([1, 2]);
+    expect(h.onChanged.mock.calls).toEqual([[SRC], [SRC]]);
+  });
+
+  it('signals nothing for a reconnect replay that changes nothing', async () => {
+    const h = harness();
+    await h.connect();
+    await h.live(arrive('A', 'Alice', T(1)));
+    h.onChanged.mockClear();
+    h.wings.sockets[0]?.handlers.onClose();
+    await jest.advanceTimersByTimeAsync(65_000);
+    h.wings.authenticate();
+    h.wings.lines(arrive('A', 'Alice', T(1)));
+    await h.settle();
+    expect(h.onChanged).not.toHaveBeenCalled();
+  });
+
+  it('signals after a rehydrate that restored players, and after an empty', async () => {
+    const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+    await h.connect();
+    expect(h.onChanged.mock.calls).toEqual([[SRC]]);
+    h.wings.frame('status', 'offline');
+    await h.session.idle();
+    expect(h.onChanged.mock.calls).toEqual([[SRC], [SRC]]);
+    expect(h.session.players()).toEqual([]);
+  });
+
+  it('a stop without emptying still signals (its roster is no longer read)', async () => {
+    const h = harness([{ steamId: 'A', displayName: 'Alice' }]);
+    await h.connect();
+    h.onChanged.mockClear();
+    await h.session.stop(false);
+    expect(h.onChanged.mock.calls).toEqual([[SRC]]);
+    expect(h.sink.serverEmptied).not.toHaveBeenCalled();
+  });
+
+  it('a throwing change listener is logged and never stops later sink calls', async () => {
+    const h = harness();
+    await h.connect();
+    h.onChanged.mockImplementation(() => {
+      throw new Error('listener down');
+    });
+    await h.live(arrive('A', 'Alice', T(1)));
+    await h.live(arrive('B', 'Bob', T(2)));
+    expect(h.sink.playerJoined).toHaveBeenCalledTimes(2);
+    expect(h.logger.error.mock.calls).toEqual([
+      ['Presence change signal failed for server 7: Error'],
+      ['Presence change signal failed for server 7: Error'],
+    ]);
+  });
 });
