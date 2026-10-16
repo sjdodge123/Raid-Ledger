@@ -4,13 +4,14 @@
  */
 import { useState, type JSX } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import type { EventResponseDto } from '@raid-ledger/contract';
+import type { AdHocParticipantDto, EventResponseDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
 import { AttendeeAvatars } from '../../components/calendar/AttendeeAvatars';
 import { GameTimeWidget } from '../../components/features/game-time/GameTimeWidget';
 import { AttendanceTracker } from '../../components/events/AttendanceTracker';
 import { LiveBadge } from '../../components/events/LiveBadge';
 import { VoiceRoster } from '../../components/events/VoiceRoster';
+import { voiceParticipants } from '../../components/events/voice-participants';
 import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
 
@@ -92,14 +93,15 @@ export function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, 
 }
 
 export function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc, event, eventStatus }: {
-    showVoiceRoster: boolean; voiceRoster: { participants: unknown[]; activeCount: number };
+    showVoiceRoster: boolean; voiceRoster: { participants: AdHocParticipantDto[] };
     isAdHoc: boolean; event: EventResponseDto; eventStatus: string | null;
 }) {
-    if (!showVoiceRoster || !voiceRoster.participants.length) return null;
+    // ROK-1821: a session with only game-server rows has no voice panel.
+    if (!showVoiceRoster || !voiceParticipants(voiceRoster.participants).length) return null;
     return (
         <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
             {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
-            <VoiceRoster participants={voiceRoster.participants as never} activeCount={voiceRoster.activeCount} />
+            <VoiceRoster participants={voiceRoster.participants} />
         </div>
     );
 }

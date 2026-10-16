@@ -142,10 +142,17 @@ describe('VoiceAttendanceService.getActiveRoster (ROK-530)', () => {
       service.handleLeave(10, 'discord-out');
 
       const { participants } = service.getActiveRoster(10);
-      const byId = (id: string) => participants.find((p) => p.discordUserId === id);
+      const byId = (id: string) =>
+        participants.find((p) => p.discordUserId === id);
 
-      expect(byId('discord-in')).toMatchObject({ source: 'discord', inVoice: true });
-      expect(byId('discord-out')).toMatchObject({ source: 'discord', inVoice: false });
+      expect(byId('discord-in')).toMatchObject({
+        source: 'discord',
+        inVoice: true,
+      });
+      expect(byId('discord-out')).toMatchObject({
+        source: 'discord',
+        inVoice: false,
+      });
     });
   });
 

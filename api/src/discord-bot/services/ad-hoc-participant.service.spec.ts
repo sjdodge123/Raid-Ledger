@@ -234,11 +234,26 @@ describe('AdHocParticipantService', () => {
       const [voiceRow, serverRow] = rows;
       mockDb.where.mockResolvedValueOnce([
         { ...voiceRow, source: 'discord', inVoice: true, onServer: false },
-        { ...serverRow, discordUserId: null, steamId: '76561198000000001', source: 'steam', inVoice: false, onServer: true },
+        {
+          ...serverRow,
+          discordUserId: null,
+          steamId: '76561198000000001',
+          source: 'steam',
+          inVoice: false,
+          onServer: true,
+        },
       ]);
       const result = await service.getRoster(42);
-      expect(result[0]).toMatchObject({ source: 'discord', inVoice: true, onServer: false });
-      expect(result[1]).toMatchObject({ source: 'steam', inVoice: false, onServer: true });
+      expect(result[0]).toMatchObject({
+        source: 'discord',
+        inVoice: true,
+        onServer: false,
+      });
+      expect(result[1]).toMatchObject({
+        source: 'steam',
+        inVoice: false,
+        onServer: true,
+      });
     });
 
     it('returns empty array when no participants', async () => {

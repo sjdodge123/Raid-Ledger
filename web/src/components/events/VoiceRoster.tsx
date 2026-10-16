@@ -1,9 +1,10 @@
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
+import { voiceParticipants } from './voice-participants';
 
 interface VoiceRosterProps {
+  /** The whole ad-hoc roster; game-server rows are filtered out here (ROK-1821). */
   participants: AdHocParticipantDto[];
-  activeCount: number;
 }
 
 /**
@@ -80,8 +81,11 @@ function ParticipantGroup({ participants, isActive, label, count }: {
 
 /**
  * VoiceRoster — Real-time voice channel participant list (ROK-293, ROK-530).
+ * Shows voice rows only; the header counts are computed from the same rows,
+ * not the server's all-rows `activeCount` (ROK-1821).
  */
-export function VoiceRoster({ participants, activeCount }: VoiceRosterProps) {
+export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
+  const participants = voiceParticipants(allRows);
   const active = participants.filter((p) => !p.leftAt);
   const left = participants.filter((p) => !!p.leftAt);
 
@@ -89,7 +93,7 @@ export function VoiceRoster({ participants, activeCount }: VoiceRosterProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-foreground">Voice Channel Roster</h3>
-        <span className="text-xs text-muted">{activeCount} active / {participants.length} total</span>
+        <span className="text-xs text-muted">{active.length} active / {participants.length} total</span>
       </div>
       <ParticipantGroup participants={active} isActive={true} label="In Channel" count={active.length} />
       <ParticipantGroup participants={left} isActive={false} label="Left" count={left.length} />
