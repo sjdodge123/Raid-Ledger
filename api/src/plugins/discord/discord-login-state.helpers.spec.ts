@@ -39,7 +39,12 @@ function browser(): Browser {
       delete jar[name];
     }),
   } as unknown as Response;
-  const req = { headers: {}, query: {}, cookies: jar, res } as unknown as Request;
+  const req = {
+    headers: {},
+    query: {},
+    cookies: jar,
+    res,
+  } as unknown as Request;
   return { jar, req, res };
 }
 
@@ -87,7 +92,11 @@ describe('Discord login state (ROK-1808)', () => {
 
   it('accepts the state in the browser that minted it and clears the cookie', () => {
     const b = browser();
-    const state = signBrowserBoundLoginState(b.res, { action: 'login' }, SECRET);
+    const state = signBrowserBoundLoginState(
+      b.res,
+      { action: 'login' },
+      SECRET,
+    );
     const check = verifyBrowserBoundLoginState(b.req, b.res, state, opts);
     expect(check).toMatchObject({ ok: true, state: { action: 'login' } });
     expect(b.jar[COOKIE]).toBeUndefined();
@@ -95,7 +104,11 @@ describe('Discord login state (ROK-1808)', () => {
 
   it('refuses a replay of the same state (single use)', () => {
     const b = browser();
-    const state = signBrowserBoundLoginState(b.res, { action: 'login' }, SECRET);
+    const state = signBrowserBoundLoginState(
+      b.res,
+      { action: 'login' },
+      SECRET,
+    );
     verifyBrowserBoundLoginState(b.req, b.res, state, opts);
     expect(verifyBrowserBoundLoginState(b.req, b.res, state, opts)).toEqual({
       ok: false,
@@ -143,7 +156,11 @@ describe('Discord login state (ROK-1808)', () => {
     const b = browser();
     const now = Date.now();
     const clock = jest.spyOn(Date, 'now').mockReturnValue(now);
-    const state = signBrowserBoundLoginState(b.res, { action: 'login' }, SECRET);
+    const state = signBrowserBoundLoginState(
+      b.res,
+      { action: 'login' },
+      SECRET,
+    );
     clock.mockReturnValue(now + 10 * 60 * 1000 + 1);
     expect(verifyBrowserBoundLoginState(b.req, b.res, state, opts)).toEqual({
       ok: false,

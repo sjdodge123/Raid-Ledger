@@ -12,9 +12,7 @@ import {
  * not `LinkProvider` (whose JWT purposes are per link flow).
  */
 export type LinkStateProvider =
-  | LinkProvider
-  | 'calendar-google'
-  | 'discord-login';
+  LinkProvider | 'calendar-google' | 'discord-login';
 import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 
 /**

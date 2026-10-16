@@ -180,8 +180,7 @@ export class DiscordAuthController {
     res.redirect(
       buildSilentLoginRedirect({
         oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
-        signState: (p) =>
-          signBrowserBoundLoginState(res, p, this.getSecret()),
+        signState: (p) => signBrowserBoundLoginState(res, p, this.getSecret()),
         returnTo: returnTo ?? '/',
         clientUrl: this.getClientUrl(req),
       }),

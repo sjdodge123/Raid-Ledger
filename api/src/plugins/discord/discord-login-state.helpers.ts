@@ -36,8 +36,7 @@ const LOGIN_ACTIONS: ReadonlySet<unknown> = new Set([
 ]);
 
 export type LoginStateCheck =
-  | { ok: true; state: Record<string, unknown> }
-  | { ok: false; reason: string };
+  { ok: true; state: Record<string, unknown> } | { ok: false; reason: string };
 
 /** Login entry: bind a fresh `r` to this browser and sign it into the state. */
 export function signBrowserBoundLoginState(
@@ -65,7 +64,12 @@ export function verifyBrowserBoundLoginState(
     return { ok: false, reason: 'not a login state' };
   }
   try {
-    assertLinkStateBoundToBrowser(req, res, DISCORD_LOGIN_STATE_PROVIDER, data.r);
+    assertLinkStateBoundToBrowser(
+      req,
+      res,
+      DISCORD_LOGIN_STATE_PROVIDER,
+      data.r,
+    );
   } catch {
     return { ok: false, reason: 'state not bound to this browser' };
   }
