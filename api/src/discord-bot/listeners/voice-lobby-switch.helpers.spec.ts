@@ -61,7 +61,8 @@ describe('retrackVoiceGame (ROK-1805)', () => {
   it('keeps the open session when the member is already tracked on that game', () => {
     const { deps, order } = depsWith(null, VALHEIM);
     retrackVoiceGame(deps, 'a', VALHEIM, 7);
-    expect(order).toEqual(['start:Valheim']);
+    // No stop and no restart for the game already tracked.
+    expect(order).toEqual([]);
   });
 
   it('matches the tracked game by id, not name — a roster-side name for the same game keeps the session (review MINOR 1)', () => {
@@ -72,7 +73,8 @@ describe('retrackVoiceGame (ROK-1805)', () => {
       { gameId: VALHEIM.gameId, gameName: 'Unknown game' },
       7,
     );
-    expect(order).toEqual(['start:Unknown game']);
+    // A restart under another name would orphan the first session (Codex r2).
+    expect(order).toEqual([]);
   });
 
   it('closes the session of a different game id first', () => {

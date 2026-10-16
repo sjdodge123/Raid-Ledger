@@ -41,7 +41,7 @@ export async function switchLobbyMemberGame(
 /**
  * Start voice tracking for `target`, first closing a different game's open
  * voice session (Codex r4 P2 2 — a bare start overwrote the tracker and left
- * the old game's session open). The same game keeps its session. Review
+ * the old game's session open). The same game keeps its session untouched. Review
  * MINOR 1: games compare by id — the roster and presence paths can name the
  * same game differently ('Unknown game' vs the rich-presence name).
  */
@@ -52,8 +52,11 @@ export function retrackVoiceGame(
   rlUserId: number | null,
 ): void {
   const current = deps.voiceGameTracker.get(memberId);
-  if (current && current.gameId !== target.gameId)
-    stopVoiceGameTracking(deps, memberId);
+  // Same game id: keep the open session as is. GameActivityService keys a
+  // session by user + activity NAME, so restarting under another display name
+  // would orphan the first session (Codex ROK-1805 r2 P2).
+  if (current?.gameId === target.gameId) return;
+  if (current) stopVoiceGameTracking(deps, memberId);
   startVoiceGameTracking(
     deps,
     memberId,
