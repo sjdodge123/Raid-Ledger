@@ -244,6 +244,10 @@ describe('ICS subscribe feed — link lifecycle', () => {
     await issueFeed();
     const res = await testApp.request.get(`/cal/u/${file}`);
     expect(res.status).toBe(404);
+    // Codex r3 minor: a miss is never cached and never looks like a calendar.
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['content-type'] ?? '').not.toContain('text/calendar');
+    expect(res.headers['content-disposition']).toBeUndefined();
   });
 
   it('owner routes need a session', async () => {

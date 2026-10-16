@@ -9,6 +9,11 @@
  *
  * Express 5 path syntax makes `:token.ics` fragile, so the route takes the
  * whole file name and the regex below splits it.
+ *
+ * The calendar headers are set in the handler, on success only: an `@Header`
+ * decorator is applied BEFORE the handler runs, so a 404 would have carried
+ * `Cache-Control: private, max-age=900` and been cached as a miss. A miss is
+ * `no-store` (Codex r3 minor).
  */
 import {
   Controller,
@@ -18,7 +23,9 @@ import {
   Logger,
   NotFoundException,
   Param,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
@@ -36,6 +43,13 @@ import { serializeIcsCalendar } from '../feed/ics-serialize.helpers';
 /** `<43 base64url chars>.ics` — the only file name that can resolve. */
 export const FEED_FILE_PATTERN = /^([A-Za-z0-9_-]{43})\.ics$/;
 
+/** The success-only headers of a served feed. */
+function setCalendarHeaders(res: Response): void {
+  res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
+  res.setHeader('Cache-Control', 'private, max-age=900');
+  res.setHeader('Content-Disposition', 'inline; filename="raid-ledger.ics"');
+}
+
 @Controller('cal/u')
 export class CalendarFeedPublicController {
   private readonly logger = new Logger(CalendarFeedPublicController.name);
@@ -48,17 +62,21 @@ export class CalendarFeedPublicController {
 
   @Get(':file')
   @RateLimit('calendarFeed')
-  @Header('Content-Type', 'text/calendar; charset=utf-8')
-  @Header('Cache-Control', 'private, max-age=900')
   @Header('Referrer-Policy', 'no-referrer')
-  @Header('Content-Disposition', 'inline; filename="raid-ledger.ics"')
-  async feed(@Param('file') file: string): Promise<string> {
+  async feed(
+    @Param('file') file: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<string> {
     const userId = await this.resolveOwner(file);
-    if (userId === null) throw new NotFoundException();
+    if (userId === null) {
+      res.setHeader('Cache-Control', 'no-store');
+      throw new NotFoundException();
+    }
     const now = new Date();
     const entries = await loadFeedEntries(this.db, userId, now);
     const clientUrl = await this.settings.getClientUrl();
     this.stampFetched(userId);
+    setCalendarHeaders(res);
     return serializeIcsCalendar(
       buildFeedCalendar(entries, { clientUrl, userId, now }),
     );
