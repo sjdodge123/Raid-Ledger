@@ -165,7 +165,10 @@ function seatInVoice(id: string, game: string | null = VALHEIM): GuildMember {
   return m as unknown as GuildMember;
 }
 
-async function joinVoice(id: string, game = VALHEIM): Promise<void> {
+async function joinVoice(
+  id: string,
+  game: string | null = VALHEIM,
+): Promise<void> {
   const gm = seatInVoice(id, game);
   await handleChannelJoin(
     listener['joinCtx'],
@@ -229,7 +232,7 @@ describe('server path — voice members count toward minPlayers (Q9)', () => {
   });
 
   it('1 on the server + 1 presence-null person in voice takes the delayed spawn, as in the reverse order (Codex r3 P2)', async () => {
-    seatInVoice(VOICE_A, null);
+    await joinVoice(VOICE_A, null);
     const src = { pelicanServerId: ++serverSeq, gameId: valheim };
     await sink().playerJoined(src, { steamId: STEAM_B, displayName: 'Bjorn' });
     expect(await valheimQuickPlays()).toBe(0);
