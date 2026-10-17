@@ -14,26 +14,24 @@
  * (`components/feedback/feedback-scrub.ts`) because that payload goes to our
  * own API, not through a Sentry hook.
  *
- * ROUND 4 REDESIGN. Rounds 1–3 patched the matcher three times and each patch
- * bought a new bug (length caps that let a long secret through, a
- * `(?!\[Filtered\])` lookahead that a spoofed placeholder walked past, an
- * ambiguous-key rule that turned `{"code":500}` into invalid JSON). The rules
- * are now few enough to hold in your head, and `sentry-scrub-secrets.test.ts`
- * states every one of them as an input → expected row plus
- * `scrub(scrub(x)) === scrub(x)`:
+ * ROUND 4 REDESIGN, ROUND 5 CORRECTIONS. Rounds 1–3 patched the matcher three
+ * times and each patch bought a new bug. The rules are now few enough to hold
+ * in your head, and `sentry-scrub-secrets.test.ts` states every one of them as
+ * an input → expected row plus `scrub(scrub(x)) === scrub(x)`:
  *
- *  1. A KEY is secret only when it is unambiguous: an exact name, or a
- *     camel/snake name ending in token/secret/password/key. `tokenCount`,
- *     `tokenizer`, `passwordPolicy` and `keyboard` survive.
+ *  1. A KEY is secret only when it is unambiguous: an exact name, a name
+ *     ending in token/secret/password/passwd, or one of the explicit `*_key`
+ *     compounds. `tokenCount`, `tokenizer`, `passwordPolicy`, `keyboard`,
+ *     `queryKey` and `primaryKey` survive.
  *  2. A VALUE is scrubbed when (a) it is a known query/fragment param inside
  *     something that is actually a URL, (b) it follows a rule-1 key as
  *     `key=value` / `key: value` / `"key":"value"` anywhere in text, or (c) it
- *     follows `Bearer`/`Basic`.
+ *     follows `Bearer`/`Basic` — in any case.
  *  3. `code`, `state` and `key` are credentials ONLY as URL params — as bare
  *     JSON keys they are an HTTP status, a UI state and a keyboard key.
  *
- * There are no length caps: every quantifier is `+` over one character class
- * (`SECRET_VALUE`), which is linear, so a 200k-char string cannot blow up.
+ * There are no length caps: every quantifier is `+`/`*` over one character
+ * class, which is linear, so a 200k-char string cannot blow up.
  */
 import { scrubTokenFromUrl, SECRET_VALUE } from './sentry-scrub';
 
@@ -47,17 +45,12 @@ const FILTERED = '[Filtered]';
  * the bar for membership, because a key match drops the WHOLE value whatever
  * its shape. `code`, `state` and `key` are deliberately absent (rule 3).
  */
-const SECRET_KEY_EXACT = new Set([
+const SECRET_KEY_EXACT = [
     'password',
     'passwd',
     'pwd',
     'secret',
     'token',
-    'access_token',
-    'refresh_token',
-    'id_token',
-    'api_key',
-    'apikey',
     'authorization',
     'proxy-authorization',
     'cookie',
@@ -68,25 +61,38 @@ const SECRET_KEY_EXACT = new Set([
     'csrf',
     'credential',
     'credentials',
-]);
+] as const;
 
-/** `api_key`, `access-token`, `user_api_key` — a separator, then the noun. */
-const SECRET_SUFFIX_SNAKE = /[_-](?:token|secret|password|passwd|pwd|key)$/;
+/** `accessToken`, `user_api_secret`, `clientSecret` — any name ending in the noun. */
+const SECRET_NOUN_SUFFIX = String.raw`[A-Za-z0-9_-]*(?:token|secret|password|passwd)`;
 
 /**
- * `accessToken`, `clientSecret`, `apiKey` — a lowercase/digit, then the noun
- * capitalised. The leading character is what keeps `Key` and `Token` as whole
- * words out, and the `$` is what keeps `tokenCount` and `passwordPolicy` in.
+ * r5 P2: a bare `key`/`Key` suffix is NOT a secret noun — `queryKey`,
+ * `primaryKey` and `keyboard` are ordinary diagnostics whose values are worth
+ * keeping. Only these explicit compounds name a credential.
  */
-const SECRET_SUFFIX_CAMEL = /[a-z0-9](?:Token|Secret|Password|Key)$/;
+const SECRET_KEY_COMPOUND =
+    String.raw`(?:[A-Za-z0-9_-]*[_-])?(?:api|secret|private|access|signing|encryption)_?key`;
+
+/**
+ * THE one definition of a secret key. `isSecretKey` (object keys) and the
+ * `key=value` matcher below are both built from it, so they cannot drift.
+ *
+ * r5 P1: the matcher used to capture a GENERIC key and then ask
+ * `isSecretKey`. In `Error: password=swordfish` it matched `Error: password`,
+ * found `Error` innocent, returned the match unchanged — and had already
+ * consumed the embedded secret, so the scan resumed past it. Compiling the
+ * key from this source means a non-secret key cannot match at all, and
+ * nothing is ever skipped.
+ */
+const SECRET_KEY_SOURCE =
+    `(?:${SECRET_NOUN_SUFFIX}|${SECRET_KEY_COMPOUND}|${SECRET_KEY_EXACT.join('|')})`;
+
+const SECRET_KEY_WHOLE = new RegExp(`^${SECRET_KEY_SOURCE}$`, 'i');
 
 /** Object keys whose whole value is dropped, whatever shape it has. */
 export function isSecretKey(key: string): boolean {
-    const name = key.trim();
-    const lower = name.toLowerCase();
-    return (
-        SECRET_KEY_EXACT.has(lower) || SECRET_SUFFIX_SNAKE.test(lower) || SECRET_SUFFIX_CAMEL.test(name)
-    );
+    return SECRET_KEY_WHOLE.test(key.trim());
 }
 
 /* ------------------------------------------------------- 2a: URL params */
@@ -118,17 +124,22 @@ const URL_PARAM = new RegExp(String.raw`([?&#](?:${URL_PARAM_NAMES})=)` + SECRET
 
 /**
  * `key=value`, `key: value`, `"key":"value"` or `'key': 'value'` anywhere in
- * text — a log line, a pasted header, a JSON body. The key is captured and
- * handed to `isSecretKey`, so rules 1 and 2b cannot drift apart.
+ * text — a log line, a pasted header, a JSON body. The key part is compiled
+ * from `SECRET_KEY_SOURCE`, so only a secret key can match.
+ *
+ * The `i` flag covers the key names AND the auth scheme (r5 P1 #2:
+ * `Authorization: bearer eyJ…` used to miss the lowercase scheme, scrub the
+ * word `bearer` as if it were the value, and ship the JWT).
  *
  * Groups: 1 the optional quote around the key (balanced via `\1`), 2 the key,
  * 3 the separator, 4 the gap after it, 5 an auth scheme, 6/7 a quoted value.
  * An unquoted value falls through to `SECRET_VALUE`.
  */
 const KEYED_SECRET = new RegExp(
-    String.raw`(?<![A-Za-z0-9_-])("?)([A-Za-z0-9_-]+)\1\s*([=:])(\s*)((?:Bearer|Basic)\s+|)` +
+    String.raw`(?<![A-Za-z0-9_-])("?)(${SECRET_KEY_SOURCE})\1(?![A-Za-z0-9_-])` +
+        String.raw`\s*([=:])(\s*)((?:Bearer|Basic)\s+|)` +
         String.raw`(?:"([^"]+)"|'([^']+)'|${SECRET_VALUE})`,
-    'g',
+    'gi',
 );
 
 /**
@@ -136,9 +147,13 @@ const KEYED_SECRET = new RegExp(
  * a second pass sees exactly what the first one wrote. It is kept only in
  * front of an auth scheme, because `Authorization: Bearer [Filtered]` is worth
  * more to triage than `Authorization:Bearer [Filtered]`.
+ *
+ * There is deliberately NO `isSecretKey` re-check here: re-deciding would
+ * reintroduce the r5 P1 skip, because by this point the value has already
+ * been consumed.
  */
 function filterKeyed(
-    match: string,
+    _match: string,
     quote: string,
     key: string,
     separator: string,
@@ -147,7 +162,6 @@ function filterKeyed(
     doubleQuoted?: string,
     singleQuoted?: string,
 ): string {
-    if (!isSecretKey(key)) return match;
     const spacing = scheme === '' ? '' : gap;
     const wrap = doubleQuoted === undefined ? (singleQuoted === undefined ? '' : "'") : '"';
     return `${quote}${key}${quote}${separator}${spacing}${scheme}${wrap}${FILTERED}${wrap}`;
