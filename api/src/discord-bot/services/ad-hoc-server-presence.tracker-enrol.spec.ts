@@ -110,6 +110,22 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     );
   });
 
+  it("a tracker enrol carries the named player's character owner (ROK-1828)", async () => {
+    const owned = { ...ON_SERVER, characterOwnerId: 'zdo-owner-1' };
+    const svc = serviceWith([owned]);
+    await svc.onParticipantJoined(VOICE_JOIN);
+    expect(attachServerPlayer).toHaveBeenCalledWith(
+      expect.anything(),
+      LIVE,
+      1,
+      {
+        steamId: ROK,
+        displayName: 'rok',
+        characterOwnerId: 'zdo-owner-1',
+      },
+    );
+  });
+
   it('a player whose row is already open on that server is not attached again', async () => {
     jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const svc = serviceWith([ON_SERVER]);
