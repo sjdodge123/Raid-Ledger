@@ -23,10 +23,7 @@ import {
   findLinkedMemberRows,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
-import {
-  findGuild,
-  toGuildSummary,
-} from '../../../guilds/guild-core.queries';
+import { findGuild, toGuildSummary } from '../../../guilds/guild-core.queries';
 import {
   findCharacterGuild,
   findImportedBy,

@@ -58,9 +58,10 @@ export class HubKindRegistry {
 
   /** Every live adapter (owner active), one per registered kind. */
   active(): HubKindAdapter[] {
-    const registered = this.plugins.getAdaptersForExtensionPoint<HubKindAdapter>(
-      EXTENSION_POINTS.HUB_KIND,
-    );
+    const registered =
+      this.plugins.getAdaptersForExtensionPoint<HubKindAdapter>(
+        EXTENSION_POINTS.HUB_KIND,
+      );
     return [...registered.values()].filter(
       (a) => this.resolve(a.kind) !== undefined,
     );

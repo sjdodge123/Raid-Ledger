@@ -2,7 +2,10 @@ import { and, asc, desc, eq, inArray, isNotNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { CharacterGuild, GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot, sameRegionOrUnknown } from './guild-membership.helpers';
+import {
+  inLatestSnapshot,
+  sameRegionOrUnknown,
+} from './guild-membership.helpers';
 import { toGuildSummary } from '../../../guilds/guild-core.queries';
 
 /** ROK-1785 — read queries behind the guild endpoints (no access logic). */
