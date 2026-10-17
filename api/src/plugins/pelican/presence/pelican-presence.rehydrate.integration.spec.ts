@@ -22,6 +22,10 @@ import {
   okCredentials,
 } from './pelican-presence.spec-fakes';
 import {
+  SERVER_PRESENCE_READER,
+  type ServerPresenceReader,
+} from './server-presence.reader';
+import {
   SERVER_PRESENCE_SINK,
   type ServerPresenceSink,
   type ServerPresenceSource,
@@ -30,6 +34,7 @@ import {
 const t = schema.adHocParticipants;
 const STEAM_A = '76561198000000221';
 const STEAM_B = '76561198000000222';
+const STEAM_C = '76561198000000223';
 
 let testApp: TestApp;
 let sink: ServerPresenceSink;
@@ -41,11 +46,8 @@ const steamRows = (eventId: number, steamId: string) =>
     .from(t)
     .where(and(eq(t.eventId, eventId), eq(t.steamId, steamId)));
 
-/** A live Quick Play with STEAM_A (linked to "RokRL") on the server as "rok". */
-async function seedLinkedOnServer(
-  src: ServerPresenceSource,
-  characterOwnerId?: string,
-): Promise<number> {
+/** A live Quick Play of `src`'s game with nobody on it yet. */
+async function seedLiveEvent(src: ServerPresenceSource): Promise<number> {
   const now = new Date();
   const [event] = nonEmpty(
     await testApp.db
@@ -61,6 +63,15 @@ async function seedLinkedOnServer(
       .returning(),
     'event',
   );
+  return event.id;
+}
+
+/** A live Quick Play with STEAM_A (linked to "RokRL") on the server as "rok". */
+async function seedLinkedOnServer(
+  src: ServerPresenceSource,
+  characterOwnerId?: string,
+): Promise<number> {
+  const eventId = await seedLiveEvent(src);
   const [user] = nonEmpty(
     await testApp.db
       .insert(schema.users)
@@ -68,16 +79,14 @@ async function seedLinkedOnServer(
       .returning(),
     'user',
   );
-  await testApp.app
-    .get(AdHocParticipantService)
-    .addServerParticipant(event.id, {
-      steamId: STEAM_A,
-      displayName: 'rok',
-      userId: user.id,
-      pelicanServerId: src.pelicanServerId,
-      ...(characterOwnerId ? { characterOwnerId } : {}),
-    });
-  return event.id;
+  await testApp.app.get(AdHocParticipantService).addServerParticipant(eventId, {
+    steamId: STEAM_A,
+    displayName: 'rok',
+    userId: user.id,
+    pelicanServerId: src.pelicanServerId,
+    ...(characterOwnerId ? { characterOwnerId } : {}),
+  });
+  return eventId;
 }
 
 function startSession(src: ServerPresenceSource) {
@@ -215,5 +224,98 @@ describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () 
       'zdo-owner-a',
     ]);
     await session.stop(false);
+  });
+});
+
+/** One player arriving: a join, then the character line that names them. */
+const at = (s: number) => `2026-10-17T10:00:${String(s).padStart(2, '0')}`;
+const arrival = (steamId: string, name: string, ownerId: string, s: number) => [
+  line({ kind: 'join', steamId, loggedAt: at(s) }),
+  line({
+    kind: 'character',
+    name,
+    zdoidZero: false,
+    ownerId,
+    loggedAt: at(s + 1),
+  }),
+];
+
+/** Replay `lines` as a cold start's post-auth burst, then let the sink settle. */
+async function coldReplay(
+  wings: ReturnType<typeof fakeWings>,
+  session: PelicanPresenceSession,
+  lines: string[],
+) {
+  await socketOpened(wings);
+  wings.authenticate();
+  wings.lines(lines);
+  // A re-auth flushes the buffered replay synchronously (no settle timer).
+  wings.authenticate();
+  await session.idle();
+}
+
+describe('Presence session — a cold replay enrol persists the character owner (ROK-1828)', () => {
+  let reader: ServerPresenceReader;
+  let current: PelicanPresenceSession | null = null;
+
+  beforeAll(() => {
+    reader = testApp.app.get<ServerPresenceReader>(SERVER_PRESENCE_READER, {
+      strict: false,
+    });
+  });
+
+  // The supervisor never sees these hand-built sessions: point the tracker
+  // read port (what `enrolTracked` reads) at whichever one is running.
+  beforeEach(() => {
+    jest
+      .spyOn(reader, 'playersForGame')
+      .mockImplementation((gameId) =>
+        (current?.players() ?? []).filter((p) => p.gameId === gameId),
+      );
+  });
+
+  afterEach(() => {
+    current = null;
+    jest.mocked(reader.playersForGame).mockRestore();
+  });
+
+  it("every replay-enrolled row keeps its owner, so after a restart a stranger's same-named character is not a respawn", async () => {
+    const src = newSource();
+    const eventId = await seedLiveEvent(src);
+    const first = startSession(src);
+    current = first.session;
+    await first.session.start();
+    // A's queued join runs enrolTracked, which attaches B from the tracker
+    // before B's own join — that join then skips the already-open row.
+    await coldReplay(first.wings, first.session, [
+      ...arrival(STEAM_A, 'rok', 'zdo-owner-a', 1),
+      ...arrival(STEAM_B, 'bob', 'zdo-owner-b', 3),
+    ]);
+    const owners = async (steamId: string) =>
+      (await steamRows(eventId, steamId)).map((r) => [
+        r.characterName,
+        r.characterOwnerId,
+      ]);
+    expect(await owners(STEAM_A)).toEqual([['rok', 'zdo-owner-a']]);
+    expect(await owners(STEAM_B)).toEqual([['bob', 'zdo-owner-b']]);
+    await first.session.stop(false);
+
+    const second = startSession(src);
+    current = second.session;
+    await second.session.start();
+    await coldReplay(
+      second.wings,
+      second.session,
+      arrival(STEAM_C, 'bob', 'zdo-owner-c', 5),
+    );
+
+    expect(second.session.players().map((p) => [p.steamId, p.name])).toEqual([
+      [STEAM_A, 'rok'],
+      [STEAM_B, 'bob'],
+      [STEAM_C, 'bob'],
+    ]);
+    expect(await owners(STEAM_C)).toEqual([['bob', 'zdo-owner-c']]);
+    expect(await owners(STEAM_B)).toEqual([['bob', 'zdo-owner-b']]);
+    await second.session.stop(false);
   });
 });
