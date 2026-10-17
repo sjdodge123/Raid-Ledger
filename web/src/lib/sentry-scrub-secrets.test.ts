@@ -83,6 +83,8 @@ describe('scrubSecretsFromText — before/after table (r3)', () => {
         ['{"code":"xyz","ok":true}', '{"code":"[Filtered]","ok":true}'],
     ])('scrubs %j', (input: string, expected: string) => {
         expect(scrubSecretsFromText(input)).toBe(expected);
+        // Idempotent: the passes overlap, and a second one must change nothing.
+        expect(scrubSecretsFromText(expected)).toBe(expected);
     });
 
     it.each([

@@ -10,7 +10,7 @@
  * ROK-1838 r3: stopping only at whitespace ate the rest of a captured log line
  * (`{"url":"/j?token=a","status":500}` lost `status`).
  */
-const TOKEN_PARAM = /([#?&]token=)[^&#\s"',}\])]{0,4096}/g;
+const TOKEN_PARAM = /([#?&]token=)(?!\[Filtered\])[^&#\s"',}\])]{0,4096}/g;
 
 /**
  * ROK-1750: a private poll's share token is a PATH segment — the page

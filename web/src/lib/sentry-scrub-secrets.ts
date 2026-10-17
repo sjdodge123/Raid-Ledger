@@ -35,6 +35,16 @@ const FILTERED = '[Filtered]';
 const VALUE = String.raw`[^&#\s"',}\])]{0,4096}`;
 
 /**
+ * Skip a value that is already `[Filtered]`. The passes overlap by design (a
+ * `?token=` is seen by both `scrubTokenFromUrl` and `SECRET_PARAM`), and
+ * without this the second pass matched `[Filtered` — `]` ends a value — and
+ * wrote `[Filtered]]`. It sits BEFORE the optional opening quote so the engine
+ * cannot backtrack past it and re-filter `:"[Filtered]"`. Every matcher below
+ * carries it, so the scrub is idempotent.
+ */
+const NOT_FILTERED = String.raw`(?!["']?\[Filtered\])`;
+
+/**
  * Keys that are secret wherever they appear. `authorization`, `cookie` and
  * `session` are NOT here on purpose — as free text they are header lines whose
  * value is handled by `BEARER` below, and as object keys by `isSecretKey`;
@@ -48,7 +58,7 @@ const ALWAYS_SECRET_KEY = String.raw`access_?token|refresh_?token|id_?token|toke
  * bare `password=swordfish` or a JSON body is covered.
  */
 const SECRET_PARAM = new RegExp(
-    String.raw`((?<![A-Za-z0-9])(?:${ALWAYS_SECRET_KEY})"?\s{0,8}[=:]\s{0,8}["']?)${VALUE}`,
+    String.raw`((?<![A-Za-z0-9])(?:${ALWAYS_SECRET_KEY})"?\s{0,8}[=:]\s{0,8}${NOT_FILTERED}["']?)${VALUE}`,
     'gi',
 );
 
@@ -60,13 +70,13 @@ const URL_LIKE = /(?:https?:\/\/|\/)[^\s"'<>]{1,2048}/gi;
 
 /** An ambiguous key as a query param — only ever run INSIDE a `URL_LIKE` hit. */
 const URL_AMBIGUOUS_PARAM = new RegExp(
-    String.raw`([?&#](?:${AMBIGUOUS_KEY})=)${VALUE}`,
+    String.raw`([?&#](?:${AMBIGUOUS_KEY})=)${NOT_FILTERED}${VALUE}`,
     'gi',
 );
 
 /** The same keys quoted as a JSON key, which is unambiguous enough on its own. */
 const JSON_AMBIGUOUS_KEY = new RegExp(
-    String.raw`("(?:${AMBIGUOUS_KEY})"\s{0,8}:\s{0,8}["']?)${VALUE}`,
+    String.raw`("(?:${AMBIGUOUS_KEY})"\s{0,8}:\s{0,8}${NOT_FILTERED}["']?)${VALUE}`,
     'gi',
 );
 
@@ -74,7 +84,7 @@ const JSON_AMBIGUOUS_KEY = new RegExp(
  * `Authorization: Bearer <jwt>` pasted into a log line or a bug report. Any
  * length — a one-character token is still a credential (Codex r3).
  */
-const BEARER = /\b(Bearer\s{1,8})[A-Za-z0-9._~+/=-]{1,4096}/gi;
+const BEARER = /\b(Bearer\s{1,8})(?!\[Filtered\])[A-Za-z0-9._~+/=-]{1,4096}/gi;
 
 /** `?code=`/`&state=` inside URLs only, so source-like text is untouched. */
 function scrubAmbiguousKeys(value: string): string {
