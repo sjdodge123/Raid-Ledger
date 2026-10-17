@@ -5,7 +5,7 @@
  * game-specific (realm, faction, the LedgerLink import line) arrives through
  * the hub module's `heroPills` / `heroNote`.
  */
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
 import type { GuildEventCardDto } from '@raid-ledger/contract';
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
@@ -54,9 +54,11 @@ interface HubHeroProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     nextRaid: GuildEventCardDto | null;
+    /** The hub's single settings entry point — only a Leader/admin gets one (ROK-1830 S4). */
+    action?: ReactNode;
 }
 
-export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Element {
+export function HubHero({ ctx, module: mod, nextRaid, action = null }: HubHeroProps): JSX.Element {
     const line = mod?.heroNote ? mod.heroNote(ctx) : null;
     // Core always has an Events tab now (ROK-1830 S3c), so the chip always has
     // somewhere to land; a module only redirects it (WoW → its Raids tab).
@@ -72,10 +74,11 @@ export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Eleme
                     <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>
-            {(chip || line) && (
-                <div className="flex flex-col items-start gap-1 lg:items-end">
+            {(chip || line || action) && (
+                <div className="flex flex-col items-start gap-2 lg:items-end">
                     {chip}
                     {line && <p className="text-xs text-dim">{line}</p>}
+                    {action}
                 </div>
             )}
         </header>

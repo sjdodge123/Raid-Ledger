@@ -9,7 +9,7 @@
  * a warm cache needs no second commit; it runs no plugin query itself).
  * A 403 (not a member) is a friendly empty state.
  */
-import { useEffect, useRef, type JSX, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
@@ -28,6 +28,12 @@ import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
 import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
+import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
+import { HubSettingsTrigger } from './settings/settings-trigger';
+
+/** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
+const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
+const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
 
@@ -94,6 +100,40 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     );
 }
 
+interface OverlayProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    settingsOpen: boolean;
+    pickerOpen: boolean;
+    closeSettings: () => void;
+    closePicker: () => void;
+    openPicker: () => void;
+}
+
+function HubOverlays({ ctx, module: mod, settingsOpen, pickerOpen, closeSettings, closePicker, openPicker }: OverlayProps): JSX.Element {
+    return (
+        <Suspense fallback={null}>
+            {settingsOpen && <HubSettingsSheet ctx={ctx} module={mod} onClose={closeSettings} onChangeChannel={openPicker} />}
+            {pickerOpen && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={closePicker} />}
+        </Suspense>
+    );
+}
+
+/** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
+function useHubSettingsState(canManage: boolean) {
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [pickerOpen, setPickerOpen] = useState(false);
+    // The picker replaces the sheet rather than stacking on it: two dialogs deep
+    // is a shell the inventory doesn't have, and the sheet has nothing in flight.
+    const openPicker = useCallback(() => { setSettingsOpen(false); setPickerOpen(true); }, []);
+    const closeSettings = useCallback(() => setSettingsOpen(false), []);
+    const closePicker = useCallback(() => setPickerOpen(false), []);
+    const openSettings = useCallback(() => setSettingsOpen(true), []);
+    const value: HubSettingsValue = useMemo(
+        () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
+    return { settingsOpen, pickerOpen, openPicker, closeSettings, closePicker, openSettings, value };
+}
+
 interface FrameProps {
     ctx: HubCtx;
     module: HubModule | undefined;
@@ -104,12 +144,19 @@ interface FrameProps {
 function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
+    const canManage = ctx.page.viewer.canManageEditors;
+    const s = useHubSettingsState(canManage);
     return (
-        <div className={PAGE}>
-            <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null} />
-            <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
-            <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
-        </div>
+        <HubSettingsProvider value={s.value}>
+            <div className={PAGE}>
+                <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null}
+                    action={canManage ? <HubSettingsTrigger onOpen={s.openSettings} /> : null} />
+                <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
+                <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
+                <HubOverlays ctx={ctx} module={mod} settingsOpen={s.settingsOpen} pickerOpen={s.pickerOpen}
+                    closeSettings={s.closeSettings} closePicker={s.closePicker} openPicker={s.openPicker} />
+            </div>
+        </HubSettingsProvider>
     );
 }
 

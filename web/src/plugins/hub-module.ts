@@ -10,7 +10,7 @@
  */
 import type { ComponentType } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getHubModuleRegistrations } from './plugin-registry';
 
@@ -65,6 +65,20 @@ export interface HubResourceSection {
     useVisible?: (guildId: number) => boolean;
 }
 
+/**
+ * What the settings sheet hands a module's editor-delegation pickers
+ * (ROK-1830 S4). Core owns the editor list, the chips and the mutations; a
+ * module only offers the grants its game can express — WoW adds whole ranks,
+ * which core knows nothing about.
+ */
+export interface HubEditorDelegationCtx {
+    page: GuildPage;
+    editors: readonly GuildEditor[];
+    /** A mutation is in flight — disable the pickers. */
+    pending: boolean;
+    onAdd: (input: CreateGuildEditorInput) => void;
+}
+
 /** The band one row belongs to while the Members list is grouped. */
 export interface HubMemberGrouping {
     key: string;
@@ -115,6 +129,12 @@ export interface HubModule {
      * the core Events tab.
      */
     eventsJumpTab?: string;
+    /**
+     * Rows added to the settings sheet's "Page editors" section (ROK-1830 S4).
+     * WoW contributes its rank + member pickers here; the rank-based mapping
+     * itself stays WoW-side. Unset = core shows the list with no way to add.
+     */
+    editorDelegation?: ComponentType<HubEditorDelegationCtx>;
     /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` component is fine. */
     resourceSections?: readonly HubResourceSection[];
 }

@@ -1,14 +1,13 @@
 /**
- * ROK-1830 — the WoW guild's Overview widgets: role composition (50), the
- * members summary with its per-rank counts (60) and the page-editors card
- * (80, staff only). Core's own widgets sit on 10/20/30/40/70, so these three
- * keep the prototype's bento order exactly.
+ * ROK-1830 — the WoW guild's Overview widgets: role composition (50) and the
+ * members summary with its per-rank counts (60). Core's own widgets sit on
+ * 10/20/30/40/70, so these two keep the prototype's bento order exactly. The
+ * page-editors card (80) left in S4 — editors live in the settings sheet now.
  */
 import type { JSX } from 'react';
 import type { HubCtx } from '../../hub-module';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { WidgetCard } from '../../../components/hub/hub-bits';
-import { GuildEditorsCard } from './editors-panel';
 import { GuildRoleComposition } from './role-composition';
 import { RoleSummary } from './role-bits';
 import { rankLabel } from './wow-guild.helpers';
@@ -50,8 +49,4 @@ export function WowMembersSummary(ctx: HubCtx): JSX.Element {
 
 export function WowRoleCompositionWidget({ raids }: HubCtx): JSX.Element | null {
     return raids.data ? <GuildRoleComposition composition={raids.data.composition} /> : null;
-}
-
-export function WowEditorsWidget({ page }: HubCtx): JSX.Element {
-    return <GuildEditorsCard page={page} />;
 }
