@@ -102,9 +102,11 @@ async function expectThreeLatest(page: Page, channelId: string): Promise<void> {
         'href', new RegExp(`^https://discord\\.com/channels/\\d+/${channelId}$`));
 }
 
-test('editor (rank-1 officer): binds a readable channel and the card shows the latest 3 messages', async ({ page }, testInfo) => {
+// ROK-1830 S4 / spec Q4: picking the channel is Leader + admin only now — an
+// officer keeps content editing but loses the picker. Same flow, staff viewer.
+test('Leader (admin): binds a readable channel and the card shows the latest 3 messages', async ({ page }, testInfo) => {
     await withMirror(testInfo, {}, async (fx) => {
-        await signInOnboardedMember(page, fx.guild.users.officer.userId);
+        await signInAsAdmin(page.context());
         await openOverview(page, fx.guild.guildId);
         const card = page.getByTestId('guild-discord-mirror');
         await expect(card).toHaveAttribute('data-state', 'unset');
@@ -117,6 +119,17 @@ test('editor (rank-1 officer): binds a readable channel and the card shows the l
         await expect(page.getByTestId('guild-discord-picker-body')).toHaveCount(0);
         await expectThreeLatest(page, fx.channelId);
         await expect(card.getByTestId('guild-discord-change'), 'the editor can change the channel').toBeVisible();
+    });
+});
+
+test('officer: can edit content but gets no channel picker (ROK-1830 D10/Q4)', async ({ page }, testInfo) => {
+    await withMirror(testInfo, {}, async (fx) => {
+        await bindAsAdmin(fx);
+        await signInOnboardedMember(page, fx.guild.users.officer.userId);
+        await openOverview(page, fx.guild.guildId);
+        await expectThreeLatest(page, fx.channelId);
+        await expect(page.getByTestId('guild-settings-trigger'), 'the settings sheet is Leader/admin only').toHaveCount(0);
+        await expect(page.getByTestId('guild-discord-change'), 'and with it the channel picker').toHaveCount(0);
     });
 });
 

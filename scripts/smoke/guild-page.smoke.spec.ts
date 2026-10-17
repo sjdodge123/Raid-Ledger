@@ -92,23 +92,29 @@ test('GM: hero, rank-grouped members, character link, no Page editors card', asy
     });
 });
 
-test('admin: Page editors card with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
+test('admin: the settings sheet holds the editors, with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInAsAdmin(page.context());
         await page.goto(`/guilds/${guild.guildId}`);
+        const trigger = page.getByTestId('guild-settings-trigger');
+        await expect(trigger, 'admins get the single settings entry point (ROK-1830 S4)').toBeVisible({ timeout: 15_000 });
+        await trigger.click();
         const panel = page.getByTestId('guild-editors-panel');
-        await expect(panel, 'admins manage page editors').toBeVisible({ timeout: 15_000 });
-        await panel.getByText('Page editors').click();
+        await expect(panel, 'admins manage page editors').toBeVisible();
         await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText('Add your Guild Master as an editor.');
         await expect(panel.getByTestId('guild-editor-chip')).toHaveCount(1);
+        const hide = page.getByTestId('guild-settings-hide-hub');
+        await expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831)').toBeDisabled();
+        await expect(hide).toHaveAttribute('aria-checked', 'false');
     });
 });
 
-test('officer (rank-1 grant): can edit, but no Page editors card', async ({ page }, testInfo) => {
+test('officer (rank-1 grant): can edit, but no settings sheet and no editors', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('guild-overview')).toBeVisible();
+        await expect(page.getByTestId('guild-settings-trigger'), 'the sheet is Leader/admin only (D10/Q4)').toHaveCount(0);
         await expect(page.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
     });
 });

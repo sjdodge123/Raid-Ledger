@@ -519,6 +519,16 @@ same split elsewhere.
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
 
+**A settings panel is this pair too, not a third shell** (ROK-1830 S4). The hub's "Guild settings"
+(`components/hub/settings/settings-sheet.tsx`) holds the Discord channel row, Page editors and hub
+visibility in a `Modal maxWidth="max-w-lg"` at ≥1024px and a `BottomSheet maxHeight="85vh"` below — the
+same split `GuildDiscordPicker` and `AddonImportDialog` ship. Its rows are `SettingsSection` +
+`SettingsSwitchRow` (`settings-rows.tsx`): a switch with no endpoint behind it renders **disabled with
+the reason in its helper line**, never hidden. The approved prototype drew a 440px panel anchored to the
+trigger; that shell exists nowhere in §3.1, so it was not built — the anchored-popover idiom stays the
+§4.14 action list. **Don't stack two dialogs** to reach a nested picker: the sheet closes and the picker
+opens in its place (`useHubSettingsState`, `hub-page.tsx`), because nothing in the sheet is in flight.
+
 **Sheet layout rules** (ROK-1640 / ROK-1641):
 
 - **Size against the visible viewport.** Sheet heights are `dvh` with a `vh` fallback — `BottomSheet` converts

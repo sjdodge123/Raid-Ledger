@@ -122,6 +122,9 @@ describe('GuildPage (ROK-1785)', () => {
         expect(screen.queryByTestId('guild-hero')).toBeNull();
     });
 
+});
+
+describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
     it('hides the settings trigger, and with it the editors, unless the viewer can manage editors', async () => {
         serve(makePage(false));
         renderPage();
