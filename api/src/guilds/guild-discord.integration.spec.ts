@@ -18,6 +18,8 @@ import { DiscordBotClientService } from '../discord-bot/discord-bot-client.servi
 import type { ChannelMirrorRead } from '../discord-bot/channel-mirror/channel-mirror.read';
 import * as schema from '../drizzle/schema';
 import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
+import type { GuildActor } from './guild-access.service';
+import { GuildDiscordService } from './guild-discord.service';
 import {
   CHOOSER_CANNOT_VIEW_MESSAGE,
   LINK_DISCORD_MESSAGE,
@@ -66,6 +68,8 @@ type Actor = Who | 'admin';
 let testApp: TestApp;
 let guildId: number;
 let mirror: ChannelMirrorService;
+let service: GuildDiscordService;
+let adminUserId: number;
 const userIds = {} as Record<Who, number>;
 const tokens = {} as Record<Actor, string>;
 const fake = { connected: true, chooserCanView: false };
@@ -185,6 +189,8 @@ beforeAll(async () => {
   await registry.ensureInstalled('blizzard');
   await registry.activate('blizzard');
   mirror = testApp.app.get(ChannelMirrorService);
+  service = testApp.app.get(GuildDiscordService);
+  adminUserId = testApp.seed.adminUser.id;
   guildId = await insertGuild('Discord Mirror Keepers');
   for (const who of ['editor', 'local', 'plain', 'outsider'] as const) {
     await seedUser(who);
@@ -231,7 +237,10 @@ describe('permission matrix', () => {
     expect((await call('get', '/discord', who)).status).toBe(status);
   });
 
-  it.each(['plain', 'outsider'] as const)(
+  // ROK-1830 D5-A: the picker is Leader-only. A delegated editor ("Officer")
+  // keeps `canEdit` for page content but is refused on all three Discord
+  // routes by `GuildLeaderGuard`.
+  it.each(['editor', 'local', 'plain', 'outsider'] as const)(
     'channel list + writes: %s → 403',
     async (who) => {
       const results = await Promise.all([
@@ -240,9 +249,21 @@ describe('permission matrix', () => {
         call('delete', '/discord/channel', who),
       ]);
       expect(results.map((r) => r.status)).toEqual([403, 403, 403]);
+      expect(results[0]?.body.message).toBe('Guild leader access required');
       expect(await profileRow()).toBeUndefined();
     },
   );
+
+  it('channel list + writes: admin → 200', async () => {
+    expect((await call('get', '/discord/channels', 'admin')).status).toBe(200);
+    expect(
+      (await call('put', '/discord/channel', 'admin', { channelId: PUBLIC.id }))
+        .status,
+    ).toBe(200);
+    expect((await call('delete', '/discord/channel', 'admin')).status).toBe(
+      204,
+    );
+  });
 
   it('GET on an unknown guild is 404 for staff', async () => {
     const res = await testApp.request
@@ -321,7 +342,7 @@ describe('server name (review MINOR 5)', () => {
   });
 
   it("the channel list names the bot's server", async () => {
-    const res = await call('get', '/discord/channels', 'editor');
+    const res = await call('get', '/discord/channels', 'admin');
     expect(res.body).toEqual({
       connected: true,
       channels: [PUBLIC, PRIVATE],
@@ -331,23 +352,23 @@ describe('server name (review MINOR 5)', () => {
 });
 
 describe('channel list', () => {
-  it('editor sees the bot-readable channels', async () => {
-    const res = await call('get', '/discord/channels', 'editor');
+  it('the Leader sees the bot-readable channels', async () => {
+    const res = await call('get', '/discord/channels', 'admin');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ connected: true, channels: [PUBLIC, PRIVATE] });
   });
 
   it('bot down → connected:false + [], never a 5xx', async () => {
     fake.connected = false;
-    const res = await call('get', '/discord/channels', 'editor');
+    const res = await call('get', '/discord/channels', 'admin');
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ connected: false, channels: [] });
   });
 });
 
 describe('PUT public channel', () => {
-  it('editor binds; row stamped; cache cleared; mirror returned', async () => {
-    const res = await call('put', '/discord/channel', 'editor', {
+  it('the Leader binds; row stamped; cache cleared; mirror returned', async () => {
+    const res = await call('put', '/discord/channel', 'admin', {
       channelId: PUBLIC.id,
     });
     expect(res.status).toBe(200);
@@ -355,14 +376,14 @@ describe('PUT public channel', () => {
     const row = await profileRow();
     expect(row?.discordChannelId).toBe(PUBLIC.id);
     expect(row?.discordChannelPrivateAck).toBe(false);
-    expect(row?.discordChannelSetBy).toBe(userIds.editor);
+    expect(row?.discordChannelSetBy).toBe(adminUserId);
     expect(row?.discordChannelSetAt).toBeInstanceOf(Date);
     expect(mirror.clear).toHaveBeenCalledWith(PUBLIC.id);
   });
 
   it('rebind clears the cache for the old AND the new channel', async () => {
     await bindDirect(GONE_ID);
-    const res = await call('put', '/discord/channel', 'editor', {
+    const res = await call('put', '/discord/channel', 'admin', {
       channelId: PUBLIC.id,
     });
     expect(res.status).toBe(200);
@@ -374,7 +395,7 @@ describe('PUT public channel', () => {
 
 describe('PUT validation', () => {
   it('a channel the bot cannot read → 400, nothing stored', async () => {
-    const res = await call('put', '/discord/channel', 'editor', {
+    const res = await call('put', '/discord/channel', 'admin', {
       channelId: UNREADABLE_ID,
     });
     expect(res.status).toBe(400);
@@ -387,14 +408,14 @@ describe('PUT validation', () => {
     [{ channelId: PUBLIC.id, extra: true }],
     [{}],
   ])('malformed body %j → 400', async (body) => {
-    expect((await call('put', '/discord/channel', 'editor', body)).status).toBe(
+    expect((await call('put', '/discord/channel', 'admin', body)).status).toBe(
       400,
     );
   });
 
   it('bot down → 409, nothing stored', async () => {
     fake.connected = false;
-    const res = await call('put', '/discord/channel', 'editor', {
+    const res = await call('put', '/discord/channel', 'admin', {
       channelId: PUBLIC.id,
     });
     expect(res.status).toBe(409);
@@ -405,7 +426,7 @@ describe('PUT validation', () => {
 describe('PUT private channel (D7)', () => {
   it('without the acknowledgement → 400', async () => {
     fake.chooserCanView = true;
-    const res = await call('put', '/discord/channel', 'editor', {
+    const res = await call('put', '/discord/channel', 'admin', {
       channelId: PRIVATE.id,
     });
     expect(res.status).toBe(400);
@@ -413,13 +434,23 @@ describe('PUT private channel (D7)', () => {
     expect(await profileRow()).toBeUndefined();
   });
 
+  // ROK-1830 D5-A closed the HTTP route to every non-staff caller, and staff
+  // are exempt from the chooser check — so the three chooser assertions are
+  // driven at the service seam against the same real database, with the same
+  // non-staff actors. They come back to HTTP when ROK-1794 makes rank 0 a
+  // non-staff Leader.
+  const asActor = (who: Who): GuildActor => ({
+    id: userIds[who],
+    role: 'member',
+  });
+
   it("acked, but the chooser's Discord account can't see it → 403", async () => {
-    const res = await call('put', '/discord/channel', 'editor', {
-      channelId: PRIVATE.id,
-      privateAck: true,
-    });
-    expect(res.status).toBe(403);
-    expect(res.body.message).toBe(CHOOSER_CANNOT_VIEW_MESSAGE);
+    await expect(
+      service.setChannel(asActor('editor'), guildId, {
+        channelId: PRIVATE.id,
+        privateAck: true,
+      }),
+    ).rejects.toThrow(CHOOSER_CANNOT_VIEW_MESSAGE);
     expect(mirror.canDiscordUserView).toHaveBeenCalledWith(
       EDITOR_DISCORD_ID,
       PRIVATE.id,
@@ -427,25 +458,27 @@ describe('PUT private channel (D7)', () => {
     expect(await profileRow()).toBeUndefined();
   });
 
-  it('acked + chooser can see it → 200, ack stored', async () => {
+  it('acked + chooser can see it → bound, ack stored', async () => {
     fake.chooserCanView = true;
-    const res = await call('put', '/discord/channel', 'editor', {
+    await service.setChannel(asActor('editor'), guildId, {
       channelId: PRIVATE.id,
       privateAck: true,
     });
-    expect(res.status).toBe(200);
-    expect((await profileRow())?.discordChannelPrivateAck).toBe(true);
+    const row = await profileRow();
+    expect(row?.discordChannelId).toBe(PRIVATE.id);
+    expect(row?.discordChannelPrivateAck).toBe(true);
   });
 
-  it('editor without a linked Discord account → 400', async () => {
+  it('a chooser without a linked Discord account → 400', async () => {
     fake.chooserCanView = true;
-    const res = await call('put', '/discord/channel', 'local', {
-      channelId: PRIVATE.id,
-      privateAck: true,
-    });
-    expect(res.status).toBe(400);
-    expect(res.body.message).toBe(LINK_DISCORD_MESSAGE);
+    await expect(
+      service.setChannel(asActor('local'), guildId, {
+        channelId: PRIVATE.id,
+        privateAck: true,
+      }),
+    ).rejects.toThrow(LINK_DISCORD_MESSAGE);
     expect(mirror.canDiscordUserView).not.toHaveBeenCalled();
+    expect(await profileRow()).toBeUndefined();
   });
 
   it('staff are exempt from the chooser check (ack still required)', async () => {
@@ -460,9 +493,9 @@ describe('PUT private channel (D7)', () => {
 });
 
 describe('DELETE + set_by', () => {
-  it('editor unbinds → 204, columns reset, old cache cleared, GET unset', async () => {
-    await bindDirect(PUBLIC.id, userIds.editor);
-    const res = await call('delete', '/discord/channel', 'editor');
+  it('the Leader unbinds → 204, columns reset, old cache cleared, GET unset', async () => {
+    await bindDirect(PUBLIC.id, adminUserId);
+    const res = await call('delete', '/discord/channel', 'admin');
     expect(res.status).toBe(204);
     const row = await profileRow();
     expect(row?.discordChannelId).toBeNull();

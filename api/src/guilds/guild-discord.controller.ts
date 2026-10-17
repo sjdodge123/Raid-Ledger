@@ -17,7 +17,7 @@ import type {
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
 import { GuildDiscordService } from './guild-discord.service';
-import { GuildEditorGuard } from './guild-editor.guard';
+import { GuildLeaderGuard } from './guild-leader.guard';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
 
 const jwt = AuthGuard('jwt');
@@ -25,7 +25,9 @@ const jwt = AuthGuard('jwt');
 /**
  * ROK-1788 (S4) — the guild's read-only Discord channel mirror under
  * `/plugins/wow/guilds/:id/discord`. The mirror read needs `canView` (in the
- * service); the channel list and the binding writes need `GuildEditorGuard`.
+ * service); the channel list and the binding writes are Leader-only
+ * (ROK-1830 D5-A, `GuildLeaderGuard`) — an Officer may edit page content but
+ * not rebind the guild's Discord channel.
  */
 @Controller('plugins/wow/guilds/:id/discord')
 @UseGuards(HubKindActiveGuard)
@@ -42,7 +44,7 @@ export class GuildDiscordController {
   }
 
   @Get('channels')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, GuildLeaderGuard)
   listChannels(
     @Param('id', ParseIntPipe) id: number,
   ): Promise<GuildDiscordChannelListDto> {
@@ -50,7 +52,7 @@ export class GuildDiscordController {
   }
 
   @Put('channel')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, GuildLeaderGuard)
   setChannel(
     @Request() req: AuthenticatedRequest,
     @Param('id', ParseIntPipe) id: number,
@@ -60,7 +62,7 @@ export class GuildDiscordController {
   }
 
   @Delete('channel')
-  @UseGuards(jwt, GuildEditorGuard)
+  @UseGuards(jwt, GuildLeaderGuard)
   @HttpCode(204)
   async clearChannel(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.discord.clearChannel(id);
