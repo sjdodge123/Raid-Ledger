@@ -3,7 +3,8 @@
  * the owner routes, the public `cal/u/:file` route and the overview's
  * `feed.url`, against Postgres. Exercises the real SQL of `upsertFeedToken`,
  * `revokeFeed`, `loadFeedToken`, `findFeedUserByToken` and `loadFeedEntries`
- * (window overlap, bench, cancelled-event filter), which unit specs only mock.
+ * (window overlap, bench, cancelled-event and rescheduling filters), which
+ * unit specs only mock.
  */
 import { eq } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
@@ -16,6 +17,10 @@ import * as schema from '../drizzle/schema';
 import { SettingsService } from '../settings/settings.service';
 import { setCalendarSyncEnabled } from '../settings/settings-calendar-sync.helpers';
 import { buildCopyId, deriveInstanceId } from './providers/rl-copy-id.helpers';
+import {
+  insertDecidedLineup,
+  insertSchedulingMatch,
+} from '../lineups/standalone-poll/standalone-poll-query.helpers';
 
 const FEED = '/users/me/calendars/feed';
 const URL_SHAPE = /\/api\/cal\/u\/([A-Za-z0-9_-]{43})\.ics$/;
@@ -159,6 +164,40 @@ describe('ICS subscribe feed — content', () => {
     );
     expect(unfold(res.text)).toContain(
       '\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n',
+    );
+  });
+});
+
+describe('ICS subscribe feed — rescheduling (ROK-1807)', () => {
+  it('drops an event while its rescheduling poll runs; restores it once cleared (ROK-1807)', async () => {
+    const eventId = await signUp('Moving Raid', 'signed_up');
+    const kept = await signUp('Still On', 'signed_up');
+    const lineup = await insertDecidedLineup(
+      testApp.db,
+      testApp.seed.adminUser.id,
+      undefined,
+      null,
+    );
+    const match = await insertSchedulingMatch(
+      testApp.db,
+      lineup.id,
+      testApp.seed.game.id,
+      undefined,
+    );
+    const setPoll = (reschedulingPollId: number | null) =>
+      testApp.db
+        .update(schema.events)
+        .set({ reschedulingPollId })
+        .where(eq(schema.events.id, eventId));
+    const feedToken = await issueFeed();
+    await setPoll(match.id);
+    const during = await fetchFeed(feedToken);
+    expect(await veventOf(during.text, eventId)).toBeUndefined();
+    expect(await veventOf(during.text, kept)).toBeDefined();
+    await setPoll(null);
+    const after = await fetchFeed(feedToken);
+    expect(await veventOf(after.text, eventId)).toContain(
+      '\r\nSUMMARY:Moving Raid\r\n',
     );
   });
 });
