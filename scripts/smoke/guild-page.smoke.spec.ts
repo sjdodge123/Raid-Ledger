@@ -234,3 +234,38 @@ test('hero "Next raid" chip jumps from Overview to the Raids tab', async ({ page
         await expect(page.getByTestId('guild-raids-tab'), 'a plain anchor fires hashchange, so the tab switches').toBeVisible({ timeout: 15_000 });
     });
 });
+
+test('editor: the Overview setup checklist lists what is missing and stays dismissed', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'officer');
+        const list = page.getByTestId('setup-checklist');
+        await expect(list, 'a freshly seeded hub has nothing set up yet (ROK-1830 S5b, D11-B)').toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('setup-checklist-progress')).toHaveText('0 of 5 done');
+        await expect(list.getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
+        await expect(list.getByTestId('setup-step-action-rules')).toHaveAttribute('href', '#resources');
+        await expect(page.getByTestId('setup-step-blocked-publish'), 'hiding a hub lands in ROK-1831').toBeVisible();
+
+        await page.getByTestId('setup-checklist-dismiss').click();
+        await expect(page.getByTestId('setup-checklist')).toHaveCount(0);
+        // Server-side per hub: a reload must not bring it back.
+        await page.reload();
+        await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('setup-checklist'), 'the dismissal is stored, not local state').toHaveCount(0);
+    });
+});
+
+test('plain member: no setup checklist, and Resources frames the addons as Recommended mods', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'member');
+        await expect(page.getByTestId('guild-overview')).toBeVisible({ timeout: 15_000 });
+        await expect(page.getByTestId('setup-checklist'), 'the checklist is for editors').toHaveCount(0);
+
+        await page.goto(`/guilds/${guild.guildId}#resources`);
+        const frame = page.getByTestId('guild-recommended-mods');
+        await expect(frame, 'the core frame now heads the WoW list (ROK-1830 S5b, D8-B)').toBeVisible({ timeout: 15_000 });
+        await expect(frame.getByRole('heading', { name: 'Recommended mods' })).toBeVisible();
+        await expect(frame.getByTestId('guild-mod-source-wow-addons')).toBeVisible();
+        await expect(frame.getByRole('list', { name: 'Recommended addons' }), 'the WoW list keeps its own DOM').toBeVisible();
+    });
+})
+;
