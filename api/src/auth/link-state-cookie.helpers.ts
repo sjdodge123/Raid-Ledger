@@ -1,17 +1,18 @@
 import * as crypto from 'crypto';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import {
   LINK_REQUEST_EXPIRED_MESSAGE,
   type LinkProvider,
 } from './link-nonce.service';
 
 /**
- * Flows that bind an OAuth state to the browser: the two account links, plus
- * Calendar Sync's Google connect (ROK-1592 L4). Calendar has no link-start
- * nonce, so it widens this type, not `LinkProvider` (whose JWT purposes are
- * per link flow).
+ * Flows that bind an OAuth state to the browser: the two account links,
+ * Calendar Sync's Google connect (ROK-1592 L4) and Discord login (ROK-1808).
+ * Neither of the last two has a link-start nonce, so they widen this type,
+ * not `LinkProvider` (whose JWT purposes are per link flow).
  */
-export type LinkStateProvider = LinkProvider | 'calendar-google';
+export type LinkStateProvider =
+  LinkProvider | 'calendar-google' | 'discord-login';
 import { linkCookieAttrs, readCookie } from './link-nonce-cookie.helpers';
 
 /**
@@ -46,15 +47,17 @@ function sha256(value: string): string {
 
 /**
  * GET /link hop, after the nonce matched: remember in this browser a fresh
- * `r` and return it for the signed state.
+ * `r` and return it for the signed state. `attrs` defaults to the link
+ * flows' attributes; Discord login passes scheme-following ones (ROK-1808).
  */
 export function bindLinkStateToBrowser(
   res: Response,
   provider: LinkStateProvider,
+  attrs: CookieOptions = linkCookieAttrs(),
 ): string {
   const r = crypto.randomBytes(32).toString('base64url');
   res.cookie(linkStateCookieName(provider), sha256(r), {
-    ...linkCookieAttrs(),
+    ...attrs,
     maxAge: LINK_STATE_TTL_MS,
   });
   return r;
@@ -79,15 +82,17 @@ function stateCookieMatches(
  * the cookie minted for the state's `r` (a forwarded authorize/OpenID URL
  * arrives without it). A match clears the cookie so the state is single-use;
  * a mismatch leaves it (it may be this browser's own in-flight link).
+ * `clearAttrs` must match the attributes the cookie was set with.
  */
 export function assertLinkStateBoundToBrowser(
   req: Request,
   res: Response,
   provider: LinkStateProvider,
   r: unknown,
+  clearAttrs: CookieOptions = linkCookieAttrs(),
 ): void {
   if (!stateCookieMatches(req, provider, r)) {
     throw new Error(LINK_REQUEST_EXPIRED_MESSAGE);
   }
-  res.clearCookie(linkStateCookieName(provider), linkCookieAttrs());
+  res.clearCookie(linkStateCookieName(provider), clearAttrs);
 }

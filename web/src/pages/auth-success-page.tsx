@@ -95,7 +95,9 @@ async function exchangeAuthCode(code: string) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
     const response = await nativeFetch(`${API_BASE_URL}/auth/exchange-code`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        // ROK-1808: the code only exchanges alongside the browser-bound
+        // `rl_auth_code` cookie the callback set (dev API is cross-origin).
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code }), signal: controller.signal,
     });
     clearTimeout(timeout);

@@ -18,7 +18,6 @@ import { RateLimit } from '../../throttler/rate-limit.decorator';
 import { DiscordNotificationService } from '../../notifications/discord-notification.service';
 import { discordFetch } from './discord-http.util';
 import { REDIS_CLIENT } from '../../redis/redis.module';
-import * as crypto from 'crypto';
 import type Redis from 'ioredis';
 import type { Response, Request } from 'express';
 import { AUTH_EVENTS, type DiscordLoginPayload } from '../../auth/auth.service';
@@ -26,7 +25,6 @@ import type { UserRole } from '@raid-ledger/contract';
 import {
   DiscordAuthGuard,
   signOAuthState,
-  verifyOAuthState,
   getOriginUrl,
   exchangeCodeForToken,
   fetchDiscordProfile,
@@ -41,6 +39,9 @@ import {
 import { consumeBrowserBoundNonce } from '../../auth/link-nonce-cookie.helpers';
 import { bindLinkStateToBrowser } from '../../auth/link-state-cookie.helpers';
 import { verifyDiscordLinkState } from './discord-link-state.helpers';
+import { signBrowserBoundLoginState } from './discord-login-state.helpers';
+import { mintBrowserBoundAuthCode } from '../../auth/auth-code-cookie.helpers';
+import { verifiedLoginStateOf } from './discord-verified-login-state';
 
 interface RequestWithUser extends Request {
   user: {
@@ -95,26 +96,23 @@ export class DiscordAuthController {
   ) {
     if (res.headersSent) return;
     const { access_token } = await this.authService.login(req.user);
-    const authCode = crypto.randomBytes(32).toString('hex');
+    // ROK-1808: the code is bound to this browser (cookie of its hash).
+    const authCode = mintBrowserBoundAuthCode(req, res);
     await this.redis.setex(`auth_code:${authCode}`, 30, access_token);
     const clientUrl = this.getClientUrl(req);
     // ROK-1353: mint a refresh family + set the httpOnly cookie before the
     // browser redirect so the SPA has a long-lived session post-login.
     await issueDiscordRefreshCookie(this.refreshService, req, res, req.user.id);
 
-    const stateParam = (req.query as Record<string, string>).state;
-    if (stateParam) {
-      const stateData = verifyOAuthState(
-        stateParam,
-        this.getSecret(),
-        this.logger,
+    // ROK-1808: route on the state the login store already verified.
+    const stateData = verifiedLoginStateOf(req);
+    const inviteCode =
+      stateData?.action === 'invite' ? stateData.inviteCode : undefined;
+    if (typeof inviteCode === 'string' && inviteCode) {
+      res.redirect(
+        `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(inviteCode)}`,
       );
-      if (stateData?.action === 'invite' && stateData.inviteCode) {
-        res.redirect(
-          `${clientUrl}/auth/success?code=${authCode}&invite=${encodeURIComponent(stateData.inviteCode as string)}`,
-        );
-        return;
-      }
+      return;
     }
     res.redirect(`${clientUrl}/auth/success?code=${authCode}`);
   }
@@ -141,12 +139,15 @@ export class DiscordAuthController {
       return;
     }
 
-    const state = signOAuthState(
-      { action: 'invite', inviteCode, timestamp: Date.now() },
+    // ROK-1808: bound to this browser; the callback's strategy checks it.
+    const state = signBrowserBoundLoginState(
+      req,
+      res,
+      { action: 'invite', inviteCode },
       this.getSecret(),
     );
     res.redirect(
-      `https://discord.com/api/oauth2/authorize?client_id=${oauthConfig.clientId}&redirect_uri=${encodeURIComponent(oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`,
+      this.buildOAuthUrl(oauthConfig.clientId, oauthConfig.callbackUrl, state),
     );
   }
 
@@ -177,7 +178,8 @@ export class DiscordAuthController {
     res.redirect(
       buildSilentLoginRedirect({
         oauthConfig: await this.settingsService.getDiscordOAuthConfig(),
-        secret: this.getSecret(),
+        signState: (p) =>
+          signBrowserBoundLoginState(req, res, p, this.getSecret()),
         returnTo: returnTo ?? '/',
         clientUrl: this.getClientUrl(req),
       }),

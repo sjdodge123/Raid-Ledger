@@ -10,6 +10,8 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { server } from '../test/mocks/server';
 
 import { renderWithProviders } from '../test/render-helpers';
 import { AuthSuccessPage } from './auth-success-page';
@@ -59,5 +61,21 @@ describe('AuthSuccessPage — ROK-1367 silent-guard cooldown', () => {
         ).toBeGreaterThanOrEqual(before);
         // The stale access token is dropped on the silent-failure path.
         expect(getAccessToken()).toBeNull();
+    });
+});
+
+describe('AuthSuccessPage — ROK-1808 browser-bound auth code', () => {
+    it('sends cookies with the code exchange (the rl_auth_code binding)', async () => {
+        const seen: RequestCredentials[] = [];
+        server.use(http.post('http://localhost:3000/auth/exchange-code', ({ request }) => {
+            seen.push(request.credentials);
+            return HttpResponse.json({ access_token: 'jwt' });
+        }));
+
+        renderWithProviders(<AuthSuccessPage />, {
+            initialEntries: ['/auth/success?code=c1808'],
+        });
+
+        await waitFor(() => expect(seen).toEqual(['include']));
     });
 });
