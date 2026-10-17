@@ -9,6 +9,7 @@ import {
   readErrorCode,
 } from './deactivated-session';
 import { nativeFetch } from './native-fetch';
+import { httpStatusOf } from './api-error';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -234,6 +235,10 @@ async function issueFenced<T>(issue: () => Promise<T>): Promise<T> {
  *   released, so a refresh that began under the pre-change session — or
  *   queued behind the install — is dropped instead of overwriting the
  *   re-issued access token.
+ * - A 401 under the lock (an unexpired but revoked token — another tab changed
+ *   the password) can't refresh there, so the lock is released, ONE normal
+ *   refresh runs, and the request is retried once under a fresh fence. A 401
+ *   is rejected by the auth guard before the handler, so the retry is safe.
  *
  * Known gap: without `navigator.locks`, a refresh that passed the server's
  * revoke re-check just before the change can still deliver its (now revoked)
@@ -242,6 +247,32 @@ async function issueFenced<T>(issue: () => Promise<T>): Promise<T> {
  */
 export async function installSessionExclusively<T>(issue: () => Promise<T>): Promise<T> {
   if (getAuthMethod() && isTokenStale(getAccessToken())) await ensureFreshToken();
+  const first = await attemptInstall(issue);
+  if (!first.unauthorized || !getAuthMethod()) return first.settle();
+  // Outside the lock now, a normal refresh can run. `freshRefresh` never joins
+  // a pre-change POST, whose token the generation bump would drop anyway.
+  if ((await freshRefresh()).kind !== 'ok') return first.settle();
+  return (await attemptInstall(issue)).settle();
+}
+
+/** One fenced attempt: its outcome, replayable, plus whether it was a 401. */
+interface InstallAttempt<T> {
+  settle: () => T;
+  unauthorized: boolean;
+}
+
+/** True for a 401 thrown by `fetchApi` or returned by `fetchWithAuth`. */
+function isUnauthorized(outcome: unknown): boolean {
+  if (outcome instanceof Response) return outcome.status === 401;
+  return httpStatusOf(outcome) === 401;
+}
+
+async function attemptInstall<T>(issue: () => Promise<T>): Promise<InstallAttempt<T>> {
   bumpRefreshGeneration();
-  return issueFenced(issue);
+  try {
+    const value = await issueFenced(issue);
+    return { settle: () => value, unauthorized: isUnauthorized(value) };
+  } catch (err) {
+    return { settle: () => { throw err; }, unauthorized: isUnauthorized(err) };
+  }
 }
