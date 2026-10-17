@@ -255,7 +255,10 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     const body = message.content;
     expect(body).toContain('+1');
     expect(body).toContain('/lfg');
-    expect(body.toLowerCase()).toContain('withdraw');
+    // ROK-1660: the intro names every way out (was: "Run /lfg and press Withdraw").
+    expect(body).toContain("I'm out");
+    expect(body).toContain('My LFGs');
+    expect(body).toContain('/lfg-leave');
     // ROK-1658 concise copy: posts "close" (was: retagged + archived).
     expect(body).toContain('Posts close');
     expect(body).toBe(LFG_BOARD_INTRO_BODY);
