@@ -7,12 +7,14 @@ import type { WingsSocketFactory } from '../pelican-console-socket.helpers';
 import {
   errName,
   LiveLineStats,
+  netOwnerChanges,
   netPresenceChanges,
   PRESENCE_REPLAY_SETTLE_MS,
   PRESENCE_STOPPED_STATES,
   PRESENCE_UNREACHABLE_EMPTY_MS,
   ReplayWatermark,
   toPresentPlayers,
+  toSinkPlayer,
 } from './pelican-presence.helpers';
 import { UntrackedHeldPlayers } from './pelican-presence.held';
 import type { GamePresenceEvent } from './presence-events';
@@ -22,9 +24,9 @@ import type {
   ServerPresenceSource,
 } from './server-presence.sink';
 import {
-  presenceDisplayName,
   ServerPresenceTracker,
   type PresenceChange,
+  type PresentPlayer,
 } from './server-presence.tracker';
 
 /** The logger surface a session uses — messages carry ids/kinds/counts only. */
@@ -129,6 +131,11 @@ export class PelicanPresenceSession {
     return this.queue;
   }
 
+  /**
+   * Seeds the tracker from the sink's open rows. A row comes back under its
+   * character name — linked rows too (ROK-1822) — so its next character line
+   * is that player's respawn, never a pending handshake's first line.
+   */
   private async rehydrate(): Promise<void> {
     try {
       const { sink, source } = this.opts;
@@ -181,7 +188,10 @@ export class PelicanPresenceSession {
   private applyLive(event: GamePresenceEvent, at: Date): void {
     if (event.kind === 'server-stopping')
       return this.emptyAll('server-stopping line');
-    this.forward(this.tracker.apply(event, at));
+    const before = this.tracker.snapshotWithOwners();
+    const changes = this.tracker.apply(event, at);
+    this.forward(changes);
+    this.forwardOwners(before, changes);
     this.forwardHeldLeaves(event);
     if (event.kind !== 'heartbeat') return;
     const { count } = event;
@@ -245,7 +255,8 @@ export class PelicanPresenceSession {
     const buffered = this.replay;
     this.replay = null;
     if (!buffered) return;
-    const before = this.tracker.snapshot();
+    // With owners (ROK-1822 r4): a restore must not null a hydrated owner.
+    const before = this.tracker.snapshotWithOwners();
     for (const { event, at } of buffered) this.tracker.apply(event, at);
     if (this.cold) this.tracker.restore(before);
     this.cold = false;
@@ -254,6 +265,7 @@ export class PelicanPresenceSession {
       `Presence replay for server ${this.serverId}: ${buffered.length} events, ${changes.length} changes`,
     );
     this.forward(changes);
+    this.forwardOwners(before, changes);
   }
 
   private onStatus(state: string): void {
@@ -296,10 +308,8 @@ export class PelicanPresenceSession {
 
   private forward(changes: PresenceChange[]): void {
     for (const change of changes) {
-      const player = {
-        steamId: change.steamId,
-        displayName: presenceDisplayName(change),
-      };
+      const owner = this.tracker.ownerOf(change.steamId);
+      const player = toSinkPlayer(change, owner);
       if (change.kind === 'joined') {
         this.held.forget(change.steamId); // the tracker owns them now
         this.enqueue('playerJoined', (s, src) => s.playerJoined(src, player));
@@ -312,6 +322,22 @@ export class PelicanPresenceSession {
       }
     }
     if (changes.length > 0) this.notify();
+  }
+
+  /**
+   * ROK-1822 r4: an owner-only change (a repeat handshake clearing it, a
+   * respawn adopting one) is persisted through `playerRenamed` under the
+   * unchanged name. It is not a presence change: no join/leave, no notify.
+   */
+  private forwardOwners(
+    before: PresentPlayer[],
+    changes: PresenceChange[],
+  ): void {
+    const after = this.tracker.snapshotWithOwners();
+    for (const p of netOwnerChanges(before, after, changes)) {
+      const player = toSinkPlayer(p, p.owner ?? null);
+      this.enqueue('playerRenamed', (s, src) => s.playerRenamed(src, player));
+    }
   }
 
   /** Queued behind the sink calls, so a listener sees their outcome. */

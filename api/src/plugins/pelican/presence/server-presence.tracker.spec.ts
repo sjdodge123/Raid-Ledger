@@ -319,3 +319,31 @@ describe('presenceDisplayName', () => {
     expect(presenceDisplayName({ steamId: A, name: null })).toBe(A);
   });
 });
+
+describe('hydrated owner ids (ROK-1822 r3)', () => {
+  it("a stranger's same-named character pairs to their handshake, not to the hydrated player", () => {
+    const t = new ServerPresenceTracker();
+    t.hydrate([{ steamId: A, name: 'Bjorn', owner: '111' }]);
+    t.apply(join(B), new Date());
+    const changes = t.apply(
+      { kind: 'character', name: 'Bjorn', zdoidZero: false, ownerId: '222' },
+      new Date(),
+    );
+
+    expect(changes).toEqual([{ kind: 'joined', steamId: B, name: 'Bjorn' }]);
+    expect([t.ownerOf(A), t.ownerOf(B)]).toEqual(['111', '222']);
+  });
+});
+
+describe('owner-carrying snapshot for cold-replay restore (ROK-1822 r4)', () => {
+  it('snapshotWithOwners → restore keeps a hydrated owner id', () => {
+    const t = new ServerPresenceTracker();
+    t.hydrate([{ steamId: A, name: 'Bjorn', owner: '111' }]);
+    const before = t.snapshotWithOwners();
+    t.apply(leave(A), new Date(1_000));
+    t.restore(before);
+    expect(t.ownerOf(A)).toBe('111');
+    // The plain roster snapshot stays name-only.
+    expect(t.snapshot()).toEqual([{ steamId: A, name: 'Bjorn' }]);
+  });
+});

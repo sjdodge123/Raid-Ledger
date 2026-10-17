@@ -1,4 +1,5 @@
 import {
+  netOwnerChanges,
   netPresenceChanges,
   ReplayWatermark,
   toPresentPlayers,
@@ -56,6 +57,29 @@ describe('netPresenceChanges', () => {
     ).toEqual([
       { steamId: 'A', name: null },
       { steamId: 'B', name: 'Bob' },
+    ]);
+  });
+});
+
+describe('netOwnerChanges (ROK-1822 r4)', () => {
+  it('lists only same-named players whose owner alone changed', () => {
+    const before = [
+      { steamId: 'A', name: 'Alice', owner: '1' },
+      { steamId: 'B', name: 'Bob', owner: '2' },
+      { steamId: 'C', name: 'Cat' },
+      { steamId: 'D', name: null },
+    ];
+    const after = [
+      { steamId: 'A', name: 'Alice' },
+      { steamId: 'B', name: 'Bob', owner: '2' },
+      { steamId: 'C', name: 'Cat', owner: '3' },
+      { steamId: 'D', name: null },
+      { steamId: 'E', name: 'Eve', owner: '5' },
+    ];
+    const changes = [{ kind: 'joined' as const, steamId: 'E', name: 'Eve' }];
+    expect(netOwnerChanges(before, after, changes)).toEqual([
+      { steamId: 'A', name: 'Alice' },
+      { steamId: 'C', name: 'Cat', owner: '3' },
     ]);
   });
 });

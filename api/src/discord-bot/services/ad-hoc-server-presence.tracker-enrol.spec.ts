@@ -46,6 +46,10 @@ const SOURCE: ServerPresenceSource = { gameId: 10, pelicanServerId: 1 };
 const ROK = '76561198000000001';
 const LIVE = { id: 278, channelBindingId: 'b1', adHocStatus: 'live' };
 const ON_SERVER: ServerRosterPlayer = { ...SOURCE, steamId: ROK, name: 'rok' };
+/** A voice join: `addParticipant` always names the Discord member. */
+const VOICE_JOIN = { eventId: 278, userId: 5, discordUserId: 'discord-5' };
+/** A server-row join: `addServerParticipant` / a server-born spawn — no Discord id. */
+const SERVER_JOIN = { eventId: 278, userId: 5 };
 
 function readerOf(players: ServerRosterPlayer[]): ServerPresenceReader {
   return {
@@ -94,7 +98,7 @@ afterEach(() => jest.resetAllMocks());
 describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   it('a voice-born spawn gives a server-only tracker player an on-server row', async () => {
     const svc = serviceWith([ON_SERVER]);
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).toHaveBeenCalledWith(
       expect.anything(),
       LIVE,
@@ -109,7 +113,7 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
   it('a player whose row is already open on that server is not attached again', async () => {
     jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const svc = serviceWith([ON_SERVER]);
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
   });
 
@@ -117,7 +121,7 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     // The game-wide read spans every live event of game 10, not only `LIVE`.
     jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const svc = serviceWith([ON_SERVER]);
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).not.toHaveBeenCalled();
     expect(listOpenGameServerSteamIds).toHaveBeenCalledWith(
       expect.anything(),
@@ -129,14 +133,14 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     jest.mocked(listOpenGameServerSteamIds).mockResolvedValue([ROK]);
     const moved = { ...ON_SERVER, pelicanServerId: 2 };
     const svc = serviceWith([moved]);
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     // Re-attaching would overwrite the row's pelicanServerId with 2.
     expect(attachServerPlayer).not.toHaveBeenCalled();
   });
 
   it('a player the tracker lists on two servers is attached once', async () => {
     const svc = serviceWith([ON_SERVER, { ...ON_SERVER, pelicanServerId: 2 }]);
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);
   });
 
@@ -185,9 +189,26 @@ describe('AdHocServerPresenceService — tracker enrolment (ROK-1821)', () => {
     const svc = serviceWith([ON_SERVER]);
     await svc.playerJoined(SOURCE, { steamId: ROK, displayName: 'rok' });
     await svc.openPresence(SOURCE); // re-auth: the hold is now unconfirmed
-    await svc.onParticipantJoined({ eventId: 278, userId: 5 });
+    await svc.onParticipantJoined(VOICE_JOIN);
     expect(attachServerPlayer).toHaveBeenCalledTimes(1);
     expect(await svc.heldPresence(SOURCE)).toEqual([]);
+  });
+
+  it('a server-row PARTICIPANT_JOINED does not trigger the enrol pass (ROK-1822)', async () => {
+    const svc = serviceWith([ON_SERVER]);
+    await svc.onParticipantJoined(SERVER_JOIN);
+    expect(jest.mocked(getEventById).mock.calls).toEqual([]);
+    expect(jest.mocked(findLiveGameAdHocEvent).mock.calls).toEqual([]);
+    expect(jest.mocked(attachServerPlayer).mock.calls).toEqual([]);
+  });
+
+  it('a discord voice join still runs the enrol pass (ROK-1822)', async () => {
+    const svc = serviceWith([ON_SERVER]);
+    await svc.onParticipantJoined(VOICE_JOIN);
+    expect(jest.mocked(findLiveGameAdHocEvent).mock.calls).toEqual([
+      [expect.anything(), 10],
+    ]);
+    expect(attachServerPlayer).toHaveBeenCalledTimes(1);
   });
 
   it('the voice-leave safety net enrols tracked players and answers true', async () => {

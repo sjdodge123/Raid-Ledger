@@ -7,6 +7,12 @@ import type {
 export interface PresentPlayer {
   steamId: string;
   name: string | null;
+  /**
+   * The owner id of the character that named them (ROK-1822 r3), so a
+   * same-named stranger is not their respawn. Hydrate/restore input and
+   * {@link ServerPresenceTracker.snapshotWithOwners} output only.
+   */
+  owner?: string;
 }
 
 /** One presence transition the tracker emits for the Quick Play bridge. */
@@ -79,6 +85,24 @@ export class ServerPresenceTracker {
     return [...this.present].map(([steamId, e]) => ({ steamId, name: e.name }));
   }
 
+  /**
+   * {@link snapshot} plus each named player's owner id (ROK-1822 r4): the
+   * restore point of a cold replay, and the before/after of an owner-only
+   * change the sink must persist.
+   */
+  snapshotWithOwners(): PresentPlayer[] {
+    return [...this.present].map(([steamId, e]) =>
+      e.owner === null
+        ? { steamId, name: e.name }
+        : { steamId, name: e.name, owner: e.owner },
+    );
+  }
+
+  /** The owner id of a present player's character, else null (ROK-1822 r3). */
+  ownerOf(steamId: string): string | null {
+    return this.present.get(steamId)?.owner ?? null;
+  }
+
   /** Replace all state with a persisted roster (RL restart path). Emits nothing. */
   hydrate(players: PresentPlayer[]): void {
     this.reset();
@@ -101,7 +125,8 @@ export class ServerPresenceTracker {
 
   /** Present with lastSeen 0; an unnamed one queues for the next character line. */
   private addNeverSeen(p: PresentPlayer): void {
-    this.present.set(p.steamId, { name: p.name, lastSeen: 0, owner: null });
+    const owner = p.owner ?? null;
+    this.present.set(p.steamId, { name: p.name, lastSeen: 0, owner });
     if (p.name === null) this.unnamed.push(p.steamId);
   }
 
@@ -201,8 +226,8 @@ export class ServerPresenceTracker {
   /**
    * The present player a character line belongs to: same name and, when the
    * line carries one, same owner id (ROK-1802). A same-named player whose
-   * owner is not yet known (hydrated after a restart, or re-handshaken)
-   * adopts it.
+   * owner is not yet known (a legacy row hydrated without one, or
+   * re-handshaken) adopts it.
    */
   private findCharacter(
     name: string,

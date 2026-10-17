@@ -34,6 +34,7 @@ import {
   enrolTrackerInto,
   hasAnyoneToEnrol,
   hasTrackedPlayers,
+  isServerRowJoin,
   lazyReader,
   attachUnenrolled,
   openServerRows,
@@ -204,12 +205,13 @@ export class AdHocServerPresenceService implements ServerPresenceSink {
    * every player any server of its game is holding below `minPlayers` —
    * unchanged heartbeats never call the sink again, so nothing else would.
    * ROK-1821: and every player the tracker reports, held or not (RCA F1).
+   * ROK-1822: a server row's own join skips it — its attach already ran one.
    */
   @OnEvent(AD_HOC_EVENTS.PARTICIPANT_JOINED)
   async onParticipantJoined(p: AdHocParticipantJoinedPayload): Promise<void> {
+    if (isServerRowJoin(p)) return;
     try {
-      const event = await getEventById(this.db, p.eventId);
-      const gameId = event?.gameId;
+      const gameId = (await getEventById(this.db, p.eventId))?.gameId;
       if (!gameId || !hasAnyoneToEnrol(this.enrol, gameId)) return;
       await this.serial(gameId, async () => {
         const live = await findLiveGameAdHocEvent(this.db, gameId);

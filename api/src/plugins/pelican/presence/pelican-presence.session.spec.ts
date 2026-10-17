@@ -409,7 +409,10 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     '10/16/2026 17:20:00: Connections 0 ZDOS:1200  sent:0 recv:0';
   const logs = (h: ReturnType<typeof harness>) =>
     h.logger.log.mock.calls.map(([m]) => m);
-  const thorvald = [SRC, { steamId: STEAM, displayName: 'Thorvald' }];
+  const thorvald = [
+    SRC,
+    { steamId: STEAM, displayName: 'Thorvald', characterOwnerId: '123456789' },
+  ];
 
   it('missing test 4: a live join between two re-auth replays applies at once; the next replay adds 0 events', async () => {
     const h = harness([], okCredentials, [], valheim);
@@ -452,5 +455,58 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     expect(logs(h)).toContain(
       'Presence: emptying server 7 (status offline); 1 tracked',
     );
+  });
+});
+
+describe('character owner persistence (ROK-1822 r4)', () => {
+  const ALICE = { steamId: 'A', displayName: 'Alice', characterOwnerId: '111' };
+  const aliceAs = (ownerId: string, loggedAt: string) =>
+    line({
+      kind: 'character',
+      name: 'Alice',
+      zdoidZero: false,
+      ownerId,
+      loggedAt,
+    });
+
+  it('a live repeat handshake persists the cleared then adopted owner, with no join/leave', async () => {
+    const h = harness([ALICE]);
+    await h.connect();
+    const notified = h.onChanged.mock.calls.length;
+    await h.live([line({ kind: 'join', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([aliceAs('222', T(2))]);
+    expect(h.sink.playerRenamed.mock.calls).toEqual([
+      [SRC, { steamId: 'A', displayName: 'Alice' }],
+      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+    ]);
+    expect(h.sink.playerJoined).not.toHaveBeenCalled();
+    expect(h.sink.playerLeft).not.toHaveBeenCalled();
+    // An owner change is not a roster change.
+    expect(h.onChanged.mock.calls.length).toBe(notified);
+  });
+
+  it('a cold replay persists its net owner change', async () => {
+    const h = harness([ALICE]);
+    await h.connect([
+      line({ kind: 'join', steamId: 'A', loggedAt: T(1) }),
+      aliceAs('222', T(2)),
+    ]);
+    expect(h.sink.playerRenamed.mock.calls).toEqual([
+      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+    ]);
+    expect(h.sink.playerJoined).not.toHaveBeenCalled();
+  });
+
+  it('a cold-replay restore keeps the owner, so a same-named stranger still joins', async () => {
+    const h = harness([ALICE]);
+    await h.connect([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([
+      line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+      aliceAs('999', T(3)),
+    ]);
+    expect(h.sink.playerJoined.mock.calls).toEqual([
+      [SRC, { steamId: 'B', displayName: 'Alice', characterOwnerId: '999' }],
+    ]);
+    expect(h.sink.playerLeft).not.toHaveBeenCalled();
   });
 });

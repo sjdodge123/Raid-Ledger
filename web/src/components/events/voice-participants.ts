@@ -25,11 +25,46 @@ export function voiceParticipants(participants: AdHocParticipantDto[]): AdHocPar
 }
 
 /**
- * ROK-1821 — unlinked game-server players still on the server. They have no
- * Raid Ledger user, so no signup shows them; the voice section lists them in
- * their own "On the game server" group. Linked server players are omitted —
- * the signup roster already shows them as their Raid Ledger user.
+ * ROK-1821/1822 — game-server players still on the server who no signup shows,
+ * listed in their own "On the game server" group: unlinked players (no Raid
+ * Ledger user), and linked players without a signup (a user with no Discord id
+ * gets none — the signup is keyed on it). A linked player WITH a signup is
+ * omitted — the roster already shows them as their user. While the signup
+ * roster is unknown (`signedUpUserIds` absent) linked players stay hidden, so a
+ * loading roster never flashes a duplicate.
  */
-export function serverGuestParticipants(participants: AdHocParticipantDto[]): AdHocParticipantDto[] {
-  return participants.filter((p) => !isVoiceParticipant(p) && p.userId === null && !p.leftAt);
+export function serverGuestParticipants(
+  participants: AdHocParticipantDto[],
+  signedUpUserIds?: ReadonlySet<number>,
+): AdHocParticipantDto[] {
+  return participants.filter((p) => {
+    if (isVoiceParticipant(p) || p.leftAt) return false;
+    if (p.userId === null) return true;
+    return signedUpUserIds !== undefined && !signedUpUserIds.has(p.userId);
+  });
+}
+
+/** The voice panel's two groups (ROK-1822). */
+export interface VoiceGroups {
+  /** In the voice channel now: an open row whose `inVoice` is not false. */
+  active: AdHocParticipantDto[];
+  /** Was in voice at some point but is not now: closed, or open with `inVoice: false`. */
+  left: AdHocParticipantDto[];
+}
+
+/**
+ * ROK-1822 — splits the voice rows of an ad-hoc roster into In Channel and
+ * Left. A voice row is one that was in voice at some point
+ * ({@link isVoiceParticipant}); it is active only while in voice now, so a
+ * server row that joined voice then left (still on the server, `leftAt` null)
+ * and an open Discord row with `inVoice: false` both land under Left. A legacy
+ * row with no `inVoice` flag falls back to `leftAt`.
+ */
+export function splitVoiceGroups(participants: AdHocParticipantDto[]): VoiceGroups {
+  const groups: VoiceGroups = { active: [], left: [] };
+  for (const p of voiceParticipants(participants)) {
+    const inVoiceNow = !p.leftAt && p.inVoice !== false;
+    (inVoiceNow ? groups.active : groups.left).push(p);
+  }
+  return groups;
 }
