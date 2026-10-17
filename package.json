@@ -28,7 +28,7 @@
     "devDependencies": {
         "@axe-core/playwright": "~4.13.0",
         "@eslint-community/eslint-plugin-eslint-comments": "^4.8.1",
-        "@playwright/test": "^1.63.0"
+        "@playwright/test": "^1.64.0"
     },
     "dependencies": {
         "chrono-node": "^2.10.2"
