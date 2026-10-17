@@ -47,6 +47,8 @@ export interface ServerPresenceMemberInfo {
   userId: number | null;
   /** ROK-1800: the Pelican server the player is on (scopes cleanup). */
   pelicanServerId?: number;
+  /** ROK-1822 r3: the owner id of the character line that named them. */
+  characterOwnerId?: string;
 }
 
 /** Discord identity of a voice member, as the voice path supplies it. */

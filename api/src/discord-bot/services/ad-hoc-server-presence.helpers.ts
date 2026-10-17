@@ -233,6 +233,7 @@ export async function listOpenServerPresence(
       steamId: p.steamId,
       displayName: p.discordUsername,
       characterName: p.characterName,
+      characterOwnerId: p.characterOwnerId,
       userId: p.userId,
       discordUserId: p.discordUserId,
     })
@@ -245,12 +246,27 @@ export async function listOpenServerPresence(
         isNull(p.leftAt),
       ),
     );
-  return rows.flatMap((r) => {
-    if (!r.steamId) return [];
-    const unlinked = r.userId === null && r.discordUserId === null;
-    const legacy = unlinked ? r.displayName : r.steamId;
-    return [{ steamId: r.steamId, displayName: r.characterName ?? legacy }];
-  });
+  return rows.flatMap(toOpenPresencePlayer);
+}
+
+/** The columns {@link listOpenServerPresence} reads. */
+interface OpenPresenceRow {
+  steamId: string | null;
+  displayName: string;
+  characterName: string | null;
+  characterOwnerId: string | null;
+  userId: number | null;
+  discordUserId: string | null;
+}
+
+/** One open row as a rehydrate player; the owner id comes with its name (ROK-1822 r3). */
+function toOpenPresencePlayer(r: OpenPresenceRow): ServerPresencePlayer[] {
+  if (!r.steamId) return [];
+  const unlinked = r.userId === null && r.discordUserId === null;
+  const legacy = unlinked ? r.displayName : r.steamId;
+  const base = { steamId: r.steamId, displayName: r.characterName ?? legacy };
+  const owner = r.characterName === null ? null : r.characterOwnerId;
+  return [owner ? { ...base, characterOwnerId: owner } : base];
 }
 
 /**
@@ -292,10 +308,19 @@ export async function renameSteamOnlyRow(
   player: ServerPresencePlayer,
 ): Promise<void> {
   const unlinked = sql`${p.discordUserId} IS NULL AND ${p.userId} IS NULL`;
+  const name = characterNameOf(player);
+  // The owner id is the one that came with this name (ROK-1822 r3).
+  const character =
+    name === null
+      ? {}
+      : {
+          characterName: name,
+          characterOwnerId: player.characterOwnerId ?? null,
+        };
   await db
     .update(p)
     .set({
-      characterName: characterNameOf(player) ?? sql`${p.characterName}`,
+      ...character,
       discordUsername: sql`CASE WHEN ${unlinked} THEN ${player.displayName} ELSE ${p.discordUsername} END`,
     })
     .where(and(eq(p.eventId, eventId), eq(p.steamId, player.steamId)));

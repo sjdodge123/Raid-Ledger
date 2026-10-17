@@ -77,6 +77,8 @@ export interface SteamMergeInput {
   pelicanServerId?: number;
   /** Character name, else the SteamID64 (ROK-1822: kept in `character_name`). */
   displayName?: string;
+  /** ROK-1822 r3: the owner id of the character line that named them. */
+  characterOwnerId?: string;
 }
 
 /**
@@ -115,7 +117,7 @@ export async function mergeSteamIntoUserRow(
 }
 
 /**
- * ROK-1822: the character name the merged row keeps. An incoming name wins;
+ * ROK-1822: the character name (and its owner id, r3) the merged row keeps. An incoming name wins;
  * an explicitly nameless player (displayName = SteamID) clears it, because a
  * closed session's name may be another character and would be rehydrated
  * after a restart (Codex r2). Only an omitted display name keeps the folded
@@ -124,10 +126,14 @@ export async function mergeSteamIntoUserRow(
 function mergedCharacterName(
   member: SteamMergeInput,
   steam: Row | null,
-): { characterName?: string | null } {
+): { characterName?: string | null; characterOwnerId?: string | null } {
   const { steamId, displayName } = member;
-  if (displayName !== undefined)
-    return { characterName: characterNameOf({ steamId, displayName }) };
-  const kept = steam?.characterName ?? null;
-  return kept === null ? {} : { characterName: kept };
+  if (displayName !== undefined) {
+    const characterName = characterNameOf({ steamId, displayName });
+    const owner = characterName === null ? null : member.characterOwnerId;
+    return { characterName, characterOwnerId: owner ?? null };
+  }
+  if (!steam || steam.characterName === null) return {};
+  const { characterName, characterOwnerId } = steam;
+  return { characterName, characterOwnerId };
 }

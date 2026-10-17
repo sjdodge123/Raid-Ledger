@@ -41,10 +41,14 @@ export function netPresenceChanges(
 export function toPresentPlayers(
   players: ServerPresencePlayer[],
 ): PresentPlayer[] {
-  return players.map((p) => ({
-    steamId: p.steamId,
-    name: p.displayName === p.steamId ? null : p.displayName,
-  }));
+  return players.map((p) => {
+    const name = p.displayName === p.steamId ? null : p.displayName;
+    const base = { steamId: p.steamId, name };
+    // ROK-1822 r3: the owner only means something next to its name.
+    return name !== null && p.characterOwnerId
+      ? { ...base, owner: p.characterOwnerId }
+      : base;
+  });
 }
 
 /**

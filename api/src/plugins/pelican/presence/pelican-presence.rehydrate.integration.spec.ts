@@ -41,7 +41,10 @@ const steamRows = (eventId: number, steamId: string) =>
     .where(and(eq(t.eventId, eventId), eq(t.steamId, steamId)));
 
 /** A live Quick Play with STEAM_A (linked to "RokRL") on the server as "rok". */
-async function seedLinkedOnServer(src: ServerPresenceSource): Promise<number> {
+async function seedLinkedOnServer(
+  src: ServerPresenceSource,
+  characterOwnerId?: string,
+): Promise<number> {
   const now = new Date();
   const [event] = nonEmpty(
     await testApp.db
@@ -71,6 +74,7 @@ async function seedLinkedOnServer(src: ServerPresenceSource): Promise<number> {
       displayName: 'rok',
       userId: user.id,
       pelicanServerId: src.pelicanServerId,
+      ...(characterOwnerId ? { characterOwnerId } : {}),
     });
   return event.id;
 }
@@ -156,6 +160,46 @@ describe('Presence session rehydrate — linked character names (ROK-1822)', () 
     expect(await steamRows(eventId, STEAM_B)).toEqual([]);
     const [row] = nonEmpty(await steamRows(eventId, STEAM_A), 'linked row');
     expect(row.characterName).toBe('rok');
+    await session.stop(false);
+  });
+});
+
+describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () => {
+  it("a new player's same-named character is not taken as the rehydrated linked player's respawn (r3)", async () => {
+    const src = newSource();
+    const eventId = await seedLinkedOnServer(src, 'zdo-owner-a');
+    const [seeded] = nonEmpty(await steamRows(eventId, STEAM_A), 'linked row');
+    expect([seeded.characterName, seeded.characterOwnerId]).toEqual([
+      'rok',
+      'zdo-owner-a',
+    ]);
+
+    const { wings, session } = startSession(src);
+    await session.start();
+    await socketOpened(wings);
+    wings.authenticate();
+    wings.lines([
+      line({ kind: 'join', steamId: STEAM_B, loggedAt: '2026-10-17T10:00:01' }),
+      line({
+        kind: 'character',
+        name: 'rok',
+        zdoidZero: false,
+        ownerId: 'zdo-owner-b',
+        loggedAt: '2026-10-17T10:00:02',
+      }),
+    ]);
+    wings.authenticate();
+    await session.idle();
+
+    expect(session.players().map((p) => [p.steamId, p.name])).toEqual([
+      [STEAM_A, 'rok'],
+      [STEAM_B, 'rok'],
+    ]);
+    const [rowB] = nonEmpty(await steamRows(eventId, STEAM_B), 'new row');
+    expect([rowB.characterName, rowB.characterOwnerId]).toEqual([
+      'rok',
+      'zdo-owner-b',
+    ]);
     await session.stop(false);
   });
 });

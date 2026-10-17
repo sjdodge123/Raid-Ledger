@@ -22,6 +22,11 @@ export interface ServerPresencePlayer {
   steamId: string;
   /** In-game character name, or the SteamID64 before a character line names them. */
   displayName: string;
+  /**
+   * ROK-1822 r3: the owner id of the character line that named them
+   * (Valheim: the ZDOID session id). Persisted and rehydrated with the name.
+   */
+  characterOwnerId?: string;
 }
 
 export interface ServerPresenceSink {

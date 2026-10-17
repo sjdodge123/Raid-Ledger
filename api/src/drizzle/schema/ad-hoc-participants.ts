@@ -61,6 +61,12 @@ export const adHocParticipants = pgTable(
      * row by name, so its next character line cannot pair elsewhere.
      */
     characterName: varchar('character_name', { length: 255 }),
+    /**
+     * ROK-1822 r3: the owner id of the character line that set
+     * `characterName` (Valheim: the ZDOID's session id). A rehydrated player
+     * keeps it, so another player's same-named character is not their respawn.
+     */
+    characterOwnerId: varchar('character_owner_id', { length: 64 }),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
     leftAt: timestamp('left_at'),
     /** Total seconds spent in the voice channel across all sessions */

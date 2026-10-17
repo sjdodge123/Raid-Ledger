@@ -1,0 +1,1 @@
+ALTER TABLE "ad_hoc_participants" ADD COLUMN "character_owner_id" varchar(64);

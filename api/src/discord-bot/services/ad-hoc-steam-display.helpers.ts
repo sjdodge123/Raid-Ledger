@@ -18,6 +18,8 @@ export interface SteamRowDisplay {
   discordUsername: string;
   /** ROK-1822: the character name, linked or not; null until one is known. */
   characterName: string | null;
+  /** ROK-1822 r3: the owner id that goes with `characterName`, else null. */
+  characterOwnerId: string | null;
 }
 
 /** The fields of a server player that decide how their row is shown. */
@@ -28,6 +30,8 @@ export interface SteamDisplayInput {
   displayName: string;
   /** The linked RL user, else null. */
   userId: number | null;
+  /** The owner id of the character line that named them, when known. */
+  characterOwnerId?: string;
 }
 
 /** A player's character name, or null while they are only a SteamID64. */
@@ -49,7 +53,10 @@ export async function resolveSteamRowDisplay(
   member: SteamDisplayInput,
 ): Promise<SteamRowDisplay> {
   const characterName = characterNameOf(member);
-  const unlinked = { discordUsername: member.displayName, characterName };
+  const characterOwnerId =
+    characterName === null ? null : (member.characterOwnerId ?? null);
+  const character = { characterName, characterOwnerId };
+  const unlinked = { discordUsername: member.displayName, ...character };
   if (member.userId === null) return unlinked;
   const u = schema.users;
   const rows = await db
@@ -59,7 +66,7 @@ export async function resolveSteamRowDisplay(
     .limit(1);
   const user = rows[0];
   if (!user) return unlinked;
-  return { discordUsername: user.displayName ?? user.username, characterName };
+  return { discordUsername: user.displayName ?? user.username, ...character };
 }
 
 /**
@@ -75,10 +82,12 @@ export async function resolveSteamRowDisplay(
 export function steamConflictDisplaySet(): {
   discordUsername: SQL;
   characterName: SQL;
+  characterOwnerId: SQL;
 } {
   const takeIncoming = sql`${t.discordUserId} IS NULL AND (excluded.user_id IS NOT NULL OR ${t.userId} IS NULL)`;
   return {
     discordUsername: sql`CASE WHEN ${takeIncoming} THEN excluded.discord_username ELSE ${t.discordUsername} END`,
     characterName: sql`excluded.character_name`,
+    characterOwnerId: sql`excluded.character_owner_id`,
   };
 }

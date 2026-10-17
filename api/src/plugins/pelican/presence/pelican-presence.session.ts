@@ -301,9 +301,11 @@ export class PelicanPresenceSession {
 
   private forward(changes: PresenceChange[]): void {
     for (const change of changes) {
+      const owner = this.tracker.ownerOf(change.steamId);
       const player = {
         steamId: change.steamId,
         displayName: presenceDisplayName(change),
+        ...(owner === null ? {} : { characterOwnerId: owner }),
       };
       if (change.kind === 'joined') {
         this.held.forget(change.steamId); // the tracker owns them now
