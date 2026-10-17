@@ -179,6 +179,9 @@ load_env() {
         source "$PROJECT_DIR/api/.env"
         set +a
     fi
+    # ROK-1838: error reporting is on by default; local dev opts out unless
+    # .env explicitly sets ENABLE_TELEMETRY.
+    export ENABLE_TELEMETRY="${ENABLE_TELEMETRY:-false}"
 }
 
 show_credentials() {

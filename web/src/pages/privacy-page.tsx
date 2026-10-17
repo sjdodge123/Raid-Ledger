@@ -22,8 +22,8 @@ import {
 const PUBLIC_FEATURES: Omit<PrivacyFeatures, 'telemetry'> = { calendar: true, ai: true };
 
 /**
- * ROK-1779: error reports are opt-in. They are disclosed unless the served
- * status says this instance has not turned them on — an unknown flag (status
+ * ROK-1838: error reports are on by default. They are disclosed unless the
+ * served status says this instance turned them off — an unknown flag (status
  * still loading, older api) discloses, the same safe side as above.
  */
 function privacyFeatures(telemetryEnabled: boolean | undefined): PrivacyFeatures {

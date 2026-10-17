@@ -12,6 +12,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# ROK-1838: error reporting is on by default; nothing CI boots may spend the
+# maintainers' Sentry quota. Every job (and so every api/web process it
+# starts) inherits the opt-out. Containers get it via `-e` below.
+env:
+  ENABLE_TELEMETRY: 'false'
+
 jobs:
   # ─── Scope Detection ──────────────────────────────────────────────
   # Determines which jobs need to run based on changed files.
@@ -922,6 +928,7 @@ jobs:
           docker run -d --name rl-ci-test \
             -p 8080:80 \
             -e ADMIN_PASSWORD=ci-test-password \
+            -e ENABLE_TELEMETRY=false \
             raid-ledger:ci-test
 
       - name: Wait for API to start (max 120s)
@@ -976,6 +983,7 @@ jobs:
             docker run -d --name "$CONTAINER" \
               -e JWT_SECRET="$SECRET" \
               -e ADMIN_PASSWORD=ci-test-password \
+              -e ENABLE_TELEMETRY=false \
               raid-ledger:ci-test
             FOUND=0
             for i in $(seq 1 60); do
@@ -1077,6 +1085,7 @@ jobs:
             -v rl-priv-test:/data \
             -p 8080:80 \
             -e ADMIN_PASSWORD=ci-test-password \
+            -e ENABLE_TELEMETRY=false \
             raid-ledger:ci-upgrade
 
       - name: Wait for /api/health (max 90s)

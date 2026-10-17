@@ -15,6 +15,7 @@ import { getClientLogs } from './feedback-console-capture';
 import { buildClientContext, screenshotFilename, type FeedbackScreenshot } from './feedback-screenshot';
 import { useFeedbackScreenshot } from './use-feedback-screenshot';
 import { FeedbackDialog } from './FeedbackDialog';
+import { scrubFeedbackPayload, scrubSecretsFromText } from './feedback-scrub';
 
 type SubmitFeedback = ReturnType<typeof useSubmitFeedback>;
 
@@ -49,7 +50,9 @@ function buildPayload(
         const logs = getClientLogs();
         if (logs) payload.clientLogs = logs;
     }
-    return payload;
+    // ROK-1838: a pasted join link (or one in the address bar / console logs)
+    // must not reach the API or Sentry with its token intact.
+    return scrubFeedbackPayload(payload);
 }
 
 function buildSentryOptions(
@@ -59,7 +62,7 @@ function buildSentryOptions(
 ) {
     const { clientLogs, clientContext } = payload;
     const feedbackContext: Record<string, unknown> = {
-        pageUrl: window.location.href,
+        pageUrl: scrubSecretsFromText(window.location.href),
         category,
         feedbackId,
     };
@@ -85,7 +88,8 @@ function useFeedbackSubmitHandler(state: ReturnType<typeof useFeedbackState>, su
             : undefined;
         submitFeedback.mutate(payload, {
             onSuccess: async (data) => {
-                const ok = await captureMessageVerified(`[${state.category.toUpperCase()}] ${state.message}`,
+                const ok = await captureMessageVerified(
+                    `[${payload.category.toUpperCase()}] ${payload.message}`,
                     buildSentryOptions(state.category, data.id, payload), attachments);
                 if (ok) state.setShowSuccess(true); else state.setSentryError(true);
                 state.setIsSubmitting(false);

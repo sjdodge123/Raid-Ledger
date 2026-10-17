@@ -46,8 +46,9 @@ export const SystemStatusSchema = z.object({
     /** ROK-1352: force-ephemeral — every event gets a channel; the per-event
      *  toggle renders as on + disabled. */
     ephemeralVoiceForced: z.boolean().optional(),
-    /** ROK-1779: true only when this instance opted in to error reporting
-     *  (ENABLE_TELEMETRY, DISABLE_TELEMETRY wins). Absent = treat as off. */
+    /** ROK-1779/ROK-1838: true when this instance's api reports errors — on by
+     *  default in production; ENABLE_TELEMETRY=false opts out, DISABLE_TELEMETRY
+     *  wins. Absent = treat as off. */
     telemetryEnabled: z.boolean().optional(),
 });
 
