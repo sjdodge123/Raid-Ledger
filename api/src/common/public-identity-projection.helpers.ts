@@ -4,8 +4,8 @@
  * `GET /users`, `/users/recent`, `/users/:id/profile`, `/games/:id/activity`
  * and `/games/:id/now-playing`: signed-in, non-deactivated members keep
  * today's payload (same reference). Anonymous and deactivated viewers get the
- * row minus `discordId`, with `avatar` rebuilt server-side as an absolute
- * Discord CDN URL (or null) — the ROK-1629 rule applied by analogy.
+ * row minus `discordId`, with `avatar` projected to null, or to a custom
+ * non-Discord URL (ROK-1827) — the ROK-1629 rule applied by analogy.
  *
  * Applied at the HTTP boundary ONLY; services keep the full shape. Each
  * anonymous branch ends with the strict `Public*Schema.parse`, so a key added
