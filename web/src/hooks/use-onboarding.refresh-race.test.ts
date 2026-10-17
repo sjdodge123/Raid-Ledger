@@ -159,4 +159,26 @@ describe('ROK-1820: password change under the rl-refresh Web Lock', () => {
         expect(result.current.changePassword.status, 'the stale token is refreshed before the lock, so the change carries a live token').toBe('success');
         expect(getAccessToken()).toBe('fresh.jwt');
     });
+
+    it('a password change from a tab holding an unexpired but revoked token recovers via one refresh and succeeds', async () => {
+        // Another tab changed the password: this tab's token is unexpired (no
+        // preflight refresh) but blocklisted, while the shared cookie is live.
+        setAccessToken(jwtWith({ exp: Math.floor(Date.now() / 1000) + 3600 }));
+        let refreshPosts = 0;
+        server.use(http.post(`${API}/auth/refresh`, () => {
+            refreshPosts += 1;
+            return HttpResponse.json({ access_token: 'refreshed.jwt' });
+        }));
+        server.use(http.post(`${API}/admin/onboarding/change-password`, ({ request }) =>
+            request.headers.get('Authorization') === 'Bearer refreshed.jwt'
+                ? HttpResponse.json({ success: true, message: 'ok', access_token: 'fresh.jwt' })
+                : HttpResponse.json({ message: 'Unauthorized' }, { status: 401 })));
+        const result = setup();
+        act(() => { result.current.changePassword.mutate({ currentPassword: 'a', newPassword: 'b' }); });
+        await waitFor(() => expect(settled(result)).toBe(true));
+        expect(result.current.changePassword.status, 'the 401 under the lock recovers by refreshing outside it and retrying').toBe('success');
+        expect(refreshPosts, 'exactly one recovery refresh').toBe(1);
+        expect(getAccessToken()).toBe('fresh.jwt');
+        expect(locks.outstanding('rl-refresh'), 'no lock left held or queued').toBe(0);
+    });
 });
