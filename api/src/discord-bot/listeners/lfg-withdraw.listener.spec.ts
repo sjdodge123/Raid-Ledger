@@ -120,12 +120,12 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
       '📋 YOUR GROUPS · 0',
     );
     expect(followUp.mock.calls[0][0]).toMatchObject({
-      content: 'Withdrawn from **Deep Rock Galactic**.',
+      content: "You're out — **Deep Rock Galactic**.",
       flags: 64,
     });
   });
 
-  it('renders "already withdrawn" when the service says there was nothing to clear', async () => {
+  it('says "not in the group" when the service says there was nothing to clear', async () => {
     const service = makeService(
       jest.fn().mockRejectedValue(new NotFoundException('nope')),
     );
@@ -138,7 +138,7 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
     await listener.handleButtonInteraction(interaction);
 
     expect(followUp.mock.calls[0][0]).toMatchObject({
-      content: "You're not in **Deep Rock Galactic** — already withdrawn.",
+      content: "You're not in the **Deep Rock Galactic** group.",
     });
     expect(editReply).toHaveBeenCalled();
   });
