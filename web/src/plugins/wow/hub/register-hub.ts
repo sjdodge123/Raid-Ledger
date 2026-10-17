@@ -4,8 +4,8 @@
  * `PluginHandle.registerHubModule`; core resolves it by `guild.kind` and drops
  * it the moment the Blizzard plugin is switched off.
  */
+import { lazy } from 'react';
 import type { HubModule } from '../../hub-module';
-import { GuildAddonsSection } from '../guild/guild-addons';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
 import { WowFactionPill, WowWhereFact } from './wow-hero';
 import { wowHeroNote } from './wow-hero.helpers';
@@ -18,6 +18,13 @@ import {
     wowMembersBlurb,
 } from './wow-members.helpers';
 import { WowEditorsWidget, WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
+
+/**
+ * `register.ts` is a boot-time side-effect import, so the addon panel (form,
+ * row, URL parser) stays a lazy chunk of the Resources tab, as it was when it
+ * lived in core. Core renders `resourceSections` inside a Suspense boundary.
+ */
+const GuildAddonsSection = lazy(() => import('../guild/guild-addons').then((m) => ({ default: m.GuildAddonsSection })));
 
 export const wowHubModule: HubModule = {
     kind: 'wow_guild',

@@ -90,7 +90,7 @@ export interface HubModule {
      * renders a dead chip.
      */
     eventsJumpTab?: string;
-    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). */
+    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` section is fine. */
     resourceSections?: readonly ComponentType<HubResourceCtx>[];
 }
 

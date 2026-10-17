@@ -3,7 +3,7 @@
  * md), then whatever sections the hub module adds below them (WoW: the
  * recommended addons).
  */
-import type { JSX } from 'react';
+import { Suspense, type JSX } from 'react';
 import { GuildLinks } from './guild-links';
 import { GuildRules } from './guild-rules';
 import { useGuildAddons, useGuildProfile } from '../api/use-guild-content';
@@ -29,7 +29,9 @@ export function GuildResources({ guildId, canEdit, module: mod }: GuildResources
                 <GuildLinks guildId={guildId} links={profile.data.links} canEdit={canEdit} />
             </div>
             {(mod?.resourceSections ?? []).map((Section, i) => (
-                <Section key={`resource-section-${i}`} guildId={guildId} canEdit={canEdit} />
+                <Suspense key={`resource-section-${i}`} fallback={null}>
+                    <Section guildId={guildId} canEdit={canEdit} />
+                </Suspense>
             ))}
         </div>
     );
