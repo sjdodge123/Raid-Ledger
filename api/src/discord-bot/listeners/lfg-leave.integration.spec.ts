@@ -234,7 +234,9 @@ describe('LfgLeaveCommand — /lfg-leave (ROK-1660)', () => {
       "You're not in the **Satisfactory** group.",
     );
   });
+});
 
+describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
   it('All my LFGs clears every own hand and nobody else’s', async () => {
     const a = await linkedMember();
     const b = await linkedMember();
@@ -295,7 +297,9 @@ describe('LfgLeaveCommand — /lfg-leave (ROK-1660)', () => {
     expect(await isActive(a.userId, quiet.id)).toBe(false);
     expect(editReply).toHaveBeenCalledWith("You're out — **Quiet Game**.");
   });
+});
 
+describe('LfgLeaveCommand — guards (ROK-1660)', () => {
   it.each([
     ['deactivated', deactivateUser, LFG_BLOCKED_REPLY],
     ['banned', banUser, LFG_BLOCKED_REPLY],
