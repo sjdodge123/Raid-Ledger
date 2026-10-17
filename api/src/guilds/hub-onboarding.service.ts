@@ -105,7 +105,10 @@ export class HubOnboardingService {
     guildId: number,
   ): Promise<void> {
     const visible = await this.access.canView(actor, guildId);
-    if (!visible || (isStaff(actor) && !(await guildExists(this.db, guildId)))) {
+    if (
+      !visible ||
+      (isStaff(actor) && !(await guildExists(this.db, guildId)))
+    ) {
       throw new NotFoundException(`Guild ${guildId} not found`);
     }
     if (

@@ -60,7 +60,7 @@ export function settlePending(
     const inFlight = Math.max(0, cur.inFlight - 1);
     const confirmed = cur.confirmed || outcome === 'success';
     const rollback = outcome === 'error' && inFlight === 0 && !confirmed && !cur.preExisting;
-    const { [id]: _dropped, ...rest } = map;
+    const rest = Object.fromEntries(Object.entries(map).filter(([k]) => k !== id));
     return {
         map: inFlight === 0 ? rest : { ...rest, [id]: { ...cur, inFlight, confirmed } },
         rollback,
@@ -82,4 +82,28 @@ export function mergePending(
         return !known.has(id) && (map[id]?.inFlight ?? 0) > 0;
     });
     return kept.length === 0 ? fresh : { dismissed: [...fresh.dismissed, ...kept] };
+}
+
+/** The three cache reads/writes the hook needs, bound to one pair. */
+export interface PendingLedger {
+    begin: (preExisting: boolean) => void;
+    /** Settle one write; `true` = this caller must roll the entry back. */
+    settle: (outcome: 'success' | 'error') => boolean;
+    read: () => PendingDismissals;
+}
+
+export function pendingLedger(
+    read: () => PendingDismissals,
+    write: (map: PendingDismissals) => void,
+    id: string,
+): PendingLedger {
+    return {
+        begin: (preExisting) => { write(beginPending(read(), id, preExisting)); },
+        settle: (outcome) => {
+            const { map, rollback } = settlePending(read(), id, outcome);
+            write(map);
+            return rollback;
+        },
+        read,
+    };
 }

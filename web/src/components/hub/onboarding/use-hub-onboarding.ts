@@ -16,7 +16,7 @@ import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contr
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
 import { dismissHubOnboarding, fetchHubOnboarding, type HubOnboardingScope } from './hub-onboarding-api';
 import {
-    beginPending, mergePending, pairId, settlePending, type PendingDismissals,
+    mergePending, pairId, pendingLedger, type PendingDismissals,
 } from './hub-onboarding-pending';
 
 export const HUB_ONBOARDING_KEY_PREFIX = ['guilds', 'onboarding'] as const;
@@ -78,21 +78,17 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         retry: false,
     });
     const pendingKey = hubOnboardingPendingKey(viewer);
-    const pair = pairId(key, guildId);
-    const readPending = (): PendingDismissals =>
-        queryClient.getQueryData<PendingDismissals>(pendingKey) ?? {};
-    const settle = (outcome: 'success' | 'error'): boolean => {
-        const { map, rollback } = settlePending(readPending(), pair, outcome);
-        queryClient.setQueryData(pendingKey, map);
-        return rollback;
-    };
+    const ledger = pendingLedger(
+        () => queryClient.getQueryData<PendingDismissals>(pendingKey) ?? {},
+        (map) => { queryClient.setQueryData(pendingKey, map); },
+        pairId(key, guildId),
+    );
     const mutation = useMutation<HubOnboardingStateDto, Error, void>({
         mutationFn: () => dismissHubOnboarding(key, guildId),
         onMutate: async () => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<HubOnboardingStateDto>(queryKey);
-            const preExisting = isPromptDismissed(previous, key, guildId);
-            queryClient.setQueryData(pendingKey, beginPending(readPending(), pair, preExisting));
+            ledger.begin(isPromptDismissed(previous, key, guildId));
             queryClient.setQueryData(queryKey, withDismissal(previous, key, guildId, new Date().toISOString()));
         },
         // Rollback puts the prompt back rather than leaving it hidden on a
@@ -101,7 +97,7 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         // touches only THIS (key, guildId) entry, and only when no later write
         // for the pair confirmed it or is still running (Codex P2, PR-3).
         onError: () => {
-            if (!settle('error')) return;
+            if (!ledger.settle('error')) return;
             queryClient.setQueryData<HubOnboardingStateDto>(
                 queryKey, (cur) => withoutDismissal(cur, key, guildId),
             );
@@ -110,8 +106,8 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         // had when it answered, so installing it wholesale drops a sibling
         // prompt's still-pending optimistic row (PR-3 review MINOR).
         onSuccess: (fresh) => {
-            settle('success');
-            const map = readPending();
+            ledger.settle('success');
+            const map = ledger.read();
             queryClient.setQueryData<HubOnboardingStateDto>(
                 queryKey, (cur) => mergePending(fresh, cur, map),
             );
