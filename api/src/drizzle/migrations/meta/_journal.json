@@ -1569,6 +1569,13 @@
       "when": 1792254259625,
       "tag": "0224_messy_human_cannonball",
       "breakpoints": true
+    },
+    {
+      "idx": 225,
+      "version": "7",
+      "when": 1792276426271,
+      "tag": "0225_odd_smiling_tiger",
+      "breakpoints": true
     }
   ]
 }
