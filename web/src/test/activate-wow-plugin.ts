@@ -8,5 +8,7 @@ import '../plugins/wow/register';
 import { usePluginStore } from '../stores/plugin-store';
 
 export function activateWowPlugin(): void {
-    usePluginStore.setState({ activeSlugs: new Set(['blizzard']) });
+    // `initialized` mirrors boot: the app has fetched /system/status and applied
+    // its plugin list, which is what gates the hub's first render (ROK-1830).
+    usePluginStore.setState({ activeSlugs: new Set(['blizzard']), initialized: true });
 }

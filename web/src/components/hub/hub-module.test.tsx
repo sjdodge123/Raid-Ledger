@@ -56,14 +56,14 @@ function renderPage(): void {
 beforeEach(() => {
     clearRegistry();
     registerPlugin(SLUG, { icon: '/x.png', color: 'blue', label: 'Test game' }).registerHubModule(testModule);
-    usePluginStore.setState({ activeSlugs: new Set([SLUG]) });
+    usePluginStore.setState({ activeSlugs: new Set([SLUG]), initialized: true });
     server.use(http.get(BASE, () => HttpResponse.json(PAGE)));
 });
 
 afterEach(() => {
     window.location.hash = '';
     clearRegistry();
-    usePluginStore.setState({ activeSlugs: new Set<string>() });
+    usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
 });
 
 describe('hub module extension point (ROK-1830 AC2)', () => {
@@ -84,7 +84,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
     });
 
     it('drops the whole module while its plugin is inactive', async () => {
-        usePluginStore.setState({ activeSlugs: new Set<string>() });
+        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Roster']);

@@ -12,6 +12,8 @@ import type { GuildAddon, GuildAddonList, GuildPage as GuildPageDto, GuildProfil
 import { server } from '../../../test/mocks/server';
 import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { activateWowPlugin } from '../../../test/activate-wow-plugin';
+import { usePluginHydration } from '../../../hooks/use-plugins';
+import { usePluginStore } from '../../../stores/plugin-store';
 import { at } from '../../../test/defined';
 import { GuildPage } from '../hub-page';
 
@@ -286,15 +288,20 @@ describe('Resources: the addons section while it loads and when it fails', () =>
 });
 
 /**
- * ROK-1830 r3 — the probe reports in a LAYOUT effect and its answers are keyed
- * by guild, so a warm cache paints the Resources tab in the same frame.
+ * ROK-1830 — the module's Resources sections answer DURING the render pass
+ * above the tab nav, so a warm cache puts the Resources tab in the very first
+ * commit that draws the nav at all.
  *
- * Phase-sensitive on purpose: `PaintSpy` is a later sibling whose PASSIVE
- * effect snapshots the tab labels after every commit. In the first commit that
- * renders the nav, a layout-effect probe has already forced the sync re-render,
- * so that snapshot holds Resources; a passive-effect probe would still be
- * queued and the snapshot would miss it (RTL's `act` flushes everything
- * afterwards, so a post-render query cannot tell them apart).
+ * Commit-sensitive on purpose: `PaintSpy` is a later sibling whose PASSIVE
+ * effect snapshots the tab labels after EVERY commit, and the test judges
+ * `painted[0]` — the first snapshot that saw a nav. Only an answer computed in
+ * the nav's own render pass can be in it. Any child-to-parent report fails
+ * here, in either effect phase: lifting state out of a child costs a second
+ * commit by construction, so the nav has already been drawn without Resources
+ * by the time the parent re-renders with the answer. (That is not a guess — the
+ * r3 `useLayoutEffect` probe this replaced was red on exactly this assertion.)
+ * A plain post-render query cannot tell the two apart, because RTL's `act`
+ * flushes every pending commit before it runs.
  */
 function PaintSpy({ onPaint }: { onPaint: (labels: (string | null)[]) => void }): null {
     // No dependency array on purpose: snapshot after EVERY commit, so the first
@@ -330,5 +337,58 @@ describe('Resources tab visibility on a warm cache', () => {
         const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
         expect(labels, 'a cached answer must not need a second commit to show Resources').toContain('Resources');
+    });
+});
+
+/**
+ * ROK-1830 r5 — the plugin list hydrates from an async query, so `useHubModule`
+ * flips undefined → module after the page may already have rendered. The
+ * section-id key under which the hero/nav/panel live would then change on an
+ * ordinary cold load and React would remount the whole frame — mount effects
+ * re-run, panel state and scroll position are lost. The page holds its loading
+ * state until the list settles instead, so the key only moves on a real plugin
+ * toggle from the admin page.
+ */
+function HydrationHost(): null {
+    usePluginHydration();
+    return null;
+}
+
+describe('the hub frame and an asynchronous plugin list', () => {
+    it('holds the loading state until the plugin list hydrates, then mounts the hero exactly once', async () => {
+        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false });
+        let releaseStatus = (): void => {};
+        const statusSettled = new Promise<void>((resolve) => { releaseStatus = (): void => { resolve(); }; });
+        let pageFetches = 0;
+        serve(false, EMPTY_PROFILE, list);
+        server.use(
+            http.get(BASE, () => { pageFetches += 1; return HttpResponse.json(makePage(false)); }),
+            http.get('http://localhost:3000/system/status', async () => {
+                await statusSettled;
+                return HttpResponse.json({ status: 'ok', activePlugins: ['blizzard'] });
+            }),
+        );
+
+        renderWithProviders(
+            <><HydrationHost /><Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes></>,
+            { initialEntries: ['/guilds/7'] },
+        );
+        await waitFor(() => expect(pageFetches, 'the guild payload must have been served').toBeGreaterThan(0));
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-loading'),
+            'the page must still be loading while the plugin list is in flight, not showing a frame built without the module',
+        ).not.toBeNull());
+        expect(
+            screen.queryByTestId('guild-hero'),
+            'the frame must not mount while the plugin list is still in flight — the module arriving would remount it',
+        ).toBeNull();
+
+        releaseStatus();
+        const hero = await screen.findByTestId('guild-hero');
+        expect(await tabLabels(), 'the module tabs must be present as soon as the frame is').toContain('Raids');
+        expect(
+            screen.getByTestId('guild-hero'),
+            'hydrating the plugin list must not remount the frame: the hero must be the same DOM node',
+        ).toBe(hero);
     });
 });
