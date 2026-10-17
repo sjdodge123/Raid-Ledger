@@ -10,9 +10,11 @@ import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ImpersonationSessionService } from '../impersonation/impersonation-session.service';
-import { secondsUntil } from '../impersonation/impersonation-session.helpers';
 import type { TokenBlocklistService } from '../token-blocklist.service';
-import { signAccessToken } from '../access-token-mint.helpers';
+import {
+  BornExpiredTokenError,
+  signAccessToken,
+} from '../access-token-mint.helpers';
 import { hashToken } from './refresh-token.helpers';
 
 export interface RefreshAccessTokenDeps {
@@ -51,19 +53,45 @@ export async function mintRefreshAccessToken(
   );
   const mintDeps = { ...deps, blocklist: pinnedBlocklist(floors) };
   if (!live) return signOwnAccessToken(mintDeps, rotated.userId, nowMs);
-  const { target, expiresAt } = live;
-  return signAccessToken(
-    mintDeps,
-    {
-      sub: target.id,
-      username: target.username,
-      role: target.role,
-      impersonatedBy: rotated.userId,
-    },
-    { expiresIn: secondsUntil(expiresAt, new Date()) },
-    nowMs,
-  );
+  return signImpersonationAccessToken(mintDeps, rotated.userId, live, nowMs);
 }
+
+/**
+ * The target's token, `exp` capped at the marker's `expires_at` (ROK-1820:
+ * from the pinned clock, never the floor-raised `iat`). When the floor leaves
+ * no lifetime before that deadline the impersonation is over, so the holder
+ * gets their own token instead of a born-expired one.
+ */
+async function signImpersonationAccessToken(
+  deps: RefreshAccessTokenDeps,
+  holderId: number,
+  live: LiveImpersonation,
+  nowMs: number,
+): Promise<string> {
+  const { target, expiresAt } = live;
+  try {
+    return await signAccessToken(
+      deps,
+      {
+        sub: target.id,
+        username: target.username,
+        role: target.role,
+        impersonatedBy: holderId,
+      },
+      { notAfter: expiresAt },
+      nowMs,
+    );
+  } catch (err) {
+    if (!(err instanceof BornExpiredTokenError)) throw err;
+    return signOwnAccessToken(deps, holderId, nowMs);
+  }
+}
+
+type LiveImpersonation = NonNullable<
+  Awaited<
+    ReturnType<RefreshAccessTokenDeps['impersonation']['resolveForRefresh']>
+  >
+>;
 
 /** Block floors read once, before anything they guard was validated. */
 type PinnedFloors = Map<number, number | undefined>;
@@ -131,7 +159,7 @@ async function rowIsGone(
   return !row || row.revokedAt != null;
 }
 
-/** The cookie holder's own 1h access token (module default `expiresIn`). */
+/** The cookie holder's own 1h access token (`ACCESS_TOKEN_TTL_SECONDS`). */
 async function signOwnAccessToken(
   deps: RefreshAccessTokenDeps,
   userId: number,

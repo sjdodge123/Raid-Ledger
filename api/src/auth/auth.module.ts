@@ -27,6 +27,7 @@ import { RefreshTokenService } from './refresh/refresh-token.service';
 import { RefreshTokenController } from './refresh/refresh-token.controller';
 import { RefreshTokenCleanupService } from './refresh/refresh-token-cleanup.service';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
+import { ACCESS_TOKEN_TTL_SECONDS } from './access-token-mint.helpers';
 import { PasswordChangeSessionService } from './password-change/password-change-session.service';
 
 /**
@@ -52,7 +53,7 @@ import { PasswordChangeSessionService } from './password-change/password-change-
           ...(secret !== undefined ? { secret } : {}),
           // ROK-1353: access JWT shortened 24h → 1h; refresh-token rotation
           // keeps sessions long-lived without a long-lived access token.
-          signOptions: { expiresIn: '1h' },
+          signOptions: { expiresIn: ACCESS_TOKEN_TTL_SECONDS },
         };
       },
       inject: [ConfigService],

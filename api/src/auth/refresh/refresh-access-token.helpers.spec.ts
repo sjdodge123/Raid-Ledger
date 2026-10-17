@@ -160,3 +160,35 @@ describe('ROK-1810 Codex r4 — target promoted between the floor pin and valida
     expect(await t.blocklist.isBlocked(TARGET.id, iat)).toBe(true);
   });
 });
+
+describe('ROK-1820 refresh impersonation exp vs the marker deadline', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  const SECOND = Math.floor(NOW.getTime() / 1000);
+
+  it('a floored iat never pushes exp past the marker expires_at', async () => {
+    const expiresAt = new Date((SECOND + 20) * 1000 + 500);
+    const t = build({ target: TARGET, expiresAt });
+    await t.blocklist.blockUser(USER.id);
+    const token = await mintOrFail(t.deps);
+    expect(t.jwt.decode<{ iat: number; exp: number }>(token)).toMatchObject({
+      iat: SECOND + 1,
+      exp: SECOND + 20,
+    });
+  });
+
+  it('floor reaches the deadline → the holder gets their OWN token, not a born-expired one', async () => {
+    const expiresAt = new Date((SECOND + 1) * 1000);
+    const t = build({ target: TARGET, expiresAt });
+    await t.blocklist.blockUser(USER.id);
+    const token = await mintOrFail(t.deps);
+    const claims = t.jwt.decode<{ sub: number; impersonatedBy?: number }>(
+      token,
+    );
+    expect({ sub: claims.sub, impersonatedBy: claims.impersonatedBy }).toEqual({
+      sub: USER.id,
+      impersonatedBy: undefined,
+    });
+  });
+});
