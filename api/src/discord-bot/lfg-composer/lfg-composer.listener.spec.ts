@@ -14,6 +14,7 @@ import { Logger } from '@nestjs/common';
 import { MessageFlags } from 'discord.js';
 import { LFG_COMPOSER_COPY } from './lfg-composer.constants';
 import { viewComposerGames } from './lfg-composer-view.helpers';
+import { showComposerMyLfgs } from './lfg-composer-mine.helpers';
 import {
   LfgComposerListener,
   isComposerInteraction,
@@ -29,6 +30,9 @@ jest.mock('./lfg-composer-flow.helpers', () => ({
 }));
 jest.mock('./lfg-composer-view.helpers', () => ({
   viewComposerGames: jest.fn().mockResolvedValue(undefined),
+}));
+jest.mock('./lfg-composer-mine.helpers', () => ({
+  showComposerMyLfgs: jest.fn().mockResolvedValue(undefined),
 }));
 
 type Kind = 'button' | 'select' | 'modal';
@@ -70,6 +74,7 @@ describe('routeComposerInteraction', () => {
     ['select', 'lfgc:pick:deep', pickComposerGame],
     ['modal', 'lfgc:modal', submitComposerSearch],
     ['button', 'lfgc:view', viewComposerGames],
+    ['button', 'lfgc:mine', showComposerMyLfgs],
   ] as const)('%s %s reaches its step', async (kind, id, step) => {
     await routeComposerInteraction(DEPS, fake(kind, id) as never);
     expect(step).toHaveBeenCalledTimes(1);

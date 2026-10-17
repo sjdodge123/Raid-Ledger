@@ -155,7 +155,7 @@ function makeLfgService(
       created: true,
       body: { group: summary() },
     }),
-    listGroups: jest.fn().mockResolvedValue([]),
+    listOwnGroups: jest.fn().mockResolvedValue([]),
     ...over,
   };
 }
@@ -229,7 +229,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
 
       expect(editReply).toHaveBeenCalledWith(LFG_UNLINKED_REPLY);
       expect(lfgService.createIntent).not.toHaveBeenCalled();
-      expect(lfgService.listGroups).not.toHaveBeenCalled();
+      expect(lfgService.listOwnGroups).not.toHaveBeenCalled();
     });
   });
 
@@ -401,7 +401,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     ['/lfg list', LFG_LIST_SENTINEL],
   ])('%s lists the caller groups instead of writing', async (_label, game) => {
     const lfgService = makeLfgService({
-      listGroups: jest
+      listOwnGroups: jest
         .fn()
         .mockResolvedValue([summary({ hasOwnIntent: true, gameName: 'Mine' })]),
     });
@@ -411,7 +411,7 @@ describe('LfgCommand (ROK-1454 D10 / AC6)', () => {
     await command.handleInteraction(interaction);
 
     expect(lfgService.createIntent).not.toHaveBeenCalled();
-    expect(lfgService.listGroups).toHaveBeenCalledWith(7);
+    expect(lfgService.listOwnGroups).toHaveBeenCalledWith(7);
     const payload = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { author?: { name: string } } }>;
       components: unknown[];

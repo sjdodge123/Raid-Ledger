@@ -159,7 +159,7 @@ export function toGroupSummary(row: LfgGroupAggregate): LfgGroupSummaryDto {
  * no reader, ROK-1435) makes `hasOwnIntent` a constant `false` rather than
  * computing it against somebody's id.
  */
-function groupColumns(viewerId: number | null) {
+export function groupColumns(viewerId: number | null) {
   return {
     gameId: schema.games.id,
     gameName: schema.games.name,
@@ -333,7 +333,7 @@ function toHeartedGame(row: {
 }
 
 /** Games the viewer already holds a live intent for — excluded from hearts. */
-function ownLiveIntents(db: LfgDb, viewerId: number, now: Date) {
+export function ownLiveIntents(db: LfgDb, viewerId: number, now: Date) {
   return db
     .select({ gameId: schema.lfgIntents.gameId })
     .from(schema.lfgIntents)
