@@ -2,6 +2,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { eq, and } from 'drizzle-orm';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
@@ -147,6 +148,19 @@ export async function findSlotOrThrow(
 export function assertSlotClaimable(slot: SlotRow): void {
   if (slot.status === 'accepted' || slot.status === 'claimed') {
     throw new ConflictException('This invite has already been claimed');
+  }
+}
+
+/**
+ * ROK-1825: a slot created for a named Discord user is that user's alone —
+ * a code read off the roster must not let anyone else take the reservation.
+ */
+export function assertClaimerIsInvitee(
+  slot: Pick<SlotRow, 'discordUserId'>,
+  claimerDiscordId: string | null,
+): void {
+  if (slot.discordUserId && slot.discordUserId !== claimerDiscordId) {
+    throw new ForbiddenException('This invite is reserved for another player');
   }
 }
 

@@ -21,6 +21,7 @@ import {
   validateEventAvailable,
   resolveGameInfo,
   assertSlotClaimable,
+  assertClaimerIsInvitee,
   findClaimEventOrThrow,
   checkNotAlreadySignedUp,
   buildPostClaimDm,
@@ -129,6 +130,7 @@ export class InviteService {
     const event = await findClaimEventOrThrow(this.db, slot.eventId);
     await checkNotAlreadySignedUp(this.db, slot.eventId, userId, slot.id);
     const user = await this.findUserOrThrow(userId);
+    assertClaimerIsInvitee(slot, user.discordId);
     const role =
       roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps' | 'player');
     return user.discordId
