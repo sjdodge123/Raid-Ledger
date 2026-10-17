@@ -25,6 +25,7 @@ import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-
 import { HubMembers } from './hub-members';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
+import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
@@ -129,10 +130,14 @@ export function GuildPage(): JSX.Element {
     const { id } = useParams<{ id: string }>();
     const guildId = Number(id);
     const query = useGuildPage(Number.isInteger(guildId) ? guildId : 0);
+    // The module decides the tab set, so there is nothing worth drawing before
+    // the plugin list has settled — and drawing it would remount the frame when
+    // the module arrives (see `HubResourceVisibility`).
+    const pluginsHydrated = usePluginsHydrated();
     if (!Number.isInteger(guildId) || guildId <= 0) {
         return <Notice testId="guild-not-found"><p className="text-sm text-muted">This guild doesn&apos;t exist. Check the link and try again.</p></Notice>;
     }
     if (query.error) return <ErrorState error={query.error} onRetry={() => void query.refetch()} />;
-    if (!query.data) return <LoadingState />;
+    if (!query.data || !pluginsHydrated) return <LoadingState />;
     return <GuildPageBody page={query.data} />;
 }

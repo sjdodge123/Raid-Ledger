@@ -19,6 +19,9 @@
  * Hook-order legality: the hook list is positional and varies with the section
  * set, so the component that calls them is keyed by those sections — a module
  * switching on or off remounts it instead of changing one instance's hook count.
+ * That remount takes the hero/nav/panel with it, so the page waits for the
+ * plugin list to hydrate before mounting any of it (`usePluginsHydrated`) and
+ * the key then only moves on a genuine plugin toggle from the admin page.
  */
 import type { JSX, ReactNode } from 'react';
 import type { HubResourceSection } from '../../plugins/hub-module';
@@ -30,9 +33,27 @@ export interface HubResourceVisibilityProps {
     children: (anyVisible: boolean) => ReactNode;
 }
 
-/** Identity of the hook list: its length and which entries ask a hook at all. */
+type VisibilityHook = NonNullable<HubResourceSection['useVisible']>;
+
+/** Stable per-function id, so swapping an implementation under the same section id changes the key. */
+const hookIds = new WeakMap<VisibilityHook, number>();
+let nextHookId = 0;
+function hookId(hook: VisibilityHook): number {
+    const seen = hookIds.get(hook);
+    if (seen !== undefined) return seen;
+    nextHookId += 1;
+    hookIds.set(hook, nextHookId);
+    return nextHookId;
+}
+
+/**
+ * Identity of the hook list: its length, which entries ask a hook at all, and
+ * WHICH hook each one asks — a replacement implementation under the same
+ * section id may call a different number of hooks internally, so the key has to
+ * move with the function, not just with the id.
+ */
 function sectionsKey(sections: readonly HubResourceSection[]): string {
-    return sections.map((section) => `${section.id}:${section.useVisible ? 'ask' : 'always'}`).join('|');
+    return sections.map((s) => `${s.id}:${s.useVisible ? `ask#${hookId(s.useVisible)}` : 'always'}`).join('|');
 }
 
 function SectionAnswers({ sections, guildId, children }: HubResourceVisibilityProps): JSX.Element {
