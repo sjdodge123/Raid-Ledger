@@ -409,7 +409,10 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     '10/16/2026 17:20:00: Connections 0 ZDOS:1200  sent:0 recv:0';
   const logs = (h: ReturnType<typeof harness>) =>
     h.logger.log.mock.calls.map(([m]) => m);
-  const thorvald = [SRC, { steamId: STEAM, displayName: 'Thorvald' }];
+  const thorvald = [
+    SRC,
+    { steamId: STEAM, displayName: 'Thorvald', characterOwnerId: '123456789' },
+  ];
 
   it('missing test 4: a live join between two re-auth replays applies at once; the next replay adds 0 events', async () => {
     const h = harness([], okCredentials, [], valheim);
