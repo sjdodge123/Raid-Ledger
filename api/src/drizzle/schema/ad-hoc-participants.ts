@@ -54,6 +54,13 @@ export const adHocParticipants = pgTable(
     /** Display name — Discord username, or character name / SteamID64. */
     discordUsername: varchar('discord_username', { length: 255 }).notNull(),
     discordAvatarHash: varchar('discord_avatar_hash', { length: 255 }),
+    /**
+     * ROK-1822: the in-game character name of a game-server row, linked or
+     * not (a linked row shows the RL name in `discordUsername`). Null until
+     * a character line names the player. Lets a restart rehydrate a linked
+     * row by name, so its next character line cannot pair elsewhere.
+     */
+    characterName: varchar('character_name', { length: 255 }),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
     leftAt: timestamp('left_at'),
     /** Total seconds spent in the voice channel across all sessions */
