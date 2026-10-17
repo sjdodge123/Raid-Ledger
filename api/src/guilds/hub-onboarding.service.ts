@@ -11,7 +11,11 @@ import type {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import * as schema from '../drizzle/schema';
-import { GuildAccessService, type GuildActor } from './guild-access.service';
+import {
+  GuildAccessService,
+  isStaff,
+  type GuildActor,
+} from './guild-access.service';
 import {
   parseOnboardingKey,
   parseOnboardingScope,
@@ -31,9 +35,9 @@ import {
  * A SCOPED dismissal still needs authorization (PR-3 review): `?guildId=` is
  * caller-supplied, so without a check any signed-in user could probe which
  * guild ids exist (an unknown one hit the FK and answered 500) and write one
- * row per existing guild. The guild must exist and the caller must be able to
- * see it; the editor checklist additionally needs edit rights, because only
- * an editor is ever shown it.
+ * row per existing guild. The caller must be able to see the guild, and the
+ * editor checklist additionally needs edit rights, because only an editor is
+ * ever shown it.
  *
  * Every method answers with the WHOLE state, so the web replaces its cache
  * instead of merging a partial response.
@@ -85,17 +89,24 @@ export class HubOnboardingService {
     return { key, guildId };
   }
 
-  /** Unknown guild → 404; cannot view → 403; checklist needs edit → 403. */
+  /**
+   * Cannot view it, or it does not exist → the SAME 404; the checklist then
+   * needs edit rights → 403.
+   *
+   * Authorization runs BEFORE existence on purpose (Codex P3 / PR-3 review):
+   * a 404-for-missing + 403-for-inaccessible pair lets any signed-in user read
+   * which guild ids exist straight off the status code. Membership implies the
+   * row exists, so the existence query is only needed for staff, who pass
+   * `canView` for every id and would otherwise reach the insert's FK.
+   */
   private async authorizeScope(
     actor: GuildActor,
     key: HubOnboardingKey,
     guildId: number,
   ): Promise<void> {
-    if (!(await guildExists(this.db, guildId))) {
+    const visible = await this.access.canView(actor, guildId);
+    if (!visible || (isStaff(actor) && !(await guildExists(this.db, guildId)))) {
       throw new NotFoundException(`Guild ${guildId} not found`);
-    }
-    if (!(await this.access.canView(actor, guildId))) {
-      throw new ForbiddenException('You cannot see this guild');
     }
     if (
       key === 'hub-setup-checklist' &&

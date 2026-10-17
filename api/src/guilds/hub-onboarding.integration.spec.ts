@@ -231,7 +231,9 @@ describe('HubOnboardingService scope authorization (integration)', () => {
     expect(await rowCount(userId)).toBe(0);
   });
 
-  it('refuses a guild the caller cannot see', async () => {
+  // The two refusals must be indistinguishable, or the status code tells an
+  // outsider which guild ids exist (Codex P3, PR-3).
+  it('answers the same 404 for a guild that exists but the caller cannot see', async () => {
     const guildId = await seedGuild('Closed Hub');
     const outsiderId = await seedUser('onboard-outsider');
 
@@ -239,7 +241,7 @@ describe('HubOnboardingService scope authorization (integration)', () => {
       onboarding.dismiss(member(outsiderId), CARD, {
         guildId: String(guildId),
       }),
-    ).rejects.toThrow(ForbiddenException);
+    ).rejects.toThrow(NotFoundException);
     expect(await rowCount(outsiderId)).toBe(0);
   });
 

@@ -15,11 +15,23 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
 import { dismissHubOnboarding, fetchHubOnboarding, type HubOnboardingScope } from './hub-onboarding-api';
+import {
+    beginPending, mergePending, pairId, settlePending, type PendingDismissals,
+} from './hub-onboarding-pending';
 
 export const HUB_ONBOARDING_KEY_PREFIX = ['guilds', 'onboarding'] as const;
 
 export function hubOnboardingKey(viewer: number | 'anon'): readonly unknown[] {
     return [...HUB_ONBOARDING_KEY_PREFIX, viewer] as const;
+}
+
+/**
+ * The in-flight ledger rides in the same cache as the state, so it is scoped
+ * to the QueryClient (and so to a test) without any module-level state. Its
+ * own prefix keeps it clear of the state key's invalidations.
+ */
+export function hubOnboardingPendingKey(viewer: number | 'anon'): readonly unknown[] {
+    return ['guilds', 'onboarding-pending', viewer] as const;
 }
 
 /** Pure: does this state already hold a dismissal for exactly this scope? */
@@ -65,28 +77,45 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         enabled: isAuthenticated,
         retry: false,
     });
-    const mutation = useMutation<HubOnboardingStateDto, Error, void, { added: boolean }>({
+    const pendingKey = hubOnboardingPendingKey(viewer);
+    const pair = pairId(key, guildId);
+    const readPending = (): PendingDismissals =>
+        queryClient.getQueryData<PendingDismissals>(pendingKey) ?? {};
+    const settle = (outcome: 'success' | 'error'): boolean => {
+        const { map, rollback } = settlePending(readPending(), pair, outcome);
+        queryClient.setQueryData(pendingKey, map);
+        return rollback;
+    };
+    const mutation = useMutation<HubOnboardingStateDto, Error, void>({
         mutationFn: () => dismissHubOnboarding(key, guildId),
         onMutate: async () => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<HubOnboardingStateDto>(queryKey);
-            const added = !isPromptDismissed(previous, key, guildId);
+            const preExisting = isPromptDismissed(previous, key, guildId);
+            queryClient.setQueryData(pendingKey, beginPending(readPending(), pair, preExisting));
             queryClient.setQueryData(queryKey, withDismissal(previous, key, guildId, new Date().toISOString()));
-            return { added };
         },
         // Rollback puts the prompt back rather than leaving it hidden on a
         // dismissal the server never stored — it would silently return on the
-        // next page load with no explanation. It reconciles only THIS (key,
-        // guildId) entry: restoring the whole snapshot would also undo a
-        // sibling prompt's dismissal that succeeded while this one was in
-        // flight (Codex P2, PR-3).
-        onError: (_e, _v, ctx) => {
-            if (ctx?.added !== true) return;
+        // next page load with no explanation. `settlePending` decides: it
+        // touches only THIS (key, guildId) entry, and only when no later write
+        // for the pair confirmed it or is still running (Codex P2, PR-3).
+        onError: () => {
+            if (!settle('error')) return;
             queryClient.setQueryData<HubOnboardingStateDto>(
                 queryKey, (cur) => withoutDismissal(cur, key, guildId),
             );
         },
-        onSuccess: (fresh) => { queryClient.setQueryData(queryKey, fresh); },
+        // Merge, don't replace: the response only knows about rows the server
+        // had when it answered, so installing it wholesale drops a sibling
+        // prompt's still-pending optimistic row (PR-3 review MINOR).
+        onSuccess: (fresh) => {
+            settle('success');
+            const map = readPending();
+            queryClient.setQueryData<HubOnboardingStateDto>(
+                queryKey, (cur) => mergePending(fresh, cur, map),
+            );
+        },
     });
     // Not memoized: `mutation` is a fresh object every render, so a
     // `useCallback` keyed on it memoized nothing (PR-3 nit).
