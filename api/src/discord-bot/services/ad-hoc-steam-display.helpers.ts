@@ -3,8 +3,7 @@
  *
  * Spike ruling: the in-game character name is for UNLINKED players only. A
  * player whose SteamID resolves to a Raid Ledger user shows as that user —
- * `users.display_name`, else `users.username` — with `users.avatar` (the
- * Discord avatar hash). Rows carrying a `user_id` are never renamed to a
+ * `users.display_name`, else `users.username`. Rows carrying a `user_id` are never renamed to a
  * character name; unlinked rows keep following renames.
  */
 import { eq, sql, type SQL } from 'drizzle-orm';
@@ -17,47 +16,50 @@ const t = schema.adHocParticipants;
 /** The display columns a Steam row is written with. */
 export interface SteamRowDisplay {
   discordUsername: string;
-  discordAvatarHash: string | null;
+  /** ROK-1822: the character name, linked or not; null until one is known. */
+  characterName: string | null;
 }
 
 /** The fields of a server player that decide how their row is shown. */
 export interface SteamDisplayInput {
+  /** SteamID64. */
+  steamId: string;
   /** In-game character name, else the SteamID64. */
   displayName: string;
   /** The linked RL user, else null. */
   userId: number | null;
 }
 
+/** A player's character name, or null while they are only a SteamID64. */
+export function characterNameOf(player: {
+  steamId: string;
+  displayName: string;
+}): string | null {
+  return player.displayName === player.steamId ? null : player.displayName;
+}
+
 /**
- * The name/avatar to write for a server player: the linked user's Raid
- * Ledger identity, else the character name with no avatar. A user id that
- * no longer resolves falls back to the character name.
+ * The name to write for a server player: the linked user's Raid Ledger
+ * name, else the character name. A user id that no longer resolves falls
+ * back to the character name. No avatar (ROK-1822 NIT 7): the web builds
+ * one only from a Discord id, which a Steam row never has.
  */
 export async function resolveSteamRowDisplay(
   db: Db,
   member: SteamDisplayInput,
 ): Promise<SteamRowDisplay> {
-  const unlinked = {
-    discordUsername: member.displayName,
-    discordAvatarHash: null,
-  };
+  const characterName = characterNameOf(member);
+  const unlinked = { discordUsername: member.displayName, characterName };
   if (member.userId === null) return unlinked;
   const u = schema.users;
   const rows = await db
-    .select({
-      displayName: u.displayName,
-      username: u.username,
-      avatar: u.avatar,
-    })
+    .select({ displayName: u.displayName, username: u.username })
     .from(u)
     .where(eq(u.id, member.userId))
     .limit(1);
   const user = rows[0];
   if (!user) return unlinked;
-  return {
-    discordUsername: user.displayName ?? user.username,
-    discordAvatarHash: user.avatar,
-  };
+  return { discordUsername: user.displayName ?? user.username, characterName };
 }
 
 /**
@@ -65,14 +67,15 @@ export async function resolveSteamRowDisplay(
  * identity (merged) keeps its Discord name. Otherwise a linked incoming
  * player's RL identity wins; a row already tied to a user is never renamed
  * to a character name; an unlinked row takes the latest character name.
+ * The character name itself always follows the latest known one.
  */
 export function steamConflictDisplaySet(): {
   discordUsername: SQL;
-  discordAvatarHash: SQL;
+  characterName: SQL;
 } {
   const takeIncoming = sql`${t.discordUserId} IS NULL AND (excluded.user_id IS NOT NULL OR ${t.userId} IS NULL)`;
   return {
     discordUsername: sql`CASE WHEN ${takeIncoming} THEN excluded.discord_username ELSE ${t.discordUsername} END`,
-    discordAvatarHash: sql`CASE WHEN ${takeIncoming} THEN excluded.discord_avatar_hash ELSE ${t.discordAvatarHash} END`,
+    characterName: sql`COALESCE(excluded.character_name, ${t.characterName})`,
   };
 }

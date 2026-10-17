@@ -129,6 +129,11 @@ export class PelicanPresenceSession {
     return this.queue;
   }
 
+  /**
+   * Seeds the tracker from the sink's open rows. A row comes back under its
+   * character name — linked rows too (ROK-1822) — so its next character line
+   * is that player's respawn, never a pending handshake's first line.
+   */
   private async rehydrate(): Promise<void> {
     try {
       const { sink, source } = this.opts;

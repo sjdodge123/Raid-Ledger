@@ -10,6 +10,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { characterNameOf } from './ad-hoc-steam-display.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.adHocParticipants;
@@ -74,6 +75,8 @@ function carriedSeconds(user: Row, steam: Row | null, now: Date): number {
 export interface SteamMergeInput {
   steamId: string;
   pelicanServerId?: number;
+  /** Character name, else the SteamID64 (ROK-1822: kept in `character_name`). */
+  displayName?: string;
 }
 
 /**
@@ -100,6 +103,7 @@ export async function mergeSteamIntoUserRow(
       .set({
         steamId: member.steamId,
         pelicanServerId: member.pelicanServerId ?? null,
+        ...mergedCharacterName(member, steam),
         ...(carried > 0
           ? { totalDurationSeconds: (user.totalDurationSeconds ?? 0) + carried }
           : {}),
@@ -108,4 +112,16 @@ export async function mergeSteamIntoUserRow(
       .where(eq(t.id, user.id));
     return true;
   });
+}
+
+/** ROK-1822: the merging player's character name, else the folded row's. */
+function mergedCharacterName(
+  member: SteamMergeInput,
+  steam: Row | null,
+): { characterName?: string } {
+  const { steamId, displayName } = member;
+  const named =
+    displayName === undefined ? null : characterNameOf({ steamId, displayName });
+  const name = named ?? steam?.characterName ?? null;
+  return name === null ? {} : { characterName: name };
 }

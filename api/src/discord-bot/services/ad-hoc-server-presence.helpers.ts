@@ -10,6 +10,7 @@ import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
 import type { ServerPresencePlayer } from '../../plugins/pelican/presence/server-presence.sink';
+import { characterNameOf } from './ad-hoc-steam-display.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const p = schema.adHocParticipants;
@@ -216,10 +217,11 @@ export async function countServerOnlyPresence(
 }
 
 /**
- * Open rows still on THIS server — the rehydrate set for its session. Only an
- * unlinked row's name is a character name; a linked or merged row's is the
- * RL/Discord name (ROK-1821), so it rehydrates as its SteamID — nameless to
- * the tracker until the next character line names it (Codex r3).
+ * Open rows still on THIS server — the rehydrate set for its session, named
+ * by `character_name` (ROK-1822): a linked or merged row's shown name is the
+ * RL/Discord one, so without it the row rehydrated nameless and its next
+ * character line could pair to another player's pending handshake. A row
+ * from before the column falls back to the unlinked name, else the SteamID.
  */
 export async function listOpenServerPresence(
   db: Db,
@@ -230,6 +232,7 @@ export async function listOpenServerPresence(
     .select({
       steamId: p.steamId,
       displayName: p.discordUsername,
+      characterName: p.characterName,
       userId: p.userId,
       discordUserId: p.discordUserId,
     })
@@ -244,10 +247,9 @@ export async function listOpenServerPresence(
     );
   return rows.flatMap((r) => {
     if (!r.steamId) return [];
-    const named = r.userId === null && r.discordUserId === null;
-    return [
-      { steamId: r.steamId, displayName: named ? r.displayName : r.steamId },
-    ];
+    const unlinked = r.userId === null && r.discordUserId === null;
+    const legacy = unlinked ? r.displayName : r.steamId;
+    return [{ steamId: r.steamId, displayName: r.characterName ?? legacy }];
   });
 }
 
@@ -280,23 +282,21 @@ export async function listOpenGameServerSteamIds(
 }
 
 /**
- * A character line named a Steam-only player: refresh their shown name.
- * Unlinked rows only — a linked row shows the RL user (ROK-1821).
+ * A character line named a present player: every row of theirs on the event
+ * records the character name (ROK-1822), but only an unlinked row shows it —
+ * a linked or merged row keeps its RL/Discord name (ROK-1821).
  */
 export async function renameSteamOnlyRow(
   db: Db,
   eventId: number,
   player: ServerPresencePlayer,
 ): Promise<void> {
+  const unlinked = sql`${p.discordUserId} IS NULL AND ${p.userId} IS NULL`;
   await db
     .update(p)
-    .set({ discordUsername: player.displayName })
-    .where(
-      and(
-        eq(p.eventId, eventId),
-        eq(p.steamId, player.steamId),
-        isNull(p.discordUserId),
-        isNull(p.userId),
-      ),
-    );
+    .set({
+      characterName: characterNameOf(player) ?? sql`${p.characterName}`,
+      discordUsername: sql`CASE WHEN ${unlinked} THEN ${player.displayName} ELSE ${p.discordUsername} END`,
+    })
+    .where(and(eq(p.eventId, eventId), eq(p.steamId, player.steamId)));
 }
