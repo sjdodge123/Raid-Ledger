@@ -12,6 +12,7 @@ import { InviteCommand } from '../commands/invite.command';
 import { HelpCommand } from '../commands/help.command';
 import { PlayingCommand } from '../commands/playing.command';
 import { LfgCommand } from '../commands/lfg.command';
+import { LfgLeaveCommand } from '../commands/lfg-leave.command';
 import { Events, MessageFlags, type Client } from 'discord.js';
 
 let testModule: TestingModule;
@@ -100,6 +101,14 @@ function buildInteractionProviders() {
       provide: LfgCommand,
       useValue: {
         commandName: 'lfg',
+        handleInteraction: jest.fn().mockResolvedValue(undefined),
+        handleAutocomplete: jest.fn().mockResolvedValue(undefined),
+      },
+    },
+    {
+      provide: LfgLeaveCommand,
+      useValue: {
+        commandName: 'lfg-leave',
         handleInteraction: jest.fn().mockResolvedValue(undefined),
         handleAutocomplete: jest.fn().mockResolvedValue(undefined),
       },
@@ -219,6 +228,10 @@ function handleInteractionTests() {
     await handleRosterRouteTest(interactionHandler);
   });
 
+  it('routes /lfg-leave to the leave command (ROK-1660)', async () => {
+    await handleLfgLeaveRouteTest(interactionHandler);
+  });
+
   it('should ignore unknown commands without throwing', async () => {
     await handleUnknownCommandTest(interactionHandler);
   });
@@ -294,6 +307,22 @@ async function handleRosterRouteTest(handler: (i: unknown) => Promise<void>) {
   expect(rosterViewCommand.handleInteraction).toHaveBeenCalledWith(
     mockInteraction,
   );
+}
+
+async function handleLfgLeaveRouteTest(handler: (i: unknown) => Promise<void>) {
+  const mockInteraction = {
+    isChatInputCommand: jest.fn().mockReturnValue(true),
+    isAutocomplete: jest.fn().mockReturnValue(false),
+    commandName: 'lfg-leave',
+    replied: false,
+    deferred: false,
+  };
+  await handler(mockInteraction);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  const leave = testModule.get<{ handleInteraction: jest.Mock }>(
+    LfgLeaveCommand,
+  );
+  expect(leave.handleInteraction).toHaveBeenCalledWith(mockInteraction);
 }
 
 async function handleUnknownCommandTest(

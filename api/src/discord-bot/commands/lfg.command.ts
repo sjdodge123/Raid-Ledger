@@ -97,7 +97,10 @@ export async function resolveLfgCaller(
  * @returns The render context; every field may be null.
  */
 export async function loadLfgReplyContext(
-  settingsService: SettingsService,
+  settingsService: Pick<
+    SettingsService,
+    'getDiscordBotCommunityName' | 'getClientUrl' | 'getDiscordBotTimezone'
+  >,
 ): Promise<LfgReplyContext> {
   const [communityName, clientUrl, timezone] = await Promise.all([
     settingsService.getDiscordBotCommunityName(),
@@ -105,6 +108,20 @@ export async function loadLfgReplyContext(
     settingsService.getDiscordBotTimezone(),
   ]);
   return { communityName, clientUrl, timezone };
+}
+
+/**
+ * ROK-1471 D8 — forum post links for a whole list, read in ONE query rather
+ * than per row. Shared by `/lfg`, `/lfg-leave` and the composer's `My LFGs`.
+ */
+export async function loadLfgPostLinks(
+  db: PostgresJsDatabase<typeof schema>,
+  gameIds: number[],
+): Promise<LfgPostLinks> {
+  const threads = await listLfmThreadsForGames(db, gameIds);
+  return new Map(
+    threads.map((t) => [t.gameId, forumPostLink(t.guildId, t.threadId)]),
+  );
 }
 
 @Injectable()
@@ -251,7 +268,7 @@ export class LfgCommand
     userId: number,
     ctx: LfgReplyContext,
   ): Promise<void> {
-    const groups = await this.lfgService.listGroups(userId);
+    const groups = await this.lfgService.listOwnGroups(userId);
     const postLinks = await this.postLinks(groups);
     await interaction.editReply(buildListReply(groups, ctx, postLinks));
   }
@@ -267,13 +284,10 @@ export class LfgCommand
   }
 
   /** D8 — post links for a whole list, read in ONE query rather than per row. */
-  private async postLinks(groups: LfgGroupSummaryDto[]): Promise<LfgPostLinks> {
-    const threads = await listLfmThreadsForGames(
+  private postLinks(groups: LfgGroupSummaryDto[]): Promise<LfgPostLinks> {
+    return loadLfgPostLinks(
       this.db,
       groups.map((g) => g.gameId),
-    );
-    return new Map(
-      threads.map((t) => [t.gameId, forumPostLink(t.guildId, t.threadId)]),
     );
   }
 

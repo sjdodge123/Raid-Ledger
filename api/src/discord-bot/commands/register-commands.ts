@@ -18,6 +18,7 @@ import { InviteCommand } from './invite.command';
 import { HelpCommand } from './help.command';
 import { PlayingCommand } from './playing.command';
 import { LfgCommand } from './lfg.command';
+import { LfgLeaveCommand } from './lfg-leave.command';
 import {
   declaredFleetClientId,
   guildScopeMessage,
@@ -56,6 +57,7 @@ export class RegisterCommandsService {
     private readonly helpCommand: HelpCommand,
     private readonly playingCommand: PlayingCommand,
     private readonly lfgCommand: LfgCommand,
+    private readonly lfgLeaveCommand: LfgLeaveCommand,
   ) {}
 
   /**
@@ -73,6 +75,7 @@ export class RegisterCommandsService {
       this.helpCommand,
       this.playingCommand,
       this.lfgCommand,
+      this.lfgLeaveCommand,
     ];
   }
 

@@ -40,6 +40,19 @@ export const COMPOSER_OPEN_CUSTOM_ID = "lfgc:open";
  */
 export const COMPOSER_VIEW_CUSTOM_ID = "lfgc:view";
 
+/**
+ * `LFG_COMPOSER_IDS.MINE` — the intro's `My LFGs` (ROK-1660). A press that
+ * answers the clicker privately with their own list.
+ */
+export const COMPOSER_MINE_CUSTOM_ID = "lfgc:mine";
+
+/**
+ * The intro body's leave line (`LFG_BOARD_INTRO_BODY`, ROK-1660) — copied,
+ * not imported: the companion bot does not depend on the api workspace.
+ */
+const INTRO_LEAVE_LINE =
+  "**Leave one**: press **I'm out** on the post, **My LFGs** below, or `/lfg-leave`.";
+
 /** Provisioning + the ENABLED handler are a few Discord round-trips. */
 const COMPOSER_READY_MS = 30_000;
 
@@ -85,6 +98,8 @@ interface IntroState {
   introTitled: number;
   /** Custom ids on the intro's starter message. */
   ids: string[];
+  /** The starter message's body text (ROK-1660 asserts its leave line). */
+  content: string;
   /** Link buttons on the starter whose URL carries a `token` (ROK-1685). */
   tokenUrls: number;
 }
@@ -106,6 +121,7 @@ async function readIntro(run: Run): Promise<IntroState> {
       pinned: false,
       introTitled,
       ids: [],
+      content: '',
       tokenUrls: 0,
     };
   }
@@ -119,6 +135,7 @@ async function readIntro(run: Run): Promise<IntroState> {
     pinned: intro.pinned,
     introTitled,
     ids: starter ? customIds(starter) : [],
+    content: starter?.content ?? '',
     tokenUrls: starter ? tokenUrlCount(starter) : 0,
   };
 }
@@ -151,6 +168,35 @@ export async function assertComposerPinned(run: Run): Promise<void> {
     await failComposerPinned(run);
   }
   await assertViewIsAPress(run);
+  await assertMyLfgsIsUp(run);
+}
+
+/**
+ * ROK-1660 — the intro carries `My LFGs`. Polled for the same reason as
+ * `View games ↗`: an intro posted by an older build is re-edited by the
+ * reconcile that set `Post an LFG`, which the caller has already seen.
+ *
+ * @param run - The board run, after `assertComposerPinned`'s poll passed.
+ */
+async function assertMyLfgsIsUp(run: Run): Promise<void> {
+  try {
+    await pollForCondition(async () => {
+      const seen = await readIntro(run);
+      const up =
+        seen.ids.includes(COMPOSER_MINE_CUSTOM_ID) &&
+        seen.content.includes(INTRO_LEAVE_LINE);
+      return up ? seen : null;
+    }, COMPOSER_READY_MS);
+  } catch {
+    const last = await readIntro(run).catch(() => null);
+    throw new Error(
+      "ROK-1660: this env's LFG board intro post must carry the " +
+        `"${COMPOSER_MINE_CUSTOM_ID}" press (My LFGs) and the line ` +
+        `${JSON.stringify(INTRO_LEAVE_LINE)} within ` +
+        `${String(COMPOSER_READY_MS)}ms; last seen ${JSON.stringify(last)} ` +
+        `in forum ${forumId(run)}`,
+    );
+  }
 }
 
 /** The AC1 failure, quoting what the intro looked like last. */
