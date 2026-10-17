@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchApi } from '../lib/api-client';
 import { toast } from '../lib/toast';
 import { setAccessToken } from '../lib/api/access-token-store';
+import { installSessionExclusively } from '../lib/api/refresh-client';
 import type {
   OnboardingStatusDto,
   DataSourceStatusDto,
@@ -30,8 +31,10 @@ function useOnboardingCoreMutations() {
   const queryClient = useQueryClient();
 
   const changePassword = useMutation({
-    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
-      fetchApi<{ success: boolean; message: string; access_token?: string }>('/admin/onboarding/change-password', { method: 'POST', body: JSON.stringify(data) }),
+    // ROK-1820: fenced from the refresh client, so a refresh POSTed under the
+    // pre-change session can't overwrite the re-issued token or cookie.
+    mutationFn: (data: { currentPassword: string; newPassword: string }) => installSessionExclusively(() =>
+      fetchApi<{ success: boolean; message: string; access_token?: string }>('/admin/onboarding/change-password', { method: 'POST', body: JSON.stringify(data) })),
     // ROK-1810: the change revokes every session; adopt the re-issued token.
     onSuccess: (res) => {
       if (res.access_token) setAccessToken(res.access_token);

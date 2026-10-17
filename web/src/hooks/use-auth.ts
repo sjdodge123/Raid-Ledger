@@ -176,6 +176,8 @@ export async function fetchCurrentUser(context?: { client: QueryClient }): Promi
  */
 function useLogin(queryClient: ReturnType<typeof useQueryClient>) {
     return useCallback(async (token: string): Promise<User | null> => {
+        // ROK-1820: a refresh POSTed before this sign-in must not overwrite it.
+        bumpRefreshGeneration();
         setAccessToken(token);
         try {
             const user = await fetchCurrentUser();
