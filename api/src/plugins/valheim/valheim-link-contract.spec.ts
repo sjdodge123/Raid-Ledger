@@ -3,10 +3,11 @@
  * the mod's wire format (`packages/contract/valheim-link/v1/CONTRACT.md`):
  * - every golden `fixtures/*.json` parses with `ValheimLinkMessageSchema`,
  *   and every inline explored bitmap inflates to exactly ceil(w·h/8) bytes;
- * - the CONTRACT.md §6 server bitmap rule (bounded gunzip, exact length)
- *   rejects corrupt, truncated, short and bomb gzip that Zod lets through;
- * - every `fixtures/invalid/*.json` is rejected with the issue path + code
- *   listed in `fixtures/invalid/EXPECTED.json`;
+ * - the CONTRACT.md §6 server bitmap rule (bounded gunzip, exact length,
+ *   one member) rejects corrupt, truncated, short, bomb and two-member gzip
+ *   that Zod lets through;
+ * - every `fixtures/invalid/*.json` is rejected — never thrown — with the
+ *   issue path + code listed in `fixtures/invalid/EXPECTED.json`;
  * - the committed `schema.json` equals a fresh generation from the Zod
  *   source. Fix drift with `npm run build -w packages/contract && node
  *   packages/contract/scripts/gen-valheim-link-schema.mjs`.
@@ -15,7 +16,7 @@
  */
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { gunzipSync, gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync, inflateRawSync } from 'node:zlib';
 import { z } from 'zod';
 import {
   VALHEIM_LINK_SCHEMA_VERSION,
@@ -47,18 +48,43 @@ const namesIn = (dir: string): string[] =>
 const inflatedBytes = (bitmap: ValheimExploredBitmap): number =>
   gunzipSync(Buffer.from(bitmap.data, 'base64')).length;
 
+/** gzip header length when FLG = 0 (no FEXTRA/FNAME/FCOMMENT/FHCRC). */
+const GZIP_PLAIN_HEADER = 10;
+const GZIP_TRAILER = 8;
+
 /**
- * The CONTRACT.md §6 server rule, as ROK-1833 must implement it: gunzip with
- * `maxOutputLength = valheimLinkBitmapBytes(w, h)`, reject on any decode
- * error (corrupt, truncated, too long) or a length that is not exact.
+ * Input bytes a zlib engine consumed — `{ info: true }` returns
+ * `{ buffer, engine }`, which `@types/node` does not model; -1 when absent.
+ */
+function bytesConsumed(out: unknown): number {
+  if (typeof out !== 'object' || out === null || !('engine' in out)) return -1;
+  const { engine } = out;
+  if (typeof engine !== 'object' || engine === null) return -1;
+  if (!('bytesWritten' in engine)) return -1;
+  return typeof engine.bytesWritten === 'number' ? engine.bytesWritten : -1;
+}
+
+/**
+ * The CONTRACT.md §6 server rule, as ROK-1833 must implement it:
+ * 1. gunzip with `maxOutputLength = valheimLinkBitmapBytes(w, h)`; any decode
+ *    error (corrupt, truncated, CRC/ISIZE mismatch, too long) rejects;
+ * 2. the inflated length must be exact;
+ * 3. ONE member: Node's gunzip silently joins concatenated members, so the
+ *    header must be the plain 10 bytes (FLG = 0) and a raw inflate of
+ *    everything between it and the 8-byte trailer must consume ALL of it.
  */
 function serverAcceptsBitmap(bitmap: ValheimExploredBitmap): boolean {
   const want = valheimLinkBitmapBytes(bitmap.width, bitmap.height);
+  const gz = Buffer.from(bitmap.data, 'base64');
   try {
-    const raw = gunzipSync(Buffer.from(bitmap.data, 'base64'), {
+    const raw = gunzipSync(gz, { maxOutputLength: want });
+    if (raw.length !== want || gz[3] !== 0) return false;
+    const body = gz.subarray(GZIP_PLAIN_HEADER, gz.length - GZIP_TRAILER);
+    const out: unknown = inflateRawSync(body, {
       maxOutputLength: want,
+      info: true,
     });
-    return raw.length === want;
+    return bytesConsumed(out) === body.length;
   } catch {
     return false;
   }
@@ -120,6 +146,9 @@ describe('Valheim Link v1 server bitmap rule (CONTRACT.md §6)', () => {
     (corrupt.readUInt32LE(corrupt.length - 8) ^ 1) >>> 0,
     corrupt.length - 8,
   );
+  const inflated = gunzipSync(gz);
+  const raw1 = inflated.subarray(0, want >> 1);
+  const raw2 = inflated.subarray(want >> 1);
   const cases: [string, ValheimExploredBitmap, boolean][] = [
     ['golden bitmap', golden, true],
     ['truncated gzip', withData(golden, gz.subarray(0, gz.length - 8)), false],
@@ -132,6 +161,16 @@ describe('Valheim Link v1 server bitmap rule (CONTRACT.md §6)', () => {
     [
       'bomb: 64× w·h/8',
       withData(golden, gzipSync(Buffer.alloc(want * 64))),
+      false,
+    ],
+    [
+      'two members joining to exactly w·h/8',
+      withData(golden, Buffer.concat([gzipSync(raw1), gzipSync(raw2)])),
+      false,
+    ],
+    [
+      'empty member, then the golden member',
+      withData(golden, Buffer.concat([gzipSync(Buffer.alloc(0)), gz])),
       false,
     ],
   ];
@@ -164,11 +203,26 @@ describe('Valheim Link v1 golden fixtures — invalid', () => {
     expect(Object.keys(expected).sort()).toEqual(names);
   });
 
+  /** safeParse, with a throw reported as data so the assertion names it. */
+  const parseInvalid = (name: string) => {
+    try {
+      const result = ValheimLinkMessageSchema.safeParse(
+        readJson(INVALID, `${name}.json`),
+      );
+      return { result, threw: null };
+    } catch (err) {
+      return { result: null, threw: String(err) };
+    }
+  };
+
   it.each(names)('%s is rejected with its EXPECTED path + code', (name) => {
-    const result = ValheimLinkMessageSchema.safeParse(
-      readJson(INVALID, `${name}.json`),
-    );
-    const issues = (result.error?.issues ?? []).map((i) => ({
+    const { result, threw } = parseInvalid(name);
+    expect({ name, threw, success: result?.success }).toEqual({
+      name,
+      threw: null,
+      success: false,
+    });
+    const issues = (result?.error?.issues ?? []).map((i) => ({
       path: i.path.map(String).join('.'),
       code: i.code,
     }));

@@ -32,3 +32,11 @@ Newest first. Every entry states **additive** or **breaking** (see
   Latest-wins keys include `serverId`. Body caps raised to cover the largest
   schema-valid message: `character` 2 MiB, `items` 10 MiB (`map` unchanged at
   8 MiB).
+- Second review round (still v1, unreleased): an int64 / SteamID64 that is
+  not a canonical decimal (`abc`, `1e5`, a 40-digit string, a negative
+  SteamID64, `-0`) is now **rejected** (`invalid_format`) instead of
+  throwing out of `safeParse` — the regex aborts before the range check,
+  which re-checks the pattern itself (8 new invalid fixtures; 27 in all).
+  The server bitmap rule (CONTRACT.md §6 step 4) now also requires **one**
+  gzip member with `FLG = 0`, rejecting concatenated members that Node's
+  gunzip would join. `schema.json` unchanged.

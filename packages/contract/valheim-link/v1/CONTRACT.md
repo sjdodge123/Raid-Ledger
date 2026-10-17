@@ -114,8 +114,10 @@ message and never hardcodes them.
 (px, py) is bit `i = py · width + px`, stored in byte `i >> 3` at bit `i & 7`
 (least significant first); `1` = explored; `py = 0` is the **south** edge. The
 `⌈width·height/8⌉` bytes (`valheimLinkBitmapBytes(width, height)`) are
-compressed as **one gzip member** (magic `1f 8b 08`, so `data` starts with
-`H4sI`), then standard padded base64 (RFC 4648 §4). `data` is 28–3 000 000
+compressed as **one gzip member** with a plain 10-byte header (magic
+`1f 8b 08`, `FLG = 0` — no name, comment, extra field or header CRC, which is
+what .NET `GZipStream` and zlib write; `data` starts with `H4sI`) and nothing
+after its 8-byte trailer, then standard padded base64 (RFC 4648 §4). `data` is 28–3 000 000
 chars, a multiple of 4, and at most the base64 length of
 `valheimLinkBitmapMaxGzipBytes(width, height)` (raw + raw/8 + raw/64 + 64 —
 zlib's conservative deflate bound; anything larger is not an honest
@@ -182,10 +184,17 @@ stays synchronous and browser-safe, so it never inflates. The ingest endpoint
    or length-trailer mismatch, truncated stream, output over the limit);
 3. **reject** unless the inflated length is **exactly**
    `valheimLinkBitmapBytes(width, height)`.
+4. **reject** unless `data` is **one** gzip member: header byte 3 (`FLG`) is
+   `0`, and a bounded raw inflate (`zlib.inflateRawSync(buf.subarray(10,
+   buf.length - 8), { maxOutputLength, info: true })`) consumes every byte
+   between the header and the trailer (`engine.bytesWritten` equals that
+   length). Node's gunzip silently joins concatenated members, so steps 1–3
+   alone accept two members whose outputs add up to the right length.
 
 It also enforces the `capturedAt` skew rule and the PNG `IHDR` check (§1).
 `api/src/plugins/valheim/valheim-link-contract.spec.ts` pins this rule
-against truncated, corrupt-CRC, short and 64× "bomb" gzip that all pass Zod.
+against truncated, corrupt-CRC, short, 64× "bomb" and two-member gzip that
+all pass Zod.
 
 ## 7. Size caps (exported constants — for ROK-1833 limits)
 
