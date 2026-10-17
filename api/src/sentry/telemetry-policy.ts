@@ -16,42 +16,73 @@
  */
 export const TELEMETRY_DEFAULT_ENABLED = true;
 
+/** Opt-out spellings, compared trimmed + lower-cased. */
+const ENABLE_OFF_VALUES: ReadonlySet<string> = new Set([
+  'false',
+  '0',
+  'no',
+  'off',
+]);
+const DISABLE_ON_VALUES: ReadonlySet<string> = new Set([
+  'true',
+  '1',
+  'yes',
+  'on',
+]);
+
+function normalised(value: string | undefined): string {
+  return (value ?? '').trim().toLowerCase();
+}
+
 /**
- * `DISABLE_TELEMETRY='true'` → off (always wins, back-compat). Otherwise
- * `ENABLE_TELEMETRY='false'` → off. Anything else (unset, empty, `'true'`,
- * `'1'`, `DISABLE_TELEMETRY='false'`) → {@link TELEMETRY_DEFAULT_ENABLED}.
+ * The opt-out is forgiving (review MAJOR 1): `DISABLE_TELEMETRY` of
+ * true/1/yes/on → off (always wins, back-compat). Otherwise `ENABLE_TELEMETRY`
+ * of false/0/no/off → off. Case and surrounding whitespace are ignored.
+ * Anything else (unset, empty, `'true'`, a typo) → {@link TELEMETRY_DEFAULT_ENABLED}.
  */
 export function isTelemetryEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  if (env.DISABLE_TELEMETRY === 'true') return false;
-  if (env.ENABLE_TELEMETRY === 'false') return false;
+  if (DISABLE_ON_VALUES.has(normalised(env.DISABLE_TELEMETRY))) return false;
+  if (ENABLE_OFF_VALUES.has(normalised(env.ENABLE_TELEMETRY))) return false;
   return TELEMETRY_DEFAULT_ENABLED;
+}
+
+/**
+ * The api initialises Sentry only in production (instrument.ts). Shared so the
+ * served flag applies the exact same condition.
+ */
+export function isProductionRuntime(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return env.NODE_ENV === 'production';
 }
 
 /** The env file ConfigModule loads (app.module.ts). instrument.ts loads it first. */
 export const API_ENV_FILE = '.env';
 
-let bootDecision: boolean | undefined;
+let bootServed: boolean | undefined;
 
 /**
  * Called once by instrument.ts, before Sentry.init: resolves the policy and
- * records it as the decision this process booted with.
+ * records what the api's Sentry gate will do (policy AND production).
  */
 export function resolveBootTelemetry(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  bootDecision = isTelemetryEnabled(env);
-  return bootDecision;
+  const enabled = isTelemetryEnabled(env);
+  bootServed = enabled && isProductionRuntime(env);
+  return enabled;
 }
 
 /**
- * What GET /system/status tells the browser: the decision the api's Sentry
- * gate actually used, so the two halves can never disagree. Falls back to a
+ * What GET /system/status tells the browser: whether the api's own Sentry
+ * gate is on (policy AND production), so a dev api never tells browsers to
+ * report (review MAJOR 2 / Codex P2). Serves the boot record; falls back to a
  * live read only when instrument.ts never ran (tests, one-off scripts).
  */
 export function servedTelemetryEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  return bootDecision ?? isTelemetryEnabled(env);
+  return bootServed ?? (isTelemetryEnabled(env) && isProductionRuntime(env));
 }

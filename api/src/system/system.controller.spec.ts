@@ -263,7 +263,11 @@ function describeSystemController() {
     });
 
     describe('ROK-1779/ROK-1838: telemetryEnabled', () => {
-      const KEYS = ['DISABLE_TELEMETRY', 'ENABLE_TELEMETRY'] as const;
+      const KEYS = [
+        'DISABLE_TELEMETRY',
+        'ENABLE_TELEMETRY',
+        'NODE_ENV',
+      ] as const;
       const saved: Partial<Record<(typeof KEYS)[number], string>> = {};
       beforeEach(() => {
         for (const key of KEYS) {
@@ -272,6 +276,8 @@ function describeSystemController() {
           else saved[key] = value;
           delete process.env[key];
         }
+        // The api reports only in production; the served flag follows it.
+        process.env.NODE_ENV = 'production';
         (mockUsersService.count as jest.Mock).mockResolvedValue(1);
         (
           mockSettingsService.isDiscordConfigured as jest.Mock
@@ -305,6 +311,12 @@ function describeSystemController() {
       it('is false when DISABLE_TELEMETRY also is true (disable wins)', async () => {
         process.env.ENABLE_TELEMETRY = 'true';
         process.env.DISABLE_TELEMETRY = 'true';
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(false);
+      });
+
+      it('is false on a non-production api even with nothing set (review MAJOR 2)', async () => {
+        process.env.NODE_ENV = 'development';
         const result = await controller.getStatus();
         expect(result.telemetryEnabled).toBe(false);
       });

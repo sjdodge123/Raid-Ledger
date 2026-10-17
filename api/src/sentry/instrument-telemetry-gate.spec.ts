@@ -104,4 +104,12 @@ describe('ROK-1779/ROK-1838: boot gate and /system/status agree', () => {
     expect(sentryInit).not.toHaveBeenCalled();
     expect(policy.servedTelemetryEnabled({})).toBe(false);
   });
+
+  it('a non-production api neither inits Sentry nor tells browsers to report (review MAJOR 2)', async () => {
+    const { sentryInit, policy } = await boot({ NODE_ENV: 'development' });
+    expect(sentryInit).not.toHaveBeenCalled();
+    expect(policy.servedTelemetryEnabled({ NODE_ENV: 'production' })).toBe(
+      false,
+    );
+  });
 });
