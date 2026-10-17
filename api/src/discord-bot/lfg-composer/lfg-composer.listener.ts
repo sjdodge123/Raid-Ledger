@@ -37,6 +37,7 @@ import {
 import type { Db } from './lfg-composer-search.db-helpers';
 import { parseTermCustomId } from './lfg-composer-state.helpers';
 import { viewComposerGames } from './lfg-composer-view.helpers';
+import { showComposerMyLfgs } from './lfg-composer-mine.helpers';
 
 /**
  * A failure as one token-safe line: message and code, never the error object.
@@ -105,6 +106,8 @@ function routeButton(
     return openComposerModal(deps, interaction, '');
   }
   if (id === LFG_COMPOSER_IDS.VIEW) return viewComposerGames(deps, interaction);
+  if (id === LFG_COMPOSER_IDS.MINE)
+    return showComposerMyLfgs(deps, interaction);
   const back = parseTermCustomId(id, LFG_COMPOSER_IDS.BACK);
   if (back !== null) return openComposerModal(deps, interaction, back);
   if (id.startsWith(`${LFG_COMPOSER_IDS.BACK_TO_CANDIDATES}:`)) {

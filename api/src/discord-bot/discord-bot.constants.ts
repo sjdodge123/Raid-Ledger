@@ -182,6 +182,14 @@ export const LFG_BUTTON_IDS = {
   WITHDRAW: 'lfg:withdraw',
   /** Handled by `LfgJoinListener` (ROK-1471 D6); never by the withdraw path. */
   JOIN: 'lfg:join',
+  /**
+   * ROK-1660 — the board post's `I'm out` button; handled by
+   * `LfgLeaveListener`. Deliberately NOT {@link WITHDRAW}: that handler
+   * repaints the message the button sits on, which on a shared board post
+   * would overwrite the public card with the presser's private list. This one
+   * answers ephemerally and never touches the post.
+   */
+  LEAVE: 'lfg:leave',
   /** ROK-1455 D12 — the DM decline; handled by `LfgInviteDeclineListener`. */
   INVITE_DECLINE: 'lfg:invite-decline',
   /**
