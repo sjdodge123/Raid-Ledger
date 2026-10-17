@@ -12,6 +12,7 @@ import type { GuildEditor, GuildMemberRow, GuildPage as GuildPageDto } from '@ra
 import { server } from '../../test/mocks/server';
 import { at } from '../../test/defined';
 import { renderWithProviders } from '../../test/render-helpers';
+import { activateWowPlugin } from '../../test/activate-wow-plugin';
 import { GuildPage } from './hub-page';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
@@ -57,7 +58,7 @@ function renderPage(): void {
     renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
 }
 
-beforeEach(() => { editorCalls = 0; posts = []; });
+beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GuildPage (ROK-1785)', () => {

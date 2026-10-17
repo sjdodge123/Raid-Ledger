@@ -1,7 +1,7 @@
 /**
  * ROK-1787: the guild page Raids tab, Overview raid widgets and hero chip.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
@@ -10,6 +10,7 @@ import { server } from '../../../test/mocks/server';
 import { emptyGuildRaids } from '../../../test/mocks/guild-raids-handlers';
 import { at } from '../../../test/defined';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { GuildPage } from '../hub-page';
 import { dayLabel, timeRange, timeShort } from './guild-raids.helpers';
 
@@ -59,6 +60,8 @@ function renderPage(hash = ''): void {
 }
 
 afterEach(() => { window.location.hash = ''; });
+
+beforeEach(() => { activateWowPlugin(); });
 
 describe('Guild Raids tab (ROK-1787)', () => {
     it('renders schedule, composition, attendance and full events from the payload', async () => {

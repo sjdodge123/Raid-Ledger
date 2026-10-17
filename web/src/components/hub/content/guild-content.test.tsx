@@ -10,6 +10,7 @@ import { Route, Routes } from 'react-router-dom';
 import type { GuildAddon, GuildAddonList, GuildPage as GuildPageDto, GuildProfile } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { at } from '../../../test/defined';
 import { GuildPage } from '../hub-page';
 
@@ -65,7 +66,7 @@ async function tabLabels(): Promise<(string | null)[]> {
     return within(nav).getAllByRole('link').map((a) => a.textContent);
 }
 
-beforeEach(() => { calls = []; });
+beforeEach(() => { activateWowPlugin(); calls = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GM post (Overview)', () => {
