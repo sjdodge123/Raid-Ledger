@@ -11,7 +11,7 @@ import type { SystemStatusDto } from '@raid-ledger/contract';
 import { queryClient } from './lib/query-client';
 import { initPerformanceMonitoring } from './lib/performance';
 import './index.css';
-import App from './App';
+import App from './App.tsx';
 import { ErrorFallback } from './components/ErrorFallback';
 import { systemStatusQueryOptions } from './hooks/use-system-status';
 import { Sentry, bufferBoundaryError, captureReactError } from './sentry';
