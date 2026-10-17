@@ -19,6 +19,7 @@ import type {
   ServerPresencePlayer,
   ServerPresenceSource,
 } from '../../plugins/pelican/presence/server-presence.sink';
+import type { AdHocParticipantJoinedPayload } from '../discord-bot.constants';
 import { getEventById } from './ad-hoc-event.helpers';
 import type { PendingServerPlayers } from './ad-hoc-server-pending';
 import {
@@ -82,6 +83,17 @@ export function hasTrackedPlayers(
   gameId: number,
 ): boolean {
   return (reader?.playersForGame(gameId).length ?? 0) > 0;
+}
+
+/**
+ * ROK-1822 (review MINOR 3): a PARTICIPANT_JOINED for an on-server row — no
+ * Discord id; voice joins (`addParticipant`) always carry one. Such a row was
+ * attached by `attachServerPlayer`, which only ever runs inside a serial slot
+ * that ends in `enrolGame` (`attachWithPending`, `afterSpawn`, `enrolGame`
+ * itself), so a follow-up enrol pass would only repeat that work.
+ */
+export function isServerRowJoin(p: AdHocParticipantJoinedPayload): boolean {
+  return p.discordUserId === undefined;
 }
 
 /** True when a held or tracker-reported player of `gameId` could enrol. */
