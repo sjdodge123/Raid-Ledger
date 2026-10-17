@@ -13,7 +13,7 @@ export function ruleLines(body: string): string[] {
 /**
  * Core's half of the Resources rule: it hides only when core's own content is
  * empty AND the viewer can't edit it. Module sections answer separately
- * through `HubResourceSection.useVisible` (ROK-1830) and are OR-ed in by the
+ * through `HubModSource.useVisible` (ROK-1830) and are OR-ed in by the
  * caller, which keeps the pre-r2 truth table: canEdit OR rules+links+<module
  * content> > 0.
  */

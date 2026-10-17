@@ -5,7 +5,7 @@
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
  * Resources is core's own tab, shown once it has content, the viewer can edit
  * it, or a module section reports content of its own (ROK-1830 — core asks
- * through `HubResourceSection.useVisible` during render, above the tab nav, so
+ * through `HubModSource.useVisible` during render, above the tab nav, so
  * a warm cache needs no second commit; it runs no plugin query itself).
  * A 403 (not a member) is a friendly empty state.
  */
