@@ -52,9 +52,24 @@ export type HubOnboardingStateDto = z.infer<typeof HubOnboardingStateSchema>;
  * Query of `POST`/`DELETE /guilds/onboarding/:key/dismiss`. Omitted `guildId`
  * means the global scope; a value scopes the dismissal to that hub.
  */
+export const MAX_GUILD_ID = 2_147_483_647;
+
+/**
+ * A scalar (string from the query string, or a number) coerced to a positive
+ * int4. The union runs BEFORE coercion so a repeated query param
+ * (`?guildId=1&guildId=2` → an array) or an object is a 400 rather than
+ * something `Number()` turns into `NaN` — and the `max` keeps the value
+ * inside Postgres' `integer`, where a larger id is an overflow 500, not a 404.
+ */
+const guildIdQuery = z
+    .union([z.string(), z.number()])
+    .transform((v) => (typeof v === 'number' ? v : Number(v)))
+    .pipe(z.number().int().positive().max(MAX_GUILD_ID))
+    .optional();
+
 export const HubOnboardingScopeQuerySchema = z
     .object({
-        guildId: z.coerce.number().int().positive().optional(),
+        guildId: guildIdQuery,
     })
     .strict();
 export type HubOnboardingScopeQuery = z.infer<

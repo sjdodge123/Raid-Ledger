@@ -1,6 +1,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import type { HubOnboardingDismissalDto } from '@raid-ledger/contract';
+import { HubOnboardingKeySchema } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
 
 type Db = PostgresJsDatabase<typeof schema>;
@@ -32,11 +33,20 @@ export async function listDismissals(
     .from(t)
     .where(eq(t.userId, userId))
     .orderBy(t.dismissedAt, t.id);
-  return rows.map((row) => ({
-    key: row.key as HubOnboardingDismissalDto['key'],
-    guildId: row.guildId,
-    dismissedAt: row.dismissedAt.toISOString(),
-  }));
+  // Parsed, not cast: the column is text, and a key the enum no longer knows
+  // (a retired prompt left behind by an older release) must not be handed to
+  // the web as a valid one — it is dropped instead.
+  return rows.flatMap((row) => {
+    const key = HubOnboardingKeySchema.safeParse(row.key);
+    if (!key.success) return [];
+    return [
+      {
+        key: key.data,
+        guildId: row.guildId,
+        dismissedAt: row.dismissedAt.toISOString(),
+      },
+    ];
+  });
 }
 
 /**
@@ -66,4 +76,14 @@ export async function deleteDismissal(
   await db
     .delete(schema.hubOnboardingDismissals)
     .where(scopeWhere(userId, key, guildId));
+}
+
+/** Does this guild exist? A scoped dismissal for one that does not is a 404. */
+export async function guildExists(db: Db, guildId: number): Promise<boolean> {
+  const rows = await db
+    .select({ id: schema.guilds.id })
+    .from(schema.guilds)
+    .where(eq(schema.guilds.id, guildId))
+    .limit(1);
+  return rows.length > 0;
 }

@@ -53,4 +53,24 @@ describe('parseOnboardingScope', () => {
       BadRequestException,
     );
   });
+
+  // Codex P2: `2147483648` coerced cleanly and then overflowed Postgres'
+  // `integer` column — a 500 on a value the schema should have refused.
+  it('refuses a guild id above the int4 ceiling', () => {
+    expect(parseOnboardingScope({ guildId: '2147483647' })).toBe(2147483647);
+    expect(() => parseOnboardingScope({ guildId: '2147483648' })).toThrow(
+      BadRequestException,
+    );
+  });
+
+  // A repeated query param arrives as an array; `Number(['1'])` is 1, so the
+  // union has to reject it BEFORE coercion rather than silently accept it.
+  it('refuses a non-scalar guildId before coercion', () => {
+    expect(() => parseOnboardingScope({ guildId: ['1'] })).toThrow(
+      BadRequestException,
+    );
+    expect(() => parseOnboardingScope({ guildId: { id: 1 } })).toThrow(
+      BadRequestException,
+    );
+  });
 });

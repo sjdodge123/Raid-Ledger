@@ -41,7 +41,7 @@ export class HubOnboardingController {
     @Param('key') key: string,
     @Query() query: unknown,
   ): Promise<HubOnboardingStateDto> {
-    return this.onboarding.dismiss(req.user.id, key, query);
+    return this.onboarding.dismiss(req.user, key, query);
   }
 
   @Delete(':key/dismiss')
@@ -50,6 +50,6 @@ export class HubOnboardingController {
     @Param('key') key: string,
     @Query() query: unknown,
   ): Promise<HubOnboardingStateDto> {
-    return this.onboarding.restore(req.user.id, key, query);
+    return this.onboarding.restore(req.user, key, query);
   }
 }
