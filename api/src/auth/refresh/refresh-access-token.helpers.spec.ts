@@ -130,11 +130,23 @@ describe('ROK-1810 Codex r2 — refresh mint after a concurrent revoke', () => {
     expect(q.limit).toHaveBeenCalledTimes(2);
   });
 
-  it('no floor → no revoke re-check query (only the user lookup)', async () => {
+  // ROK-1820: a password change commits the revoke BEFORE `blockUser` writes
+  // Redis. A refresh whose floor read lands in that gap sees no floor, yet its
+  // rotated row is already revoked — it must still 401 with nothing signed.
+  it('no floor + rotated row revoked → null (401), nothing signed', async () => {
     const t = build(null);
-    const q = queuedDb([USER]);
+    const q = queuedDb([{ revokedAt: new Date(NOW) }], [USER]);
+    const sign = jest.spyOn(t.jwt, 'sign');
+    const deps = { ...t.deps, db: q.db };
+    await expect(mintRefreshAccessToken(deps, ROTATED)).resolves.toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('no floor + rotated row live → re-check, then the user lookup', async () => {
+    const t = build(null);
+    const q = queuedDb([{ revokedAt: null }], [USER]);
     await mintOrFail({ ...t.deps, db: q.db });
-    expect(q.limit).toHaveBeenCalledTimes(1);
+    expect(q.limit).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -158,5 +170,37 @@ describe('ROK-1810 Codex r4 — target promoted between the floor pin and valida
     const iat = iatOf(t.jwt, await mintOrFail(deps));
     expect(iat).toBe(preFloor);
     expect(await t.blocklist.isBlocked(TARGET.id, iat)).toBe(true);
+  });
+});
+
+describe('ROK-1820 refresh impersonation exp vs the marker deadline', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  const SECOND = Math.floor(NOW.getTime() / 1000);
+
+  it('a floored iat never pushes exp past the marker expires_at', async () => {
+    const expiresAt = new Date((SECOND + 20) * 1000 + 500);
+    const t = build({ target: TARGET, expiresAt });
+    await t.blocklist.blockUser(USER.id);
+    const token = await mintOrFail(t.deps);
+    expect(t.jwt.decode<{ iat: number; exp: number }>(token)).toMatchObject({
+      iat: SECOND + 1,
+      exp: SECOND + 20,
+    });
+  });
+
+  it('floor reaches the deadline → the holder gets their OWN token, not a born-expired one', async () => {
+    const expiresAt = new Date((SECOND + 1) * 1000);
+    const t = build({ target: TARGET, expiresAt });
+    await t.blocklist.blockUser(USER.id);
+    const token = await mintOrFail(t.deps);
+    const claims = t.jwt.decode<{ sub: number; impersonatedBy?: number }>(
+      token,
+    );
+    expect({ sub: claims.sub, impersonatedBy: claims.impersonatedBy }).toEqual({
+      sub: USER.id,
+      impersonatedBy: undefined,
+    });
   });
 });

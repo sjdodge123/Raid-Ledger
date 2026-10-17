@@ -34,6 +34,7 @@ import { REFRESH_COOKIE_NAME } from './refresh-cookie.helpers';
 import { hashToken } from './refresh-token.helpers';
 import * as rotation from './refresh-rotation.helpers';
 import * as grace from './refresh-grace.helpers';
+import { PasswordChangeSessionService } from '../password-change/password-change-session.service';
 
 let testApp: TestApp;
 
@@ -168,5 +169,84 @@ describe('ROK-1809 refresh rotation vs revocation', () => {
     const sibling = await service().rotate(issued.rawToken);
 
     expect(sibling).toBeNull();
+  });
+});
+
+// ── ROK-1820: a refresh committed before a password change, answered after ──
+
+function refreshWith(rawToken: string) {
+  return testApp.request
+    .post('/auth/refresh')
+    .set('Cookie', `${REFRESH_COOKIE_NAME}=${rawToken}`);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
+/** The `rl_rt` value a response sets, or undefined when it sets none. */
+function refreshCookieSet(res: {
+  headers: Record<string, unknown>;
+}): string | undefined {
+  const raw = res.headers['set-cookie'];
+  const lines = isStringArray(raw) ? raw : [];
+  const prefix = `${REFRESH_COOKIE_NAME}=`;
+  const line = lines.find((l) => l.startsWith(prefix));
+  return line?.slice(prefix.length).split(';')[0];
+}
+
+/**
+ * Run `between` right after the controller's `rotate()` commits the child and
+ * before the access token is minted — the window where another device's
+ * password change lands while this refresh is still in flight.
+ */
+function afterRotateCommits(between: () => Promise<unknown>): void {
+  const svc = service();
+  const original = svc.rotate.bind(svc);
+  jest.spyOn(svc, 'rotate').mockImplementationOnce(async (raw) => {
+    const rotated = await original(raw);
+    await between();
+    return rotated;
+  });
+}
+
+describe('ROK-1820 refresh in flight across a password change', () => {
+  it('revoke committed but block not yet written → 401 and no rl_rt Set-Cookie', async () => {
+    const { userId, issued } = await issueAdminFamily();
+    // revokeAllSessions step 1 only: the blocklist write has not landed yet.
+    afterRotateCommits(() => service().revokeAllForUser(userId));
+
+    const res = await refreshWith(issued.rawToken);
+
+    expect({ status: res.status, cookie: refreshCookieSet(res) }).toEqual({
+      status: 401,
+      cookie: undefined,
+    });
+  });
+
+  it('a full password change mid-refresh → 401, no rl_rt, and the re-issued token still rotates', async () => {
+    const { userId, issued } = await issueAdminFamily();
+    const pw = testApp.app.get(PasswordChangeSessionService);
+    const admin = testApp.seed.adminUser;
+    let reissued: string | undefined;
+    afterRotateCommits(async () => {
+      await pw.revokeAllSessions(userId);
+      const session = await pw.issueSession(
+        { id: admin.id, username: admin.username, role: admin.role },
+        null,
+      );
+      reissued = session.refresh.rawToken;
+    });
+
+    const stale = await refreshWith(issued.rawToken);
+    expect({ status: stale.status, cookie: refreshCookieSet(stale) }).toEqual({
+      status: 401,
+      cookie: undefined,
+    });
+
+    // Same second as the block: the password change's own token is not caught.
+    const fresh = await refreshWith(defined(reissued, 're-issued rl_rt'));
+    expect(fresh.status).toBe(200);
+    expect(refreshCookieSet(fresh)).toEqual(expect.any(String));
   });
 });
