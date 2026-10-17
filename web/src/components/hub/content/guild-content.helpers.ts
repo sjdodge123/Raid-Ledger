@@ -1,8 +1,9 @@
 /**
- * ROK-1786 — pure helpers for the guild page content (rules, links, addons,
- * the Resources tab rule).
+ * ROK-1786/ROK-1830 — pure helpers for the hub's core content (rules, links
+ * and the Resources tab rule). The addon flavor labels moved to the WoW
+ * plugin with the addon panel they name.
  */
-import type { GuildAddonFlavor, GuildAddonList, GuildProfile } from '@raid-ledger/contract';
+import type { GuildAddonList, GuildProfile } from '@raid-ledger/contract';
 
 /** A rule body renders as the prototype's item list: one item per non-blank line. */
 export function ruleLines(body: string): string[] {
@@ -30,12 +31,6 @@ export function moveItem<T>(list: readonly T[], index: number, dir: -1 | 1): T[]
     next[to] = a;
     return next;
 }
-
-export const FLAVOR_LABEL: Record<GuildAddonFlavor | 'any', string> = {
-    any: 'Any flavor', classic: 'Classic', forever: 'Forever', retail: 'Retail',
-};
-
-export const SOURCE_LABEL = { curseforge: 'CurseForge', wago: 'Wago', github: 'GitHub', url: 'Website' } as const;
 
 /** "Updated 3 Oct 2026" — absolute and locale-formatted, so tests stay stable. */
 export function updatedLabel(iso: string): string {

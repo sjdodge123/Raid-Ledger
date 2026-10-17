@@ -1,14 +1,21 @@
 /**
- * ROK-1786 — the Resources tab: rules, links (side by side from md) and the
- * recommended addons below.
+ * ROK-1786/ROK-1830 — the Resources tab: rules and links (side by side from
+ * md), then whatever sections the hub module adds below them (WoW: the
+ * recommended addons).
  */
 import type { JSX } from 'react';
-import { GuildAddons } from './guild-addons';
 import { GuildLinks } from './guild-links';
 import { GuildRules } from './guild-rules';
 import { useGuildAddons, useGuildProfile } from '../api/use-guild-content';
+import type { HubModule } from '../../../plugins/hub-module';
 
-export function GuildResources({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element {
+interface GuildResourcesProps {
+    guildId: number;
+    canEdit: boolean;
+    module: HubModule | undefined;
+}
+
+export function GuildResources({ guildId, canEdit, module: mod }: GuildResourcesProps): JSX.Element {
     const profile = useGuildProfile(guildId);
     const addons = useGuildAddons(guildId);
     if (profile.error || addons.error) {
@@ -21,7 +28,9 @@ export function GuildResources({ guildId, canEdit }: { guildId: number; canEdit:
                 <GuildRules guildId={guildId} rules={profile.data.rules} canEdit={canEdit} />
                 <GuildLinks guildId={guildId} links={profile.data.links} canEdit={canEdit} />
             </div>
-            <GuildAddons guildId={guildId} list={addons.data} canEdit={canEdit} />
+            {(mod?.resourceSections ?? []).map((Section, i) => (
+                <Section key={`resource-section-${i}`} guildId={guildId} canEdit={canEdit} />
+            ))}
         </div>
     );
 }

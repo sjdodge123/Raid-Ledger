@@ -5,6 +5,7 @@
  * it the moment the Blizzard plugin is switched off.
  */
 import type { HubModule } from '../../hub-module';
+import { GuildAddonsSection } from '../guild/guild-addons';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
 import { WowFactionPill, WowWhereFact } from './wow-hero';
 import { wowHeroNote } from './wow-hero.helpers';
@@ -40,4 +41,5 @@ export const wowHubModule: HubModule = {
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
     eventsJumpTab: 'raids',
+    resourceSections: [GuildAddonsSection],
 };

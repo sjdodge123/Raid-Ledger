@@ -1,8 +1,8 @@
 /** ROK-1786 — rule line splitting, the Resources rule, the link preview and reorder ids. */
 import { describe, it, expect } from 'vitest';
 import type { GuildAddon } from '@raid-ledger/contract';
-import { parseAddonUrl, previewAddonUrl } from './addon-url';
-import { reorderedIds } from './addon-view';
+import { parseAddonUrl, previewAddonUrl } from '../../../plugins/wow/guild/addon-url';
+import { reorderedIds } from '../../../plugins/wow/guild/addon-view';
 import { moveItem, resourcesVisible, ruleLines } from './guild-content.helpers';
 
 const stub = (id: number): GuildAddon => ({

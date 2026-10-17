@@ -3,8 +3,13 @@
  * filter (`null` flavor / empty `flavors` = every flavor).
  */
 import type { GuildAddon, GuildAddonFlavor, GuildAddonRequirement, PinnedAddon } from '@raid-ledger/contract';
-import { FLAVOR_LABEL, SOURCE_LABEL } from './guild-content.helpers';
 import { parseAddonUrl } from './addon-url';
+
+export const FLAVOR_LABEL: Record<GuildAddonFlavor | 'any', string> = {
+    any: 'Any flavor', classic: 'Classic', forever: 'Forever', retail: 'Retail',
+};
+
+export const SOURCE_LABEL = { curseforge: 'CurseForge', wago: 'Wago', github: 'GitHub', url: 'Website' } as const;
 
 export type FlavorFilter = GuildAddonFlavor | 'any';
 

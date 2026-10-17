@@ -64,7 +64,7 @@ interface PanelProps {
 function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'roster') return <HubMembers ctx={ctx} module={mod} />;
-    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} />;
+    if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
     return <HubOverview ctx={ctx} module={mod} />;

@@ -45,6 +45,12 @@ export interface HubWidget {
     visible?: (ctx: HubCtx) => boolean;
 }
 
+/** What a module-provided Resources-tab section receives. */
+export interface HubResourceCtx {
+    guildId: number;
+    canEdit: boolean;
+}
+
 /** One cell of a member row, rendered in `memberColumns` order. */
 export interface HubMemberColumn {
     id: string;
@@ -84,6 +90,8 @@ export interface HubModule {
      * renders a dead chip.
      */
     eventsJumpTab?: string;
+    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). */
+    resourceSections?: readonly ComponentType<HubResourceCtx>[];
 }
 
 export interface HubModuleRegistration {

@@ -1,19 +1,23 @@
 /**
- * ROK-1786 — "Recommended addons" (prototype `RecommendedAddons.tsx`):
+ * ROK-1786/ROK-1830 — "Recommended addons" (prototype `RecommendedAddons.tsx`):
  * pinned rows first (from the setting, never editable), then the guild's own
  * list, filtered by flavor. Editors add by pasting a link, edit, remove and
  * reorder (the full id list is PUT back).
+ *
+ * Addon flavors are a WoW concept, so the panel lives in this plugin and is
+ * contributed to core's Resources tab through `HubModule.resourceSections`.
  */
 import { useState, type JSX } from 'react';
 import type { GuildAddonList } from '@raid-ledger/contract';
-import { RadioGroup } from '../../ui/radio-group';
+import { RadioGroup } from '../../../components/ui/radio-group';
 import { AddAddonForm, type NewAddon } from './addon-form';
 import { AddonRow, type RowActions } from './addon-row';
 import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
-import { SectionTitle } from '../hub-bits';
-import { useGuildAddonMutations } from '../api/use-guild-content';
+import { SectionTitle } from '../../../components/hub/hub-bits';
+import { useGuildAddonMutations, useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import type { HubResourceCtx } from '../../hub-module';
 
 const FILTER_OPTIONS = [
     { value: 'any', label: 'All' },
@@ -42,7 +46,14 @@ function useAddonActions(guildId: number, list: GuildAddonList, visible: Readonl
     return { actions, add, adding: m.add.isPending, addFailure: m.add.error?.message ?? null, listError };
 }
 
-export function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
+/** The Resources-tab section: core has already settled this query before the tab renders. */
+export function GuildAddonsSection({ guildId, canEdit }: HubResourceCtx): JSX.Element | null {
+    const addons = useGuildAddons(guildId);
+    if (!addons.data) return null;
+    return <GuildAddons guildId={guildId} list={addons.data} canEdit={canEdit} />;
+}
+
+function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
     const [filter, setFilter] = useState<FlavorFilter>('any');
     const visible = list.addons.filter((a) => guildAddonMatches(a, filter));
     const { actions, add, adding, addFailure, listError } = useAddonActions(guildId, list, new Set(visible.map((a) => a.id)));
