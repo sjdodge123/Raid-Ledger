@@ -156,9 +156,17 @@ describe('POST /admin/test/wow/seed-guild — the cast', () => {
 
   it.each([
     // GM_RANK_IMPLIES_EDIT is off: the GM has no implicit rights.
-    ['gm', 200, { canEdit: false, canManageEditors: false }],
-    ['officer', 200, { canEdit: true, canManageEditors: false }],
-    ['member', 200, { canEdit: false, canManageEditors: false }],
+    ['gm', 200, { role: 'member', canEdit: false, canManageEditors: false }],
+    [
+      'officer',
+      200,
+      { role: 'officer', canEdit: true, canManageEditors: false },
+    ],
+    [
+      'member',
+      200,
+      { role: 'member', canEdit: false, canManageEditors: false },
+    ],
     ['outsider', 403, undefined],
   ] as const)('%s → %i with viewer %o', async (role, status, viewer) => {
     const out = await seedGuild('Matrix Keepers');

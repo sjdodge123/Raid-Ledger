@@ -93,6 +93,7 @@ export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
   return {
     id: row.id,
     gameId: row.gameId,
+    kind: row.kind,
     name: row.name,
     region: row.region,
     realmSlug: row.realmSlug,

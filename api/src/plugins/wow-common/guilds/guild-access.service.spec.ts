@@ -13,6 +13,7 @@ import {
 import {
   GM_RANK_IMPLIES_EDIT,
   GuildAccessService,
+  viewerAccess,
   type GuildActor,
 } from './guild-access.service';
 import type { LinkedMemberRow } from './guild-membership.helpers';
@@ -134,6 +135,47 @@ describe('GuildAccessService access matrix', () => {
   });
 });
 
+describe('GuildAccessService.resolveLadder (ROK-1830)', () => {
+  it.each(['admin', 'operator'] as const)(
+    '%s is leader without any member row',
+    async (role) => {
+      expect(await service.resolveLadder(actor(role), GUILD)).toBe('leader');
+      expect(db.select).not.toHaveBeenCalled();
+    },
+  );
+
+  it('an explicit grant (rank or member) makes an officer', async () => {
+    queue([member(2, 1)], [{ id: 9 }]);
+    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('officer');
+  });
+
+  it('a live member without a grant — the GM included — is a member', async () => {
+    queue([member(1, 0)], []);
+    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('member');
+  });
+
+  it('no live linked row is a visitor and skips the delegation lookup', async () => {
+    db.where.mockResolvedValueOnce([]);
+    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('visitor');
+    expect(db.where).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('viewerAccess (ROK-1830)', () => {
+  it.each([
+    ['leader', true, true],
+    ['officer', true, false],
+    ['member', false, false],
+    ['visitor', false, false],
+  ] as const)('%s → canEdit %s, canManageEditors %s', (role, edit, manage) => {
+    expect(viewerAccess(role)).toEqual({
+      role,
+      canEdit: edit,
+      canManageEditors: manage,
+    });
+  });
+});
+
 describe('GM_RANK_IMPLIES_EDIT', () => {
   it('is off until character ownership is verified', () => {
     expect(GM_RANK_IMPLIES_EDIT).toBe(false);
@@ -156,6 +198,7 @@ describe('GuildAccessService.myGuilds', () => {
       {
         id: GUILD,
         gameId: 3,
+        kind: 'wow_guild',
         name: 'Stormwind Guard',
         region: 'us',
         realmSlug: null,
@@ -169,6 +212,7 @@ describe('GuildAccessService.myGuilds', () => {
       {
         id: GUILD,
         gameId: 3,
+        kind: 'wow_guild',
         name: 'Stormwind Guard',
         region: 'us',
         realmSlug: null,

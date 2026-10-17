@@ -1,7 +1,12 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { and, asc, eq, inArray, or } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GuildSummary, UserRole } from '@raid-ledger/contract';
+import type {
+  GuildSummary,
+  GuildViewerAccess,
+  LadderRole,
+  UserRole,
+} from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import {
@@ -34,6 +39,25 @@ export function isStaff(actor: GuildActor): boolean {
   return actor.role === 'admin' || actor.role === 'operator';
 }
 
+/** ROK-1830 D5-A: edit rights = Leader or Officer (today's `canEdit`). */
+export function ladderCanEdit(role: LadderRole): boolean {
+  return role === 'leader' || role === 'officer';
+}
+
+/** ROK-1830 D5-A: managing editors = Leader only (today's staff check). */
+export function ladderCanManageEditors(role: LadderRole): boolean {
+  return role === 'leader';
+}
+
+/** The page's `viewer` object, every boolean derived from the ladder role. */
+export function viewerAccess(role: LadderRole): GuildViewerAccess {
+  return {
+    role,
+    canEdit: ladderCanEdit(role),
+    canManageEditors: ladderCanManageEditors(role),
+  };
+}
+
 /**
  * ROK-1785 D4 — the ONLY place guild rank / delegation logic lives. Every
  * answer is computed live from the latest snapshot; nothing is cached, so a
@@ -59,18 +83,29 @@ export class GuildAccessService {
   }
 
   /**
-   * Admin/operator, or an explicit `guild_editors` grant (rank or member).
-   * The GM counts only while `GM_RANK_IMPLIES_EDIT` is on.
+   * ROK-1830 D5-A ladder, resolved in ONE place. Until ROK-1794: staff
+   * (admin/operator) ⇒ leader; an explicit `guild_editors` grant (rank or
+   * member) ⇒ officer — the GM counts only while `GM_RANK_IMPLIES_EDIT` is
+   * on; any other live linked member ⇒ member; everyone else ⇒ visitor.
    */
-  async canEdit(actor: GuildActor, guildId: number): Promise<boolean> {
-    if (isStaff(actor)) return true;
+  async resolveLadder(actor: GuildActor, guildId: number): Promise<LadderRole> {
+    if (isStaff(actor)) return 'leader';
     const rows = await findLinkedMemberRows(this.db, actor.id, guildId);
-    if (rows.length === 0) return false;
-    if (GM_RANK_IMPLIES_EDIT && rows.some(isGuildMaster)) return true;
-    return this.hasDelegation(guildId, rows);
+    if (rows.length === 0) return 'visitor';
+    if (GM_RANK_IMPLIES_EDIT && rows.some(isGuildMaster)) return 'officer';
+    const delegated = await this.hasDelegation(guildId, rows);
+    return delegated ? 'officer' : 'member';
   }
 
-  /** Granting/revoking editors: admin/operator only (no DB lookup). */
+  /** Leader or Officer: admin/operator, or an explicit `guild_editors` grant. */
+  async canEdit(actor: GuildActor, guildId: number): Promise<boolean> {
+    return ladderCanEdit(await this.resolveLadder(actor, guildId));
+  }
+
+  /**
+   * Granting/revoking editors: Leader only. Today only staff are Leader, so
+   * no DB lookup is needed (ROK-1794 makes rank 0 a Leader and this a query).
+   */
   canManageEditors(actor: GuildActor, guildId: number): Promise<boolean> {
     void guildId;
     return Promise.resolve(isStaff(actor));

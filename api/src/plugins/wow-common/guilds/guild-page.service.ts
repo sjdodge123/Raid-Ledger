@@ -16,6 +16,7 @@ import * as schema from '../../../drizzle/schema';
 import {
   GuildAccessService,
   isStaff,
+  viewerAccess,
   type GuildActor,
 } from './guild-access.service';
 import {
@@ -79,16 +80,15 @@ export class GuildPageService {
     }
     const guild = await findGuild(this.db, guildId);
     if (!guild) throw new NotFoundException('Guild not found');
-    const [rows, importedBy, canEdit, canManageEditors] = await Promise.all([
+    const [rows, importedBy, role] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),
-      this.access.canEdit(actor, guildId),
-      this.access.canManageEditors(actor, guildId),
+      this.access.resolveLadder(actor, guildId),
     ]);
     return {
       guild: toGuildSummary(guild),
       importedBy,
-      viewer: { canEdit, canManageEditors },
+      viewer: viewerAccess(role),
       ranks: groupRoster(rows),
       roleCounts: computeRoleCounts(rows),
     };
