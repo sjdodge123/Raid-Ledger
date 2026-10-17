@@ -114,16 +114,20 @@ export async function mergeSteamIntoUserRow(
   });
 }
 
-/** ROK-1822: the merging player's character name, else the folded row's. */
+/**
+ * ROK-1822: the character name the merged row keeps. An incoming name wins;
+ * an explicitly nameless player (displayName = SteamID) clears it, because a
+ * closed session's name may be another character and would be rehydrated
+ * after a restart (Codex r2). Only an omitted display name keeps the folded
+ * row's name.
+ */
 function mergedCharacterName(
   member: SteamMergeInput,
   steam: Row | null,
-): { characterName?: string } {
+): { characterName?: string | null } {
   const { steamId, displayName } = member;
-  const named =
-    displayName === undefined
-      ? null
-      : characterNameOf({ steamId, displayName });
-  const name = named ?? steam?.characterName ?? null;
-  return name === null ? {} : { characterName: name };
+  if (displayName !== undefined)
+    return { characterName: characterNameOf({ steamId, displayName }) };
+  const kept = steam?.characterName ?? null;
+  return kept === null ? {} : { characterName: kept };
 }

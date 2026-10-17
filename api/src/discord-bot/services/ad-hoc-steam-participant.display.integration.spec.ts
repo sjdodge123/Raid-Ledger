@@ -170,4 +170,24 @@ describe('Steam row display identity — unlinked players (ROK-1821 F4)', () => 
     const row = await steamRow(eventId);
     expect([row.discordUsername, row.characterName]).toEqual([STEAM_A, null]);
   });
+
+  it("a nameless rejoin that folds the closed Steam row into the user's voice row does not bring its old character name back", async () => {
+    const eventId = await insertEvent();
+    await service.addServerParticipant(eventId, member('Ragnhild', null));
+    await service.markServerLeave(eventId, STEAM_A);
+    const userId = await insertLinkedUser('RokRL');
+    await service.addParticipant(eventId, {
+      discordUserId: 'rok1822-r3-voice',
+      discordUsername: 'VoiceName',
+      discordAvatarHash: null,
+      userId,
+    });
+    await service.addServerParticipant(eventId, member(STEAM_A, userId));
+
+    const row = await steamRow(eventId);
+    expect([row.discordUserId, row.characterName]).toEqual([
+      'rok1822-r3-voice',
+      null,
+    ]);
+  });
 });
