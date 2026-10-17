@@ -62,6 +62,8 @@ x-runner-base: &runner-base
     # steps, so the container default is pinned to the same number. ~4.6 GB heap
     # + ~1.4 GB native (V8 + chromium for Playwright) fits under 6 GiB.
     NODE_OPTIONS: --max-old-space-size=4608
+    # ROK-1838: error reporting is on by default; runner-booted api/web opt out.
+    ENABLE_TELEMETRY: "false"
   # Each runner needs the host docker socket so it can spin sibling containers
   # (env stacks, testcontainers) and the host worktree dir mounted at /workspace.
   # node_modules + caches live in named volumes (do NOT sync via Mutagen).
@@ -353,6 +355,7 @@ services:
     environment:
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
+      ENABLE_TELEMETRY: "false"
       RL_SLOT: "1"
     volumes:
       - /srv/rl-infra/runners/slot-1/worktree:/workspace
@@ -375,6 +378,7 @@ services:
     environment:
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
+      ENABLE_TELEMETRY: "false"
       RL_SLOT: "2"
     volumes:
       - /srv/rl-infra/runners/slot-2/worktree:/workspace
@@ -401,6 +405,7 @@ services:
     environment:
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
+      ENABLE_TELEMETRY: "false"
       RL_SLOT: "3"
     volumes:
       - /srv/rl-infra/runners/slot-3/worktree:/workspace
@@ -420,6 +425,7 @@ services:
     environment:
       TZ: America/Denver
       NODE_OPTIONS: --max-old-space-size=4608
+      ENABLE_TELEMETRY: "false"
       RL_SLOT: "4"
     volumes:
       - /srv/rl-infra/runners/slot-4/worktree:/workspace

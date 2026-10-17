@@ -711,6 +711,9 @@ LAST_PHASE="pg_ready"
 # inbox (1,348 events in 11h from one fleet container once looked like a prod
 # incident). Pass SENTRY_ENVIRONMENT=fleet-slot-${SLOT} so each slot's events
 # land in their own bucket instead. SLOT is the runner slot resolved above.
+# ROK-1838: error reporting is now ON by default, so fleet envs opt out with
+# ENABLE_TELEMETRY=false (API and, via /system/status, the web app) — fleet
+# envs sharing the built-in DSN helped exhaust the Sentry quota on 2026-10-15.
 # Note: only NEW containers pick this up — the idempotent re-spin path above
 # never re-runs `docker run`, so a pre-existing env keeps the env it was
 # created with until it's destroyed + spun fresh.
@@ -804,6 +807,7 @@ docker run -d \
     -e FLEET_ADMIN_DISCORD_ID="${RL_OPERATOR_DISCORD_ID:-}" \
     -e NODE_ENV=production \
     -e SENTRY_ENVIRONMENT="fleet-slot-${SLOT}" \
+    -e ENABLE_TELEMETRY=false \
     ${PUBLIC_URL_FLAG[@]+"${PUBLIC_URL_FLAG[@]}"} \
     ${EXTRA_ENV[@]+"${EXTRA_ENV[@]}"} \
     --label "rl.role=env" \

@@ -1656,6 +1656,7 @@ run_container_validation() {
     --name "$cname" \
     -p "${host_port}:80" \
     -e ADMIN_PASSWORD=ci-test \
+    -e ENABLE_TELEMETRY=false \
     rl:ci-test
 
   _wait_for_container_health "$cname" "$host_port"
