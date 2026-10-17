@@ -20,6 +20,28 @@ interface ActivityRow {
   createdAt: Date;
 }
 
+/**
+ * Any metadata key naming a raw Discord identifier (`discordUserId`,
+ * `discordId`, `discordUsername`, ...). ROK-1824: the reschedule-ack writer
+ * stores `discordUserId` for participants with no Ledger account; the read
+ * path must never return it, to any caller.
+ */
+const DISCORD_IDENTIFIER_KEY = /discord/i;
+
+/** Drop raw Discord identifiers from a stored metadata blob (ROK-1824). */
+export function stripDiscordIdentifiers(
+  metadata: unknown,
+): Record<string, unknown> | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return null;
+  }
+  return Object.fromEntries(
+    Object.entries(metadata).filter(
+      ([key]) => !DISCORD_IDENTIFIER_KEY.test(key),
+    ),
+  );
+}
+
 function mapRow(r: ActivityRow): ActivityEntryDto {
   return {
     id: r.id,
@@ -28,7 +50,7 @@ function mapRow(r: ActivityRow): ActivityEntryDto {
       ? // 'Unknown' fallback fires only for orphan rows whose actorId points at a user the LEFT JOIN couldn't resolve (residue from before the activity_log.actor_id FK was enforced).
         { id: r.actorId, displayName: r.actorName ?? 'Unknown' }
       : null,
-    metadata: (r.metadata as Record<string, unknown>) ?? null,
+    metadata: stripDiscordIdentifiers(r.metadata),
     createdAt: r.createdAt.toISOString(),
   };
 }

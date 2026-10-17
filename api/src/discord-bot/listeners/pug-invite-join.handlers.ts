@@ -1,10 +1,12 @@
 import { eq, and } from 'drizzle-orm';
 import type { ButtonInteraction } from 'discord.js';
+import { ForbiddenException } from '@nestjs/common';
 import * as schema from '../../drizzle/schema';
 import type { PugRole } from '@raid-ledger/contract';
 import type { PugInviteDeps } from './pug-invite.helpers';
 import { safeDeferReply, safeErrorReply } from './pug-invite.helpers';
 import { errorStack } from '../../common/error-format.helpers';
+import { assertClaimerIsInvitee } from '../../events/invite.helpers';
 
 /**
  * Handle "Join Event" button from invite link unfurl (ROK-263).
@@ -29,8 +31,15 @@ export async function handleJoinEventButton(
   }
 }
 
+interface JoinSlot {
+  id: string;
+  eventId: number;
+  role: string;
+  discordUserId: string | null;
+}
+
 interface ValidatedJoinContext {
-  slot: { id: string; eventId: number; role: string };
+  slot: JoinSlot;
   event: typeof schema.events.$inferSelect;
 }
 
@@ -67,6 +76,7 @@ async function doJoinEvent(
 ): Promise<void> {
   const ctx = await validateJoinContext(deps, interaction, inviteCode);
   if (!ctx) return;
+  if (await refuseNonInvitee(interaction, ctx.slot)) return;
   const linkedUser = await findLinkedUser(deps, interaction.user.id);
   if (!linkedUser) {
     await replyWithWebLink(interaction, inviteCode);
@@ -85,6 +95,26 @@ async function doJoinEvent(
     linkedUser,
     ctx.event.title,
   );
+}
+
+/**
+ * ROK-1825: the web claim's invitee binding, applied before anything is
+ * written — a reserved slot is never signed into or deleted by someone else.
+ */
+async function refuseNonInvitee(
+  interaction: ButtonInteraction,
+  slot: JoinSlot,
+): Promise<boolean> {
+  try {
+    assertClaimerIsInvitee(slot, interaction.user.id);
+    return false;
+  } catch (err) {
+    if (!(err instanceof ForbiddenException)) throw err;
+    await interaction.editReply({
+      content: 'This spot is reserved for another player.',
+    });
+    return true;
+  }
 }
 
 async function findLinkedUser(
@@ -131,7 +161,7 @@ async function checkExistingSignup(
 async function createSignupAndCleanup(
   deps: PugInviteDeps,
   interaction: ButtonInteraction,
-  slot: { id: string; eventId: number; role: string },
+  slot: JoinSlot,
   linkedUser: { id: number },
   eventTitle: string,
 ): Promise<void> {

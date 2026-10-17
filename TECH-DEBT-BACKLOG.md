@@ -2775,3 +2775,8 @@ same day (#1278, #1279, #1280).
 ### 2026-10-16 — fix/rok-1818-completion-without-scheduled-event (surfaced during the fleet Discord smoke gate)
 
 - **med** — `tools/test-bot/src/smoke/` ROK-1370 tests "poll start flips embed to RESCHEDULING and tears down the Scheduled Event" and "lock-in restores the live embed + Scheduled Event, repeatably": `pollForCondition timed out after 60000ms` when run in the combined `SMOKE_NAME_FILTER='scheduled event'` set on a fleet env (concurrency 5). Pre-existing: an `origin/main` 394c1ec99 baseline env on slot 2 failed both in 2/2 runs (branch failed them 3 of 4); both pass when run alone. The env log in both cases has ~12 `Discord API timeout: scheduledEvents.fetch exceeded 30000ms` lines (create/update for the ROK-1370 events), and the shared dev guild held 8 foreign scheduled events. Main run 2 also failed ROK-1696 (`SE … did not reach Active within 300000ms`). Suggested: serialize the scheduled-event smoke group (or cut its concurrency) and add a guild-SE cache/backoff so concurrent `scheduledEvents.fetch` calls don't each pay a 30s timeout; then re-baseline.
+
+### 2026-10-17 — fix/security-p2-batch (review NITs left out of ROK-1824/1825/1826)
+
+- **low** `api/src/discord-bot/commands/invite.command.ts` — `/invite` doesn't refuse deactivated or banned callers, unlike `/lfg` and (after ROK-1826) `/event`. Not a regression; found reviewing ROK-1826. Suggested: resolve the caller the way `resolveLfgCaller` does and reply `LFG_BLOCKED_REPLY`.
+- **nit** lineup activity route — has no `NotDeactivatedGuard` (the event route is fine). Same on main before this batch. Suggested: add the guard so a deactivated user's still-valid JWT can't read lineup activity.
