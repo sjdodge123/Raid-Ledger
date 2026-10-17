@@ -87,10 +87,13 @@ describe('setupProgress', () => {
 
     // Lead ruling 1: the blocked channel row must not pin the card open — an
     // Officer who has done everything else still sees it finish.
-    it('an Officer finishes without the channel step', () => {
+    it('an Officer reaches 6 of 6 — the blocked channel row is not counted', () => {
+        // Countable for an Officer: roster, leader-post, rules, links, mods,
+        // next-raid. `leader` and `publish` are blocked for everyone; `discord`
+        // is blocked only here, so the total drops from 7 to 6, not the done.
         const progress = setupProgress(setupSteps(input({
             profile: FULL, discord: UNSET, modsConfigured: true, hasNextRaid: true, canPickChannel: false,
         })));
-        expect(progress).toEqual({ done: 5, total: 5, complete: true, label: '5 of 5' });
+        expect(progress).toEqual({ done: 6, total: 6, complete: true, label: '6 of 6' });
     });
 });

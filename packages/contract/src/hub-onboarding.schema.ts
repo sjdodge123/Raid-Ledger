@@ -60,9 +60,15 @@ export const MAX_GUILD_ID = 2_147_483_647;
  * (`?guildId=1&guildId=2` → an array) or an object is a 400 rather than
  * something `Number()` turns into `NaN` — and the `max` keeps the value
  * inside Postgres' `integer`, where a larger id is an overflow 500, not a 404.
+ *
+ * The string branch is pinned to canonical decimal digits BEFORE `Number()`,
+ * because `Number()` accepts far more than a client can put in a query string:
+ * `1e3`, `" 7 "` and `"7.0"` all used to resolve to real ids (Codex P3, PR-3).
  */
+const CANONICAL_ID = /^[1-9]\d{0,9}$/;
+
 const guildIdQuery = z
-    .union([z.string(), z.number()])
+    .union([z.string().regex(CANONICAL_ID, 'guildId must be decimal digits'), z.number()])
     .transform((v) => (typeof v === 'number' ? v : Number(v)))
     .pipe(z.number().int().positive().max(MAX_GUILD_ID))
     .optional();

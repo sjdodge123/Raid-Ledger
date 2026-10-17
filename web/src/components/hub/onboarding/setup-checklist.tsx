@@ -6,6 +6,7 @@
  */
 import type { JSX } from 'react';
 import { Button } from '../../ui/button';
+import { FOCUS_RING } from '../../ui/form-classes';
 import { WidgetCard } from '../hub-bits';
 import { useGuildProfile } from '../api/use-guild-content';
 import { useGuildDiscord } from '../discord/use-guild-discord';
@@ -14,7 +15,9 @@ import { useHubOnboarding } from './use-hub-onboarding';
 import { setupProgress, setupSteps, type SetupStep } from './setup-checklist.helpers';
 
 const MARK = 'mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px] leading-none';
-const LINK = 'rounded text-sm font-medium text-accent underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus';
+// `text-accent` / `ring-focus` were never declared tokens (ROK-1645): the
+// shipped inline-link idiom is `text-success` plus the shared FOCUS_RING.
+const LINK = `rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`;
 
 function StepAction({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() => void) | null }): JSX.Element | null {
     if (step.done) return null;

@@ -235,14 +235,21 @@ test('hero "Next raid" chip jumps from Overview to the Raids tab', async ({ page
     });
 });
 
-test('editor: the Overview setup checklist lists what is missing and stays dismissed', async ({ page }, testInfo) => {
+test('editor: the Overview setup checklist scores the seeded hub and stays dismissed', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         const list = page.getByTestId('setup-checklist');
-        await expect(list, 'a freshly seeded hub has nothing set up yet (ROK-1830 S5b, D11-B)').toBeVisible({ timeout: 15_000 });
-        await expect(page.getByTestId('setup-checklist-progress')).toHaveText('0 of 5 done');
+        await expect(list, 'the seeded hub still has steps outstanding (ROK-1830 S5b, D11-B)').toBeVisible({ timeout: 15_000 });
+        // An Officer has no channel picker, so the Discord row is blocked and
+        // drops out of the count: six countable steps, not seven.
+        await expect(page.getByTestId('setup-checklist-progress')).toHaveText(/^\d+ of 6 done$/);
+        // The seed already satisfies three of them; the profile ones it does not.
+        await expect(list.getByTestId('setup-step-roster'), 'the Officer is a seeded member').toHaveAttribute('data-done', 'true');
+        await expect(list.getByTestId('setup-step-next-raid'), 'the seed tags raid nights').toHaveAttribute('data-done', 'true');
+        await expect(list.getByTestId('setup-step-mods'), 'the seeded WoW hub ships addons').toHaveAttribute('data-done', 'true');
         await expect(list.getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
         await expect(list.getByTestId('setup-step-action-rules')).toHaveAttribute('href', '#resources');
+        await expect(list.getByTestId('setup-step-blocked-discord'), 'an Officer is told to ask the Leader (ruling 1)').toBeVisible();
         await expect(page.getByTestId('setup-step-blocked-publish'), 'hiding a hub lands in ROK-1831').toBeVisible();
 
         await page.getByTestId('setup-checklist-dismiss').click();
