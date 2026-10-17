@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "map",
+  "character": {
+    "steamId": "76561198000000001",
+    "playerId": "1000000000000001",
+    "worldUid": "1234567890123"
+  },
+  "grid": {
+    "textureSize": 2048,
+    "pixelSizeMetres": 12
+  },
+  "explored": {
+    "encoding": "gzip+base64-bitset-lsb0",
+    "width": 1024,
+    "height": 1024,
+    "data": "H4sIAAAAAAACE+3bwW3CQBRAwSAOOVICpVAalEYplOAjBxRHCSG2K3hRdqaBJ+z1gvDftzcAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgNYurV/n+b3sf8zz3H789ALcv/qn9vKHN+D78oc3YHr2j+ntDxfA8/ZnC+Dyk5/36fLLFuD06h/T5ZctwMerf26Xf/UA/ObnXfr4RQ/gdeknD+Bt6R/Sxz/aAO5L/5Q+/tEGsDz+zQawyicbQNy/rPv7dPtJNqC6f1v3D+P1p3U/2IDv6/5pvP5j3T/rl19/xRdg3d/kgy/AwfuXbX+vH/78CH6A6I/dv237B319ff1R+tO2f3T99fX19f3+1v//ff9/tH3//8X90f9/9v6j7Y/+/q1+/zn6++fR5w/q+Y/R52/y+ad6/quef6vn/+r5x3r+s55/red/8/nnev67nn+v5//r8w/1+Y/6/Et+/qc+/1Sf/6rPv+Xn/+rzj/X5z/z8a33+FwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD4Cz4BfX/MLgAAAgA="
+  },
+  "sharedExplored": null,
+  "pins": [
+    {
+      "type": "Icon0",
+      "label": "Camp",
+      "x": 120.5,
+      "z": -42.25,
+      "checked": false,
+      "shared": false
+    },
+    {
+      "type": "Death",
+      "label": "",
+      "x": 900,
+      "z": 1450,
+      "checked": true,
+      "shared": false
+    },
+    {
+      "type": "Boss",
+      "label": "Fixture boss",
+      "x": -300,
+      "z": 610,
+      "checked": false,
+      "shared": false
+    }
+  ],
+  "baseMap": null
+}
