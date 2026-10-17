@@ -98,6 +98,7 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       identity,
       tagger,
+      { kind: 'wow_guild' } as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const identityCalls = registerAdapter.mock.calls.filter(
@@ -126,6 +127,7 @@ describe('WowCommonModule character-identity registration', () => {
       {} as never,
       { gameSlugs: [] } as never,
       tagger as never,
+      { kind: 'wow_guild' } as never,
     );
     (mod as unknown as { registerAdapters(): void }).registerAdapters();
     const taggerCalls = registerAdapter.mock.calls.filter(
@@ -136,6 +138,38 @@ describe('WowCommonModule character-identity registration', () => {
         EXTENSION_POINTS.EVENT_GUILD_TAGGER,
         '*',
         tagger,
+        { ownerPluginId: 'blizzard' },
+      ],
+    ]);
+  });
+});
+
+describe('WowCommonModule hub-kind registration (ROK-1830)', () => {
+  it('registers WoW as the "wow_guild" hub kind, owned by the plugin (ROK-1830)', () => {
+    const registerAdapter = jest.fn();
+    const noSlugs = { gameSlugs: [] as string[] };
+    const hubKind = { kind: 'wow_guild' };
+    const mod = new WowCommonModule(
+      { registerAdapter } as never,
+      {} as never,
+      noSlugs as never,
+      noSlugs as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { gameSlugs: [] } as never,
+      { pluginSlug: 'blizzard' } as never,
+      hubKind as never,
+    );
+    (mod as unknown as { registerAdapters(): void }).registerAdapters();
+    const hubCalls = registerAdapter.mock.calls.filter(
+      ([point]) => point === EXTENSION_POINTS.HUB_KIND,
+    );
+    expect(hubCalls).toEqual([
+      [
+        EXTENSION_POINTS.HUB_KIND,
+        'wow_guild',
+        hubKind,
         { ownerPluginId: 'blizzard' },
       ],
     ]);
