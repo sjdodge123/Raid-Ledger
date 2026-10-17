@@ -17,9 +17,9 @@ const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
 
 function makePage(canEdit: boolean): GuildPageDto {
     return {
-        guild: { id: 7, gameId: 1, name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null },
+        guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null },
         importedBy: null,
-        viewer: { canEdit, canManageEditors: false },
+        viewer: { role: canEdit ? 'officer' : 'member', canEdit, canManageEditors: false },
         ranks: [],
         roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
     };

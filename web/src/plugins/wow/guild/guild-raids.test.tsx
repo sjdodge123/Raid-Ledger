@@ -18,9 +18,9 @@ const CHAR_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';
 const GROUP_ID = '0d7e3f5a-1b2c-4d3e-8f9a-0b1c2d3e4f5a';
 
 const PAGE: GuildPageDto = {
-    guild: { id: 7, gameId: 1, name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null },
+    guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null },
     importedBy: null,
-    viewer: { canEdit: false, canManageEditors: false },
+    viewer: { role: 'member', canEdit: false, canManageEditors: false },
     ranks: [],
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 0 },
 };

@@ -23,9 +23,9 @@ function row(overrides: Partial<GuildMemberRow> & Pick<GuildMemberRow, 'memberId
 
 function makePage(canManageEditors = false): GuildPageDto {
     return {
-        guild: { id: 7, gameId: 1, name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 3, lastSnapshotAt: null },
+        guild: { id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us', realmSlug: null, realmName: 'Doomhowl', faction: 'Horde', memberCount: 3, lastSnapshotAt: null },
         importedBy: null,
-        viewer: { canEdit: canManageEditors, canManageEditors },
+        viewer: { role: canManageEditors ? 'leader' : 'member', canEdit: canManageEditors, canManageEditors },
         ranks: [
             { rankIndex: 0, rankName: 'Guild Master', members: [row({ memberId: 1, name: 'Grimtusk', rankIndex: 0, rankName: 'Guild Master', effectiveRole: 'tank', characterId: LINKED_ID, isMain: true })] },
             { rankIndex: 2, rankName: 'Raider', members: [row({ memberId: 2, name: 'Stormcall', effectiveRole: 'healer', characterId: '9a8b7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d' }), row({ memberId: 3, name: 'Nolinkadin' })] },
