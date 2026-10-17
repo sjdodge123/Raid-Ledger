@@ -1,7 +1,7 @@
 /**
- * ROK-1830 — the hub's tab frame. Core pins Overview and Members first and
- * Resources last (D7-A); a module's tabs sit between them, ordered by their
- * own `order`. A module cannot take the first or the last slot.
+ * ROK-1830 — the hub's tab frame. Core pins Overview, Members and Events
+ * first and Resources last (D7-A); a module's tabs sit between them, ordered
+ * by their own `order`. A module cannot take the first or the last slot.
  */
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 
@@ -19,6 +19,7 @@ export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: 
     return [
         { id: 'overview', label: 'Overview', hidden: false },
         { id: 'members', label: 'Members', hidden: false },
+        { id: 'events', label: 'Events', hidden: false },
         ...moduleTabs,
         { id: 'resources', label: 'Resources', hidden: !showResources },
     ];

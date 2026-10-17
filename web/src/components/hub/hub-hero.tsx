@@ -58,8 +58,10 @@ interface HubHeroProps {
 
 export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Element {
     const line = mod?.heroNote ? mod.heroNote(ctx) : null;
-    const jumpTab = mod?.eventsJumpTab ?? null;
-    const chip = nextRaid !== null && jumpTab !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} /> : null;
+    // Core always has an Events tab now (ROK-1830 S3c), so the chip always has
+    // somewhere to land; a module only redirects it (WoW → its Raids tab).
+    const jumpTab = mod?.eventsJumpTab ?? 'events';
+    const chip = nextRaid !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} /> : null;
     return (
         <header data-testid="guild-hero"
             className="mb-4 flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">

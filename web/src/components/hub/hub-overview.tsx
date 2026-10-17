@@ -21,6 +21,8 @@ const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').t
 
 const SPAN_2 = 'md:col-span-2';
 const OVERVIEW_ATTENDANCE_TOP = 5;
+/** "All events" always lands on the core Events tab now that one exists (ROK-1830 S3c). */
+const EVENTS_TAB = 'events';
 
 interface Cell {
     key: string;
@@ -30,7 +32,7 @@ interface Cell {
 }
 
 /** The core band. Module widgets land between these orders — WoW uses 50/60/80. */
-function coreCells({ page, raids }: HubCtx, jumpTab: string | null): Cell[] {
+function coreCells({ page, raids }: HubCtx): Cell[] {
     const data = raids.data;
     const cells: Cell[] = [
         { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
@@ -38,7 +40,7 @@ function coreCells({ page, raids }: HubCtx, jumpTab: string | null): Cell[] {
     ];
     if (!data) return cells;
     cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} /> });
-    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={jumpTab} /> });
+    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} /> });
     cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} /> });
     return cells;
 }
@@ -50,7 +52,7 @@ function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
 }
 
 export function HubOverview({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
-    const cells = [...coreCells(ctx, mod?.eventsJumpTab ?? null), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const cells = [...coreCells(ctx), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

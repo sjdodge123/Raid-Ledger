@@ -108,9 +108,11 @@ export interface HubModule {
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */
     heroNote?: (ctx: HubCtx) => string | null;
     /**
-     * Tab id the hero's next-event chip and the Overview events widget jump to
-     * (WoW: `raids`). Unset = no jump, so a module without an events tab never
-     * renders a dead chip.
+     * Tab id the hero's next-event chip jumps to. Core's own Events tab owns
+     * the Overview "All events" jump (ROK-1830 S3c); this is only the chip, so
+     * a module can send "Next raid" at its own tab — WoW points at `raids`,
+     * where the next raid's role composition is (approved prototype). Unset =
+     * the core Events tab.
      */
     eventsJumpTab?: string;
     /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` component is fine. */

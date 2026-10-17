@@ -23,6 +23,7 @@ import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
 import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
+import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
 import { usePluginsHydrated } from '../../hooks/use-plugins';
@@ -72,6 +73,7 @@ interface PanelProps {
 function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
+    if (active === 'events') return <HubEventsTab query={ctx.raids} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
