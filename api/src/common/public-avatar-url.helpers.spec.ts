@@ -27,6 +27,31 @@ describe('publicAvatarUrl (ROK-1827)', () => {
     expect(String(publicAvatarUrl('hash1'))).not.toContain(SNOWFLAKE);
   });
 
+  it('nulls an absolute Discord-CDN avatar URL stored on the row', () => {
+    expect(
+      publicAvatarUrl(
+        `https://cdn.discordapp.com/avatars/${SNOWFLAKE}/hash1.png`,
+      ),
+    ).toBeNull();
+    expect(
+      publicAvatarUrl(
+        `https://media.discordapp.net/avatars/${SNOWFLAKE}/hash1.png?size=64`,
+      ),
+    ).toBeNull();
+    expect(
+      publicAvatarUrl(`https://example.com/avatars/${SNOWFLAKE}.png`),
+    ).toBeNull();
+  });
+
+  it('still passes a non-Discord absolute URL through unchanged', () => {
+    const url = 'https://cdn.example.com/uploads/u/42/portrait.webp';
+    expect(publicAvatarUrl(url)).toBe(url);
+  });
+
+  it('nulls a string that starts with http but is not a parsable URL', () => {
+    expect(publicAvatarUrl('httpnonsense')).toBeNull();
+  });
+
   it('takes no Discord id parameter, so no caller can reintroduce one', () => {
     expect(publicAvatarUrl.length).toBe(1);
   });
