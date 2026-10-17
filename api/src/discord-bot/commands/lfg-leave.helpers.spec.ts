@@ -8,11 +8,14 @@ import {
   LFG_LEAVE_ALL_CHOICE,
   LFG_LEAVE_NONE_CHOICE,
   buildLeaveChoices,
+  DISCORD_CONTENT_CAP,
   buildLeftAllReply,
+  buildLeftSomeReply,
   matchOwnGroup,
   remainingCount,
 } from './lfg-leave.helpers';
 import {
+  LFG_LEAVE_ERROR_REPLY,
   buildLeftReply,
   buildNotInGroupReply,
   withdrawIfPresent,
@@ -58,14 +61,19 @@ describe('buildLeaveChoices (ROK-1660)', () => {
 
   it('filters own games by the typed text, case-insensitively', () => {
     expect(buildLeaveChoices(groups, 'HELL')).toEqual([
-      LFG_LEAVE_ALL_CHOICE,
       { name: 'Helldivers 2', value: '3' },
     ]);
   });
 
-  it('never offers a game the caller is not in, even when typed', () => {
-    const values = buildLeaveChoices(groups, 'deep').map((c) => c.value);
-    expect(values).toEqual(['all']);
+  it('never offers a game the caller is not in — nor All my LFGs alone', () => {
+    // Typing a game you are not in must not leave a no-confirm "leave
+    // everything" as the only thing to pick.
+    expect(buildLeaveChoices(groups, 'deep')).toEqual([]);
+  });
+
+  it('offers All my LFGs while the typed text names it', () => {
+    expect(buildLeaveChoices(groups, 'ALL')[0]).toEqual(LFG_LEAVE_ALL_CHOICE);
+    expect(buildLeaveChoices(groups, 'my lf')).toEqual([LFG_LEAVE_ALL_CHOICE]);
   });
 
   it('answers the single none choice when the caller has no hands', () => {
@@ -126,6 +134,37 @@ describe('/lfg-leave reply copy (ROK-1660)', () => {
     expect(buildLeftAllReply(['A', 'B', 'C'])).toBe(
       "You're out of all 3 — **A**, **B**, **C**.",
     );
+  });
+
+  it('All my LFGs with 40 long names still fits one Discord message', () => {
+    const names = Array.from(
+      { length: 40 },
+      (_, i) => `${String(i).padStart(2, '0')}${'n'.repeat(48)}`,
+    );
+    const reply = buildLeftAllReply(names);
+    expect(reply.length).toBeLessThanOrEqual(DISCORD_CONTENT_CAP);
+    expect(reply).toMatch(/^You're out of all 40 — \*\*00n+\*\*, /);
+    expect(reply).toMatch(/ …and \d+ more\.$/);
+    const shown = (reply.match(/\*\*\d\dn+\*\*/g) ?? []).length;
+    const hidden = Number(/…and (\d+) more/.exec(reply)?.[1]);
+    expect(shown + hidden).toBe(40);
+  });
+
+  it('a partial All my LFGs names what was left, what was not, then the error', () => {
+    expect(buildLeftSomeReply(['A', 'B'], ['Z'])).toBe(
+      `You're out of **A**, **B**, but couldn't leave **Z**. ${LFG_LEAVE_ERROR_REPLY}`,
+    );
+  });
+
+  it('a partial reply with nothing left is just the error line', () => {
+    expect(buildLeftSomeReply([], ['Z'])).toBe(LFG_LEAVE_ERROR_REPLY);
+  });
+
+  it('a partial reply with 40 long names on each side still fits', () => {
+    const names = Array.from({ length: 40 }, (_, i) => `${i}${'x'.repeat(49)}`);
+    const reply = buildLeftSomeReply(names, names);
+    expect(reply.length).toBeLessThanOrEqual(DISCORD_CONTENT_CAP);
+    expect(reply.endsWith(LFG_LEAVE_ERROR_REPLY)).toBe(true);
   });
 });
 

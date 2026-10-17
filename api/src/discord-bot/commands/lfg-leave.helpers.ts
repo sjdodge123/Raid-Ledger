@@ -7,6 +7,7 @@
  * `Leave · {game}` list buttons — they live in `listeners/lfg-leave.helpers`.
  */
 import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
+import { LFG_LEAVE_ERROR_REPLY } from '../listeners/lfg-leave.helpers';
 
 /** Autocomplete value for `All my LFGs` — leaves every own hand at once. */
 export const LFG_LEAVE_ALL_SENTINEL = 'all';
@@ -34,8 +35,9 @@ export function ownGroups(groups: LfgGroupSummaryDto[]): LfgGroupSummaryDto[] {
 }
 
 /**
- * The `/lfg-leave game:` autocomplete: `All my LFGs` first, then one choice
- * per OWN group whose name contains the typed text (case-insensitive).
+ * The `/lfg-leave game:` autocomplete: `All my LFGs` first (only while the
+ * typed text is empty or part of that label), then one choice per OWN group
+ * whose name contains the typed text (case-insensitive).
  * No own groups → the single `You're not in any LFG` choice.
  *
  * @param groups - `LfgService.listGroups(userId)`; filtered to own here.
@@ -48,6 +50,10 @@ export function buildLeaveChoices(
   const own = ownGroups(groups);
   if (own.length === 0) return [LFG_LEAVE_NONE_CHOICE];
   const needle = typed.trim().toLowerCase();
+  // `All my LFGs` leaves everything with no confirm, so it is never the lone
+  // answer to someone typing a game they are not in — only to an empty query
+  // or one that names it.
+  const offerAll = LFG_LEAVE_ALL_CHOICE.name.toLowerCase().includes(needle);
   const games = own
     .filter((g) => g.gameName.toLowerCase().includes(needle))
     .slice(0, LFG_LEAVE_MAX_GAME_CHOICES)
@@ -55,7 +61,7 @@ export function buildLeaveChoices(
       name: g.gameName.slice(0, CHOICE_NAME_CAP),
       value: String(g.gameId),
     }));
-  return [LFG_LEAVE_ALL_CHOICE, ...games];
+  return offerAll ? [LFG_LEAVE_ALL_CHOICE, ...games] : games;
 }
 
 /**
@@ -83,8 +89,42 @@ export function remainingCount(
   return groups.find((g) => g.gameId === gameId)?.activeCount ?? 0;
 }
 
-/** `All my LFGs` with two or more groups left. */
+/** Discord rejects message content longer than this. */
+export const DISCORD_CONTENT_CAP = 2000;
+
+/**
+ * `**A**, **B**, **C**` — as many names as fit in `budget` characters, then
+ * `…and N more`. The withdrawals have already happened by the time this is
+ * worded, so the reply must never be too long to send.
+ */
+export function boundedNameList(names: string[], budget: number): string {
+  const bold = names.map((n) => `**${n.slice(0, CHOICE_NAME_CAP)}**`);
+  for (let shown = bold.length; shown > 0; shown -= 1) {
+    const hidden = bold.length - shown;
+    const more = hidden > 0 ? ` …and ${hidden} more` : '';
+    const list = `${bold.slice(0, shown).join(', ')}${more}`;
+    if (list.length <= budget) return list;
+  }
+  return `…and ${bold.length} more`;
+}
+
+/** `All my LFGs` with two or more groups left. Always fits one message. */
 export function buildLeftAllReply(gameNames: string[]): string {
-  const list = gameNames.map((n) => `**${n}**`).join(', ');
-  return `You're out of all ${gameNames.length} — ${list}.`;
+  const lead = `You're out of all ${gameNames.length} — `;
+  const budget = DISCORD_CONTENT_CAP - lead.length - 1;
+  return `${lead}${boundedNameList(gameNames, budget)}.`;
+}
+
+/**
+ * `All my LFGs` where some withdrawals threw: name what WAS left (those writes
+ * landed) and what was not, then the generic error line. Nothing left → just
+ * the error line.
+ */
+export function buildLeftSomeReply(left: string[], failed: string[]): string {
+  if (left.length === 0) return LFG_LEAVE_ERROR_REPLY;
+  const fixed = `You're out of , but couldn't leave . ${LFG_LEAVE_ERROR_REPLY}`;
+  const half = Math.floor((DISCORD_CONTENT_CAP - fixed.length) / 2);
+  const leftList = boundedNameList(left, half);
+  const failedList = boundedNameList(failed, half);
+  return `You're out of ${leftList}, but couldn't leave ${failedList}. ${LFG_LEAVE_ERROR_REPLY}`;
 }

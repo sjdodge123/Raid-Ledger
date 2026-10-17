@@ -66,7 +66,13 @@ function setup(lists: LfgGroupSummaryDto[][], games: GameRow[][] = []) {
   for (const list of lists) listGroups.mockResolvedValueOnce(list);
   listGroups.mockResolvedValue(lists.at(-1) ?? []);
   const withdraw = jest.fn().mockResolvedValue(undefined);
-  const service = { listGroups, withdraw } as unknown as LfgService;
+  // One queue for both reads: the own-groups read and the after-count read
+  // are consumed in call order, as the tests below script them.
+  const service = {
+    listGroups,
+    listOwnGroups: listGroups,
+    withdraw,
+  } as unknown as LfgService;
   const command = new LfgLeaveCommand(
     fakeDb(games) as never,
     service,
@@ -196,6 +202,22 @@ describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
     ]);
     expect(editReply).toHaveBeenCalledWith(
       "You're out of all 2 — **A**, **B**.",
+    );
+  });
+
+  it('All my LFGs that fails midway names what WAS left, then the error', async () => {
+    const { command, withdraw } = setup([
+      [group(1, 'A', true), group(2, 'B', true), group(3, 'C', true)],
+    ]);
+    withdraw
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('db down'))
+      .mockResolvedValueOnce(undefined);
+    const { interaction, editReply } = slash('all');
+    await command.handleInteraction(interaction);
+    expect(withdraw).toHaveBeenCalledTimes(3);
+    expect(editReply).toHaveBeenCalledWith(
+      "You're out of **A**, **C**, but couldn't leave **B**. Something went wrong. Please try again.",
     );
   });
 

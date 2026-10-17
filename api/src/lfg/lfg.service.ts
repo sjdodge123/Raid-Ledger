@@ -42,6 +42,7 @@ import {
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
+import { listOwnActiveGroups } from './lfg-own-groups.helpers';
 import { readGroupDetail } from './lfg-group-detail.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
@@ -279,6 +280,11 @@ export class LfgService {
   /** `GET /lfg` — every game somebody is actively looking for. */
   listGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
     return listActiveGroups(this.db, userId);
+  }
+
+  /** The caller's own live groups — uncapped, unlike {@link listGroups}. */
+  listOwnGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
+    return listOwnActiveGroups(this.db, userId);
   }
 
   /** `GET /lfg/:gameId` — group detail, including an empty-group read. */

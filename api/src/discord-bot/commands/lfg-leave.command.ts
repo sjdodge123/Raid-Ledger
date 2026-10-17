@@ -9,7 +9,7 @@
  * group-changed event (and the board post re-render) fire identically. There
  * is no second write path.
  */
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
   MessageFlags,
   SlashCommandBuilder,
@@ -41,6 +41,7 @@ import {
   LFG_LEAVE_NONE_SENTINEL,
   buildLeaveChoices,
   buildLeftAllReply,
+  buildLeftSomeReply,
   matchOwnGroup,
   ownGroups,
   remainingCount,
@@ -62,6 +63,7 @@ export class LfgLeaveCommand
   implements SlashCommandHandler, CommandInteractionHandler
 {
   readonly commandName = 'lfg-leave';
+  private readonly logger = new Logger(LfgLeaveCommand.name);
 
   constructor(
     @Inject(DrizzleAsyncProvider)
@@ -92,7 +94,7 @@ export class LfgLeaveCommand
     const focused = interaction.options.getFocused(true);
     if (focused.name !== 'game') return;
     const caller = await resolveLfgCaller(this.db, interaction.user.id);
-    const groups = caller ? await this.lfgService.listGroups(caller.id) : [];
+    const groups = caller ? await this.lfgService.listOwnGroups(caller.id) : [];
     await interaction.respond(buildLeaveChoices(groups, focused.value));
   }
 
@@ -110,7 +112,7 @@ export class LfgLeaveCommand
       await interaction.editReply(LFG_BLOCKED_REPLY);
       return;
     }
-    const groups = await this.lfgService.listGroups(caller.id);
+    const groups = await this.lfgService.listOwnGroups(caller.id);
     if (!typed || typed === LFG_LEAVE_NONE_SENTINEL) {
       await this.replyWithList(interaction, groups);
     } else if (typed === LFG_LEAVE_ALL_SENTINEL) {
@@ -152,14 +154,16 @@ export class LfgLeaveCommand
     userId: number,
     groups: LfgGroupSummaryDto[],
   ): Promise<void> {
-    const left: LfgGroupSummaryDto[] = [];
-    for (const group of ownGroups(groups)) {
-      if (await withdrawIfPresent(this.lfgService, userId, group.gameId)) {
-        left.push(group);
-      }
-    }
+    const { left, failed } = await this.withdrawEach(userId, ownGroups(groups));
     const [only] = left;
-    if (left.length === 0 || !only) {
+    if (failed.length > 0) {
+      await interaction.editReply(
+        buildLeftSomeReply(
+          left.map((g) => g.gameName),
+          failed.map((g) => g.gameName),
+        ),
+      );
+    } else if (left.length === 0 || !only) {
       await this.replyWithList(interaction, []);
     } else if (left.length === 1) {
       const reply = await this.leftReply(userId, only.gameId, only.gameName);
@@ -169,6 +173,29 @@ export class LfgLeaveCommand
         buildLeftAllReply(left.map((g) => g.gameName)),
       );
     }
+  }
+
+  /**
+   * Withdraw each group in turn. One failure does not stop the rest, and the
+   * writes that DID land are reported rather than lost behind a generic error.
+   */
+  private async withdrawEach(
+    userId: number,
+    groups: LfgGroupSummaryDto[],
+  ): Promise<{ left: LfgGroupSummaryDto[]; failed: LfgGroupSummaryDto[] }> {
+    const left: LfgGroupSummaryDto[] = [];
+    const failed: LfgGroupSummaryDto[] = [];
+    for (const group of groups) {
+      try {
+        if (await withdrawIfPresent(this.lfgService, userId, group.gameId)) {
+          left.push(group);
+        }
+      } catch (error) {
+        this.logger.error(`Failed to leave LFG game ${group.gameId}:`, error);
+        failed.push(group);
+      }
+    }
+    return { left, failed };
   }
 
   /** `You're out — …` with the count re-read after the write. */
