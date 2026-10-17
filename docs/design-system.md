@@ -1024,6 +1024,17 @@ with a tone map on tokens only: success `bg-success/10 border-success/30 text-su
 same recipe, neutral/expected-refusal `bg-panel border-edge text-muted`. Put a one-line legend above the
 table saying what each chip in a cell means, and a `title` on every chip.
 
+**Module-extended list table (ROK-1830).** The hub's Members list is the read-only sibling: the same
+`max-w-full overflow-x-auto border border-edge` box + `useMediaQuery(DESKTOP_MQ)` split, except the columns
+come from the active plugin's hub module rather than the file
+(`web/src/components/hub/hub-member-table.tsx`, driven by `HubMemberColumn`). Rules for that shape: every
+column carries a `header`, which is the `<th>` on desktop and the only label a phone card gets, so the first
+column is the row's identity and the rest wrap into one meta line; a grouped list draws its band as a
+`<th scope="colgroup">` row on `bg-panel` (phone: the same line above the card group), never a second table;
+any per-row accent is a `border-l-2` on the first cell with a token class the module supplies. Tools above
+the box are the shared `SearchInput` (max-width `xs`) and, when a column offers grouping, a `Checkbox`
+labelled `Group by <header>`, with a `text-xs text-muted` count line between them and the box.
+
 **Editable admin table (ROK-1094).** When each row carries controls (pickers, a `Switch`, a ghost button),
 keep the same box/header/divider idiom at ≥1024px and switch to one stacked card per row below it via
 `useMediaQuery(DESKTOP_MQ)` (§4.18) — reference `web/src/plugins/pelican/slots/pelican-servers-table.tsx`;
