@@ -89,7 +89,10 @@ export interface HubMemberGrouping {
 
 /**
  * One column of the Members list (ROK-1830 S3b). `header` names it in the
- * desktop table head and labels the cell on the phone cards. A column with
+ * desktop table head ONLY — a phone card shows the first column as the row's
+ * identity line and wraps the rest into one unlabelled meta line, so every
+ * cell must read on its own (a column whose `cell` can render `null`, such as
+ * WoW's Main/Raid role, would otherwise leave an orphan label). A column with
  * `groupBy` also offers core the "Group by <header>" toggle — core bands the
  * rows by the returned key, in first-appearance order, so the module's own row
  * order decides the band order.

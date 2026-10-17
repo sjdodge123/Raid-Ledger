@@ -58,13 +58,17 @@ export function useHashTab(
     const hash = useSyncExternalStore(subscribeToHash, readHash, serverHash);
     const active = tabFromHash(hash, ids, defaultId, aliases);
     // A retired hash is rewritten in place, so the address bar and any copy of
-    // the link settle on the current id without adding a history entry.
+    // the link settle on the current id without adding a history entry — but
+    // only when the alias actually landed on its tab. A hidden target falls
+    // through to `defaultId`, and rewriting then would point the link at a tab
+    // that isn't there.
     useEffect(() => {
         const raw = window.location.hash.replace(/^#/, '');
-        if (raw && aliases[raw] && aliases[raw] !== raw) {
-            window.history.replaceState(null, '', `#${aliases[raw]}`);
+        const target = raw ? aliases[raw] : undefined;
+        if (target !== undefined && target !== raw && target === active) {
+            window.history.replaceState(null, '', `#${target}`);
         }
-    }, [hash, aliases]);
+    }, [hash, aliases, active]);
     const selectTab = useCallback((id: string) => {
         window.location.hash = id;
     }, []);

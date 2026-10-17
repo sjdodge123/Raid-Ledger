@@ -127,11 +127,13 @@ interface MirrorProps {
     onChangeChannel?: (() => void) | null;
 }
 
-/** Hidden while loading (no layout jump) and for non-editors while nothing is bound. */
+/** Hidden while loading (no layout jump) and, while nothing is bound, for anyone who cannot pick. */
 export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }: MirrorProps): JSX.Element | null {
     const query = useGuildDiscord(guildId);
     const mirror = query.data;
-    if (query.isPending || (mirror?.state === 'unset' && !canEdit)) return null;
+    // Gated on the affordance, not on `canEdit`: an Officer may edit content
+    // but not pick a channel (D5-A), so an unset card would be a dead end.
+    if (query.isPending || (mirror?.state === 'unset' && onChangeChannel === null)) return null;
     const open = onChangeChannel;
     const action = headerAction({ mirror, onChange: open });
     return (

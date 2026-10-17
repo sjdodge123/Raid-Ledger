@@ -100,38 +100,43 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     );
 }
 
+/**
+ * One overlay at a time. The picker REPLACES the sheet rather than stacking on
+ * it: two dialogs deep is a shell the inventory doesn't have, and the sheet has
+ * nothing in flight — so a single state, not two booleans that can both be true.
+ */
+type HubOverlay = 'closed' | 'settings' | 'picker';
+
 interface OverlayProps {
     ctx: HubCtx;
     module: HubModule | undefined;
-    settingsOpen: boolean;
-    pickerOpen: boolean;
-    closeSettings: () => void;
-    closePicker: () => void;
+    overlay: HubOverlay;
+    onClose: () => void;
     openPicker: () => void;
 }
 
-function HubOverlays({ ctx, module: mod, settingsOpen, pickerOpen, closeSettings, closePicker, openPicker }: OverlayProps): JSX.Element {
+function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: OverlayProps): JSX.Element {
     return (
         <Suspense fallback={null}>
-            {settingsOpen && <HubSettingsSheet ctx={ctx} module={mod} onClose={closeSettings} onChangeChannel={openPicker} />}
-            {pickerOpen && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={closePicker} />}
+            {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
+            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={onClose} />}
         </Suspense>
     );
 }
 
 /** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
 function useHubSettingsState(canManage: boolean) {
-    const [settingsOpen, setSettingsOpen] = useState(false);
-    const [pickerOpen, setPickerOpen] = useState(false);
-    // The picker replaces the sheet rather than stacking on it: two dialogs deep
-    // is a shell the inventory doesn't have, and the sheet has nothing in flight.
-    const openPicker = useCallback(() => { setSettingsOpen(false); setPickerOpen(true); }, []);
-    const closeSettings = useCallback(() => setSettingsOpen(false), []);
-    const closePicker = useCallback(() => setPickerOpen(false), []);
-    const openSettings = useCallback(() => setSettingsOpen(true), []);
+    const [overlay, setOverlay] = useState<HubOverlay>('closed');
+    const openPicker = useCallback(() => setOverlay('picker'), []);
+    const openSettings = useCallback(() => setOverlay('settings'), []);
+    const onClose = useCallback(() => setOverlay('closed'), []);
+    // Both overlays are Leader-only. A refetched page that demotes the viewer
+    // mid-session must take them off the screen, not leave a dialog whose
+    // writes the server now refuses.
+    useEffect(() => { if (!canManage) setOverlay('closed'); }, [canManage]);
     const value: HubSettingsValue = useMemo(
         () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
-    return { settingsOpen, pickerOpen, openPicker, closeSettings, closePicker, openSettings, value };
+    return { overlay, openPicker, onClose, openSettings, value };
 }
 
 interface FrameProps {
@@ -153,8 +158,7 @@ function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element 
                     action={canManage ? <HubSettingsTrigger onOpen={s.openSettings} /> : null} />
                 <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
                 <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
-                <HubOverlays ctx={ctx} module={mod} settingsOpen={s.settingsOpen} pickerOpen={s.pickerOpen}
-                    closeSettings={s.closeSettings} closePicker={s.closePicker} openPicker={s.openPicker} />
+                <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
             </div>
         </HubSettingsProvider>
     );

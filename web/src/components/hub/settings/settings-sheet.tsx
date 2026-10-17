@@ -25,21 +25,36 @@ import { SettingsSection, SettingsSwitchRow } from './settings-rows';
 /** Q7: `guilds.hidden_at` and its filtering land with the guild directory (ROK-1831). */
 const HIDE_HUB_REASON = 'Hiding a hub isn’t available yet — it arrives with the guild directory.';
 
-function channelLine(mirror: GuildDiscordMirrorDto | undefined): string {
-    if (!mirror) return 'Loading…';
+function channelLine(mirror: GuildDiscordMirrorDto): string {
     if (mirror.state === 'ok') return `#${mirror.channel.name}`;
     if (mirror.state === 'unset') return 'No channel chosen yet.';
     const name = 'channelName' in mirror && mirror.channelName ? `#${mirror.channelName}` : null;
     return name ? `${name} — Raid Ledger can’t read it right now.` : 'The bound channel is unavailable.';
 }
 
+/** A failed mirror read must not sit on "Loading…" forever — the shipped inline-error idiom instead. */
+function ChannelLine({ query }: { query: ReturnType<typeof useGuildDiscord> }): JSX.Element {
+    if (query.isPending) {
+        return <p className="text-sm text-secondary" data-testid="guild-settings-channel">Loading…</p>;
+    }
+    if (query.data === undefined) {
+        return (
+            <p role="alert" className="text-sm text-danger" data-testid="guild-settings-channel-error">
+                Couldn’t load the Discord channel. Try again later.
+            </p>
+        );
+    }
+    return <p className="text-sm text-secondary" data-testid="guild-settings-channel">{channelLine(query.data)}</p>;
+}
+
 function DiscordSection({ guildId, onChangeChannel }: { guildId: number; onChangeChannel: () => void }): JSX.Element {
-    const mirror = useGuildDiscord(guildId).data;
+    const query = useGuildDiscord(guildId);
+    const mirror = query.data;
     const bound = mirror !== undefined && mirror.state !== 'unset';
     return (
         <SettingsSection title="Discord channel" testId="guild-settings-discord"
             blurb="The channel mirrored read-only on the Overview tab.">
-            <p className="text-sm text-secondary" data-testid="guild-settings-channel">{channelLine(mirror)}</p>
+            <ChannelLine query={query} />
             <div>
                 <Button variant="secondary" size="sm" onClick={onChangeChannel} data-testid="guild-settings-choose-channel">
                     {bound ? 'Change channel' : 'Choose channel'}
