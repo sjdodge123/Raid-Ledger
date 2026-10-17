@@ -1,14 +1,12 @@
 /**
  * ROK-1660 — pure pieces of `/lfg-leave`: the autocomplete sentinels, the
- * own-hands-only choice list, the exact reply copy and the one "withdraw and
- * say whether it happened" wrapper around `LfgService.withdraw`.
+ * own-hands-only choice list and the `All my LFGs` reply.
  *
- * Kept free of Nest/DB so the copy sheet is unit-testable row by row, and so
- * the board `I'm out` handler can word its replies from the same builders.
+ * The single-game copy (`You're out — …` / `You're not in the … group.`) and
+ * the withdraw-if-present wrapper are shared with the board `I'm out` and the
+ * `Leave · {game}` list buttons — they live in `listeners/lfg-leave.helpers`.
  */
-import { NotFoundException } from '@nestjs/common';
 import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
-import type { LfgService } from '../../lfg/lfg.service';
 
 /** Autocomplete value for `All my LFGs` — leaves every own hand at once. */
 export const LFG_LEAVE_ALL_SENTINEL = 'all';
@@ -85,39 +83,8 @@ export function remainingCount(
   return groups.find((g) => g.gameId === gameId)?.activeCount ?? 0;
 }
 
-/** `You're out — **{game}**. {n} still looking.` (no count when n = 0). */
-export function buildLeftReply(gameName: string, remaining: number): string {
-  const head = `You're out — **${gameName}**.`;
-  return remaining > 0 ? `${head} ${remaining} still looking.` : head;
-}
-
-/** The caller had no hand for that game. */
-export function buildNotInGroupReply(gameName: string): string {
-  return `You're not in the **${gameName}** group.`;
-}
-
 /** `All my LFGs` with two or more groups left. */
 export function buildLeftAllReply(gameNames: string[]): string {
   const list = gameNames.map((n) => `**${n}**`).join(', ');
   return `You're out of all ${gameNames.length} — ${list}.`;
-}
-
-/**
- * The one write path, with "had no hand" turned into `false` rather than an
- * error. Every other failure propagates.
- *
- * @returns true when a hand was withdrawn, false when there was none.
- */
-export async function tryWithdraw(
-  lfgService: Pick<LfgService, 'withdraw'>,
-  userId: number,
-  gameId: number,
-): Promise<boolean> {
-  try {
-    await lfgService.withdraw(userId, gameId);
-    return true;
-  } catch (error) {
-    if (error instanceof NotFoundException) return false;
-    throw error;
-  }
 }

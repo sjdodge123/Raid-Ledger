@@ -39,13 +39,16 @@ import {
   LFG_LEAVE_NONE_SENTINEL,
   buildLeaveChoices,
   buildLeftAllReply,
-  buildLeftReply,
-  buildNotInGroupReply,
   matchOwnGroup,
   ownGroups,
   remainingCount,
-  tryWithdraw,
 } from './lfg-leave.helpers';
+import {
+  buildLeftReply,
+  buildNotInGroupReply,
+  leaveOneGroup,
+  withdrawIfPresent,
+} from '../listeners/lfg-leave.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 
@@ -133,10 +136,10 @@ export class LfgLeaveCommand
       });
       return;
     }
-    const left = await tryWithdraw(this.lfgService, userId, game.id);
+    const outcome = await leaveOneGroup(this.lfgService, userId, game.id);
     await interaction.editReply(
-      left
-        ? await this.leftReply(userId, game.id, game.name)
+      outcome.left
+        ? buildLeftReply(game.name, outcome.stillLooking)
         : buildNotInGroupReply(game.name),
     );
   }
@@ -149,7 +152,7 @@ export class LfgLeaveCommand
   ): Promise<void> {
     const left: LfgGroupSummaryDto[] = [];
     for (const group of ownGroups(groups)) {
-      if (await tryWithdraw(this.lfgService, userId, group.gameId)) {
+      if (await withdrawIfPresent(this.lfgService, userId, group.gameId)) {
         left.push(group);
       }
     }

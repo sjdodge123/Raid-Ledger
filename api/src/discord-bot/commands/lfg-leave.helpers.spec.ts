@@ -9,12 +9,14 @@ import {
   LFG_LEAVE_NONE_CHOICE,
   buildLeaveChoices,
   buildLeftAllReply,
-  buildLeftReply,
-  buildNotInGroupReply,
   matchOwnGroup,
   remainingCount,
-  tryWithdraw,
 } from './lfg-leave.helpers';
+import {
+  buildLeftReply,
+  buildNotInGroupReply,
+  withdrawIfPresent,
+} from '../listeners/lfg-leave.helpers';
 
 function lfgGroup(
   gameId: number,
@@ -127,20 +129,22 @@ describe('/lfg-leave reply copy (ROK-1660)', () => {
   });
 });
 
-describe('tryWithdraw (ROK-1660)', () => {
+describe('withdrawIfPresent — the shared write wrapper (ROK-1660)', () => {
   it('returns true after the one write path succeeds', async () => {
     const withdraw = jest.fn().mockResolvedValue(undefined);
-    await expect(tryWithdraw({ withdraw }, 7, 1)).resolves.toBe(true);
+    await expect(withdrawIfPresent({ withdraw }, 7, 1)).resolves.toBe(true);
     expect(withdraw).toHaveBeenCalledWith(7, 1);
   });
 
   it('maps NotFound (no hand) to false', async () => {
     const withdraw = jest.fn().mockRejectedValue(new NotFoundException());
-    await expect(tryWithdraw({ withdraw }, 7, 1)).resolves.toBe(false);
+    await expect(withdrawIfPresent({ withdraw }, 7, 1)).resolves.toBe(false);
   });
 
   it('lets every other failure propagate', async () => {
     const withdraw = jest.fn().mockRejectedValue(new Error('db down'));
-    await expect(tryWithdraw({ withdraw }, 7, 1)).rejects.toThrow('db down');
+    await expect(withdrawIfPresent({ withdraw }, 7, 1)).rejects.toThrow(
+      'db down',
+    );
   });
 });
