@@ -62,12 +62,12 @@ beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GuildPage (ROK-1785)', () => {
-    it('shows only the Overview, Members and Raids tabs (S1 + S3)', async () => {
+    it('shows the Overview, Members, Events and Raids tabs (S1 + S3)', async () => {
         serve(makePage());
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
-        expect(labels).toEqual(['Overview', 'Members', 'Raids']);
+        expect(labels).toEqual(['Overview', 'Members', 'Events', 'Raids']);
     });
 
     it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {
