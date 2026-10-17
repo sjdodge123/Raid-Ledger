@@ -25,12 +25,14 @@ const guest = row({ id: 's1', userId: null, discordUserId: null, discordUsername
 const linked = row({ id: 's2', userId: 9, discordUserId: null, discordUsername: 'rok', source: 'steam', inVoice: false, onServer: true });
 const voice = row({ id: 'd1', discordUsername: 'hiphoptobop', source: 'discord', inVoice: true });
 
+type SignupStatus = ViewerEventRosterDto['signups'][number]['status'];
+
 /** A signup roster holding the given Raid Ledger user ids (ROK-1822). */
-function rosterOf(userIds: number[]): ViewerEventRosterDto {
+function rosterOf(userIds: number[], status: SignupStatus = 'signed_up'): ViewerEventRosterDto {
   const signups = userIds.map((id) => ({
     id, eventId: 42, user: { id, username: `user-${id}`, avatar: null },
     signedUpAt: '2026-10-16T17:00:00Z', characterId: null, character: null,
-    confirmationStatus: 'pending' as const, status: 'signed_up' as const,
+    confirmationStatus: 'pending' as const, status,
   }));
   return { eventId: 42, signups, count: signups.length };
 }
@@ -87,6 +89,11 @@ describe('EventDetailVoiceSection — server guests (ROK-1821)', () => {
     renderSection([voice, guest, linked], rosterOf([1, 9]));
     expect(screen.queryByText('rok')).not.toBeInTheDocument();
     expect(screen.getByText('On the game server (1)')).toBeInTheDocument();
+  });
+
+  it('lists a linked server player whose signup is declined under "On the game server" (ROK-1822)', () => {
+    renderSection([voice, guest, linked], rosterOf([9], 'declined'));
+    expect(within(groupOf(/On the game server \(2\)/)).getByText('rok')).toBeInTheDocument();
   });
 
   it('renders nothing when only linked server rows exist', () => {

@@ -14,6 +14,7 @@ import { ServerGuestRoster, VoiceRoster } from '../../components/events/VoiceRos
 import { serverGuestParticipants, voiceParticipants } from '../../components/events/voice-participants';
 import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
+import { isRosterShownSignup } from './event-detail-helpers';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
 type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
@@ -98,8 +99,9 @@ export function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc,
     /** The signup roster; linked server players outside it join the server group (ROK-1822). */
     roster?: ViewerEventRosterDto | undefined;
 }) {
-    // ROK-1821: voice rows get the voice panel; server players no signup shows their own group.
-    const signedUpUserIds = roster ? new Set(roster.signups.map((s) => s.user.id)) : undefined;
+    // ROK-1821: voice rows get the voice panel; server players no shown signup lists get their own group.
+    const shownSignups = roster?.signups.filter(isRosterShownSignup);
+    const signedUpUserIds = shownSignups ? new Set(shownSignups.map((s) => s.user.id)) : undefined;
     const hasVoice = voiceParticipants(voiceRoster.participants).length > 0;
     const hasGuests = serverGuestParticipants(voiceRoster.participants, signedUpUserIds).length > 0;
     if (!showVoiceRoster || (!hasVoice && !hasGuests)) return null;
