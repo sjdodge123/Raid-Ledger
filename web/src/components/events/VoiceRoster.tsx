@@ -1,6 +1,6 @@
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 import { AvatarWithFallback } from '../shared/AvatarWithFallback';
-import { serverGuestParticipants, voiceParticipants } from './voice-participants';
+import { serverGuestParticipants, splitVoiceGroups, voiceParticipants } from './voice-participants';
 
 interface VoiceRosterProps {
   /** The whole ad-hoc roster; game-server rows are filtered out here (ROK-1821). */
@@ -86,9 +86,8 @@ function ParticipantGroup({ participants, isActive, label, count }: {
  */
 export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
   const participants = voiceParticipants(allRows);
-  // Review MINOR 4: an open row that left voice (still on the server) is "Left".
-  const active = participants.filter((p) => !p.leftAt && p.inVoice !== false);
-  const left = participants.filter((p) => !!p.leftAt || p.inVoice === false);
+  // ROK-1822: In Channel = in voice now; Left = in voice at some point, not now.
+  const { active, left } = splitVoiceGroups(allRows);
 
   return (
     <div className="space-y-4">
@@ -104,10 +103,14 @@ export function VoiceRoster({ participants: allRows }: VoiceRosterProps) {
 }
 
 /**
- * ROK-1821 — unlinked players on the event's game server, listed apart from
- * the voice roster (which stays voice-only). Renders nothing when there are none.
+ * ROK-1821/1822 — players on the event's game server whom no signup shows,
+ * listed apart from the voice roster (which stays voice-only). Renders nothing
+ * when there are none. `signedUpUserIds` is the event's signup roster; linked
+ * server players outside it are listed too.
  */
-export function ServerGuestRoster({ participants: allRows }: VoiceRosterProps) {
-  const guests = serverGuestParticipants(allRows);
+export function ServerGuestRoster({ participants: allRows, signedUpUserIds }: VoiceRosterProps & {
+  signedUpUserIds?: ReadonlySet<number> | undefined;
+}) {
+  const guests = serverGuestParticipants(allRows, signedUpUserIds);
   return <ParticipantGroup participants={guests} isActive={true} label="On the game server" count={guests.length} />;
 }
