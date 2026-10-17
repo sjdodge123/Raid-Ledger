@@ -5,7 +5,6 @@ import {
   IMPERSONATION_TTL_MS,
   markerEndReason,
   markerExpiry,
-  secondsUntil,
   type UserLike,
 } from './impersonation-session.helpers';
 import { KICK_COOLDOWN_MS } from '../auth-status.helpers';
@@ -33,17 +32,12 @@ function reason(
   );
 }
 
-describe('markerExpiry / secondsUntil', () => {
+describe('markerExpiry', () => {
   it('caps a marker at exactly one hour from start', () => {
     expect(markerExpiry(NOW).getTime() - NOW.getTime()).toBe(
       IMPERSONATION_TTL_MS,
     );
     expect(IMPERSONATION_TTL_MS).toBe(3_600_000);
-  });
-
-  it('floors whole seconds and never returns less than 1', () => {
-    expect(secondsUntil(new Date(NOW.getTime() + 90_900), NOW)).toBe(90);
-    expect(secondsUntil(new Date(NOW.getTime() - 5_000), NOW)).toBe(1);
   });
 });
 

@@ -180,12 +180,16 @@ function refreshWith(rawToken: string) {
     .set('Cookie', `${REFRESH_COOKIE_NAME}=${rawToken}`);
 }
 
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string');
+}
+
 /** The `rl_rt` value a response sets, or undefined when it sets none. */
 function refreshCookieSet(res: {
   headers: Record<string, unknown>;
 }): string | undefined {
   const raw = res.headers['set-cookie'];
-  const lines = Array.isArray(raw) ? (raw as string[]) : [];
+  const lines = isStringArray(raw) ? raw : [];
   const prefix = `${REFRESH_COOKIE_NAME}=`;
   const line = lines.find((l) => l.startsWith(prefix));
   return line?.slice(prefix.length).split(';')[0];
