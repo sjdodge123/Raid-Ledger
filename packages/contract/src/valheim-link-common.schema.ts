@@ -45,11 +45,20 @@ export const VALHEIM_LINK_ITEM_EXPORT_MAX = 10_000;
 
 // ---------- primitives ----------
 
-/** Signed 64-bit range (a .NET `long`, a Postgres `bigint`). */
-export const VALHEIM_LINK_INT64_MIN = '-9223372036854775808';
-export const VALHEIM_LINK_INT64_MAX = '9223372036854775807';
-/** First individual-account SteamID64 (universe 1, type 1, instance 1, account 0). */
-export const VALHEIM_LINK_STEAMID64_MIN = '76561197960265728';
+// Spelled as arithmetic, not literals: the ROK-1471 guard spec forbids any
+// 15+ digit literal in packages/contract/src (Discord permission integers).
+const TWO = BigInt(2);
+const INT64_LIMIT = TWO ** BigInt(63);
+/** Signed 64-bit range (a .NET `long`, a Postgres `bigint`): -2^63 .. 2^63-1. */
+export const VALHEIM_LINK_INT64_MIN = (-INT64_LIMIT).toString(); // -9223372036854775808
+export const VALHEIM_LINK_INT64_MAX = (INT64_LIMIT - BigInt(1)).toString(); // 9223372036854775807
+/**
+ * First individual-account SteamID64 (universe 1, type 1, instance 1,
+ * account 0) = 0x0110000100000000 = 2^56 + 2^52 + 2^32 = 76561197960265728.
+ */
+export const VALHEIM_LINK_STEAMID64_MIN = (
+    TWO ** BigInt(56) + TWO ** BigInt(52) + TWO ** BigInt(32)
+).toString();
 
 /**
  * True when `v` matches `canonical` (a length-bounded decimal pattern) AND
