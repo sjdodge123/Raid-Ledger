@@ -149,6 +149,8 @@ describe('InviteService.resolveInvite — no Discord invite minting (ROK-1631)',
 // ---------------------------------------------------------------------------
 // The authenticated claim paths still hand back a server invite
 // ---------------------------------------------------------------------------
+// A slot claim reads: slot → event → claimer (ownership check, ROK-1825) →
+// existing signup → ….
 
 async function testShareClaimMints(): Promise<void> {
   selectSequence = [[], [mockEvent], [{ discordId: 'discord-1' }]];
@@ -163,8 +165,8 @@ async function testMemberSlotClaimMints(): Promise<void> {
   selectSequence = [
     [mockSlot],
     [mockEvent],
-    [],
     [{ discordId: 'discord-1' }],
+    [],
     [{ discordId: 'discord-1' }],
   ];
   const service = await buildService();
@@ -176,7 +178,7 @@ async function testMemberSlotClaimMints(): Promise<void> {
 }
 
 async function testPugSlotClaimMints(): Promise<void> {
-  selectSequence = [[mockSlot], [mockEvent], [], [{ discordId: null }]];
+  selectSequence = [[mockSlot], [mockEvent], [{ discordId: null }], []];
   const service = await buildService();
   const result = await service.claimInvite('slot1234', 1);
 
