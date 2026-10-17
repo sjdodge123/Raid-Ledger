@@ -180,22 +180,39 @@ test('entry points: header text link / user menu item / drawer "Your guild" reac
 /*
  * ROK-1787 (S3) — the seed-guild fixture also tags a weekly "Molten Core Night"
  * series (3 nights from next week) and a past "Onyxia Clear" with attendance.
+ * ROK-1830 S3c split that content: core #events holds schedule + attendance +
+ * events, the WoW #raids tab keeps role composition.
  */
-test('#raids: schedule, composition, attendance and guild events', async ({ page }, testInfo) => {
+test('#events: the core tab carries the schedule, attendance and every tagged event', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'member', '#events');
+        const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
+        await expect(tabs.locator('a[href="#events"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        const tab = page.getByTestId('guild-events-tab');
+        await expect(tab).toBeVisible({ timeout: 15_000 });
+        const night = tab.getByTestId('guild-schedule-night');
+        await expect(night, 'one row per tagged recurring series').toHaveCount(1);
+        await expect(night).toContainText('Molten Core Night');
+        await expect(tab.getByText('Shown in your local time')).toBeVisible();
+        await expect(tab.getByTestId('guild-attendance-row').first()).toBeVisible();
+        await expect(tab.getByTestId('guild-upcoming-event'), 'the three seeded series nights').toHaveCount(3);
+        await expect(tab.getByTestId('guild-recent-event').filter({ hasText: 'Onyxia Clear' })).toBeVisible();
+        // ROK-1830 S3c: role composition is the WoW module's, on #raids.
+        await expect(tab.getByTestId('guild-composition-tank')).toHaveCount(0);
+    });
+});
+
+test('#raids: the WoW module tab keeps role composition and nothing core already shows', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#raids');
         const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
         await expect(tabs.locator('a[href="#raids"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
         const tab = page.getByTestId('guild-raids-tab');
         await expect(tab).toBeVisible({ timeout: 15_000 });
-        const night = tab.getByTestId('guild-schedule-night');
-        await expect(night, 'one row per tagged recurring series').toHaveCount(1);
-        await expect(night).toContainText('Molten Core Night');
-        await expect(tab.getByText('Shown in your local time')).toBeVisible();
         await expect(tab.getByTestId('guild-composition-tank')).toBeVisible();
-        await expect(tab.getByTestId('guild-attendance-row').first()).toBeVisible();
-        await expect(tab.getByTestId('guild-upcoming-event'), 'the three seeded series nights').toHaveCount(3);
-        await expect(tab.getByTestId('guild-recent-event').filter({ hasText: 'Onyxia Clear' })).toBeVisible();
+        await expect(tab.getByTestId('guild-schedule-night'), 'the schedule moved to #events').toHaveCount(0);
+        await expect(tab.getByTestId('guild-upcoming-event'), 'the event list moved to #events').toHaveCount(0);
+        await expect(tab.getByTestId('guild-attendance-row'), 'attendance moved to #events').toHaveCount(0);
     });
 });
 
