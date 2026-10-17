@@ -126,14 +126,16 @@ function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: Overlay
 
 /** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
 function useHubSettingsState(canManage: boolean) {
-    const [overlay, setOverlay] = useState<HubOverlay>('closed');
-    const openPicker = useCallback(() => setOverlay('picker'), []);
-    const openSettings = useCallback(() => setOverlay('settings'), []);
-    const onClose = useCallback(() => setOverlay('closed'), []);
-    // Both overlays are Leader-only. A refetched page that demotes the viewer
-    // mid-session must take them off the screen, not leave a dialog whose
-    // writes the server now refuses.
-    useEffect(() => { if (!canManage) setOverlay('closed'); }, [canManage]);
+    const [requested, setRequested] = useState<HubOverlay>('closed');
+    const openPicker = useCallback(() => setRequested('picker'), []);
+    const openSettings = useCallback(() => setRequested('settings'), []);
+    const onClose = useCallback(() => setRequested('closed'), []);
+    // Both overlays are Leader-only, so the rights gate the RENDER rather than
+    // an effect that resets the state: a refetched page that demotes the viewer
+    // mid-session takes the open dialog off the screen in the same commit, and
+    // nothing cascades. (The stale request is harmless — a re-promoted viewer
+    // reopens from the trigger.)
+    const overlay: HubOverlay = canManage ? requested : 'closed';
     const value: HubSettingsValue = useMemo(
         () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
     return { overlay, openPicker, onClose, openSettings, value };

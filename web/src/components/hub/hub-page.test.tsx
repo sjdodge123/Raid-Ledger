@@ -5,7 +5,7 @@
  * to `viewer.canManageEditors`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
@@ -55,8 +55,8 @@ function serve(page: GuildPageDto | null, status = 200, editors: GuildEditor[] =
     );
 }
 
-function renderPage(): void {
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+function renderPage() {
+    return renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
 }
 
 beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
@@ -181,5 +181,45 @@ describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
         const panel = await screen.findByTestId('guild-editors-panel');
         await waitFor(() => expect(within(panel).getAllByTestId('guild-editor-chip')).toHaveLength(2));
         expect(within(panel).queryByTestId('guild-editors-gm-hint'), 'the GM is already an editor, so the hint must hide').toBeNull();
+    });
+
+});
+
+// ROK-1830 r1 (Codex P2): both overlays are Leader-only, so a refetched page
+// that demotes the viewer must take the open one off the screen rather than
+// leave a dialog whose writes the server now refuses.
+describe('GuildPage — a demotion closes the Leader-only overlays (ROK-1830 r1)', () => {
+    it('closes an open settings sheet when canManageEditors flips false', async () => {
+        let canManage = true;
+        serve(makePage(true));
+        server.use(http.get(BASE, () => HttpResponse.json(makePage(canManage))));
+        const { queryClient } = renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        expect(await screen.findByTestId('guild-settings-sheet')).toBeInTheDocument();
+
+        canManage = false;
+        await act(async () => { await queryClient.invalidateQueries(); });
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-settings-sheet'),
+            'a demoted viewer must not keep the Leader-only sheet open',
+        ).toBeNull());
+        expect(screen.queryByTestId('guild-settings-trigger')).toBeNull();
+    });
+
+    it('closes an open channel picker when canManageEditors flips false', async () => {
+        let canManage = true;
+        serve(makePage(true));
+        server.use(http.get(BASE, () => HttpResponse.json(makePage(canManage))));
+        const { queryClient } = renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        await userEvent.click(await screen.findByTestId('guild-settings-choose-channel'));
+        expect(await screen.findByTestId('guild-discord-picker-body')).toBeInTheDocument();
+
+        canManage = false;
+        await act(async () => { await queryClient.invalidateQueries(); });
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-discord-picker-body'),
+            'a demoted viewer must not keep the Leader-only picker open',
+        ).toBeNull());
     });
 });

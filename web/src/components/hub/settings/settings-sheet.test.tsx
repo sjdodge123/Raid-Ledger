@@ -44,9 +44,23 @@ function serve(mirror: GuildDiscordMirrorDto, editors: GuildEditor[] = [RANK_EDI
     );
 }
 
-/** The raids query is never read by the sheet, so an idle result is enough. */
+/**
+ * The raids query is never read by the sheet, so a pending result is enough —
+ * spelled out as a real `UseQueryResult` rather than an `as unknown as` cast,
+ * which would hide a future field the sheet starts reading.
+ */
+const IDLE_RAIDS: HubCtx['raids'] = {
+    data: undefined, error: null, isPending: true, isLoading: true, isLoadingError: false,
+    isRefetchError: false, isSuccess: false, isError: false, isFetched: false,
+    isFetchedAfterMount: false, isFetching: false, isInitialLoading: true, isPaused: false,
+    isPlaceholderData: false, isRefetching: false, isStale: false, isEnabled: true,
+    status: 'pending', fetchStatus: 'fetching', dataUpdatedAt: 0, errorUpdatedAt: 0,
+    failureCount: 0, failureReason: null, errorUpdateCount: 0,
+    refetch: () => Promise.reject(new Error('not used by the settings sheet')),
+};
+
 function ctxFor(): HubCtx {
-    return { page: PAGE, raids: { data: undefined, error: null } as unknown as HubCtx['raids'] };
+    return { page: PAGE, raids: IDLE_RAIDS };
 }
 
 function renderSheet(module?: HubModule): void {
@@ -61,7 +75,7 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
     it('names the bound channel and offers to change it', async () => {
         serve(okMirror([discordMessage(1)]));
         renderSheet();
-        expect(await screen.findByTestId('guild-settings-channel')).toHaveTextContent('#announcements');
+        await waitFor(() => expect(screen.getByTestId('guild-settings-channel')).toHaveTextContent('#announcements'));
         expect(screen.getByTestId('guild-settings-choose-channel')).toHaveTextContent('Change channel');
     });
 
@@ -97,5 +111,16 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
         expect(hide).toBeDisabled();
         expect(hide).toHaveAttribute('aria-checked', 'false');
         expect(screen.getByText(/Hiding a hub isn’t available yet/)).toBeInTheDocument();
+    });
+
+    it('a failed mirror read says so instead of sitting on "Loading…"', async () => {
+        server.use(
+            http.get(`${BASE}/discord`, () => new HttpResponse(null, { status: 500 })),
+            http.get(`${BASE}/editors`, () => HttpResponse.json({ editors: [] })),
+        );
+        renderSheet();
+        const alert = await screen.findByTestId('guild-settings-channel-error');
+        expect(alert, 'a 500 must surface the inline error, not Loading…').toHaveTextContent('Couldn’t load the Discord channel.');
+        expect(screen.queryByTestId('guild-settings-channel')).toBeNull();
     });
 });

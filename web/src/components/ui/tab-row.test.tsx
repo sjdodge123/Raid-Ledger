@@ -5,7 +5,7 @@
  */
 import type { JSX } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import { TabRow, type TabRowTab } from './tab-row';
 import { tabFromHash, tabPanelId, useHashTab } from './tab-row.helpers';
 
@@ -141,5 +141,34 @@ describe('TabRow — reveals the active tab', () => {
         mockGeometry(20);
         render(<TabRow tabs={TABS} activeId="roster" label="Sections" />);
         expect(scrollSpy).not.toHaveBeenCalled();
+    });
+});
+
+/**
+ * ROK-1830 r1 — the retired-hash rewrite. `#roster` settles on `#members`
+ * only when Members is actually in `ids`; a hidden target falls through to the
+ * default tab, and rewriting then would hand out a link to a tab that is not
+ * there.
+ */
+describe('useHashTab — retired hash aliases', () => {
+    const ALIASES = { roster: 'members' };
+
+    function AliasHarness({ ids }: { ids: readonly string[] }): JSX.Element {
+        const [active] = useHashTab(ids, 'overview', ALIASES);
+        return <p data-testid="active">{active}</p>;
+    }
+
+    it('rewrites #roster to #members when Members is visible', async () => {
+        window.history.replaceState(null, '', '#roster');
+        render(<AliasHarness ids={['overview', 'members']} />);
+        await waitFor(() => expect(window.location.hash).toBe('#members'));
+        expect(screen.getByTestId('active')).toHaveTextContent('members');
+    });
+
+    it('leaves #roster alone when the Members tab is not visible', async () => {
+        window.history.replaceState(null, '', '#roster');
+        render(<AliasHarness ids={['overview']} />);
+        await waitFor(() => expect(screen.getByTestId('active')).toHaveTextContent('overview'));
+        expect(window.location.hash, 'a hidden target must not be written into the address bar').toBe('#roster');
     });
 });

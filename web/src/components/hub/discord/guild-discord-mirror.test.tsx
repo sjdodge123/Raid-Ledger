@@ -153,3 +153,23 @@ describe('GuildDiscordMirror — private tag (spec: Pill/StatusChip on a private
         expect(screen.getByTestId('guild-discord-change')).toBeInTheDocument();
     });
 });
+
+describe('GuildDiscordMirror — the unset card follows the affordance (ROK-1830 D5-A)', () => {
+    it('renders nothing for an Officer who may edit but may not pick', async () => {
+        const { served } = serve({ state: 'unset' });
+        renderCard(true, null);
+        await waitFor(() => expect(served(), 'the mirror must have been requested').toBe(true));
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-discord-mirror'),
+            'an editor without the picker must not see a dead-end unbound card',
+        ).toBeNull());
+        expect(screen.queryByTestId('guild-discord-state-unset')).toBeNull();
+    });
+
+    it('still prompts a viewer who cannot edit but may pick', async () => {
+        serve({ state: 'unset' });
+        renderCard(false, () => undefined);
+        expect(await screen.findByTestId('guild-discord-state-unset')).toBeInTheDocument();
+        expect(screen.getByTestId('guild-discord-choose')).toBeInTheDocument();
+    });
+});
