@@ -65,6 +65,33 @@ export async function findEventForViewer(
 }
 
 /**
+ * Metadata keys an anonymous viewer may see: the ones the web timeline renders
+ * (gameName, reason, role, note) plus the benign schedule data event writers
+ * emit (title, oldStart, newStart). ROK-1824.
+ */
+const PUBLIC_ACTIVITY_METADATA_KEYS = [
+  'gameName',
+  'reason',
+  'role',
+  'note',
+  'title',
+  'oldStart',
+  'newStart',
+] as const;
+
+/** Rebuild activity metadata from the public key whitelist only. */
+function toPublicActivityMetadata(
+  metadata: ActivityEntryDto['metadata'],
+): ActivityEntryDto['metadata'] {
+  if (!metadata) return null;
+  const out: Record<string, unknown> = {};
+  for (const key of PUBLIC_ACTIVITY_METADATA_KEYS) {
+    if (key in metadata) out[key] = metadata[key];
+  }
+  return out;
+}
+
+/**
  * Explicit whitelist rebuild of one activity entry for an anonymous viewer
  * (ROK-1824, ROK-1629 pattern): actor is id + display name only — the same
  * identity the public roster/creator projection exposes — so a key later
@@ -77,7 +104,7 @@ export function toPublicActivityEntry(e: ActivityEntryDto): ActivityEntryDto {
     actor: e.actor
       ? { id: e.actor.id, displayName: e.actor.displayName }
       : null,
-    metadata: e.metadata,
+    metadata: toPublicActivityMetadata(e.metadata),
     createdAt: e.createdAt,
   };
 }
