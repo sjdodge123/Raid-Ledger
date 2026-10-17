@@ -51,6 +51,20 @@ export interface HubResourceCtx {
     canEdit: boolean;
 }
 
+/**
+ * One section a module appends to core's Resources tab (ROK-1830 r2).
+ *
+ * `useVisible` is how core decides whether the Resources tab has anything in it
+ * without knowing what the section renders or which endpoint feeds it — core
+ * calls it inside a per-section probe component, so it may use hooks. Omitted =
+ * the section always counts as having content.
+ */
+export interface HubResourceSection {
+    id: string;
+    component: ComponentType<HubResourceCtx>;
+    useVisible?: (guildId: number) => boolean;
+}
+
 /** One cell of a member row, rendered in `memberColumns` order. */
 export interface HubMemberColumn {
     id: string;
@@ -90,8 +104,8 @@ export interface HubModule {
      * renders a dead chip.
      */
     eventsJumpTab?: string;
-    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` section is fine. */
-    resourceSections?: readonly ComponentType<HubResourceCtx>[];
+    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` component is fine. */
+    resourceSections?: readonly HubResourceSection[];
 }
 
 export interface HubModuleRegistration {

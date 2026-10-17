@@ -18,6 +18,7 @@ import {
     wowMembersBlurb,
 } from './wow-members.helpers';
 import { WowEditorsWidget, WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
+import { useWowAddonsVisible } from './wow-resources.helpers';
 
 /**
  * `register.ts` is a boot-time side-effect import, so the addon panel (form,
@@ -48,5 +49,5 @@ export const wowHubModule: HubModule = {
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
     eventsJumpTab: 'raids',
-    resourceSections: [GuildAddonsSection],
+    resourceSections: [{ id: 'wow-addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
 };

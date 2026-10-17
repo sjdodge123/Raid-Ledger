@@ -1,8 +1,9 @@
 /** ROK-1786 — rule line splitting, the Resources rule, the link preview and reorder ids. */
 import { describe, it, expect } from 'vitest';
-import type { GuildAddon } from '@raid-ledger/contract';
+import type { GuildAddon, GuildProfile } from '@raid-ledger/contract';
 import { parseAddonUrl, previewAddonUrl } from '../../../plugins/wow/guild/addon-url';
 import { reorderedIds } from '../../../plugins/wow/guild/addon-view';
+import { wowAddonsVisible } from '../../../plugins/wow/hub/wow-resources.helpers';
 import { moveItem, resourcesVisible, ruleLines } from './guild-content.helpers';
 
 const stub = (id: number): GuildAddon => ({
@@ -10,15 +11,25 @@ const stub = (id: number): GuildAddon => ({
     requirement: 'optional', flavor: id === 2 ? 'retail' : null, sortOrder: id, createdAt: '2026-10-01T00:00:00.000Z', updatedAt: '2026-10-01T00:00:00.000Z',
 });
 
+const profile = (over: Partial<GuildProfile> = {}): GuildProfile => ({ guildId: 1, gmPost: null, rules: [], links: [], ...over });
+
 describe('guild content helpers', () => {
     it('ruleLines trims and drops blank lines', () => {
         expect(ruleLines(' a \r\n\n  \nb')).toEqual(['a', 'b']);
     });
 
-    it('resourcesVisible: hidden only when empty and not editable', () => {
-        expect(resourcesVisible(false, undefined, undefined)).toBe(false);
-        expect(resourcesVisible(true, undefined, undefined)).toBe(true);
-        expect(resourcesVisible(false, undefined, { pinned: [], addons: [stub(1)] })).toBe(true);
+    it('resourcesVisible: core content hides only when empty and not editable', () => {
+        expect(resourcesVisible(false, undefined)).toBe(false);
+        expect(resourcesVisible(true, undefined)).toBe(true);
+        expect(resourcesVisible(false, profile({ rules: [{ title: 'Loot', body: 'Need before greed' }] }))).toBe(true);
+        expect(resourcesVisible(false, profile({ links: [{ title: 'Logs', links: [] }] }))).toBe(true);
+        expect(resourcesVisible(false, profile())).toBe(false);
+    });
+
+    it('wowAddonsVisible: the module half of the same rule — a pinned or guild addon counts', () => {
+        expect(wowAddonsVisible(undefined)).toBe(false);
+        expect(wowAddonsVisible({ pinned: [], addons: [] })).toBe(false);
+        expect(wowAddonsVisible({ pinned: [], addons: [stub(1)] })).toBe(true);
     });
 
     it('parseAddonUrl previews the known hosts and rejects non-http links', () => {

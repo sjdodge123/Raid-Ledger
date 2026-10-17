@@ -3,8 +3,10 @@
  * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
  * hero pills come from the hub module registered for `guild.kind`
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
- * Resources is core's own tab, shown once it has content or the viewer can
- * edit it. A 403 (not a member) is a friendly empty state.
+ * Resources is core's own tab, shown once it has content, the viewer can edit
+ * it, or a module section reports content of its own (ROK-1830 — core asks
+ * through `HubResourceSection.useVisible`; it runs no plugin query itself).
+ * A 403 (not a member) is a friendly empty state.
  */
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
@@ -13,7 +15,7 @@ import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { type HubCtx, type HubModule, useHubModule } from '../../plugins/hub-module';
+import { type HubCtx, type HubModule, type HubResourceSection, useHubModule } from '../../plugins/hub-module';
 import { HubHero } from './hub-hero';
 import { HubOverview } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
@@ -21,9 +23,13 @@ import { GuildResources } from './content/guild-resources';
 import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
-import { useGuildAddons, useGuildProfile } from './api/use-guild-content';
+import { useGuildProfile } from './api/use-guild-content';
+import { useResourceSectionVisibility } from './hub-resource-visibility';
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
+
+/** Stable identity so the probe list doesn't churn while a module is absent. */
+const NO_SECTIONS: readonly HubResourceSection[] = [];
 
 function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
@@ -70,13 +76,6 @@ function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.
     return <HubOverview ctx={ctx} module={mod} />;
 }
 
-/** Resources shows once it has content, or straight away for an editor. */
-function useShowResources(page: GuildPageDto): boolean {
-    const profile = useGuildProfile(page.guild.id);
-    const addons = useGuildAddons(page.guild.id);
-    return resourcesVisible(page.viewer.canEdit, profile.data, addons.data);
-}
-
 /** Scroll the panel top back into view when a tab switch happens below it (prototype `GuildTabPanel`). */
 function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
@@ -92,14 +91,17 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
 }
 
 function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
-    const showResources = useShowResources(page);
     const raids = useGuildRaids(page.guild.id);
     const mod = useHubModule(page.guild.kind);
+    const profile = useGuildProfile(page.guild.id);
+    const { anyVisible, probes } = useResourceSectionVisibility(mod?.resourceSections ?? NO_SECTIONS, page.guild.id);
+    const showResources = resourcesVisible(page.viewer.canEdit, profile.data) || anyVisible;
     const ctx: HubCtx = { page, raids };
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview');
     return (
         <div className={PAGE}>
+            {probes}
             <HubHero ctx={ctx} module={mod} nextRaid={raids.data?.nextRaid ?? null} />
             <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
             <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />

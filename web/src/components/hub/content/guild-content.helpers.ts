@@ -3,21 +3,23 @@
  * and the Resources tab rule). The addon flavor labels moved to the WoW
  * plugin with the addon panel they name.
  */
-import type { GuildAddonList, GuildProfile } from '@raid-ledger/contract';
+import type { GuildProfile } from '@raid-ledger/contract';
 
 /** A rule body renders as the prototype's item list: one item per non-blank line. */
 export function ruleLines(body: string): string[] {
     return body.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 }
 
-/** Resources hides only when it has nothing to show AND the viewer can't edit it. */
-export function resourcesVisible(
-    canEdit: boolean, profile: GuildProfile | undefined, addons: GuildAddonList | undefined,
-): boolean {
+/**
+ * Core's half of the Resources rule: it hides only when core's own content is
+ * empty AND the viewer can't edit it. Module sections answer separately
+ * through `HubResourceSection.useVisible` (ROK-1830) and are OR-ed in by the
+ * caller, which keeps the pre-r2 truth table: canEdit OR rules+links+<module
+ * content> > 0.
+ */
+export function resourcesVisible(canEdit: boolean, profile: GuildProfile | undefined): boolean {
     if (canEdit) return true;
-    const count = (profile?.rules.length ?? 0) + (profile?.links.length ?? 0)
-        + (addons?.pinned.length ?? 0) + (addons?.addons.length ?? 0);
-    return count > 0;
+    return (profile?.rules.length ?? 0) + (profile?.links.length ?? 0) > 0;
 }
 
 /** Swap the item at `index` with its neighbour in `dir`; out of range = unchanged copy. */
