@@ -155,9 +155,9 @@ function describeIgdbControllerActivityEndpoints() {
       const result = await ctrl.getGameActivity(42, 'week', ANON_REQ);
 
       expect(result.topPlayers[0]).not.toHaveProperty('discordId');
-      expect(result.topPlayers[0]?.avatar).toBe(
-        'https://cdn.discordapp.com/avatars/111/abc123.png',
-      );
+      // ROK-1827: no CDN url — it carried the snowflake.
+      expect(result.topPlayers[0]?.avatar).toBeNull();
+      expect(JSON.stringify(result)).not.toContain('cdn.discordapp.com');
       expect(result.topPlayers[1]).toMatchObject({
         avatar: null,
         customAvatarUrl: '/avatars/2.webp',
@@ -422,9 +422,10 @@ function describeIgdbControllerActivityEndpoints() {
       expect(result.players[0]).toEqual({
         userId: 3,
         username: 'ActivePlayer',
-        avatar: 'https://cdn.discordapp.com/avatars/333/def456.png',
+        avatar: null,
         customAvatarUrl: null,
       });
+      expect(JSON.stringify(result)).not.toContain('cdn.discordapp.com');
       expect(result.count).toBe(1);
     });
 

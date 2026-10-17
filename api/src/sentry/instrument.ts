@@ -1,14 +1,18 @@
 /**
  * Sentry instrumentation for the NestJS backend.
  * MUST be imported FIRST in main.ts — before any other imports.
- * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, opt-in via ENABLE_TELEMETRY=true (DISABLE_TELEMETRY=true still wins).
+ * ROK-306/ROK-1779: Maintainer telemetry — hardcoded DSN, ON by default (ROK-1838); ENABLE_TELEMETRY=false opts out (DISABLE_TELEMETRY=true still wins).
  */
 import * as Sentry from '@sentry/nestjs';
 import { config as loadEnvFile } from 'dotenv';
 import * as os from 'os';
 import { scrubSecrets } from './sentry-scrub.helpers';
 import { scrubPii } from './sentry-pii.helpers';
-import { API_ENV_FILE, resolveBootTelemetry } from './telemetry-policy';
+import {
+  API_ENV_FILE,
+  isProductionRuntime,
+  resolveBootTelemetry,
+} from './telemetry-policy';
 
 const SENTRY_DSN =
   'https://54d787fd4c3d48bc77a750b5e3f76bd5@o4510887305019392.ingest.us.sentry.io/4510887344799744';
@@ -18,8 +22,8 @@ const SENTRY_DSN =
 // ConfigModule), so ENABLE_TELEMETRY set only in .env counts here too.
 loadEnvFile({ path: API_ENV_FILE, quiet: true });
 
-const isProduction = process.env.NODE_ENV === 'production';
-// ROK-1779: the opt-in default lives in telemetry-policy.ts; the decision is
+const isProduction = isProductionRuntime();
+// ROK-1838: the on-by-default policy lives in telemetry-policy.ts; the decision is
 // recorded there so GET /system/status serves exactly what this gate used.
 const telemetryDisabled = !resolveBootTelemetry();
 

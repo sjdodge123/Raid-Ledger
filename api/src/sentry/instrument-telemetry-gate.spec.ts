@@ -54,44 +54,62 @@ async function boot(
   }
 }
 
-describe('ROK-1779: boot gate and /system/status agree', () => {
+describe('ROK-1779/ROK-1838: boot gate and /system/status agree', () => {
   afterEach(() => jest.resetModules());
 
   it('loads the .env ConfigModule uses before evaluating the gate', async () => {
     const { sentryInit, dotenvConfig, policy } = await boot(
       { NODE_ENV: 'production' },
-      { ENABLE_TELEMETRY: 'true' },
+      { ENABLE_TELEMETRY: 'false' },
     );
     expect(dotenvConfig).toHaveBeenCalledWith({
       path: policy.API_ENV_FILE,
       quiet: true,
     });
-    expect(sentryInit).toHaveBeenCalledTimes(1);
+    // The opt-out lives only in .env, so it counts only if .env was loaded.
+    expect(sentryInit).not.toHaveBeenCalled();
   });
 
-  it('status says ON when the gate turned Sentry on from .env, whatever the env says later', async () => {
+  it('status says ON when the gate turned Sentry on by default, whatever the env says later', async () => {
+    const { sentryInit, policy } = await boot({ NODE_ENV: 'production' });
+    expect(sentryInit).toHaveBeenCalledTimes(1);
+    expect(policy.servedTelemetryEnabled({ ENABLE_TELEMETRY: 'false' })).toBe(
+      true,
+    );
+  });
+
+  it('status says OFF when .env opted out, even once the opt-out is gone', async () => {
     const { sentryInit, policy } = await boot(
       { NODE_ENV: 'production' },
-      { ENABLE_TELEMETRY: 'true' },
+      { ENABLE_TELEMETRY: 'false' },
     );
-    expect(sentryInit).toHaveBeenCalledTimes(1);
-    expect(policy.servedTelemetryEnabled({})).toBe(true);
-  });
-
-  it('status says OFF when the gate left Sentry off, even if ENABLE_TELEMETRY appears later', async () => {
-    const { sentryInit, policy } = await boot({ NODE_ENV: 'production' });
     expect(sentryInit).not.toHaveBeenCalled();
-    expect(policy.servedTelemetryEnabled({ ENABLE_TELEMETRY: 'true' })).toBe(
-      false,
-    );
+    expect(policy.servedTelemetryEnabled({})).toBe(false);
   });
 
   it('a real .env value never overrides one set in the environment', async () => {
+    const { sentryInit, policy } = await boot(
+      { NODE_ENV: 'production', ENABLE_TELEMETRY: 'false' },
+      { ENABLE_TELEMETRY: 'true' },
+    );
+    expect(sentryInit).not.toHaveBeenCalled();
+    expect(policy.servedTelemetryEnabled({})).toBe(false);
+  });
+
+  it('a .env DISABLE_TELEMETRY=false never undoes DISABLE_TELEMETRY=true from the environment', async () => {
     const { sentryInit, policy } = await boot(
       { NODE_ENV: 'production', DISABLE_TELEMETRY: 'true' },
       { ENABLE_TELEMETRY: 'true', DISABLE_TELEMETRY: 'false' },
     );
     expect(sentryInit).not.toHaveBeenCalled();
     expect(policy.servedTelemetryEnabled({})).toBe(false);
+  });
+
+  it('a non-production api neither inits Sentry nor tells browsers to report (review MAJOR 2)', async () => {
+    const { sentryInit, policy } = await boot({ NODE_ENV: 'development' });
+    expect(sentryInit).not.toHaveBeenCalled();
+    expect(policy.servedTelemetryEnabled({ NODE_ENV: 'production' })).toBe(
+      false,
+    );
   });
 });

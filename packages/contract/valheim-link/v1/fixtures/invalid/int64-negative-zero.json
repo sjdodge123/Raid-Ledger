@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "character",
+  "character": {
+    "steamId": "76561198000000001",
+    "playerId": "-0",
+    "name": "Testviking",
+    "worldUid": "1234567890123",
+    "worldName": "Fixtureheim"
+  },
+  "equipment": [
+    {
+      "slot": "rightHand",
+      "item": {
+        "prefab": "SwordIron",
+        "stack": 1,
+        "quality": 3,
+        "variant": 0,
+        "durability": 180.5,
+        "maxDurability": 250
+      }
+    },
+    {
+      "slot": "head",
+      "item": {
+        "prefab": "HelmetBronze",
+        "stack": 1,
+        "quality": 2,
+        "variant": 0,
+        "durability": 300,
+        "maxDurability": 400
+      }
+    }
+  ],
+  "inventory": {
+    "grid": {
+      "width": 8,
+      "height": 4,
+      "extraRows": []
+    },
+    "items": [
+      {
+        "x": 0,
+        "y": 0,
+        "equipped": true,
+        "item": {
+          "prefab": "SwordIron",
+          "stack": 1,
+          "quality": 3,
+          "variant": 0,
+          "durability": 180.5,
+          "maxDurability": 250
+        }
+      },
+      {
+        "x": 1,
+        "y": 0,
+        "equipped": true,
+        "item": {
+          "prefab": "HelmetBronze",
+          "stack": 1,
+          "quality": 2,
+          "variant": 0,
+          "durability": 300,
+          "maxDurability": 400
+        }
+      },
+      {
+        "x": 2,
+        "y": 0,
+        "equipped": false,
+        "item": {
+          "prefab": "Wood",
+          "stack": 50,
+          "quality": 1,
+          "variant": 0,
+          "durability": null,
+          "maxDurability": null
+        }
+      },
+      {
+        "x": 7,
+        "y": 3,
+        "equipped": false,
+        "item": {
+          "prefab": "CookedMeat",
+          "stack": 12,
+          "quality": 1,
+          "variant": 0,
+          "durability": null,
+          "maxDurability": null
+        }
+      }
+    ]
+  },
+  "skills": [
+    {
+      "id": "Swords",
+      "level": 34.25,
+      "accumulator": 12.5
+    },
+    {
+      "id": "Run",
+      "level": 41,
+      "accumulator": 0
+    },
+    {
+      "id": "-1287461328",
+      "level": 3.5,
+      "accumulator": 1.75
+    }
+  ],
+  "trophies": [
+    "TrophyBoar",
+    "TrophyEikthyr"
+  ],
+  "knownItems": [
+    "Wood",
+    "Stone",
+    "Resin",
+    "CopperOre"
+  ],
+  "knownRecipes": [
+    "SwordIron",
+    "HelmetBronze",
+    "CookedMeat"
+  ]
+}

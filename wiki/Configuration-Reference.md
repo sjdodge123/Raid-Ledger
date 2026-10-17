@@ -10,7 +10,7 @@ These environment variables can be set when running the Docker container.
 | `ADMIN_PASSWORD` | *(random)* | Set a specific admin password; updates on every startup if set |
 | `CLIENT_URL` | — | Public URL of your web app (used for links in Discord embeds) |
 | `DEBUG` | `false` | Enable verbose logging (query details, startup diagnostics, plugin internals) |
-| `ENABLE_TELEMETRY` | `false` | Error reporting is opt-in. Set to `true` to send error reports to the maintainers' Sentry from the API **and** the web app; unset sends nothing. Read at startup — no rebuild needed. The maintainers' own production instance must set `ENABLE_TELEMETRY=true` to keep reporting |
+| `ENABLE_TELEMETRY` | `true` | Error reporting is on by default: the API **and** the web app send error reports to the maintainers' Sentry. Set to `false` to opt out; nothing is sent. Read at startup — no rebuild needed. Test, CI and dev instances should set `false` |
 | `DISABLE_TELEMETRY` | `false` | Set to `true` to force error reporting off, even when `ENABLE_TELEMETRY=true` |
 
 Most configuration — including Discord OAuth credentials, IGDB keys, community name, timezone, and theme — is managed through the **Admin Settings** panel in the web app. The environment variables above are the only ones you need to pass to `docker run`.

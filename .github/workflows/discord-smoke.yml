@@ -9,6 +9,12 @@ on:
       - main
   workflow_dispatch:
 
+# ROK-1838: error reporting is on by default; nothing CI boots may spend the
+# maintainers' Sentry quota. Every job (and so every api/web process it
+# starts) inherits the opt-out.
+env:
+  ENABLE_TELEMETRY: 'false'
+
 jobs:
   detect-changes:
     runs-on: ubuntu-latest

@@ -4,7 +4,8 @@
  * The public event routes (`/events`, `/events/:id`, `/events/:id/roster`,
  * `/events/:id/roster/assignments`, `/events/:id/detail`) answer signed-in
  * members with the full payload and anonymous / deactivated viewers with the
- * public projection — no Discord ids, a server-built avatar URL. The web
+ * public projection — no Discord ids, and an avatar that is null, or a custom
+ * non-Discord URL (ROK-1827). The web
  * parses either, so a logged-out page does not fail schema validation, and the
  * union types make every `discordId` read handle its absence.
  *
@@ -35,7 +36,7 @@ import type {
 /** A field present for members, absent for anonymous viewers. */
 type MemberOnly<T, K extends keyof T> = Omit<T, K> & Partial<Pick<T, K>>;
 
-/** Roster member identity: `discordId` absent for anonymous viewers; `avatar` may be a server-built URL. */
+/** Roster member identity: `discordId` absent for anonymous viewers; `avatar` is null, or a custom non-Discord URL (ROK-1827). */
 export type ViewerSignupUser = MemberOnly<SignupUserDto, 'discordId'>;
 /** Signup row as either viewer sees it (public rows also drop `note`, attendance and running-late). */
 export type ViewerSignup = MemberOnly<Omit<SignupResponseDto, 'user'>, 'note'> & { user: ViewerSignupUser };

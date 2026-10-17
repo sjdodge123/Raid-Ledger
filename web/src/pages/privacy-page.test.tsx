@@ -52,8 +52,13 @@ describe('PrivacyPage', () => {
         const page = renderPage();
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
-        expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
-        expect(page).toHaveTextContent("Error reports are off unless this site's admins turn them on");
+        expect(page).toHaveTextContent('we strip usernames, email addresses and IP addresses wherever they can be detected');
+        expect(page).toHaveTextContent('we remove the secrets that appear in web addresses, headers and sign-in links from the report and from feedback you send');
+        // ROK-1838 r3: the copy must still name what is NOT scrubbed.
+        expect(page).toHaveTextContent('Two things this does not cover:');
+        expect(page).toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');
+        expect(page).toHaveTextContent('a screenshot you attach is sent exactly as captured, so anything visible in it is sent too');
+        expect(page).toHaveTextContent("Error reports are on by default, and this site's admins can turn them off.");
     });
 
     it('discloses error reports when the instance reports telemetry on (ROK-1779)', () => {
@@ -61,7 +66,7 @@ describe('PrivacyPage', () => {
         expect(renderPage()).toHaveTextContent('Error reports.');
     });
 
-    it('omits error reports when the instance has not opted in to telemetry (ROK-1779)', () => {
+    it('omits error reports when the instance opted out of telemetry (ROK-1838)', () => {
         status.current = { telemetryEnabled: false };
         const page = renderPage();
         expect(page).not.toHaveTextContent('Error reports');

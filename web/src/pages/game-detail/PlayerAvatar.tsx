@@ -10,7 +10,7 @@ import type {
 
 /** Player avatar helper for game detail page (ROK-1714: falls back to initials on a dead URL) */
 export function PlayerAvatar({ player, size = 'sm' }: {
-    /** Anonymous viewers get the public shape: no `discordId`, `avatar` already a URL (ROK-1734). */
+    /** Anonymous viewers get the public shape: no `discordId`, and `avatar` null or a custom non-Discord URL (ROK-1827). */
     player:
         | NowPlayingPlayerDto
         | GameTopPlayerDto
