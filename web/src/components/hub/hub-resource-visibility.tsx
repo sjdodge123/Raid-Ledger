@@ -5,58 +5,49 @@
  * Core must not know what makes a module's section non-empty (before r2 it ran
  * the WoW addons query itself and pointed at `/plugins/wow/...`, which a
  * non-WoW kind would have errored on), so each section answers through its own
- * `useVisible` hook. Core calls that hook inside one `ResourceSectionProbe`
- * per section rather than in its own body — see that file for why.
+ * `useVisible` hook.
+ *
+ * r4 — the answer is produced DURING RENDER, above the tab nav, not reported up
+ * from a child. r2/r3 mounted one probe per section and let it `report` through
+ * state (passive effect, then layout effect): both are a child-to-parent round
+ * trip, so the earliest render that could see the answer was the one AFTER the
+ * commit that first drew the nav. On a warm react-query cache that made the tab
+ * row paint once without Resources and once with it, whatever the effect phase.
+ * Here the hooks run in an ancestor of the nav and hand the booleans straight
+ * down, so a cached answer is part of the very first commit.
+ *
+ * Hook-order legality: the hook list is positional and varies with the section
+ * set, so the component that calls them is keyed by those sections — a module
+ * switching on or off remounts it instead of changing one instance's hook count.
  */
-import { useCallback, useState, type JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import type { HubResourceSection } from '../../plugins/hub-module';
-import { ResourceSectionProbe, type ResourceSectionReport } from './hub-resource-probe';
 
-export interface ResourceSectionVisibility {
-    /** True once any module section reports it has something to show. */
-    anyVisible: boolean;
-    /** Render this anywhere inside the page — it draws nothing. */
-    probes: JSX.Element;
-}
-
-const NO_IDS: ReadonlySet<string> = new Set<string>();
-
-/** Answers are only ever read back for the guild they were reported for. */
-interface ReportedVisibility {
+export interface HubResourceVisibilityProps {
+    sections: readonly HubResourceSection[];
     guildId: number;
-    ids: ReadonlySet<string>;
+    /** Rendered with `true` once any section reports it has something to show. */
+    children: (anyVisible: boolean) => ReactNode;
 }
 
-export function useResourceSectionVisibility(
-    sections: readonly HubResourceSection[], guildId: number,
-): ResourceSectionVisibility {
-    const [reported, setReported] = useState<ReportedVisibility>(() => ({ guildId, ids: NO_IDS }));
-    const report = useCallback<ResourceSectionReport>((id, visible) => {
-        setReported((prev) => {
-            const ids = prev.guildId === guildId ? prev.ids : NO_IDS;
-            if (ids.has(id) === visible) return prev.guildId === guildId ? prev : { guildId, ids };
-            const next = new Set(ids);
-            if (visible) next.add(id);
-            else next.delete(id);
-            return { guildId, ids: next };
-        });
-    }, [guildId]);
-    const probes = (
-        <>
-            {sections.map((section) => (section.useVisible
-                ? (
-                    <ResourceSectionProbe
-                        key={`${guildId}:${section.id}`} id={section.id} guildId={guildId}
-                        useSectionVisible={section.useVisible} report={report}
-                    />
-                )
-                : null))}
-        </>
-    );
-    // Navigating to another guild drops the previous guild's answers outright,
-    // rather than showing them until its probes have re-reported.
-    const visibleIds = reported.guildId === guildId ? reported.ids : NO_IDS;
-    // A section that declares no `useVisible` always counts as having content.
-    const anyVisible = sections.some((section) => !section.useVisible) || visibleIds.size > 0;
-    return { anyVisible, probes };
+/** Identity of the hook list: its length and which entries ask a hook at all. */
+function sectionsKey(sections: readonly HubResourceSection[]): string {
+    return sections.map((section) => `${section.id}:${section.useVisible ? 'ask' : 'always'}`).join('|');
+}
+
+function SectionAnswers({ sections, guildId, children }: HubResourceVisibilityProps): JSX.Element {
+    // `sections` is fixed for this instance (see the key below), so these hooks
+    // run in the same order and count on every render of it.
+    const answers: boolean[] = [];
+    for (const section of sections) {
+        // A section that declares no `useVisible` always counts as having content.
+        if (!section.useVisible) { answers.push(true); continue; }
+        // A hook call in a loop, legal only because the list is fixed per instance.
+        answers.push(section.useVisible(guildId));
+    }
+    return <>{children(answers.some(Boolean))}</>;
+}
+
+export function HubResourceVisibility(props: HubResourceVisibilityProps): JSX.Element {
+    return <SectionAnswers key={sectionsKey(props.sections)} {...props} />;
 }

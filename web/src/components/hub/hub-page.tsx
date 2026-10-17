@@ -5,7 +5,8 @@
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
  * Resources is core's own tab, shown once it has content, the viewer can edit
  * it, or a module section reports content of its own (ROK-1830 — core asks
- * through `HubResourceSection.useVisible`; it runs no plugin query itself).
+ * through `HubResourceSection.useVisible` during render, above the tab nav, so
+ * a warm cache needs no second commit; it runs no plugin query itself).
  * A 403 (not a member) is a friendly empty state.
  */
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
@@ -24,11 +25,11 @@ import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-
 import { HubMembers } from './hub-members';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
-import { useResourceSectionVisibility } from './hub-resource-visibility';
+import { HubResourceVisibility } from './hub-resource-visibility';
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
 
-/** Stable identity so the probe list doesn't churn while a module is absent. */
+/** Stable identity so the section list doesn't churn while a module is absent. */
 const NO_SECTIONS: readonly HubResourceSection[] = [];
 
 function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
@@ -90,22 +91,37 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     );
 }
 
-function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
-    const raids = useGuildRaids(page.guild.id);
-    const mod = useHubModule(page.guild.kind);
-    const profile = useGuildProfile(page.guild.id);
-    const { anyVisible, probes } = useResourceSectionVisibility(mod?.resourceSections ?? NO_SECTIONS, page.guild.id);
-    const showResources = resourcesVisible(page.viewer.canEdit, profile.data) || anyVisible;
-    const ctx: HubCtx = { page, raids };
+interface FrameProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    showResources: boolean;
+}
+
+/** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
+function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview');
     return (
         <div className={PAGE}>
-            {probes}
-            <HubHero ctx={ctx} module={mod} nextRaid={raids.data?.nextRaid ?? null} />
+            <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null} />
             <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
             <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
         </div>
+    );
+}
+
+function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
+    const raids = useGuildRaids(page.guild.id);
+    const mod = useHubModule(page.guild.kind);
+    const profile = useGuildProfile(page.guild.id);
+    const coreResources = resourcesVisible(page.viewer.canEdit, profile.data);
+    const ctx: HubCtx = { page, raids };
+    // The module sections answer during THIS render pass, above the tab nav, so
+    // a warm cache puts Resources in the first commit (see hub-resource-visibility).
+    return (
+        <HubResourceVisibility sections={mod?.resourceSections ?? NO_SECTIONS} guildId={page.guild.id}>
+            {(anyVisible) => <HubFrame ctx={ctx} module={mod} showResources={coreResources || anyVisible} />}
+        </HubResourceVisibility>
     );
 }
 
