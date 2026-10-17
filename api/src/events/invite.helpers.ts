@@ -154,6 +154,10 @@ export function assertSlotClaimable(slot: SlotRow): void {
 /**
  * ROK-1825: a slot created for a named Discord user is that user's alone —
  * a code read off the roster must not let anyone else take the reservation.
+ * A username-only slot (id unresolved: guild lookup pending or the player is
+ * not in the guild) is deliberately NOT bound — that is the relay flow where
+ * the creator hands the code over, and users.username is not a reliable
+ * Discord handle (local accounts, renames), so the code is the credential.
  */
 export function assertClaimerIsInvitee(
   slot: Pick<SlotRow, 'discordUserId'>,
