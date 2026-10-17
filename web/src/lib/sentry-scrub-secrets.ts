@@ -96,7 +96,7 @@ export function scrubSecretsFromText(value: string): string {
  * because only the PII key set was consulted for keys).
  */
 const SECRET_KEY_EXACT =
-    /^(?:api[-_]?key|apikey|authorization|proxy-authorization|cookie|set-cookie|session|passwd|pwd|credentials?|auth)$/i;
+    /^(?:api[-_]?key|apikey|authorization|proxy-authorization|cookie|cookies|set-cookie|session|passwd|pwd|credentials?|auth)$/i;
 const SECRET_KEY_PART = /token|secret|password/i;
 
 export function isSecretKey(key: string): boolean {

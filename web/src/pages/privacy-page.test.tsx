@@ -52,9 +52,12 @@ describe('PrivacyPage', () => {
         const page = renderPage();
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
-        expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
-        expect(page).toHaveTextContent('removed from error reports and from feedback before they leave your browser');
+        expect(page).toHaveTextContent('we strip usernames, email addresses and IP addresses wherever they can be detected');
+        expect(page).toHaveTextContent('we remove passwords, sign-in links and other tokens from every piece of text in the report and in feedback you send');
+        // ROK-1838 r3: the copy must still name what is NOT scrubbed.
+        expect(page).toHaveTextContent('Two things this does not cover:');
         expect(page).toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');
+        expect(page).toHaveTextContent('a screenshot you attach is sent exactly as captured, so anything visible in it is sent too');
         expect(page).toHaveTextContent("Error reports are on by default, and this site's admins can turn them off.");
     });
 

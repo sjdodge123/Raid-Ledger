@@ -7,19 +7,41 @@
  *
  * Secrets only: emails/IPs are deliberately left alone here, because a
  * reporter naming their own account is the point of a bug report.
+ *
+ * r3: scrubbing runs BEFORE the contract's length caps are enforced and the
+ * result is clamped back to them. `[Filtered]` is longer than the secret it
+ * replaces, so a message sitting on the 2,000-character limit grew past it and
+ * the API rejected the whole submission — including the Sentry copy, which is
+ * only sent after the API call succeeds (Codex r3 LOW 3).
  */
 import type { CreateFeedbackDto } from '@raid-ledger/contract';
 import { scrubSecretsFromText } from '../../lib/sentry-scrub-secrets';
 
 export { scrubSecretsFromText };
 
+/**
+ * Mirrors `CreateFeedbackSchema` in `packages/contract/src/feedback.schema.ts`
+ * (`message.max(2000)`, `clientLogs.max(50_000)`). `feedback-scrub.test.ts`
+ * parses a clamped payload through that schema, so a cap change fails here.
+ */
+export const FEEDBACK_MESSAGE_MAX_CHARS = 2000;
+export const FEEDBACK_CLIENT_LOGS_MAX_CHARS = 50_000;
+
+/** Scrub, then clamp — never the other way round. */
+function scrubAndClamp(value: string, max: number): string {
+    const scrubbed = scrubSecretsFromText(value);
+    return scrubbed.length > max ? scrubbed.slice(0, max) : scrubbed;
+}
+
 /** A copy of the payload with message, pageUrl and clientLogs scrubbed. */
 export function scrubFeedbackPayload(payload: CreateFeedbackDto): CreateFeedbackDto {
     const { pageUrl, clientLogs } = payload;
     return {
         ...payload,
-        message: scrubSecretsFromText(payload.message),
+        message: scrubAndClamp(payload.message, FEEDBACK_MESSAGE_MAX_CHARS),
         ...(pageUrl === undefined ? {} : { pageUrl: scrubSecretsFromText(pageUrl) }),
-        ...(clientLogs === undefined ? {} : { clientLogs: scrubSecretsFromText(clientLogs) }),
+        ...(clientLogs === undefined
+            ? {}
+            : { clientLogs: scrubAndClamp(clientLogs, FEEDBACK_CLIENT_LOGS_MAX_CHARS) }),
     };
 }

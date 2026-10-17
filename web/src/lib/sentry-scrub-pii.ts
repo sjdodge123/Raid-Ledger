@@ -59,6 +59,7 @@ export interface PiiScrubbableEvent {
     breadcrumbs?: unknown;
     tags?: unknown;
     message?: string;
+    /** Walked whole (frames, `mechanism.data`); `value` is named for clarity. */
     exception?: { values?: Array<{ value?: string }> };
     logentry?: unknown;
     threads?: unknown;
