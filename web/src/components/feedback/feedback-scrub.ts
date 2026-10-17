@@ -15,7 +15,7 @@
  * only sent after the API call succeeds (Codex r3 LOW 3).
  */
 import type { CreateFeedbackDto } from '@raid-ledger/contract';
-import { scrubSecretsFromText } from '../../lib/sentry-scrub-secrets';
+import { scrubSecretsFromText, SECRET_FILTERED } from '../../lib/sentry-scrub-secrets';
 
 export { scrubSecretsFromText };
 
@@ -27,10 +27,26 @@ export { scrubSecretsFromText };
 export const FEEDBACK_MESSAGE_MAX_CHARS = 2000;
 export const FEEDBACK_CLIENT_LOGS_MAX_CHARS = 50_000;
 
+/**
+ * Cut at `max`, but never through a `[Filtered]` — r4: a cut that left
+ * `…?token=[` behind made the NEXT scrub match `[` as a value and write
+ * `[Filtered]` over it, growing the clamped string back past the limit. Cut
+ * in front of the partial placeholder instead; the bytes before it are
+ * already scrubbed, so nothing secret is uncovered.
+ */
+function clampOutsidePlaceholder(value: string, max: number): string {
+    if (value.length <= max) return value;
+    const windowStart = Math.max(0, max - SECRET_FILTERED.length + 1);
+    const opened = value.lastIndexOf('[', max - 1);
+    if (opened >= windowStart && SECRET_FILTERED.startsWith(value.slice(opened, max))) {
+        return value.slice(0, opened);
+    }
+    return value.slice(0, max);
+}
+
 /** Scrub, then clamp — never the other way round. */
 function scrubAndClamp(value: string, max: number): string {
-    const scrubbed = scrubSecretsFromText(value);
-    return scrubbed.length > max ? scrubbed.slice(0, max) : scrubbed;
+    return clampOutsidePlaceholder(scrubSecretsFromText(value), max);
 }
 
 /** A copy of the payload with message, pageUrl and clientLogs scrubbed. */
