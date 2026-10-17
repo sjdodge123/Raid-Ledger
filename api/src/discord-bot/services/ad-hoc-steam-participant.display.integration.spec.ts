@@ -3,8 +3,10 @@
  *
  * Spike ruling: the in-game character name is for UNLINKED players only. A
  * server player whose SteamID resolves to a Raid Ledger user shows as that
- * user (display name, else username) with their avatar, and a character
- * rename never overwrites it. An unlinked row still follows renames.
+ * user (display name, else username), and a character rename never
+ * overwrites it. An unlinked row still follows renames. ROK-1822: no avatar
+ * is written (the web builds one only from a Discord id, which a Steam row
+ * lacks), and the character name is kept in `character_name` for every row.
  */
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { and, eq } from 'drizzle-orm';
@@ -80,16 +82,17 @@ afterEach(async () => {
 });
 
 describe('Steam row display identity — linked players (ROK-1821 F4)', () => {
-  it('a linked server player shows their Raid Ledger name and avatar, not the character name', async () => {
+  it('a linked server player shows their Raid Ledger name, not the character name, and keeps the character name aside', async () => {
     const eventId = await insertEvent();
     const userId = await insertLinkedUser('RokRL');
     await service.addServerParticipant(eventId, member('rok', userId));
 
     const row = await steamRow(eventId);
-    expect([row.discordUsername, row.discordAvatarHash]).toEqual([
-      'RokRL',
-      'rl-avatar-hash',
-    ]);
+    expect([
+      row.discordUsername,
+      row.discordAvatarHash,
+      row.characterName,
+    ]).toEqual(['RokRL', null, 'rok']);
   });
 
   it('falls back to the username when the user has no display name', async () => {
@@ -119,7 +122,11 @@ describe('Steam row display identity — linked players (ROK-1821 F4)', () => {
       displayName: 'rok-renamed',
     });
 
-    expect((await steamRow(eventId)).discordUsername).toBe('RokRL');
+    const row = await steamRow(eventId);
+    expect([row.discordUsername, row.characterName]).toEqual([
+      'RokRL',
+      'rok-renamed',
+    ]);
   });
 
   it('an unlinked row that becomes linked takes the Raid Ledger name', async () => {
