@@ -12,7 +12,6 @@ import {
   buildLeftAllReply,
   buildLeftSomeReply,
   matchOwnGroup,
-  remainingCount,
 } from './lfg-leave.helpers';
 import {
   LFG_LEAVE_ERROR_REPLY,
@@ -94,7 +93,7 @@ describe('buildLeaveChoices (ROK-1660)', () => {
   });
 });
 
-describe('matchOwnGroup / remainingCount (ROK-1660)', () => {
+describe('matchOwnGroup (ROK-1660)', () => {
   const groups = [lfgGroup(1, 'Valheim', true, 4), lfgGroup(2, 'DRG', false)];
 
   it('matches an own pick by id or by exact title', () => {
@@ -105,11 +104,6 @@ describe('matchOwnGroup / remainingCount (ROK-1660)', () => {
   it('refuses a game the caller has no hand for, and free text', () => {
     expect(matchOwnGroup(groups, '2')).toBeNull();
     expect(matchOwnGroup(groups, 'Valh')).toBeNull();
-  });
-
-  it('reads the remaining count, 0 once the group is gone', () => {
-    expect(remainingCount(groups, 1)).toBe(4);
-    expect(remainingCount(groups, 99)).toBe(0);
   });
 });
 

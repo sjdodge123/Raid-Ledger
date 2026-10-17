@@ -52,9 +52,12 @@ const GAME = [{ name: 'Deep Rock Galactic' }];
 
 function makeService(
   withdraw: jest.Mock = jest.fn().mockResolvedValue(undefined),
-  groups: Row[] = [],
+  stillLooking = 0,
 ): Record<string, jest.Mock> {
-  return { withdraw, listGroups: jest.fn().mockResolvedValue(groups) };
+  return {
+    withdraw,
+    countStillLooking: jest.fn().mockResolvedValue(stillLooking),
+  };
 }
 
 function build(
@@ -77,13 +80,14 @@ function content(editReply: jest.Mock): unknown {
 
 describe("LfgLeaveListener — the board's I'm out (ROK-1660)", () => {
   it('withdraws the PRESSER and says how many are still looking', async () => {
-    const service = makeService(undefined, [{ gameId: 42, activeCount: 2 }]);
+    const service = makeService(undefined, 2);
     const listener = build([LINKED, GAME], service);
     const { interaction, editReply } = makeButton('lfg:leave:42');
 
     await listener.handleButtonInteraction(interaction);
 
     expect(service.withdraw).toHaveBeenCalledWith(7, 42);
+    expect(service.countStillLooking).toHaveBeenCalledWith(42);
     expect(content(editReply)).toBe(
       "You're out — **Deep Rock Galactic**. 2 still looking.",
     );

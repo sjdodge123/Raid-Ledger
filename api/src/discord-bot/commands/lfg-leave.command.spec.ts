@@ -61,16 +61,24 @@ function fakeDb(batches: GameRow[][]) {
 
 type GameRow = { id: number; name: string };
 
-function setup(lists: LfgGroupSummaryDto[][], games: GameRow[][] = []) {
+function setup(
+  lists: LfgGroupSummaryDto[][],
+  games: GameRow[][] = [],
+  stillLooking = 0,
+) {
   const listGroups = jest.fn();
   for (const list of lists) listGroups.mockResolvedValueOnce(list);
   listGroups.mockResolvedValue(lists.at(-1) ?? []);
   const withdraw = jest.fn().mockResolvedValue(undefined);
-  // One queue for both reads: the own-groups read and the after-count read
-  // are consumed in call order, as the tests below script them.
+  // Both own-group reads consume ONE queue in call order; the two wrappers
+  // only record which read a path chose (display vs bulk withdrawal).
+  const listOwnGroups = jest.fn((id: number) => listGroups(id));
+  const forWithdrawal = jest.fn((id: number) => listGroups(id));
+  const countStillLooking = jest.fn().mockResolvedValue(stillLooking);
   const service = {
-    listGroups,
-    listOwnGroups: listGroups,
+    listOwnGroups,
+    listOwnGroupsForWithdrawal: forWithdrawal,
+    countStillLooking,
     withdraw,
   } as unknown as LfgService;
   const command = new LfgLeaveCommand(
@@ -78,7 +86,14 @@ function setup(lists: LfgGroupSummaryDto[][], games: GameRow[][] = []) {
     service,
     {} as SettingsService,
   );
-  return { command, listGroups, withdraw };
+  return {
+    command,
+    listGroups,
+    listOwnGroups,
+    forWithdrawal,
+    countStillLooking,
+    withdraw,
+  };
 }
 
 function slash(game: string | null) {
@@ -155,13 +170,15 @@ describe('LfgLeaveCommand — autocomplete (ROK-1660)', () => {
 
 describe('LfgLeaveCommand — leave one game (ROK-1660)', () => {
   it('leaves one own game and says how many are still looking', async () => {
-    const { command, withdraw } = setup([
-      [group(1, 'Valheim', true, 4)],
-      [group(1, 'Valheim', false, 3)],
-    ]);
+    const { command, withdraw, countStillLooking } = setup(
+      [[group(1, 'Valheim', true, 4)]],
+      [],
+      3,
+    );
     const { interaction, editReply } = slash('1');
     await command.handleInteraction(interaction);
     expect(withdraw).toHaveBeenCalledWith(7, 1);
+    expect(countStillLooking).toHaveBeenCalledWith(1);
     expect(editReply).toHaveBeenCalledWith(
       "You're out — **Valheim**. 3 still looking.",
     );
@@ -191,11 +208,14 @@ describe('LfgLeaveCommand — leave one game (ROK-1660)', () => {
 
 describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
   it('All my LFGs withdraws every own hand and nobody else’s', async () => {
-    const { command, withdraw } = setup([
+    const { command, withdraw, listOwnGroups, forWithdrawal } = setup([
       [group(1, 'A', true), group(2, 'X', false), group(3, 'B', true)],
     ]);
     const { interaction, editReply } = slash('all');
     await command.handleInteraction(interaction);
+    // The unfiltered read: a hand on a hidden/banned game must go too.
+    expect(forWithdrawal).toHaveBeenCalledWith(7);
+    expect(listOwnGroups).not.toHaveBeenCalled();
     expect(withdraw.mock.calls).toEqual([
       [7, 1],
       [7, 3],
@@ -222,10 +242,26 @@ describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
   });
 
   it('All my LFGs with one hand → the one-game reply', async () => {
-    const { command } = setup([[group(1, 'A', true, 1)], []]);
+    const { command } = setup([[group(1, 'A', true, 1)]]);
     const { interaction, editReply } = slash('all');
     await command.handleInteraction(interaction);
     expect(editReply).toHaveBeenCalledWith("You're out — **A**.");
+  });
+});
+
+describe('LfgLeaveCommand — still-looking count (ROK-1660)', () => {
+  it('All my LFGs with one hand reads the game-scoped count', async () => {
+    const { command, countStillLooking } = setup(
+      [[group(1, 'A', true, 3)]],
+      [],
+      2,
+    );
+    const { interaction, editReply } = slash('all');
+    await command.handleInteraction(interaction);
+    expect(countStillLooking).toHaveBeenCalledWith(1);
+    expect(editReply).toHaveBeenCalledWith(
+      "You're out — **A**. 2 still looking.",
+    );
   });
 
   it('All my LFGs with no hands → the empty-list copy, no write', async () => {

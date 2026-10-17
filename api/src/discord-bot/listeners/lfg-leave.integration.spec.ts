@@ -117,9 +117,11 @@ async function crowdPastListCap(holderId: number): Promise<void> {
     )
     .returning({ id: schema.games.id });
   const soon = new Date(Date.now() + 60 * 60 * 1000);
-  await testApp.db.insert(schema.lfgIntents).values(
-    filler.map((g) => ({ userId: holderId, gameId: g.id, expiresAt: soon })),
-  );
+  await testApp.db
+    .insert(schema.lfgIntents)
+    .values(
+      filler.map((g) => ({ userId: holderId, gameId: g.id, expiresAt: soon })),
+    );
 }
 
 function pressLeave(gameId: number, discordId: string) {
@@ -300,7 +302,9 @@ describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
     expect(await isActive(a.userId, quiet.id)).toBe(false);
     expect(editReply).toHaveBeenCalledWith("You're out — **Quiet Game**.");
   });
+});
 
+describe('LfgLeaveCommand — All my LFGs on hidden games (ROK-1660)', () => {
   it.each(['hidden', 'banned'] as const)(
     'All my LFGs also withdraws a hand on a %s game',
     async (flag) => {

@@ -81,14 +81,6 @@ export function matchOwnGroup(
   );
 }
 
-/** How many are still looking for `gameId` (0 once the group is gone). */
-export function remainingCount(
-  groups: LfgGroupSummaryDto[],
-  gameId: number,
-): number {
-  return groups.find((g) => g.gameId === gameId)?.activeCount ?? 0;
-}
-
 /** Discord rejects message content longer than this. */
 export const DISCORD_CONTENT_CAP = 2000;
 

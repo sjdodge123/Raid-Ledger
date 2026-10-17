@@ -7,7 +7,6 @@
  * write path.
  */
 import { NotFoundException } from '@nestjs/common';
-import type { LfgGroupSummaryDto } from '@raid-ledger/contract';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { eq } from 'drizzle-orm';
 import * as schema from '../../drizzle/schema';
@@ -16,7 +15,8 @@ import { LFG_BUTTON_IDS } from '../discord-bot.constants';
 /** The slice of `LfgService` a leave needs. */
 export interface LfgLeaveWriter {
   withdraw(userId: number, gameId: number): Promise<void>;
-  listGroups(userId: number): Promise<LfgGroupSummaryDto[]>;
+  /** Game-scoped, so a group past the `GET /lfg` cap still counts. */
+  countStillLooking(gameId: number): Promise<number>;
 }
 
 /** What one leave did. `stillLooking` is the group's count AFTER the leave. */
@@ -94,9 +94,7 @@ export async function leaveOneGroup(
   if (!(await withdrawIfPresent(lfg, userId, gameId))) {
     return { left: false, stillLooking: 0 };
   }
-  const groups = await lfg.listGroups(userId);
-  const group = groups.find((g) => g.gameId === gameId);
-  return { left: true, stillLooking: group?.activeCount ?? 0 };
+  return { left: true, stillLooking: await lfg.countStillLooking(gameId) };
 }
 
 /** The game's display name for the reply copy. */

@@ -44,7 +44,6 @@ import {
   buildLeftSomeReply,
   matchOwnGroup,
   ownGroups,
-  remainingCount,
 } from './lfg-leave.helpers';
 import {
   buildLeftReply,
@@ -112,11 +111,13 @@ export class LfgLeaveCommand
       await interaction.editReply(LFG_BLOCKED_REPLY);
       return;
     }
+    if (typed === LFG_LEAVE_ALL_SENTINEL) {
+      await this.leaveAll(interaction, caller.id);
+      return;
+    }
     const groups = await this.lfgService.listOwnGroups(caller.id);
     if (!typed || typed === LFG_LEAVE_NONE_SENTINEL) {
       await this.replyWithList(interaction, groups);
-    } else if (typed === LFG_LEAVE_ALL_SENTINEL) {
-      await this.leaveAll(interaction, caller.id, groups);
     } else {
       await this.leaveOne(interaction, caller.id, groups, typed);
     }
@@ -148,12 +149,15 @@ export class LfgLeaveCommand
     );
   }
 
-  /** `All my LFGs` — withdraw every own hand, then say which ones went. */
+  /**
+   * `All my LFGs` — withdraw every own hand, then say which ones went. Reads
+   * the UNFILTERED own list: a hand on a hidden or banned game must go too.
+   */
   private async leaveAll(
     interaction: ChatInputCommandInteraction,
     userId: number,
-    groups: LfgGroupSummaryDto[],
   ): Promise<void> {
+    const groups = await this.lfgService.listOwnGroupsForWithdrawal(userId);
     const { left, failed } = await this.withdrawEach(userId, ownGroups(groups));
     const [only] = left;
     if (failed.length > 0) {
@@ -166,7 +170,7 @@ export class LfgLeaveCommand
     } else if (left.length === 0 || !only) {
       await this.replyWithList(interaction, []);
     } else if (left.length === 1) {
-      const reply = await this.leftReply(userId, only.gameId, only.gameName);
+      const reply = await this.leftReply(only.gameId, only.gameName);
       await interaction.editReply(reply);
     } else {
       await interaction.editReply(
@@ -199,13 +203,9 @@ export class LfgLeaveCommand
   }
 
   /** `You're out — …` with the count re-read after the write. */
-  private async leftReply(
-    userId: number,
-    gameId: number,
-    gameName: string,
-  ): Promise<string> {
-    const after = await this.lfgService.listGroups(userId);
-    return buildLeftReply(gameName, remainingCount(after, gameId));
+  private async leftReply(gameId: number, gameName: string): Promise<string> {
+    const stillLooking = await this.lfgService.countStillLooking(gameId);
+    return buildLeftReply(gameName, stillLooking);
   }
 
   /** The `/lfg` list — own groups with a leave button each, or empty copy. */

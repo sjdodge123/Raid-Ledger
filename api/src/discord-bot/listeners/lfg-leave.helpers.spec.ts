@@ -39,9 +39,12 @@ function group(over: Partial<LfgGroupSummaryDto> = {}): LfgGroupSummaryDto {
 
 function writer(
   withdraw: jest.Mock = jest.fn().mockResolvedValue(undefined),
-  groups: LfgGroupSummaryDto[] = [],
+  stillLooking = 0,
 ) {
-  return { withdraw, listGroups: jest.fn().mockResolvedValue(groups) };
+  return {
+    withdraw,
+    countStillLooking: jest.fn().mockResolvedValue(stillLooking),
+  };
 }
 
 describe('leave copy (ROK-1660 exact-copy sheet)', () => {
@@ -75,29 +78,31 @@ describe('leave custom id', () => {
 
 describe('withdrawIfPresent / leaveOneGroup', () => {
   it('withdraws and reports how many are still looking', async () => {
-    const lfg = writer(undefined, [group({ gameId: 42, activeCount: 3 })]);
+    const lfg = writer(undefined, 3);
     await expect(leaveOneGroup(lfg, 7, 42)).resolves.toEqual({
       left: true,
       stillLooking: 3,
     });
     expect(lfg.withdraw).toHaveBeenCalledWith(7, 42);
+    // Game-scoped read — never a lookup in the capped GET /lfg list.
+    expect(lfg.countStillLooking).toHaveBeenCalledWith(42);
   });
 
   it('reports 0 when the group is gone after the leave', async () => {
-    const lfg = writer(undefined, [group({ gameId: 9 })]);
+    const lfg = writer();
     await expect(leaveOneGroup(lfg, 7, 42)).resolves.toEqual({
       left: true,
       stillLooking: 0,
     });
   });
 
-  it('maps NotFound to "not in the group", without reading the list', async () => {
+  it('maps NotFound to "not in the group", without reading the count', async () => {
     const lfg = writer(jest.fn().mockRejectedValue(new NotFoundException()));
     await expect(leaveOneGroup(lfg, 7, 42)).resolves.toEqual({
       left: false,
       stillLooking: 0,
     });
-    expect(lfg.listGroups).not.toHaveBeenCalled();
+    expect(lfg.countStillLooking).not.toHaveBeenCalled();
   });
 
   it('rethrows every other failure', async () => {
