@@ -25,14 +25,16 @@ import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import * as schema from '../../drizzle/schema';
 import { LfgService } from '../../lfg/lfg.service';
 import { SettingsService } from '../../settings/settings.service';
-import { listLfmThreadsForGames } from '../lfg-board/lfg-board.db-helpers';
-import { loadLfgReplyContext, resolveLfgCaller } from './lfg.command';
+import {
+  loadLfgPostLinks,
+  loadLfgReplyContext,
+  resolveLfgCaller,
+} from './lfg.command';
 import {
   LFG_BLOCKED_REPLY,
   LFG_UNLINKED_REPLY,
   buildListReply,
   buildUnknownGameReply,
-  forumPostLink,
 } from './lfg.command.helpers';
 import {
   LFG_LEAVE_ALL_SENTINEL,
@@ -185,16 +187,13 @@ export class LfgLeaveCommand
     groups: LfgGroupSummaryDto[],
   ): Promise<void> {
     const own = ownGroups(groups);
-    const [ctx, threads] = await Promise.all([
+    const [ctx, postLinks] = await Promise.all([
       loadLfgReplyContext(this.settingsService),
-      listLfmThreadsForGames(
+      loadLfgPostLinks(
         this.db,
         own.map((g) => g.gameId),
       ),
     ]);
-    const postLinks = new Map(
-      threads.map((t) => [t.gameId, forumPostLink(t.guildId, t.threadId)]),
-    );
     await interaction.editReply(buildListReply(own, ctx, postLinks));
   }
 

@@ -23,6 +23,7 @@ jest.mock('./lfg.command', () => ({
     clientUrl: null,
     timezone: null,
   }),
+  loadLfgPostLinks: jest.fn().mockResolvedValue(new Map()),
 }));
 jest.mock('../lfg-board/lfg-board.db-helpers', () => ({
   listLfmThreadsForGames: jest.fn().mockResolvedValue([]),
