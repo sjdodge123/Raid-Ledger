@@ -10,6 +10,7 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../../drizzle/schema';
+import { characterNameOf } from './ad-hoc-steam-display.helpers';
 
 type Db = PostgresJsDatabase<typeof schema>;
 const t = schema.adHocParticipants;
@@ -74,6 +75,10 @@ function carriedSeconds(user: Row, steam: Row | null, now: Date): number {
 export interface SteamMergeInput {
   steamId: string;
   pelicanServerId?: number;
+  /** Character name, else the SteamID64 (ROK-1822: kept in `character_name`). */
+  displayName?: string;
+  /** ROK-1822 r3: the owner id of the character line that named them. */
+  characterOwnerId?: string;
 }
 
 /**
@@ -100,6 +105,7 @@ export async function mergeSteamIntoUserRow(
       .set({
         steamId: member.steamId,
         pelicanServerId: member.pelicanServerId ?? null,
+        ...mergedCharacterName(member, steam),
         ...(carried > 0
           ? { totalDurationSeconds: (user.totalDurationSeconds ?? 0) + carried }
           : {}),
@@ -108,4 +114,26 @@ export async function mergeSteamIntoUserRow(
       .where(eq(t.id, user.id));
     return true;
   });
+}
+
+/**
+ * ROK-1822: the character name (and its owner id, r3) the merged row keeps. An incoming name wins;
+ * an explicitly nameless player (displayName = SteamID) clears it, because a
+ * closed session's name may be another character and would be rehydrated
+ * after a restart (Codex r2). Only an omitted display name keeps the folded
+ * row's name.
+ */
+function mergedCharacterName(
+  member: SteamMergeInput,
+  steam: Row | null,
+): { characterName?: string | null; characterOwnerId?: string | null } {
+  const { steamId, displayName } = member;
+  if (displayName !== undefined) {
+    const characterName = characterNameOf({ steamId, displayName });
+    const owner = characterName === null ? null : member.characterOwnerId;
+    return { characterName, characterOwnerId: owner ?? null };
+  }
+  if (!steam || steam.characterName === null) return {};
+  const { characterName, characterOwnerId } = steam;
+  return { characterName, characterOwnerId };
 }

@@ -10,7 +10,7 @@ import { PluginSlot } from '../../plugins';
 import { copyWithToast } from '../../lib/clipboard';
 import type { EventResponseDto, SignupCharacterDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto } from '../../lib/api/viewer-event-schemas';
-import { alphabetical } from './event-detail-helpers';
+import { alphabetical, isRosterShownSignup } from './event-detail-helpers';
 
 interface SignupItem {
     id: number;
@@ -123,8 +123,9 @@ function SignupEntry({ signup, event, showBadge }: {
  * Roster attendee list grouped by status (confirmed, tentative, pending, departed).
  */
 function categorizeSignups(roster: ViewerEventRosterDto | undefined) {
-    const active = roster?.signups.filter((s) => s.status !== 'declined' && s.status !== 'departed') || [];
-    const departed = roster?.signups.filter((s) => s.status === 'departed').sort(alphabetical) || [];
+    const shown = roster?.signups.filter(isRosterShownSignup) ?? [];
+    const active = shown.filter((s) => s.status !== 'departed');
+    const departed = shown.filter((s) => s.status === 'departed').sort(alphabetical);
     const tentative = active.filter((s) => s.status === 'tentative').sort(alphabetical);
     const nonTentative = active.filter((s) => s.status !== 'tentative');
     const pending = nonTentative.filter((s) => s.confirmationStatus === 'pending' && !s.isAnonymous).sort(alphabetical);

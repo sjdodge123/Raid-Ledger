@@ -14,6 +14,7 @@ import { ServerGuestRoster, VoiceRoster } from '../../components/events/VoiceRos
 import { serverGuestParticipants, voiceParticipants } from '../../components/events/voice-participants';
 import { toast } from '../../lib/toast';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';
+import { isRosterShownSignup } from './event-detail-helpers';
 
 /** Omits an absent character name instead of carrying the key as `undefined`. */
 type AttendeeCharacter = { gameId: number | string; name?: string; avatarUrl: string | null };
@@ -92,20 +93,24 @@ export function EventDetailGameTimeWidget({ rosterAssignments, isAuthenticated, 
     );
 }
 
-export function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc, event, eventStatus }: {
+export function EventDetailVoiceSection({ showVoiceRoster, voiceRoster, isAdHoc, event, eventStatus, roster }: {
     showVoiceRoster: boolean; voiceRoster: { participants: AdHocParticipantDto[] };
     isAdHoc: boolean; event: EventResponseDto; eventStatus: string | null;
+    /** The signup roster; linked server players outside it join the server group (ROK-1822). */
+    roster?: ViewerEventRosterDto | undefined;
 }) {
-    // ROK-1821: voice rows get the voice panel; unlinked server players their own group.
+    // ROK-1821: voice rows get the voice panel; server players no shown signup lists get their own group.
+    const shownSignups = roster?.signups.filter(isRosterShownSignup);
+    const signedUpUserIds = shownSignups ? new Set(shownSignups.map((s) => s.user.id)) : undefined;
     const hasVoice = voiceParticipants(voiceRoster.participants).length > 0;
-    const hasGuests = serverGuestParticipants(voiceRoster.participants).length > 0;
+    const hasGuests = serverGuestParticipants(voiceRoster.participants, signedUpUserIds).length > 0;
     if (!showVoiceRoster || (!hasVoice && !hasGuests)) return null;
     return (
         <div className="bg-surface rounded-xl border border-edge p-4 mb-6">
             {(isAdHoc ? event.adHocStatus === 'live' : eventStatus === 'live') && <LiveBadge className="mb-3" />}
             <div className="space-y-4">
                 {hasVoice && <VoiceRoster participants={voiceRoster.participants} />}
-                <ServerGuestRoster participants={voiceRoster.participants} />
+                <ServerGuestRoster participants={voiceRoster.participants} signedUpUserIds={signedUpUserIds} />
             </div>
         </div>
     );

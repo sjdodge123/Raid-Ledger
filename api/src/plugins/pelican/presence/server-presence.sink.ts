@@ -22,6 +22,11 @@ export interface ServerPresencePlayer {
   steamId: string;
   /** In-game character name, or the SteamID64 before a character line names them. */
   displayName: string;
+  /**
+   * ROK-1822 r3: the owner id of the character line that named them
+   * (Valheim: the ZDOID session id). Persisted and rehydrated with the name.
+   */
+  characterOwnerId?: string;
 }
 
 export interface ServerPresenceSink {
@@ -30,7 +35,11 @@ export interface ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void>;
-  /** A character line named a player who was already present. */
+  /**
+   * A character line named a player who was already present — or, under
+   * the unchanged name, their character owner alone changed (ROK-1822 r4),
+   * so the persisted owner never goes stale.
+   */
   playerRenamed(
     source: ServerPresenceSource,
     player: ServerPresencePlayer,

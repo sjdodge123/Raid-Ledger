@@ -1,0 +1,1 @@
+ALTER TABLE "ad_hoc_participants" ADD COLUMN "character_name" varchar(255);

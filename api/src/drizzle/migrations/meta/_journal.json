@@ -1548,6 +1548,20 @@
       "when": 1792137795424,
       "tag": "0221_chemical_silver_samurai",
       "breakpoints": true
+    },
+    {
+      "idx": 222,
+      "version": "7",
+      "when": 1792210107749,
+      "tag": "0222_bouncy_kang",
+      "breakpoints": true
+    },
+    {
+      "idx": 223,
+      "version": "7",
+      "when": 1792211171689,
+      "tag": "0223_huge_mister_sinister",
+      "breakpoints": true
     }
   ]
 }

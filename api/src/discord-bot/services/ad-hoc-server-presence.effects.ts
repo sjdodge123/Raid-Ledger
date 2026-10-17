@@ -153,6 +153,9 @@ export async function attachServerPlayer(
     displayName: player.displayName,
     userId,
     pelicanServerId,
+    ...(player.characterOwnerId
+      ? { characterOwnerId: player.characterOwnerId }
+      : {}),
   });
   await deps.gracePeriodQueue.cancel(live.id);
   if (await restoreFromGracePeriod(deps.db, live.id))

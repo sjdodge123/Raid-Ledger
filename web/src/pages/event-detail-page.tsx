@@ -198,7 +198,7 @@ function EventDetailBodySections({ page, voice, derived, handlers }: {
             {page.isAuthenticated && <GameServerStatusChip gameId={page.event.game?.id} />}
             {page.isAuthenticated && <EventCalendarLine event={page.event} isSignedUp={derived.isSignedUp && !derived.isCancelled} />}
             <EventDetailGameTimeWidget rosterAssignments={derived.rosterAssignments} isAuthenticated={page.isAuthenticated} event={page.event} roster={page.roster} />
-            <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} />
+            <EventDetailVoiceSection showVoiceRoster={voice.showVoiceRoster} voiceRoster={voice.voiceRoster} isAdHoc={voice.isAdHoc} event={page.event} eventStatus={voice.eventStatus} roster={page.roster} />
             <EventDetailRoster roster={page.roster} event={page.event} />
             <ActivityTimeline entityType="event" entityId={page.eventId} />
             <PluginSlot name="event-detail:content-sections" context={{ contentInstances: page.event.contentInstances ?? [], eventId: page.eventId, gameSlug: page.event.game?.slug, characterId: derived.userSignup?.character?.id }} />
