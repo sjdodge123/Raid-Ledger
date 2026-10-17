@@ -454,3 +454,50 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
     );
   });
 });
+
+describe('character owner persistence (ROK-1822 r4)', () => {
+  const ALICE = { steamId: 'A', displayName: 'Alice', characterOwnerId: '111' };
+  const aliceAs = (ownerId: string, loggedAt: string) =>
+    line({ kind: 'character', name: 'Alice', zdoidZero: false, ownerId, loggedAt });
+
+  it('a live repeat handshake persists the cleared then adopted owner, with no join/leave', async () => {
+    const h = harness([ALICE]);
+    await h.connect();
+    const notified = h.onChanged.mock.calls.length;
+    await h.live([line({ kind: 'join', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([aliceAs('222', T(2))]);
+    expect(h.sink.playerRenamed.mock.calls).toEqual([
+      [SRC, { steamId: 'A', displayName: 'Alice' }],
+      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+    ]);
+    expect(h.sink.playerJoined).not.toHaveBeenCalled();
+    expect(h.sink.playerLeft).not.toHaveBeenCalled();
+    // An owner change is not a roster change.
+    expect(h.onChanged.mock.calls.length).toBe(notified);
+  });
+
+  it('a cold replay persists its net owner change', async () => {
+    const h = harness([ALICE]);
+    await h.connect([
+      line({ kind: 'join', steamId: 'A', loggedAt: T(1) }),
+      aliceAs('222', T(2)),
+    ]);
+    expect(h.sink.playerRenamed.mock.calls).toEqual([
+      [SRC, { steamId: 'A', displayName: 'Alice', characterOwnerId: '222' }],
+    ]);
+    expect(h.sink.playerJoined).not.toHaveBeenCalled();
+  });
+
+  it('a cold-replay restore keeps the owner, so a same-named stranger still joins', async () => {
+    const h = harness([ALICE]);
+    await h.connect([line({ kind: 'leave', steamId: 'A', loggedAt: T(1) })]);
+    await h.live([
+      line({ kind: 'join', steamId: 'B', loggedAt: T(2) }),
+      aliceAs('999', T(3)),
+    ]);
+    expect(h.sink.playerJoined.mock.calls).toEqual([
+      [SRC, { steamId: 'B', displayName: 'Alice', characterOwnerId: '999' }],
+    ]);
+    expect(h.sink.playerLeft).not.toHaveBeenCalled();
+  });
+});
