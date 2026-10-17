@@ -5,32 +5,12 @@
  * Core must not know what makes a module's section non-empty (before r2 it ran
  * the WoW addons query itself and pointed at `/plugins/wow/...`, which a
  * non-WoW kind would have errored on), so each section answers through its own
- * `useVisible` hook. That hook belongs to the plugin, so core calls it inside a
- * probe component rendered once per section: mounting or unmounting a probe
- * when the owning plugin toggles is legal, where calling a varying number of
- * hooks inside core's own body would not be.
+ * `useVisible` hook. Core calls that hook inside one `ResourceSectionProbe`
+ * per section rather than in its own body — see that file for why.
  */
-import { useCallback, useEffect, useState, type JSX } from 'react';
+import { useCallback, useState, type JSX } from 'react';
 import type { HubResourceSection } from '../../plugins/hub-module';
-
-type Report = (id: string, visible: boolean) => void;
-
-interface ProbeProps {
-    id: string;
-    guildId: number;
-    useSectionVisible: (guildId: number) => boolean;
-    report: Report;
-}
-
-/** Renders nothing; it exists so the section's hook has a component of its own. */
-function ResourceSectionProbe({ id, guildId, useSectionVisible, report }: ProbeProps): null {
-    const visible = useSectionVisible(guildId);
-    useEffect(() => {
-        report(id, visible);
-        return () => report(id, false);
-    }, [id, visible, report]);
-    return null;
-}
+import { ResourceSectionProbe, type ResourceSectionReport } from './hub-resource-probe';
 
 export interface ResourceSectionVisibility {
     /** True once any module section reports it has something to show. */
@@ -43,7 +23,7 @@ export function useResourceSectionVisibility(
     sections: readonly HubResourceSection[], guildId: number,
 ): ResourceSectionVisibility {
     const [visibleIds, setVisibleIds] = useState<ReadonlySet<string>>(() => new Set<string>());
-    const report = useCallback<Report>((id, visible) => {
+    const report = useCallback<ResourceSectionReport>((id, visible) => {
         setVisibleIds((prev) => {
             if (prev.has(id) === visible) return prev;
             const next = new Set(prev);
