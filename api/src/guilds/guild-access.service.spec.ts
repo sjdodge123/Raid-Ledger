@@ -16,7 +16,11 @@ import {
   EXTENSION_POINTS,
   type HubKindAdapter,
 } from '../plugins/plugin-host/extension-points';
-import { GuildAccessService, viewerAccess, type GuildActor } from './guild-access.service';
+import {
+  GuildAccessService,
+  viewerAccess,
+  type GuildActor,
+} from './guild-access.service';
 import { HubKindRegistry } from './hub-kind.registry';
 
 const GUILD = 7;
@@ -27,7 +31,10 @@ let service: GuildAccessService;
 let hub: HubKindAdapter;
 
 /** A hub kind that records what core asked it, and answers `role`. */
-function stubHub(role: LadderRole, memberGroupIds: number[] = []): HubKindAdapter {
+function stubHub(
+  role: LadderRole,
+  memberGroupIds: number[] = [],
+): HubKindAdapter {
   return {
     kind: 'wow_guild',
     pluginSlug: 'blizzard',
@@ -47,7 +54,10 @@ function build(adapter: HubKindAdapter | null): void {
   if (adapter) {
     plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
   }
-  service = new GuildAccessService(typedDb, new HubKindRegistry(plugins, typedDb));
+  service = new GuildAccessService(
+    typedDb,
+    new HubKindRegistry(plugins, typedDb),
+  );
 }
 
 /** The guild row `findGuildKind` reads (ends at `.limit(1)`). */

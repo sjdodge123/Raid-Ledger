@@ -6,7 +6,10 @@
  * deactivation are proven in `guilds/guild-access.integration.spec.ts`.
  */
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import { createDrizzleMock, type MockDb } from '../../../common/testing/drizzle-mock';
+import {
+  createDrizzleMock,
+  type MockDb,
+} from '../../../common/testing/drizzle-mock';
 import type * as schema from '../../../drizzle/schema';
 import type { GuildActor } from '../../../guilds/guild-access.service';
 import {
