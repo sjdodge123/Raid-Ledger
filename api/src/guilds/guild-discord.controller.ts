@@ -15,12 +15,12 @@ import type {
   GuildDiscordChannelListDto,
   GuildDiscordMirrorDto,
 } from '@raid-ledger/contract';
-import type { AuthenticatedRequest } from '../../../auth/types';
+import type { AuthenticatedRequest } from '../auth/types';
 import {
   PluginActiveGuard,
   RequirePlugin,
-} from '../../plugin-host/plugin-active.guard';
-import { WOW_COMMON_MANIFEST } from '../manifest';
+} from '../plugins/plugin-host/plugin-active.guard';
+import { WOW_COMMON_MANIFEST } from '../plugins/wow-common/manifest';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildEditorGuard } from './guild-editor.guard';
 

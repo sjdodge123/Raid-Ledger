@@ -5,8 +5,8 @@ import type {
   GuildEditor,
   GuildEditorKind,
 } from '@raid-ledger/contract';
-import * as schema from '../../../drizzle/schema';
-import { inLatestSnapshot } from './guild-membership.helpers';
+import * as schema from '../drizzle/schema';
+import { inLatestSnapshot } from '../plugins/wow-common/guilds/guild-membership.helpers';
 
 /** ROK-1785 — `guild_editors` reads/writes (access is checked by the caller). */
 
@@ -147,4 +147,4 @@ export async function deleteGrant(
  * driver error in `DrizzleQueryError` with SQLSTATE 23505 on `.cause`, so the
  * shared helper checks both `code` and `cause.code`.
  */
-export { isUniqueViolation } from '../../../lineups/lineups-nomination.helpers';
+export { isUniqueViolation } from '../lineups/lineups-nomination.helpers';

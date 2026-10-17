@@ -1,7 +1,7 @@
 import { eq, inArray } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../../drizzle/schema';
-import type { GuildProfileSelect } from '../../../drizzle/schema/guild-profiles';
+import * as schema from '../drizzle/schema';
+import type { GuildProfileSelect } from '../drizzle/schema/guild-profiles';
 import type { ProfilePatch } from './guild-profile.helpers';
 
 /** ROK-1786 — `guild_profiles` reads/writes (no access logic). */

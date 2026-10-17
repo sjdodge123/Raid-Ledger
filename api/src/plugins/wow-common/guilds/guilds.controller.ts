@@ -30,7 +30,7 @@ import {
   RequirePlugin,
 } from '../../plugin-host/plugin-active.guard';
 import { WOW_COMMON_MANIFEST } from '../manifest';
-import { GuildEditorsService } from './guild-editors.service';
+import { GuildEditorsService } from '../../../guilds/guild-editors.service';
 import { GuildPageService } from './guild-page.service';
 import { GuildRaidsService } from './guild-raids.service';
 

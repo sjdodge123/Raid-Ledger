@@ -12,8 +12,8 @@ import {
 import {
   buildProfilePatch,
   dropUnchangedGmPost,
-} from './guild-profile.helpers';
-import { GM_POST_HEADLINE_MAX, gmPostHeadline } from './guild-profile.queries';
+} from '../../../guilds/guild-profile.helpers';
+import { GM_POST_HEADLINE_MAX, gmPostHeadline } from '../../../guilds/guild-profile.queries';
 
 const NOW = new Date('2026-10-14T12:00:00.000Z');
 

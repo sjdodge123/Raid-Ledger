@@ -7,13 +7,13 @@ import type {
   LadderRole,
   UserRole,
 } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as schema from '../../../drizzle/schema';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import {
   findLinkedMemberRows,
   toGuildSummary,
   type LinkedMemberRow,
-} from './guild-membership.helpers';
+} from '../plugins/wow-common/guilds/guild-membership.helpers';
 
 /** The caller as the JWT strategy puts it on `request.user`. */
 export interface GuildActor {

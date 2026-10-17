@@ -9,10 +9,10 @@ import type {
   GuildDiscordChannelListDto,
   GuildDiscordMirrorDto,
 } from '@raid-ledger/contract';
-import { ChannelMirrorService } from '../../../discord-bot/channel-mirror/channel-mirror.service';
-import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
-import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as schema from '../../../drizzle/schema';
+import { ChannelMirrorService } from '../discord-bot/channel-mirror/channel-mirror.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import {
   GuildAccessService,
   isStaff,
@@ -36,7 +36,7 @@ import {
   findDiscordId,
   saveBinding,
 } from './guild-discord.queries';
-import { findGuild } from './guild-queries.helpers';
+import { findGuild } from '../plugins/wow-common/guilds/guild-queries.helpers';
 
 /**
  * ROK-1788 (S4) — the guild page's read-only Discord channel mirror. Reads

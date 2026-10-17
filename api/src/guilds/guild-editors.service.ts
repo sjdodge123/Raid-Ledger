@@ -13,8 +13,8 @@ import {
   type GuildEditor,
   type GuildEditorList,
 } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as schema from '../../../drizzle/schema';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import { GuildAccessService, type GuildActor } from './guild-access.service';
 import {
   deleteGrant,
@@ -25,7 +25,7 @@ import {
   loadEditorRows,
   toGuildEditor,
 } from './guild-editors.helpers';
-import { findGuild, rankNamesInSnapshot } from './guild-queries.helpers';
+import { findGuild, rankNamesInSnapshot } from '../plugins/wow-common/guilds/guild-queries.helpers';
 
 /**
  * ROK-1785 — the Editors panel: list / grant / revoke delegated editors.

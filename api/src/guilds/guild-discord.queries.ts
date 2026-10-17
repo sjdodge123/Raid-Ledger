@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import * as schema from '../../../drizzle/schema';
+import * as schema from '../drizzle/schema';
 
 /**
  * ROK-1788 — the Discord channel binding on `guild_profiles` (no access

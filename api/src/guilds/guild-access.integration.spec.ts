@@ -4,10 +4,10 @@
  * the canEdit / canManageEditors matrix with real `guild_editors` grants.
  */
 import { eq, sql } from 'drizzle-orm';
-import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { truncateAllTables } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
-import * as schema from '../../../drizzle/schema';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { truncateAllTables } from '../common/testing/integration-helpers';
+import { nonEmpty } from '../common/testing/narrow';
+import * as schema from '../drizzle/schema';
 import { GuildAccessService, type GuildActor } from './guild-access.service';
 
 const SNAP = new Date('2026-10-10T20:00:00.000Z');

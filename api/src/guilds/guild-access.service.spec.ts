@@ -5,18 +5,18 @@
  * deactivation are proven in `guild-access.integration.spec.ts`.
  */
 import { Test } from '@nestjs/testing';
-import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
 import {
   createDrizzleMock,
   type MockDb,
-} from '../../../common/testing/drizzle-mock';
+} from '../common/testing/drizzle-mock';
 import {
   GM_RANK_IMPLIES_EDIT,
   GuildAccessService,
   viewerAccess,
   type GuildActor,
 } from './guild-access.service';
-import type { LinkedMemberRow } from './guild-membership.helpers';
+import type { LinkedMemberRow } from '../plugins/wow-common/guilds/guild-membership.helpers';
 
 const GUILD = 7;
 const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({

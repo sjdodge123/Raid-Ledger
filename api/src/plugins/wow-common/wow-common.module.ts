@@ -2,15 +2,15 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
-import { GuildAccessService } from './guilds/guild-access.service';
-import { GuildEditorGuard } from './guilds/guild-editor.guard';
+import { GuildAccessService } from '../../guilds/guild-access.service';
+import { GuildEditorGuard } from '../../guilds/guild-editor.guard';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
-import { GuildEditorsService } from './guilds/guild-editors.service';
+import { GuildEditorsService } from '../../guilds/guild-editors.service';
 import { GuildEventTagger } from './guilds/guild-event-tagger';
 import { GuildContentController } from './guilds/guild-content.controller';
-import { GuildProfileService } from './guilds/guild-profile.service';
+import { GuildProfileService } from '../../guilds/guild-profile.service';
 import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
@@ -55,8 +55,8 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
-import { GuildDiscordController } from './guilds/guild-discord.controller';
-import { GuildDiscordService } from './guilds/guild-discord.service';
+import { GuildDiscordController } from '../../guilds/guild-discord.controller';
+import { GuildDiscordService } from '../../guilds/guild-discord.service';
 
 @Module({
   imports: [SettingsModule, CharactersModule, ChannelMirrorModule],

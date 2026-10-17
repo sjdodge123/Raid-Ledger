@@ -25,8 +25,8 @@ import {
 } from '../../plugin-host/plugin-active.guard';
 import { WOW_COMMON_MANIFEST } from '../manifest';
 import { GuildAddonsService } from './guild-addons.service';
-import { GuildEditorGuard } from './guild-editor.guard';
-import { GuildProfileService } from './guild-profile.service';
+import { GuildEditorGuard } from '../../../guilds/guild-editor.guard';
+import { GuildProfileService } from '../../../guilds/guild-profile.service';
 
 const jwt = AuthGuard('jwt');
 

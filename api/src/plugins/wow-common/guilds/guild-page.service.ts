@@ -18,7 +18,7 @@ import {
   isStaff,
   viewerAccess,
   type GuildActor,
-} from './guild-access.service';
+} from '../../../guilds/guild-access.service';
 import {
   findLinkedMemberRows,
   toGuildSummary,
@@ -31,7 +31,7 @@ import {
   listGuildsOfGame,
   rankNamesByMemberId,
 } from './guild-queries.helpers';
-import { gmPostHeadlines } from './guild-profile.queries';
+import { gmPostHeadlines } from '../../../guilds/guild-profile.queries';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 

@@ -1,4 +1,4 @@
-import type { GuildProfileSelect } from '../../../drizzle/schema/guild-profiles';
+import type { GuildProfileSelect } from '../drizzle/schema/guild-profiles';
 import {
   buildProfilePatch,
   normaliseGmPost,

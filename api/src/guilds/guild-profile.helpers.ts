@@ -10,7 +10,7 @@ import {
 import type {
   GuildProfileInsert,
   GuildProfileSelect,
-} from '../../../drizzle/schema/guild-profiles';
+} from '../drizzle/schema/guild-profiles';
 
 /**
  * ROK-1786: pure normalisers for the guild profile (GM post, rules, links).

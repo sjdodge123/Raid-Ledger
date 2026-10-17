@@ -11,8 +11,8 @@ import {
   type GuildProfile,
   type UpdateGuildProfileInput,
 } from '@raid-ledger/contract';
-import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
-import * as schema from '../../../drizzle/schema';
+import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import * as schema from '../drizzle/schema';
 import { GuildAccessService, type GuildActor } from './guild-access.service';
 import {
   buildProfilePatch,
@@ -24,7 +24,7 @@ import {
   findUsername,
   upsertProfile,
 } from './guild-profile.queries';
-import { findGuild } from './guild-queries.helpers';
+import { findGuild } from '../plugins/wow-common/guilds/guild-queries.helpers';
 
 /**
  * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`

@@ -10,14 +10,14 @@
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import type { GuildDiscordChannelOptionDto } from '@raid-ledger/contract';
-import { getTestApp, type TestApp } from '../../../common/testing/test-app';
-import { loginAsAdmin } from '../../../common/testing/integration-helpers';
-import { nonEmpty } from '../../../common/testing/narrow';
-import { ChannelMirrorService } from '../../../discord-bot/channel-mirror/channel-mirror.service';
-import { DiscordBotClientService } from '../../../discord-bot/discord-bot-client.service';
-import type { ChannelMirrorRead } from '../../../discord-bot/channel-mirror/channel-mirror.read';
-import * as schema from '../../../drizzle/schema';
-import { PluginRegistryService } from '../../plugin-host/plugin-registry.service';
+import { getTestApp, type TestApp } from '../common/testing/test-app';
+import { loginAsAdmin } from '../common/testing/integration-helpers';
+import { nonEmpty } from '../common/testing/narrow';
+import { ChannelMirrorService } from '../discord-bot/channel-mirror/channel-mirror.service';
+import { DiscordBotClientService } from '../discord-bot/discord-bot-client.service';
+import type { ChannelMirrorRead } from '../discord-bot/channel-mirror/channel-mirror.read';
+import * as schema from '../drizzle/schema';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
   CHOOSER_CANNOT_VIEW_MESSAGE,
   LINK_DISCORD_MESSAGE,
