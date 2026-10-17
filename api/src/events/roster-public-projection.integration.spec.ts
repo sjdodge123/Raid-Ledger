@@ -261,7 +261,7 @@ describe('ROK-1629 public roster projection (integration)', () => {
     },
   );
 
-  it('anonymous roster keeps every status, builds avatar URLs, drops Q2 fields', async () => {
+  it('anonymous roster keeps every status, sends no avatar URL, drops Q2 fields', async () => {
     const res = await get(`/events/${f.eventId}/roster`);
     const body = res.body as RosterBody;
     const member = await get(`/events/${f.eventId}/roster`, f.memberToken);
@@ -272,23 +272,30 @@ describe('ROK-1629 public roster projection (integration)', () => {
     });
     expect(statuses(member.body as RosterBody)).toEqual(ROSTER_STATUSES);
     const byName = new Map(body.signups.map((s) => [s.user.username, s]));
-    expect(byName.get('linked')?.user.avatar).toBe(
-      `${CDN}/${LINKED_SNOWFLAKE}/abcdef.png`,
-    );
-    expect(byName.get('guestie')?.user.avatar).toBe(
-      `${CDN}/${ANON_SNOWFLAKE}/hash9.png`,
-    );
+    // ROK-1827: no Discord CDN url at all — it embedded the snowflake.
+    expect(byName.get('linked')?.user.avatar).toBeNull();
+    expect(byName.get('guestie')?.user.avatar).toBeNull();
     expect(byName.get('unl')?.user.avatar).toBeNull();
+    const serialised = JSON.stringify(body);
+    expect(serialised).not.toContain(CDN);
+    expect(serialised).not.toContain(LINKED_SNOWFLAKE);
+    expect(serialised).not.toContain(ANON_SNOWFLAKE);
     expect(byName.get('linked')).not.toHaveProperty('note');
     expect(byName.get('linked')).not.toHaveProperty('runningLateAt');
   });
 
-  it('anonymous assignments carry the server-built avatar URL', async () => {
+  it('anonymous assignments carry no avatar URL and no snowflake (ROK-1827)', async () => {
     const res = await get(`/events/${f.eventId}/roster/assignments`);
     const linked = (res.body as AssignmentsBody).assignments.find(
       (a) => a.username === 'linked',
     );
-    expect(linked?.avatar).toBe(`${CDN}/${LINKED_SNOWFLAKE}/abcdef.png`);
+    expect({ found: !!linked, avatar: linked?.avatar }).toEqual({
+      found: true,
+      avatar: null,
+    });
+    const serialised = JSON.stringify(res.body);
+    expect(serialised).not.toContain(CDN);
+    expect(serialised).not.toContain(LINKED_SNOWFLAKE);
   });
 
   it.each([

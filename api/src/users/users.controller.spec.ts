@@ -295,7 +295,7 @@ describe('UsersController', () => {
       });
     });
 
-    it('strips discordId and builds the CDN avatar for an anonymous viewer (ROK-1734)', async () => {
+    it('strips discordId and the Discord avatar for an anonymous viewer (ROK-1827)', async () => {
       jest.spyOn(usersService, 'findAll').mockResolvedValue({
         data: [
           { ...at(mockFindAllResult.data, 0), discordId: '555', avatar: 'h1' },
@@ -304,9 +304,8 @@ describe('UsersController', () => {
       });
       const result = await controller.listPlayers(ANON_REQ, '1', '20');
       expect(result.data[0]).not.toHaveProperty('discordId');
-      expect(result.data[0]?.avatar).toBe(
-        'https://cdn.discordapp.com/avatars/555/h1.png',
-      );
+      expect(result.data[0]?.avatar).toBeNull();
+      expect(JSON.stringify(result)).not.toContain('cdn.discordapp.com');
       expect(result.meta).toMatchObject({ total: 1, page: 1 });
     });
   });
@@ -416,7 +415,7 @@ describe('UsersController', () => {
       expect(result.data[0]).toEqual({
         id: 1,
         username: 'NewPlayer1',
-        avatar: 'https://cdn.discordapp.com/avatars/111111/abc123.png',
+        avatar: null,
         customAvatarUrl: null,
         createdAt: '2026-02-10T12:00:00.000Z',
       });

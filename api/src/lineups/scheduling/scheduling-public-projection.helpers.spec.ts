@@ -47,8 +47,9 @@ describe('projectSchedulePollForViewer (ROK-1629 Q4)', () => {
   });
 
   it('carries the Discord snowflake nowhere in the serialised body (ROK-1827)', () => {
-    expect(JSON.stringify(projectSchedulePollForViewer(poll(), false)))
-      .not.toContain(SNOWFLAKE);
+    expect(
+      JSON.stringify(projectSchedulePollForViewer(poll(), false)),
+    ).not.toContain(SNOWFLAKE);
   });
 
   it('passes a custom absolute avatar URL through (no id inside it)', () => {
@@ -56,9 +57,9 @@ describe('projectSchedulePollForViewer (ROK-1629 Q4)', () => {
     const member = p.match.members[0];
     if (!member) throw new Error('fixture: no member');
     member.avatar = 'https://example.com/custom.png';
-    expect(projectSchedulePollForViewer(p, false).match.members[0]?.avatar).toBe(
-      'https://example.com/custom.png',
-    );
+    expect(
+      projectSchedulePollForViewer(p, false).match.members[0]?.avatar,
+    ).toBe('https://example.com/custom.png');
   });
 
   it('returns the member payload untouched', () => {

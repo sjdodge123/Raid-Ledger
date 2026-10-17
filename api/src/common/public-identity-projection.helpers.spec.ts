@@ -125,9 +125,9 @@ describe('toPublicIdentity (ROK-1734, tightened by ROK-1827)', () => {
     expect(toPublicIdentity({ discordId: null, avatar: CUSTOM }).avatar).toBe(
       CUSTOM,
     );
-    expect(toPublicIdentity({ discordId: SNOWFLAKE, avatar: CUSTOM }).avatar).toBe(
-      CUSTOM,
-    );
+    expect(
+      toPublicIdentity({ discordId: SNOWFLAKE, avatar: CUSTOM }).avatar,
+    ).toBe(CUSTOM);
   });
 });
 

@@ -21,7 +21,9 @@
  *
  * The Discord id is deliberately NOT a parameter: no caller can reintroduce it.
  */
-export function publicAvatarUrl(avatar: string | null | undefined): string | null {
+export function publicAvatarUrl(
+  avatar: string | null | undefined,
+): string | null {
   if (!avatar) return null;
   return avatar.startsWith('http') ? avatar : null;
 }

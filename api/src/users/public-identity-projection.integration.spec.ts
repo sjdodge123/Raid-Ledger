@@ -153,7 +153,7 @@ describe('ROK-1734 user-identity route projection (integration)', () => {
     ['anonymous', false],
     ['signed-in deactivated', true],
   ] as const)(
-    'a %s caller gets no identity key anywhere and a server-built avatar',
+    'a %s caller gets no identity key and no Discord avatar URL (ROK-1827)',
     async (_label, deactivated) => {
       const token = deactivated ? f.deactivatedToken : undefined;
       for (const route of routes(f)) {
@@ -169,7 +169,19 @@ describe('ROK-1734 user-identity route projection (integration)', () => {
         expect({
           url: route.url,
           avatar: linkedRow(route, res.body)?.avatar,
-        }).toEqual({ url: route.url, avatar: CDN_URL });
+        }).toEqual({ url: route.url, avatar: null });
+        // ROK-1827: the CDN url embedded the snowflake ROK-1629 hid.
+        const serialised = JSON.stringify(res.body);
+        expect({ url: route.url, leaks: serialised.includes(CDN_URL) }).toEqual(
+          {
+            url: route.url,
+            leaks: false,
+          },
+        );
+        expect({
+          url: route.url,
+          leaks: serialised.includes(LINKED_SNOWFLAKE),
+        }).toEqual({ url: route.url, leaks: false });
       }
     },
   );

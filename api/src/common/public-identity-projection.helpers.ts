@@ -50,6 +50,9 @@ export function toPublicIdentity<T extends IdentityRow>(
   row: T,
 ): Omit<T, 'discordId'> {
   const { discordId, ...rest } = row;
+  // ROK-1827: the snowflake is destructured only to be dropped. It must never
+  // reach `publicAvatarUrl`, which is why that helper takes no id parameter.
+  void discordId;
   return { ...rest, avatar: publicAvatarUrl(row.avatar) };
 }
 
