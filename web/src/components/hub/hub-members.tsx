@@ -1,61 +1,51 @@
 /**
- * ROK-1785 — the Roster tab: guild members grouped by rank (prototype
- * `MembersByRank.tsx`). Each row is one character in the guild: name (linked
- * when it is a Raid Ledger character, spec D9), level + class, a Main pill and
- * its role badge with a role-coloured left rule. Lower ranks start collapsed.
+ * ROK-1785/ROK-1830 — the Members (Roster) tab frame: a titled card holding
+ * the module's summary band and its member groups, each a collapsible list of
+ * rows. Core owns the frame and the collapse behaviour; the hub module says
+ * how rows group (WoW: by guild rank) and what each row's cells are.
  */
 import type { JSX } from 'react';
-import type { GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
+import type { GuildPage } from '@raid-ledger/contract';
+import type { HubCtx, HubMemberColumn, HubMemberGroup, HubModule } from '../../plugins/hub-module';
 import { ScrollCollapsible } from '../ui/scroll-collapsible';
-import { CharacterLink } from '../../plugins/wow/hub/character-link';
-import { Card, Pill, SectionTitle } from './hub-bits';
-import { ROLE_META, rankLabel } from '../../plugins/wow/hub/wow-guild.helpers';
-import { CharRoleBadge, RoleSummary } from '../../plugins/wow/hub/role-bits';
+import { Card, SectionTitle } from './hub-bits';
 
-const OPEN_RANKS_UP_TO = 2;
-
-function memberFacts(m: GuildMemberRow): string {
-    return [m.level === null ? null : `Lv ${m.level}`, m.class].filter(Boolean).join(' ');
+interface GroupProps {
+    group: HubMemberGroup;
+    columns: readonly HubMemberColumn[];
+    rowClass: ((row: HubMemberGroup['rows'][number]) => string) | undefined;
 }
 
-function MemberLine({ m }: { m: GuildMemberRow }): JSX.Element {
-    const rule = m.effectiveRole ? ROLE_META[m.effectiveRole].cls : 'border-edge-subtle';
+function MemberGroup({ group, columns, rowClass }: GroupProps): JSX.Element {
     return (
-        <li data-testid="guild-roster-member" className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-l-2 py-1 pl-2 ${rule}`}>
-            <CharacterLink name={m.name} characterId={m.characterId} />
-            <span className="text-xs text-muted">{memberFacts(m)}</span>
-            {m.isMain && <Pill>Main</Pill>}
-            {m.effectiveRole && <span className="ml-auto"><CharRoleBadge role={m.effectiveRole} /></span>}
-        </li>
-    );
-}
-
-function RankGroup({ group }: { group: GuildRankGroup }): JSX.Element | null {
-    if (group.members.length === 0) return null;
-    const name = rankLabel(group);
-    const open = group.rankIndex !== null && group.rankIndex <= OPEN_RANKS_UP_TO;
-    return (
-        <div data-testid={`guild-rank-${group.rankIndex ?? 'none'}`}>
-            <ScrollCollapsible title={`${name} · ${group.members.length}`} defaultOpen={open}
+        <div data-testid={group.testId}>
+            <ScrollCollapsible title={`${group.label} · ${group.rows.length}`} defaultOpen={group.defaultOpen}
                 className="border-b border-edge py-2 last:border-b-0">
-                <ul aria-label={`${name} members`} className="flex flex-col gap-1 text-sm">
-                    {group.members.map((m) => <MemberLine key={m.memberId} m={m} />)}
+                <ul aria-label={`${group.label} members`} className="flex flex-col gap-1 text-sm">
+                    {group.rows.map((row) => (
+                        <li key={row.memberId} data-testid="guild-roster-member"
+                            className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-l-2 py-1 pl-2 ${rowClass ? rowClass(row) : 'border-edge-subtle'}`}>
+                            {columns.map((c) => <c.cell key={c.id} row={row} />)}
+                        </li>
+                    ))}
                 </ul>
             </ScrollCollapsible>
         </div>
     );
 }
 
-export function GuildRoster({ page }: { page: GuildPage }): JSX.Element {
-    const count = page.guild.memberCount;
+export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
+    const page: GuildPage = ctx.page;
+    const groups = (mod?.memberGroups(page) ?? []).filter((g) => g.rows.length > 0);
+    const Summary = mod?.membersSummary;
     return (
         <section id="members" className="scroll-mt-4" data-testid="guild-roster">
-            <SectionTitle title="Members" blurb={`${count} members · ranks from the latest LedgerLink export`} />
+            <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? `${page.guild.memberCount} members`} />
             <Card className="flex flex-col gap-3">
-                <RoleSummary counts={page.roleCounts} />
-                {page.ranks.length === 0
-                    ? <p className="py-6 text-center text-sm text-muted">No members yet. Import a LedgerLink guild export to fill the roster.</p>
-                    : <div>{page.ranks.map((g) => <RankGroup key={g.rankIndex ?? 'none'} group={g} />)}</div>}
+                {Summary && <Summary {...ctx} />}
+                {groups.length === 0
+                    ? <p className="py-6 text-center text-sm text-muted">{mod?.membersEmpty ?? 'No members yet.'}</p>
+                    : <div>{groups.map((g) => <MemberGroup key={g.key} group={g} columns={mod?.memberColumns ?? []} rowClass={mod?.memberRowClass} />)}</div>}
             </Card>
         </section>
     );

@@ -1,5 +1,7 @@
 /**
- * ROK-1785 — pure helpers for the guild page roster, tabs and hero.
+ * ROK-1785/ROK-1830 — pure WoW-guild helpers for the hub's rank groups, realm
+ * labels and editor delegation. The tab frame moved to
+ * `web/src/components/hub/hub-tabs.ts` (core).
  */
 import type { CharacterRole, GuildEditor, GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
 
@@ -11,38 +13,6 @@ export const ROLE_META: Record<CharacterRole, { label: string; cls: string }> = 
 };
 
 export const ROLE_ORDER: readonly CharacterRole[] = ['tank', 'healer', 'dps'];
-
-/**
- * Every tab the approved prototype has. S1 shows Overview + Roster; S2
- * (ROK-1786) adds Resources when it has content or the viewer can edit it;
- * S3 (ROK-1787) adds Raids. The rest stay hidden until the story that fills
- * them ships (spec Q3).
- */
-export const GUILD_TABS = [
-    { id: 'overview', label: 'Overview', hidden: false },
-    { id: 'roster', label: 'Roster', hidden: false },
-    { id: 'raids', label: 'Raids', hidden: false },
-    { id: 'progression', label: 'Progression', hidden: true },
-    { id: 'loot', label: 'Loot', hidden: true },
-    { id: 'resources', label: 'Resources', hidden: true },
-] as const;
-
-export type GuildTabId = (typeof GUILD_TABS)[number]['id'];
-
-export const VISIBLE_TAB_IDS: readonly string[] = GUILD_TABS.filter((t) => !t.hidden).map((t) => t.id);
-
-/** The tab row for this page: Resources joins when `showResources`. */
-export function guildTabs(showResources: boolean): { id: string; label: string; hidden: boolean }[] {
-    return GUILD_TABS.map((t) => ({ ...t, hidden: t.id === 'resources' ? !showResources : t.hidden }));
-}
-
-export function visibleTabIds(showResources: boolean): string[] {
-    return guildTabs(showResources).filter((t) => !t.hidden).map((t) => t.id);
-}
-
-export function tabLabel(id: string): string {
-    return GUILD_TABS.find((t) => t.id === id)?.label ?? 'Overview';
-}
 
 export function rankLabel(group: Pick<GuildRankGroup, 'rankIndex' | 'rankName'>): string {
     if (group.rankName) return group.rankName;

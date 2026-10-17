@@ -1,24 +1,26 @@
 /**
- * ROK-1785 (S1 of ROK-1781) — `/guilds/:id`: hero + `TabRow` + the active tab.
+ * ROK-1785/ROK-1830 — `/guilds/:id`: the game-agnostic hub shell — hero +
+ * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
+ * hero pills come from the hub module registered for `guild.kind`
+ * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
  * S1 shows Overview and Roster; S2 (ROK-1786) adds Resources when it has
  * content or the viewer can edit it; S3 (ROK-1787) adds Raids. Other tabs stay
  * hidden until their story ships (spec Q3). A 403 (not a member) is a friendly empty state.
  */
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
-import type { UseQueryResult } from '@tanstack/react-query';
-import type { GuildPage as GuildPageDto, GuildRaidsDto } from '@raid-ledger/contract';
+import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { GuildHero } from './hub-hero';
-import { GuildOverview } from './hub-overview';
+import { type HubCtx, type HubModule, useHubModule } from '../../plugins/hub-module';
+import { HubHero } from './hub-hero';
+import { HubOverview } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
-import { GuildRaidsTab } from '../../plugins/wow/hub/raids-tab';
 import { GuildResources } from './content/guild-resources';
-import { guildTabs, tabLabel, visibleTabIds } from '../../plugins/wow/hub/wow-guild.helpers';
-import { GuildRoster } from './hub-members';
+import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HubMembers } from './hub-members';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildAddons, useGuildProfile } from './api/use-guild-content';
 
@@ -53,13 +55,20 @@ function LoadingState(): JSX.Element {
     );
 }
 
-type RaidsQuery = UseQueryResult<GuildRaidsDto, Error>;
+interface PanelProps {
+    active: string;
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    tabs: readonly HubTabEntry[];
+}
 
-function ActiveTab({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
-    if (active === 'roster') return <GuildRoster page={page} />;
-    if (active === 'raids') return <GuildRaidsTab query={raids} />;
+function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
+    const { page } = ctx;
+    if (active === 'roster') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} />;
-    return <GuildOverview page={page} raids={raids.data} />;
+    const tab = mod?.tabs.find((t) => t.id === active);
+    if (tab) return <tab.component {...ctx} />;
+    return <HubOverview ctx={ctx} module={mod} />;
 }
 
 /** Resources shows once it has content, or straight away for an editor. */
@@ -70,28 +79,31 @@ function useShowResources(page: GuildPageDto): boolean {
 }
 
 /** Scroll the panel top back into view when a tab switch happens below it (prototype `GuildTabPanel`). */
-function TabPanel({ active, page, raids }: { active: string; page: GuildPageDto; raids: RaidsQuery }): JSX.Element {
+function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const el = ref.current;
         if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
     }, [active]);
     return (
-        <div ref={ref} id={tabPanelId('guild', active)} role="region" aria-label={tabLabel(active)} className="scroll-mt-4">
-            <ActiveTab active={active} page={page} raids={raids} />
+        <div ref={ref} id={tabPanelId('guild', active)} role="region" aria-label={hubTabLabel(tabs, active)} className="scroll-mt-4">
+            <ActiveTab active={active} ctx={ctx} module={mod} />
         </div>
     );
 }
 
 function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     const showResources = useShowResources(page);
-    const [active] = useHashTab(visibleTabIds(showResources), 'overview');
     const raids = useGuildRaids(page.guild.id);
+    const mod = useHubModule(page.guild.kind);
+    const ctx: HubCtx = { page, raids };
+    const tabs = hubTabs(mod, ctx, showResources);
+    const [active] = useHashTab(visibleHubTabIds(tabs), 'overview');
     return (
         <div className={PAGE}>
-            <GuildHero page={page} nextRaid={raids.data?.nextRaid ?? null} />
-            <TabRow tabs={guildTabs(showResources)} activeId={active} label="Guild page sections" className="mb-6" />
-            <TabPanel active={active} page={page} raids={raids} />
+            <HubHero ctx={ctx} module={mod} nextRaid={raids.data?.nextRaid ?? null} />
+            <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
+            <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
         </div>
     );
 }

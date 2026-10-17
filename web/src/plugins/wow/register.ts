@@ -21,6 +21,7 @@ import { UserMenuGuild } from './slots/user-menu-guild';
 import { PlayersGuildCard } from './slots/players-guild-card';
 import { GameDetailGuilds } from './slots/game-detail-guilds';
 import { foreverIdentityProvider } from './forever-identity-provider';
+import { wowHubModule } from './hub/register-hub';
 
 const blizzard = registerPlugin('blizzard', {
     icon: '/plugins/blizzard/badge.jpg',
@@ -51,3 +52,4 @@ blizzard.registerSlot('user-menu:items', UserMenuGuild);
 blizzard.registerSlot('players:header-cards', PlayersGuildCard);
 blizzard.registerSlot('game-detail:sections', GameDetailGuilds);
 blizzard.registerCharacterIdentity(foreverIdentityProvider);
+blizzard.registerHubModule(wowHubModule);

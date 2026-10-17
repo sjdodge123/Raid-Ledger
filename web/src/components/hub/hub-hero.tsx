@@ -1,16 +1,22 @@
 /**
- * ROK-1785 — the guild hero (prototype `layout/GuildHero.tsx`): crest
- * placeholder, name, realm + region + faction, member count, and (ROK-1787)
- * the "Next raid" chip that jumps to the Raids tab. The progression badge
- * lands with S5.
+ * ROK-1785/ROK-1830 — the hub hero (prototype `layout/GuildHero.tsx`): crest
+ * placeholder, name, the module's facts pills, member count, and the
+ * "Next raid" chip that jumps to the module's events tab. Everything
+ * game-specific (realm, faction, the LedgerLink import line) arrives through
+ * the hub module's `heroPills` / `heroNote`.
  */
 import type { JSX } from 'react';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
-import type { GuildEventCardDto, GuildPage } from '@raid-ledger/contract';
+import type { GuildEventCardDto } from '@raid-ledger/contract';
+import type { HubCtx, HubModule } from '../../plugins/hub-module';
 import { NAV_CHIP_CLASS } from '../ui/nav-chip';
-import { Pill } from './hub-bits';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
-import { crestInitials, guildRealm } from '../../plugins/wow/hub/wow-guild.helpers';
+
+/** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
+export function crestInitials(name: string): string {
+    const letters = name.split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase());
+    return letters.slice(0, 2).join('') || '?';
+}
 
 function Crest({ name }: { name: string }): JSX.Element {
     return (
@@ -21,23 +27,13 @@ function Crest({ name }: { name: string }): JSX.Element {
     );
 }
 
-function HeroFacts({ page }: { page: GuildPage }): JSX.Element {
-    const { guild } = page;
-    const where = [guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
+function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     return (
         <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
-            <span>{where}</span>
-            {guild.faction && <Pill tone="success">{guild.faction}</Pill>}
-            <span data-testid="guild-member-count">{guild.memberCount} members</span>
+            {(mod?.heroPills ?? []).map((Pill, i) => <Pill key={`hero-pill-${i}`} {...ctx} />)}
+            <span data-testid="guild-member-count">{ctx.page.guild.memberCount} members</span>
         </div>
     );
-}
-
-function importLine(page: GuildPage): string | null {
-    const at = page.guild.lastSnapshotAt;
-    if (!at) return null;
-    const when = new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    return page.importedBy ? `Last imported from LedgerLink ${when} by ${page.importedBy}` : `Last imported from LedgerLink ${when}`;
 }
 
 /** Plain `<a href>`, not `NavChip`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
@@ -54,16 +50,22 @@ function NextRaidChip({ raid }: { raid: GuildEventCardDto }): JSX.Element {
     );
 }
 
-export function GuildHero({ page, nextRaid }: { page: GuildPage; nextRaid: GuildEventCardDto | null }): JSX.Element {
-    const line = importLine(page);
+interface HubHeroProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    nextRaid: GuildEventCardDto | null;
+}
+
+export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Element {
+    const line = mod?.heroNote ? mod.heroNote(ctx) : null;
     return (
         <header data-testid="guild-hero"
             className="mb-4 flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex min-w-0 items-center gap-4">
-                <Crest name={page.guild.name} />
+                <Crest name={ctx.page.guild.name} />
                 <div className="min-w-0">
-                    <h1 className="mb-2 break-words text-2xl font-bold text-foreground sm:text-3xl">{page.guild.name}</h1>
-                    <HeroFacts page={page} />
+                    <h1 className="mb-2 break-words text-2xl font-bold text-foreground sm:text-3xl">{ctx.page.guild.name}</h1>
+                    <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>
             {(nextRaid || line) && (
