@@ -277,6 +277,12 @@ export interface HubKindAdapter {
     actor: { id: number; role: UserRole },
     groupId: number,
   ): Promise<LadderRole>;
+  /** Ids of the groups of this kind the user is a live member of. */
+  memberGroupIds(userId: number): Promise<number[]>;
+  /** Rank index → rank name for rank-based editor grants (empty if none). */
+  rankNames(groupId: number): Promise<Map<number, string | null>>;
+  /** Is this member-row id a live member of the group (member grants)? */
+  isLiveMember(groupId: number, memberId: number): Promise<boolean>;
 }
 
 /** Well-known extension point identifiers */

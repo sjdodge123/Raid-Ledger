@@ -6,13 +6,12 @@ import type {
   GuildEditorKind,
 } from '@raid-ledger/contract';
 import * as schema from '../drizzle/schema';
-import { inLatestSnapshot } from '../plugins/wow-common/guilds/guild-membership.helpers';
 
 /** ROK-1785 — `guild_editors` reads/writes (access is checked by the caller). */
 
 type Db = PostgresJsDatabase<typeof schema>;
 
-const { guilds, guildMembers, guildEditors: ge, users } = schema;
+const { guildMembers, guildEditors: ge, users } = schema;
 
 interface RawEditorRow {
   id: number;
@@ -68,27 +67,6 @@ export async function loadEditorRows(
     .leftJoin(users, eq(users.id, ge.grantedBy))
     .where(eq(ge.guildId, guildId))
     .orderBy(asc(ge.kind), asc(ge.rankIndex), asc(guildMembers.characterName));
-}
-
-/** Is this member row in the guild's latest snapshot? */
-export async function isLiveMemberOf(
-  db: Db,
-  guildId: number,
-  memberId: number,
-): Promise<boolean> {
-  const rows = await db
-    .select({ id: guildMembers.id })
-    .from(guildMembers)
-    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
-    .where(
-      and(
-        eq(guildMembers.id, memberId),
-        eq(guildMembers.guildId, guildId),
-        inLatestSnapshot(),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
 }
 
 /** An existing grant with the same target, if any. */

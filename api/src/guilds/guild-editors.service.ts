@@ -20,15 +20,13 @@ import {
   deleteGrant,
   findDuplicateGrant,
   insertGrant,
-  isLiveMemberOf,
   isUniqueViolation,
   loadEditorRows,
   toGuildEditor,
 } from './guild-editors.helpers';
-import {
-  findGuild,
-  rankNamesInSnapshot,
-} from '../plugins/wow-common/guilds/guild-queries.helpers';
+import { findGuild } from './guild-core.queries';
+import { HubKindRegistry } from './hub-kind.registry';
+import type { HubKindAdapter } from '../plugins/plugin-host/extension-points';
 
 /**
  * ROK-1785 — the Editors panel: list / grant / revoke delegated editors.
@@ -40,11 +38,12 @@ export class GuildEditorsService {
     @Inject(DrizzleAsyncProvider)
     private readonly db: PostgresJsDatabase<typeof schema>,
     private readonly access: GuildAccessService,
+    private readonly hubKinds: HubKindRegistry,
   ) {}
 
   async list(actor: GuildActor, guildId: number): Promise<GuildEditorList> {
-    await this.assertManager(actor, guildId);
-    return { editors: await this.loadEditors(guildId) };
+    const hub = await this.assertManager(actor, guildId);
+    return { editors: await this.loadEditors(hub, guildId) };
   }
 
   /** Grant a rank or a member row; 409 on a duplicate target. */
@@ -54,13 +53,14 @@ export class GuildEditorsService {
     body: unknown,
   ): Promise<GuildEditor> {
     const input = parseCreate(body);
-    await this.assertManager(actor, guildId);
-    await this.assertTarget(guildId, input);
+    const hub = await this.assertManager(actor, guildId);
+    await this.assertTarget(hub, guildId, input);
     if (await findDuplicateGrant(this.db, guildId, input)) {
       throw new ConflictException('This editor is already granted');
     }
     const id = await this.insert(guildId, input, actor.id);
-    const created = (await this.loadEditors(guildId)).find((e) => e.id === id);
+    const editors = await this.loadEditors(hub, guildId);
+    const created = editors.find((e) => e.id === id);
     if (!created) throw new NotFoundException('Editor not found');
     return created;
   }
@@ -79,21 +79,22 @@ export class GuildEditorsService {
   private async assertManager(
     actor: GuildActor,
     guildId: number,
-  ): Promise<void> {
+  ): Promise<HubKindAdapter> {
     if (!(await this.access.canManageEditors(actor, guildId))) {
       throw new ForbiddenException('Only the guild master can manage editors');
     }
-    if (!(await findGuild(this.db, guildId))) {
-      throw new NotFoundException('Guild not found');
-    }
+    const guild = await findGuild(this.db, guildId);
+    if (!guild) throw new NotFoundException('Guild not found');
+    return this.hubKinds.require(guild.kind);
   }
 
   private async assertTarget(
+    hub: HubKindAdapter,
     guildId: number,
     input: CreateGuildEditorInput,
   ): Promise<void> {
     if (input.kind !== 'member') return;
-    if (!(await isLiveMemberOf(this.db, guildId, input.guildMemberId))) {
+    if (!(await hub.isLiveMember(guildId, input.guildMemberId))) {
       throw new BadRequestException('Member is not in this guild');
     }
   }
@@ -114,10 +115,13 @@ export class GuildEditorsService {
     }
   }
 
-  private async loadEditors(guildId: number): Promise<GuildEditor[]> {
+  private async loadEditors(
+    hub: HubKindAdapter,
+    guildId: number,
+  ): Promise<GuildEditor[]> {
     const [rows, rankNames] = await Promise.all([
       loadEditorRows(this.db, guildId),
-      rankNamesInSnapshot(this.db, guildId),
+      hub.rankNames(guildId),
     ]);
     return rows.map((r) => toGuildEditor(r, rankNames));
   }

@@ -21,12 +21,14 @@ import {
 } from '../../../guilds/guild-access.service';
 import {
   findLinkedMemberRows,
-  toGuildSummary,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
 import {
-  findCharacterGuild,
   findGuild,
+  toGuildSummary,
+} from '../../../guilds/guild-core.queries';
+import {
+  findCharacterGuild,
   findImportedBy,
   listGuildsOfGame,
   rankNamesByMemberId,

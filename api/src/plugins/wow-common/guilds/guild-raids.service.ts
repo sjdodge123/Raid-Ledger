@@ -17,7 +17,7 @@ import {
   GuildAccessService,
   type GuildActor,
 } from '../../../guilds/guild-access.service';
-import { findGuild } from './guild-queries.helpers';
+import { findGuild } from '../../../guilds/guild-core.queries';
 import {
   ATTENDANCE_WINDOW_WEEKS,
   neededFor,

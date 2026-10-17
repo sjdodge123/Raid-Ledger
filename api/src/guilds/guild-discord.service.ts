@@ -36,7 +36,7 @@ import {
   findDiscordId,
   saveBinding,
 } from './guild-discord.queries';
-import { findGuild } from '../plugins/wow-common/guilds/guild-queries.helpers';
+import { findGuild } from './guild-core.queries';
 
 /**
  * ROK-1788 (S4) — the guild page's read-only Discord channel mirror. Reads

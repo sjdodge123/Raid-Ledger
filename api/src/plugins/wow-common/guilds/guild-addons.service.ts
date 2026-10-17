@@ -45,7 +45,7 @@ import {
 } from './guild-addons.helpers';
 import { isUniqueViolation } from '../../../guilds/guild-editors.helpers';
 import { readPinnedAddons } from './guild-pinned-addons.helpers';
-import { findGuild } from './guild-queries.helpers';
+import { findGuild } from '../../../guilds/guild-core.queries';
 
 const DUPLICATE = 'This addon is already on the guild list';
 

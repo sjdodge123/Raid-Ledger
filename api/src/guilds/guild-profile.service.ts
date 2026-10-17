@@ -24,7 +24,7 @@ import {
   findUsername,
   upsertProfile,
 } from './guild-profile.queries';
-import { findGuild } from '../plugins/wow-common/guilds/guild-queries.helpers';
+import { findGuild } from './guild-core.queries';
 
 /**
  * ROK-1786 — the guild's GM post, rules and links. Reads need `canView`
