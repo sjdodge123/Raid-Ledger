@@ -9,7 +9,11 @@ import { http, HttpResponse } from 'msw';
 import type { GuildDiscordMirrorDto, GuildProfile, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { HubSettingsProvider } from '../settings/hub-settings-context';
 import { HubSetupChecklist } from './setup-checklist';
+
+/** A Leader/admin viewer: the channel picker exists, so that step is actionable. */
+const LEADER = { openChannelPicker: (): void => {} };
 
 vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
     ...(await importOriginal<typeof import('../../../hooks/use-auth')>()),
@@ -22,6 +26,9 @@ const DISCORD = 'http://localhost:3000/plugins/wow/guilds/7/discord';
 const EMPTY_PROFILE: GuildProfile = { guildId: 7, gmPost: null, rules: [], links: [] };
 const UNSET: GuildDiscordMirrorDto = { state: 'unset' };
 
+/** The props every case shares: roster imported, a raid tagged, mods available. */
+const PROPS = { guildId: 7, memberCount: 40, nextRaid: null, hasModSources: true } as const;
+
 function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: HubOnboardingStateDto = { dismissed: [] }): void {
     server.use(
         http.get(ONBOARDING, () => HttpResponse.json(state)),
@@ -33,9 +40,9 @@ function serve(profile: GuildProfile, discord: GuildDiscordMirrorDto, state: Hub
 describe('HubSetupChecklist', () => {
     it('lists every step with its progress, and marks only what exists as done', async () => {
         serve({ ...EMPTY_PROFILE, rules: [{ title: 'Be on time', body: 'Invites at 19:45.' }] }, UNSET);
-        renderWithProviders(<HubSetupChecklist guildId={7} canEdit modsConfigured={false} />);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const list = await screen.findByTestId('setup-checklist');
-        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('1 of 5 done');
+        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('2 of 7 done');
         expect(within(list).getByTestId('setup-step-rules')).toHaveAttribute('data-done', 'true');
         expect(within(list).getByTestId('setup-step-leader-post')).toHaveAttribute('data-done', 'false');
         // A done step offers no action — only the open ones do.
@@ -45,14 +52,14 @@ describe('HubSetupChecklist', () => {
 
     it('the publish step is listed with its reason instead of an action', async () => {
         serve(EMPTY_PROFILE, UNSET);
-        renderWithProviders(<HubSetupChecklist guildId={7} canEdit modsConfigured={false} />);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         const blocked = await screen.findByTestId('setup-step-blocked-publish');
         expect(blocked).toHaveTextContent('hidden-by-default hub is coming');
     });
 
     it('a viewer who cannot edit never sees it', async () => {
         serve(EMPTY_PROFILE, UNSET);
-        const { container } = renderWithProviders(<HubSetupChecklist guildId={7} canEdit={false} modsConfigured={false} />);
+        const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit={false} modsConfigured={false} /></HubSettingsProvider>);
         await waitFor(() => expect(container).toBeEmptyDOMElement());
     });
 
@@ -66,7 +73,7 @@ describe('HubSetupChecklist', () => {
             },
             { state: 'disconnected', channelId: '123' },
         );
-        const { container } = renderWithProviders(<HubSetupChecklist guildId={7} canEdit modsConfigured />);
+        const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} nextRaid={{ id: 1 }} canEdit modsConfigured /></HubSettingsProvider>);
         await waitFor(() => expect(container).toBeEmptyDOMElement());
     });
 
@@ -75,14 +82,33 @@ describe('HubSetupChecklist', () => {
         server.use(http.post(`${ONBOARDING}/hub-setup-checklist/dismiss`, () => HttpResponse.json({
             dismissed: [{ key: 'hub-setup-checklist', guildId: 7, dismissedAt: '2026-10-02T00:00:00.000Z' }],
         } satisfies HubOnboardingStateDto)));
-        renderWithProviders(<HubSetupChecklist guildId={7} canEdit modsConfigured={false} />);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await userEvent.click(await screen.findByTestId('setup-checklist-dismiss'));
         await waitFor(() => expect(screen.queryByTestId('setup-checklist')).not.toBeInTheDocument());
     });
 
     it('a dismissal stored for this hub keeps it hidden from the start', async () => {
         serve(EMPTY_PROFILE, UNSET, { dismissed: [{ key: 'hub-setup-checklist', guildId: 7, dismissedAt: '2026-10-01T00:00:00.000Z' }] });
-        const { container } = renderWithProviders(<HubSetupChecklist guildId={7} canEdit modsConfigured={false} />);
+        const { container } = renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} canEdit modsConfigured={false} /></HubSettingsProvider>);
         await waitFor(() => expect(container).toBeEmptyDOMElement());
+    });
+
+    // Lead ruling 1: an Officer has no picker, so the Discord row says who to
+    // ask — and, being blocked, it no longer keeps the card from finishing.
+    it('an Officer sees an ask-your-Leader Discord row with no action', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSetupChecklist {...PROPS} canEdit modsConfigured={false} />);
+        const blocked = await screen.findByTestId('setup-step-blocked-discord');
+        expect(blocked).toHaveTextContent('Ask your Leader');
+        expect(screen.queryByTestId('setup-step-action-discord')).not.toBeInTheDocument();
+        expect(screen.getByTestId('setup-checklist-progress')).toHaveTextContent('1 of 6 done');
+    });
+
+    // Lead ruling 3: no mod sources on this hub kind ⇒ no "Recommend mods".
+    it('omits the mods step on a hub with no mod sources', async () => {
+        serve(EMPTY_PROFILE, UNSET);
+        renderWithProviders(<HubSettingsProvider value={LEADER}><HubSetupChecklist {...PROPS} hasModSources={false} canEdit modsConfigured={false} /></HubSettingsProvider>);
+        await screen.findByTestId('setup-checklist');
+        expect(screen.queryByTestId('setup-step-mods')).not.toBeInTheDocument();
     });
 });

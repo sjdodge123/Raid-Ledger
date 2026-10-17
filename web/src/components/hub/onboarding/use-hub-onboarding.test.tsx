@@ -32,6 +32,20 @@ function Probe({ guildId = null }: { guildId?: number | null }): JSX.Element {
     );
 }
 
+/** Two prompts sharing one cache entry — the interleaving Codex reproduced. */
+function TwoPrompts(): JSX.Element {
+    const card = useHubOnboarding('players-get-your-guild', null);
+    const checklist = useHubOnboarding('hub-setup-checklist', 7);
+    return (
+        <div>
+            <span data-testid="card-visible">{card.visible ? 'yes' : 'no'}</span>
+            <span data-testid="checklist-visible">{checklist.visible ? 'yes' : 'no'}</span>
+            <button type="button" onClick={card.dismiss}>Dismiss card</button>
+            <button type="button" onClick={checklist.dismiss}>Dismiss checklist</button>
+        </div>
+    );
+}
+
 describe('useHubOnboarding', () => {
     it('is visible once the state comes back without this prompt', async () => {
         server.use(http.get(URL, () => HttpResponse.json(EMPTY)));
@@ -102,5 +116,36 @@ describe('useHubOnboarding', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
         await waitFor(() => expect(urls).toHaveLength(1));
         expect(urls[0]).toBe(`${URL}/hub-setup-checklist/dismiss?guildId=7`);
+    });
+
+    // Codex P2 (PR-3): the rollback used to restore the WHOLE cache snapshot
+    // taken when the failing mutation started, which silently undid a sibling
+    // prompt's dismissal that had succeeded in the meantime.
+    it('a failed dismiss leaves another prompt successful dismissal alone', async () => {
+        let releaseCard: () => void = () => {};
+        const cardPosted = new Promise<void>((resolve) => { releaseCard = resolve; });
+        server.use(
+            http.get(URL, () => HttpResponse.json(EMPTY)),
+            // The card's dismiss starts FIRST and fails LAST.
+            http.post(`${URL}/players-get-your-guild/dismiss`, async () => {
+                await cardPosted;
+                return HttpResponse.json({ message: 'nope' }, { status: 500 });
+            }),
+            http.post(`${URL}/hub-setup-checklist/dismiss`, () => HttpResponse.json({
+                dismissed: [{ key: 'hub-setup-checklist', guildId: 7, dismissedAt: '2026-10-02T00:00:00.000Z' }],
+            } satisfies HubOnboardingStateDto)),
+        );
+        renderWithProviders(<TwoPrompts />);
+        await waitFor(() => expect(screen.getByTestId('card-visible')).toHaveTextContent('yes'));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss card' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss checklist' }));
+        await waitFor(() => expect(screen.getByTestId('checklist-visible')).toHaveTextContent('no'));
+
+        releaseCard();
+        // The card comes back (its write failed) …
+        await waitFor(() => expect(screen.getByTestId('card-visible')).toHaveTextContent('yes'));
+        // … and the checklist, whose write SUCCEEDED, stays dismissed.
+        expect(screen.getByTestId('checklist-visible')).toHaveTextContent('no');
     });
 });

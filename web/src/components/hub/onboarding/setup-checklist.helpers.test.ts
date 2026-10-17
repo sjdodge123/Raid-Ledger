@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GuildDiscordMirrorDto, GuildProfile } from '@raid-ledger/contract';
 import { at } from '../../../test/defined';
-import { PUBLISH_BLOCKED_REASON, setupProgress, setupSteps } from './setup-checklist.helpers';
+import { CHANNEL_BLOCKED_REASON, LEADER_BLOCKED_REASON, PUBLISH_BLOCKED_REASON, setupProgress, setupSteps, type SetupStepsInput } from './setup-checklist.helpers';
 
 const EMPTY: GuildProfile = { guildId: 7, gmPost: null, rules: [], links: [] };
 const FULL: GuildProfile = {
@@ -16,45 +16,81 @@ const FULL: GuildProfile = {
 const UNSET: GuildDiscordMirrorDto = { state: 'unset' };
 const BOUND: GuildDiscordMirrorDto = { state: 'disconnected', channelId: '123' };
 
-function doneIds(input: Parameters<typeof setupSteps>[0]): string[] {
-    return setupSteps(input).filter((s) => s.done).map((s) => s.id);
+/** A hub the viewer can fully act on: Leader/admin, roster imported, mods available. */
+const BASE = { memberCount: 40, hasNextRaid: false, hasModSources: true, canPickChannel: true };
+const input = (over: Partial<SetupStepsInput>): SetupStepsInput => ({ ...BASE, profile: EMPTY, discord: UNSET, modsConfigured: false, ...over });
+
+function doneIds(over: Partial<SetupStepsInput>): string[] {
+    return setupSteps(input(over)).filter((s) => s.done).map((s) => s.id);
+}
+
+function ids(over: Partial<SetupStepsInput>): string[] {
+    return setupSteps(input(over)).map((s) => s.id);
 }
 
 describe('setupSteps', () => {
     it('a brand-new hub has nothing done', () => {
-        expect(doneIds({ profile: EMPTY, discord: UNSET, modsConfigured: false })).toEqual([]);
+        expect(doneIds({ memberCount: 0 })).toEqual([]);
     });
 
     it('each piece of content ticks exactly its own step', () => {
-        expect(doneIds({ profile: FULL, discord: BOUND, modsConfigured: true }))
-            .toEqual(['leader-post', 'rules', 'links', 'discord', 'mods']);
+        expect(doneIds({ profile: FULL, discord: BOUND, modsConfigured: true, hasNextRaid: true }))
+            .toEqual(['roster', 'leader-post', 'rules', 'links', 'discord', 'mods', 'next-raid']);
     });
 
     it('a whitespace-only leader post does not count as written', () => {
         const blank: GuildProfile = { ...EMPTY, gmPost: { body: '   \n ', updatedAt: '2026-10-01T00:00:00.000Z', updatedBy: null } };
-        expect(doneIds({ profile: blank, discord: UNSET, modsConfigured: false })).toEqual([]);
+        expect(doneIds({ profile: blank, memberCount: 0 })).toEqual([]);
     });
 
     it('unknown page data leaves every step undone rather than guessing', () => {
-        expect(doneIds({ profile: undefined, discord: undefined, modsConfigured: false })).toEqual([]);
+        expect(doneIds({ profile: undefined, discord: undefined, memberCount: 0 })).toEqual([]);
     });
 
     it('publish is listed but blocked, with the reason the viewer sees', () => {
-        const publish = at(setupSteps({ profile: FULL, discord: BOUND, modsConfigured: true }).filter((s) => s.id === 'publish'), 0);
+        const publish = at(setupSteps(input({ profile: FULL, discord: BOUND, modsConfigured: true })).filter((s) => s.id === 'publish'), 0);
         expect(publish.done).toBe(false);
         expect(publish.action).toEqual({ kind: 'blocked', reason: PUBLISH_BLOCKED_REASON });
+    });
+
+    // Spec D11-B asks for "Assign a Leader" first; Q1 leaves nowhere to store
+    // an admin-named one, so it is a listed, non-actionable row.
+    it('lists the spec step set in order, Assign a Leader first and blocked', () => {
+        expect(ids({})).toEqual(['leader', 'roster', 'leader-post', 'rules', 'links', 'discord', 'mods', 'next-raid', 'publish']);
+        const leader = at(setupSteps(input({})).filter((s) => s.id === 'leader'), 0);
+        expect(leader.action).toEqual({ kind: 'blocked', reason: LEADER_BLOCKED_REASON });
+    });
+
+    // Lead ruling 1: an Officer has no picker, so the step says who to ask.
+    it('a viewer who cannot pick a channel gets an ask-your-Leader row', () => {
+        const step = at(setupSteps(input({ canPickChannel: false })).filter((s) => s.id === 'discord'), 0);
+        expect(step.action).toEqual({ kind: 'blocked', reason: CHANNEL_BLOCKED_REASON });
+    });
+
+    // Lead ruling 3: a hub kind with no mod sources never shows the step.
+    it('hides the mods step on a hub with no mod sources', () => {
+        expect(ids({ hasModSources: false })).not.toContain('mods');
     });
 });
 
 describe('setupProgress', () => {
-    it('counts only actionable steps, so a finished hub reads 5 of 5 and complete', () => {
-        const progress = setupProgress(setupSteps({ profile: FULL, discord: BOUND, modsConfigured: true }));
-        expect(progress).toEqual({ done: 5, total: 5, complete: true, label: '5 of 5' });
+    it('counts only actionable steps, so a finished hub reads 7 of 7 and complete', () => {
+        const progress = setupProgress(setupSteps(input({ profile: FULL, discord: BOUND, modsConfigured: true, hasNextRaid: true })));
+        expect(progress).toEqual({ done: 7, total: 7, complete: true, label: '7 of 7' });
     });
 
     it('a half-set-up hub is not complete', () => {
-        const progress = setupProgress(setupSteps({ profile: FULL, discord: UNSET, modsConfigured: false }));
-        expect(progress.label).toBe('3 of 5');
+        const progress = setupProgress(setupSteps(input({ profile: FULL })));
+        expect(progress.label).toBe('4 of 7');
         expect(progress.complete).toBe(false);
+    });
+
+    // Lead ruling 1: the blocked channel row must not pin the card open — an
+    // Officer who has done everything else still sees it finish.
+    it('an Officer finishes without the channel step', () => {
+        const progress = setupProgress(setupSteps(input({
+            profile: FULL, discord: UNSET, modsConfigured: true, hasNextRaid: true, canPickChannel: false,
+        })));
+        expect(progress).toEqual({ done: 5, total: 5, complete: true, label: '5 of 5' });
     });
 });

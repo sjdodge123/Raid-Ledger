@@ -11,7 +11,6 @@
  * then disappears because the server already had the dismissal is worse than
  * one that appears a beat late.
  */
-import { useCallback } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { HubOnboardingKey, HubOnboardingStateDto } from '@raid-ledger/contract';
 import { useAuth, useViewerCacheScope } from '../../../hooks/use-auth';
@@ -89,7 +88,9 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         },
         onSuccess: (fresh) => { queryClient.setQueryData(queryKey, fresh); },
     });
-    const dismiss = useCallback(() => { mutation.mutate(); }, [mutation.mutate]);
+    // Not memoized: `mutation` is a fresh object every render, so a
+    // `useCallback` keyed on it memoized nothing (PR-3 nit).
+    const dismiss = (): void => { mutation.mutate(); };
     const known = isAuthenticated && state.data !== undefined;
     return {
         visible: known && !isPromptDismissed(state.data, key, guildId),
