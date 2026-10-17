@@ -46,7 +46,7 @@ const PublicSignupCharacterSchema = SignupCharacterSchema.extend({
     professions: z.unknown().optional(),
 });
 
-/** Roster member identity for anonymous viewers. `avatar` is an absolute URL or null (server-built). */
+/** Roster member identity for anonymous viewers. `avatar` is a custom absolute URL or null — never a Discord-CDN URL (ROK-1827). */
 export const PublicSignupUserSchema = SignupUserSchema.omit({
     discordId: true,
 }).strict();

@@ -91,8 +91,9 @@ export function isDiscordLinked(discordId: string | null | undefined): boolean {
 /**
  * Build a full Discord CDN avatar URL from a discordId and avatar hash.
  * If the hash is already a full URL, returns it as-is — even with no discordId:
- * anonymous viewers of public roster routes get a server-built avatar URL and
- * no Discord id (ROK-1629). Otherwise returns null if either value is missing.
+ * anonymous viewers of public roster routes get no Discord id, and an avatar
+ * that is null, or a custom non-Discord URL (ROK-1827). Otherwise returns null
+ * if either value is missing.
  */
 export function buildDiscordAvatarUrl(
     discordId: string | null | undefined,

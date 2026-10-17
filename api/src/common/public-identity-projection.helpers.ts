@@ -4,8 +4,8 @@
  * `GET /users`, `/users/recent`, `/users/:id/profile`, `/games/:id/activity`
  * and `/games/:id/now-playing`: signed-in, non-deactivated members keep
  * today's payload (same reference). Anonymous and deactivated viewers get the
- * row minus `discordId`, with `avatar` rebuilt server-side as an absolute
- * Discord CDN URL (or null) — the ROK-1629 rule applied by analogy.
+ * row minus `discordId`, with `avatar` projected to null, or to a custom
+ * non-Discord URL (ROK-1827) — the ROK-1629 rule applied by analogy.
  *
  * Applied at the HTTP boundary ONLY; services keep the full shape. Each
  * anonymous branch ends with the strict `Public*Schema.parse`, so a key added
@@ -35,19 +35,25 @@ import type {
   GameNowPlayingResponseDto,
   PublicGameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
-import { discordAvatarUrl } from './discord-avatar-url.helpers';
+import { publicAvatarUrl } from './public-avatar-url.helpers';
 
 type IdentityRow = {
   discordId?: string | null | undefined;
   avatar: string | null;
 };
 
-/** Drop `discordId`; replace the raw avatar hash with a server-built absolute URL. */
+/**
+ * Drop `discordId`; drop any avatar that would need it (ROK-1827 — a CDN url
+ * embeds the snowflake). A custom absolute avatar URL still passes through.
+ */
 export function toPublicIdentity<T extends IdentityRow>(
   row: T,
 ): Omit<T, 'discordId'> {
   const { discordId, ...rest } = row;
-  return { ...rest, avatar: discordAvatarUrl(discordId, row.avatar) };
+  // ROK-1827: the snowflake is destructured only to be dropped. It must never
+  // reach `publicAvatarUrl`, which is why that helper takes no id parameter.
+  void discordId;
+  return { ...rest, avatar: publicAvatarUrl(row.avatar) };
 }
 
 /** Strict-parse, then narrow back to the DTO type (values are checked loosely). */

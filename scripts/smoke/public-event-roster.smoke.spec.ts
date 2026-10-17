@@ -6,7 +6,8 @@
  * the API itself (`OptionalJwtGuard`, also hit by a member whose token has
  * expired). So:
  *  - anonymous: `GET /events/:id/detail` with no token carries no Discord id
- *    key at ANY depth, and a roster member's avatar is a server-built URL;
+ *    key at ANY depth, and a roster member's avatar is null — never a
+ *    Discord-CDN URL, which would carry the id back (ROK-1827);
  *  - signed-in: the event detail page still renders roster names and avatars
  *    from the member payload (intercepted with `page.waitForResponse`).
  *
@@ -137,7 +138,7 @@ test.afterAll(async () => {
 });
 
 test.describe('Public event roster — anonymous API caller (ROK-1629)', () => {
-    test('/events/:id/detail carries no Discord id at any depth and a server-built avatar', async () => {
+    test('/events/:id/detail carries no Discord id at any depth and no Discord-CDN avatar', async () => {
         const res = await fetchWithRetry(`${API_BASE}/events/${seeded.eventId}/detail`, {});
         expect(res.status, 'anonymous /detail must stay public').toBe(200);
         const body = (await res.json()) as Detail;
@@ -145,7 +146,10 @@ test.describe('Public event roster — anonymous API caller (ROK-1629)', () => {
         expect(discordKeyPaths(body), 'anonymous /detail leaked Discord id keys at these paths').toEqual([]);
         const member = body.roster.signups.find((s) => s.user.id === seeded.member.id)?.user;
         expect(member?.username, 'the seeded member is still listed by name').toBe(seeded.member.username);
-        expect(member?.avatar, 'the avatar is the server-built CDN URL').toBe(cdnAvatarUrl(seeded.member));
+        expect(member?.avatar, 'anonymous viewers get no Discord-CDN avatar (ROK-1827)').toBeNull();
+        expect(JSON.stringify(body), 'no Discord-CDN avatar URL anywhere in the anonymous body').not.toContain(
+            'cdn.discordapp.com/avatars/',
+        );
     });
 });
 
