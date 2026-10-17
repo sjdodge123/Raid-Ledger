@@ -14,6 +14,7 @@ import type * as schema from '../../drizzle/schema';
 import {
   SERVER_PRESENCE_READER,
   type ServerPresenceReader,
+  type ServerRosterPlayer,
 } from '../../plugins/pelican/presence/server-presence.reader';
 import type {
   ServerPresencePlayer,
@@ -70,11 +71,23 @@ export function trackedByServer(
   for (const pl of reader?.playersForGame(gameId) ?? []) {
     const list = out.get(pl.pelicanServerId) ?? [];
     if (list.some((x) => x.steamId === pl.steamId)) continue;
-    // The sink's own convention: the SteamID64 until a character line names them.
-    list.push({ steamId: pl.steamId, displayName: pl.name ?? pl.steamId });
+    list.push(toEnrolPlayer(pl));
     out.set(pl.pelicanServerId, list);
   }
   return out;
+}
+
+/**
+ * A tracked player as the sink takes them: the SteamID64 until a character
+ * line names them, and the character owner next to that name (ROK-1828) —
+ * a cold replay can enrol a player here before their own queued join, which
+ * then skips the open row, so this is the only write of their owner.
+ */
+function toEnrolPlayer(pl: ServerRosterPlayer): ServerPresencePlayer {
+  const base = { steamId: pl.steamId, displayName: pl.name ?? pl.steamId };
+  return pl.name !== null && pl.characterOwnerId
+    ? { ...base, characterOwnerId: pl.characterOwnerId }
+    : base;
 }
 
 /** True when the tracker reports anyone on a server of `gameId`. */
