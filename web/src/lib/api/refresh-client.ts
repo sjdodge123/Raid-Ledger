@@ -1,7 +1,8 @@
 import { API_BASE_URL } from '../config';
 import { RefreshResponseSchema } from '@raid-ledger/contract';
-import { setAccessToken } from './access-token-store';
+import { getAccessToken, setAccessToken } from './access-token-store';
 import { getAuthMethod } from './silent-reauth';
+import { isTokenStale } from './token-expiry';
 import {
   endDeactivatedSession,
   isDeactivatedResponse,
@@ -178,11 +179,25 @@ export async function freshRefresh(): Promise<RefreshOutcome> {
   return sharedRefresh();
 }
 
-async function underInstallLock<T>(locks: LockManager, issue: () => Promise<T>): Promise<T> {
+/** Runs `issue`, then bumps the generation — still inside the lock when locked. */
+async function issueThenBump<T>(issue: () => Promise<T>): Promise<T> {
+  try {
+    return await issue();
+  } finally {
+    bumpRefreshGeneration();
+  }
+}
+
+async function underInstallLock<T>(
+  locks: LockManager,
+  issue: () => Promise<T>,
+  entered: { value: boolean },
+): Promise<T> {
   return locks.request(LOCK_NAME, async () => {
+    entered.value = true;
     installDepth += 1;
     try {
-      return await issue();
+      return await issueThenBump(issue);
     } finally {
       installDepth -= 1;
     }
@@ -190,22 +205,43 @@ async function underInstallLock<T>(locks: LockManager, issue: () => Promise<T>):
 }
 
 /**
+ * Locked when Web Locks exist. If the lock request itself fails (e.g. an
+ * opaque origin) the install runs unlocked, as `doRefresh` does; an error
+ * thrown by `issue` under the lock is rethrown, never retried.
+ */
+async function issueFenced<T>(issue: () => Promise<T>): Promise<T> {
+  const locks = lockManager();
+  if (!locks) return issueThenBump(issue);
+  const entered = { value: false };
+  try {
+    return await underInstallLock(locks, issue, entered);
+  } catch (err) {
+    if (entered.value) throw err;
+    return issueThenBump(issue);
+  }
+}
+
+/**
  * ROK-1820: run a request that ISSUES a new session (a password change that
  * revokes every session and re-mints one) so no refresh can land on top of it.
  *
+ * - A stale access token is refreshed FIRST, unlocked: under the lock every
+ *   in-tab refresh answers indeterminate, so the request would 401 unretried.
  * - The request runs under the `rl-refresh` Web Lock, so no refresh POST from
  *   any tab of this browser is in flight while it runs: a sibling's rotated
  *   `rl_rt` Set-Cookie lands BEFORE the re-issued cookie, never after it.
- * - The generation is bumped before AND after, so a refresh that began under
- *   the pre-change session (no `navigator.locks`, or another code path) is
- *   dropped instead of overwriting the re-issued access token.
+ * - The generation is bumped before the request and again before the lock is
+ *   released, so a refresh that began under the pre-change session — or
+ *   queued behind the install — is dropped instead of overwriting the
+ *   re-issued access token.
+ *
+ * Known gap: without `navigator.locks`, a refresh that passed the server's
+ * revoke re-check just before the change can still deliver its (now revoked)
+ * `rl_rt` Set-Cookie AFTER the re-issued one; the generation only guards the
+ * access token, so the next refresh 401s and signs the user out.
  */
 export async function installSessionExclusively<T>(issue: () => Promise<T>): Promise<T> {
+  if (getAuthMethod() && isTokenStale(getAccessToken())) await ensureFreshToken();
   bumpRefreshGeneration();
-  try {
-    const locks = lockManager();
-    return locks ? await underInstallLock(locks, issue) : await issue();
-  } finally {
-    bumpRefreshGeneration();
-  }
+  return issueFenced(issue);
 }
