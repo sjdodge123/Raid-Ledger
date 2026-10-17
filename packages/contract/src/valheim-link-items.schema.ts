@@ -76,12 +76,13 @@ export const ValheimItemsMessageSchema = z.object({
         }
         seen.add(item.prefab);
         const icon = item.icon;
-        if (icon?.kind !== 'atlas') return;
-        if (!msg.atlas) {
-            ctx.addIssue({ code: 'custom', path: ['atlas'], message: 'atlas icon without an atlas' });
-        } else if (icon.x + icon.w > msg.atlas.width || icon.y + icon.h > msg.atlas.height) {
+        if (icon?.kind !== 'atlas' || !msg.atlas) return;
+        if (icon.x + icon.w > msg.atlas.width || icon.y + icon.h > msg.atlas.height) {
             ctx.addIssue({ code: 'custom', path: ['items', i, 'icon'], message: 'icon outside atlas' });
         }
     });
+    if (!msg.atlas && msg.items.some((item) => item.icon?.kind === 'atlas')) {
+        ctx.addIssue({ code: 'custom', path: ['atlas'], message: 'atlas icon without an atlas' });
+    }
 });
 export type ValheimItemsMessage = z.infer<typeof ValheimItemsMessageSchema>;

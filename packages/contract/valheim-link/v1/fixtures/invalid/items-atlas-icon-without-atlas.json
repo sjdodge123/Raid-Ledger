@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "items",
+  "locale": "English",
+  "atlas": null,
+  "items": [
+    {
+      "prefab": "SwordIron",
+      "name": "Iron sword",
+      "category": "OneHandedWeapon",
+      "maxStack": 1,
+      "maxQuality": 4,
+      "variants": 0,
+      "icon": {
+        "kind": "atlas",
+        "x": 0,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "prefab": "HelmetBronze",
+      "name": "Bronze helmet",
+      "category": "Helmet",
+      "maxStack": 1,
+      "maxQuality": 4,
+      "variants": 0,
+      "icon": {
+        "kind": "atlas",
+        "x": 64,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "prefab": "Wood",
+      "name": "Wood",
+      "category": "Material",
+      "maxStack": 50,
+      "maxQuality": 1,
+      "variants": 0,
+      "icon": {
+        "kind": "atlas",
+        "x": 128,
+        "y": 0,
+        "w": 64,
+        "h": 64
+      }
+    },
+    {
+      "prefab": "CapeLinen",
+      "name": "Linen cape",
+      "category": "Shoulder",
+      "maxStack": 1,
+      "maxQuality": 4,
+      "variants": 7,
+      "icon": {
+        "kind": "atlas",
+        "x": 960,
+        "y": 960,
+        "w": 64,
+        "h": 64
+      }
+    }
+  ]
+}

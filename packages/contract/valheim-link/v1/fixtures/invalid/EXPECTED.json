@@ -1,0 +1,38 @@
+{
+  "unknown-top-level-key": {
+    "path": "",
+    "code": "unrecognized_keys"
+  },
+  "steamid-as-number": {
+    "path": "character.steamId",
+    "code": "invalid_type"
+  },
+  "schema-version-2": {
+    "path": "schemaVersion",
+    "code": "invalid_value"
+  },
+  "unknown-kind": {
+    "path": "kind",
+    "code": "invalid_union"
+  },
+  "inventory-slot-outside-grid": {
+    "path": "inventory.items.3",
+    "code": "custom"
+  },
+  "duplicate-equip-slot": {
+    "path": "equipment.1",
+    "code": "custom"
+  },
+  "durability-half-null": {
+    "path": "equipment.0.item.maxDurability",
+    "code": "custom"
+  },
+  "map-bitmap-size-mismatch": {
+    "path": "explored",
+    "code": "custom"
+  },
+  "items-atlas-icon-without-atlas": {
+    "path": "atlas",
+    "code": "custom"
+  }
+}
