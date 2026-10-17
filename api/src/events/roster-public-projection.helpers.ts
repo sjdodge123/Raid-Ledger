@@ -2,8 +2,8 @@
  * Per-viewer projection of the public roster surfaces (ROK-1629).
  *
  * Signed-in, non-deactivated members keep today's payload. Anonymous (and
- * deactivated) viewers get display name, role/class and a server-built avatar
- * URL — no Discord ids, no note / attendance outcome / running-late marker
+ * deactivated) viewers get display name, role/class and a null (or custom, non-Discord) avatar
+ * URL — no Discord ids, no Discord-CDN avatar URL (ROK-1827), no note / attendance outcome / running-late marker
  * (operator rulings 2026-10-04, Q1/Q2/Q3/Q6).
  *
  * Applied at the HTTP boundary ONLY. `getRoster` / `getRosterWithAssignments`

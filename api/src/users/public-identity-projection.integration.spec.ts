@@ -4,8 +4,8 @@
  * `GET /users`, `/users/recent`, `/users/:id/profile`, `/games/:id/activity`
  * and `/games/:id/now-playing`: anonymous and signed-in-deactivated callers
  * get NO `discordId` / `discordUserId` / `discordAvatarHash` / `steamId` key at
- * ANY depth (recursive key walk, not spot checks) and a server-built avatar
- * URL; signed-in members and admins keep today's payload. `steamId` is never
+ * ANY depth (recursive key walk, not spot checks) and no Discord-CDN avatar
+ * URL (ROK-1827); signed-in members and admins keep today's payload. `steamId` is never
  * on the profile for a non-owner viewer (Q1).
  *
  * The linked user appears on every route (asserted), so an empty payload
