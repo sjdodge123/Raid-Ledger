@@ -104,6 +104,19 @@ describe('scrubSecretsFromText — rule table (r4)', () => {
         ['Authorization: Bearer eyJhbGciOi.payload.sig', 'Authorization: Bearer [Filtered]'],
         ['Authorization: Bearer x', 'Authorization: Bearer [Filtered]'],
         ['Bearer          x', 'Bearer          [Filtered]'],
+        // --- r5 P1: a non-secret key must not consume the secret behind it.
+        // `Error` used to match the old generic `key[=:]value` shape, test
+        // innocent, and leave the scan positioned past `password=swordfish`.
+        ['Error: password=swordfish', 'Error: password=[Filtered]'],
+        ['status: ok, token=abc', 'status: ok, token=[Filtered]'],
+        ['TypeError: cannot read secret=hunter2', 'TypeError: cannot read secret=[Filtered]'],
+        // --- r5 P1: the auth scheme matches in any case. Lowercase `bearer`
+        // used to be scrubbed AS the value, shipping the JWT behind it.
+        ['Authorization: bearer eyJhbGciOi.payload.sig', 'Authorization: bearer [Filtered]'],
+        ['authorization: BASIC dXNlcjpwYXNz', 'authorization: BASIC [Filtered]'],
+        // --- r5 P2: the explicit `*_key` compounds are still credentials.
+        ['apiKey=x', 'apiKey=[Filtered]'],
+        ['{"signingKey":"abc"}', '{"signingKey":"[Filtered]"}'],
     ])('scrubs %j', (input: string, expected: string) => {
         expect(scrubSecretsFromText(input)).toBe(expected);
         expect(scrubSecretsFromText(expected)).toBe(expected);
@@ -121,6 +134,10 @@ describe('scrubSecretsFromText — rule table (r4)', () => {
         '{"code":500,"state":"idle","key":"ArrowUp"}',
         // Substring matching used to drop all four of these.
         '{"tokenCount":5,"tokenizer":"bpe","passwordPolicy":"strong","keyboard":"qwerty"}',
+        // r5 P2: a bare `Key` suffix is a diagnostic, not a credential.
+        '{"queryKey":["events",42],"primaryKey":17}',
+        // r5 P1: a non-secret key still leaves its own value alone.
+        'message: hello',
     ])('leaves %j byte-identical', (input: string) => {
         expect(scrubSecretsFromText(input)).toBe(input);
     });
@@ -141,11 +158,17 @@ describe('isSecretKey', () => {
         'password', 'PASSWORD', 'passwd', 'pwd', 'secret', 'token', 'access_token', 'refresh_token',
         'id_token', 'api_key', 'apikey', 'Authorization', 'cookie', 'set-cookie', 'session',
         'sessionid', 'csrf', 'accessToken', 'clientSecret', 'apiKey', 'user_api_key',
+        'secret_key', 'secretKey', 'private_key', 'privateKey', 'accessKey', 'signingKey',
+        'encryptionKey', 'client_secret',
     ])('redacts %j', (key: string) => {
         expect(isSecretKey(key)).toBe(true);
     });
 
-    it.each(['tokenCount', 'tokenizer', 'passwordPolicy', 'keyboard', 'code', 'state', 'key', 'url', 'status'])(
+    it.each([
+        'tokenCount', 'tokenizer', 'passwordPolicy', 'keyboard', 'code', 'state', 'key', 'url',
+        // r5 P2: `key` on its own, and every non-credential compound of it.
+        'status', 'queryKey', 'primaryKey', 'monkey', 'hotkey', 'Key',
+    ])(
         'keeps %j',
         (key: string) => {
             expect(isSecretKey(key)).toBe(false);
