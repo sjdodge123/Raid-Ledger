@@ -4,8 +4,13 @@
  * initialises; this catches anything that still slips through.
  */
 
-/** A `token=` param right after `#`, `?` or `&`, up to the next `&` or `#`. */
-const TOKEN_PARAM = /([#?&]token=)[^&#\s]*/g;
+/**
+ * A `token=` param right after `#`, `?` or `&`. The value ends at the next
+ * `&`/`#`, at whitespace, or at the punctuation that closes it inside JSON —
+ * ROK-1838 r3: stopping only at whitespace ate the rest of a captured log line
+ * (`{"url":"/j?token=a","status":500}` lost `status`).
+ */
+const TOKEN_PARAM = /([#?&]token=)[^&#\s"',}\])]{0,4096}/g;
 
 /**
  * ROK-1750: a private poll's share token is a PATH segment — the page

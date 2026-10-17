@@ -17,7 +17,7 @@
  *   message, an exception value, `extra`, `contexts` or a breadcrumb is
  *   filtered at any depth — see `scrubSensitiveString`.
  */
-import { scrubSecretsFromText } from './sentry-scrub-secrets';
+import { isSecretKey, scrubSecretsFromText, SECRET_FILTERED } from './sentry-scrub-secrets';
 
 export const PII_REDACTED = '[redacted]';
 
@@ -60,6 +60,8 @@ export interface PiiScrubbableEvent {
     tags?: unknown;
     message?: string;
     exception?: { values?: Array<{ value?: string }> };
+    logentry?: unknown;
+    threads?: unknown;
 }
 
 export interface PiiScrubbableBreadcrumb {
@@ -83,8 +85,33 @@ export function scrubSensitiveString(value: string): string {
 
 const CIRCULAR = '[circular]';
 const TRUNCATED = '[truncated]';
-type ScrubField = 'request' | 'spans' | 'extra' | 'contexts' | 'breadcrumbs' | 'tags';
-const EVENT_FIELDS: readonly ScrubField[] = ['request', 'spans', 'extra', 'contexts', 'breadcrumbs', 'tags'];
+type ScrubField =
+    | 'request'
+    | 'spans'
+    | 'extra'
+    | 'contexts'
+    | 'breadcrumbs'
+    | 'tags'
+    | 'exception'
+    | 'logentry'
+    | 'threads';
+/**
+ * Every branch of a Sentry event that can carry free text. `exception` and
+ * `threads` are walked whole (ROK-1838 r3) so stack-frame `filename`,
+ * `abs_path`, `context_line`, `pre_context`, `post_context` and `vars`, plus
+ * `mechanism.data`, are scrubbed — not only `exception.values[].value`.
+ */
+const EVENT_FIELDS: readonly ScrubField[] = [
+    'request',
+    'spans',
+    'extra',
+    'contexts',
+    'breadcrumbs',
+    'tags',
+    'exception',
+    'logentry',
+    'threads',
+];
 
 /** Copy an object's own keys (plus an Error's message/stack), scrubbing each. */
 function copyEntries(obj: object, ancestors: Set<object>, depth: number): Record<string, unknown> {
@@ -93,13 +120,28 @@ function copyEntries(obj: object, ancestors: Set<object>, depth: number): Record
         out['name'] = obj.name;
         out['message'] = scrubSensitiveString(obj.message);
         if (typeof obj.stack === 'string') out['stack'] = scrubSensitiveString(obj.stack);
+        // `cause` is non-enumerable, so the key loop below never sees it.
+        const cause: unknown = Reflect.get(obj, 'cause');
+        if (cause !== undefined) out['cause'] = scrubPiiValue(cause, ancestors, depth + 1);
     }
     for (const key of Object.keys(obj)) {
-        const raw: unknown = Reflect.get(obj, key);
-        if (VERSION_KEY.test(key) && typeof raw === 'string') out[key] = raw;
-        else out[key] = isPiiKey(key) ? PII_REDACTED : scrubPiiValue(raw, ancestors, depth + 1);
+        out[key] = scrubEntry(key, Reflect.get(obj, key), ancestors, depth);
     }
     return out;
+}
+
+/**
+ * One key/value. A secret-named key loses its whole value whatever its shape;
+ * a PII-named key is redacted; a `*version` string keeps its dotted number
+ * (the IPv4 rule would otherwise read `141.0.0.0` as an address) but is STILL
+ * secret-scrubbed — ROK-1838 r3: the old verbatim copy let
+ * `extra.appVersion = '/join?token=abc'` through.
+ */
+function scrubEntry(key: string, raw: unknown, ancestors: Set<object>, depth: number): unknown {
+    if (isSecretKey(key)) return SECRET_FILTERED;
+    if (isPiiKey(key)) return PII_REDACTED;
+    if (VERSION_KEY.test(key) && typeof raw === 'string') return scrubSecretsFromText(raw);
+    return scrubPiiValue(raw, ancestors, depth + 1);
 }
 
 /**
