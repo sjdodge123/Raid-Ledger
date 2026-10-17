@@ -18,9 +18,9 @@ export const VALHEIM_LINK_SCHEMA_VERSION = 1;
 // ---------- size caps (CONTRACT.md §7; the ingest endpoint, ROK-1833) ----------
 
 /** Recommended request-body cap for a `character` message (UTF-8 JSON). */
-export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 262_144;
+export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 524_288;
 /** Recommended request-body cap for a `map` message (inline bitmaps). */
-export const VALHEIM_LINK_MAP_MAX_BYTES = 4_194_304;
+export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
 /** Recommended request-body cap for an `items` message. */
 export const VALHEIM_LINK_ITEMS_MAX_BYTES = 4_194_304;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
