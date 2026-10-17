@@ -172,6 +172,9 @@ describe('scrubSecretsFromText — r6 compound keys', () => {
         ['clientKey=abc123', 'clientKey=[Filtered]'],
         ['authKey=abc123', 'authKey=[Filtered]'],
         ['db_pwd=swordfish', 'db_pwd=[Filtered]'],
+        ['DBPwd=secret123', 'DBPwd=[Filtered]'],
+        ['dbpwd=secret123', 'dbpwd=[Filtered]'],
+        ['PWD=hunter2', 'PWD=[Filtered]'],
         ['db-pwd=swordfish', 'db-pwd=[Filtered]'],
     ])('scrubs %j', (input: string, expected: string) => {
         expect(scrubSecretsFromText(input)).toBe(expected);
@@ -189,7 +192,7 @@ describe('isSecretKey', () => {
         'encryptionKey', 'client_secret',
         // r6: hyphenated / camelCase compounds and the `pwd` suffix.
         'api-key', 'X-Api-Key', 'private-key', 'awsAccessKey', 'awsSecretAccessKey',
-        'clientKey', 'authKey', 'db_pwd', 'db-pwd',
+        'clientKey', 'authKey', 'db_pwd', 'db-pwd', 'DBPwd', 'dbpwd', 'PWD', 'OLDPWD_token',
     ])('redacts %j', (key: string) => {
         expect(isSecretKey(key)).toBe(true);
     });
