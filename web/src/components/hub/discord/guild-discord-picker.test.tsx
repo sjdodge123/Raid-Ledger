@@ -2,25 +2,56 @@
  * ROK-1788 (S4) — the editor-only channel picker: private channels hidden
  * until opted in, the acknowledgement gates Save on a private choice, the
  * PUT body, Remove, and server refusals (400 / 403 / 409) shown inline.
+ *
+ * ROK-1830 S4 moved the picker out of the mirror card: the hub frame mounts it
+ * (`discord-picker-mount.tsx`) and hands an opener only to a Leader/admin, so
+ * these cases drive the real page — a Leader opens the picker from the card's
+ * Change/Choose shortcut, exactly as a user does. The picker component itself
+ * is unchanged; only the setup below moved with it.
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import type { GuildDiscordChannelListDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
+import { Route, Routes } from 'react-router-dom';
+import type {
+    GuildDiscordChannelListDto, GuildDiscordMirrorDto, GuildMemberRow, GuildPage as GuildPageDto,
+} from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
+import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { PRIVATE_CHANNEL, PUBLIC_CHANNEL, okMirror } from '../../../test/mocks/guild-discord-handlers';
-import { GuildDiscordMirror } from './guild-discord-mirror';
+import { GuildPage } from '../hub-page';
 
-const BASE = 'http://localhost:3000/plugins/wow/guilds/7/discord';
+const GUILD = 'http://localhost:3000/plugins/wow/guilds/7';
+const BASE = `${GUILD}/discord`;
 const LIST: GuildDiscordChannelListDto = { connected: true, channels: [PUBLIC_CHANNEL, PRIVATE_CHANNEL] };
+
+const GM: GuildMemberRow = {
+    memberId: 1, name: 'Grimtusk', class: 'Warrior', level: 60, rankIndex: 0,
+    rankName: 'Guild Master', effectiveRole: null, characterId: null, isMain: true,
+};
+
+/** A Leader may rebind the channel; an Officer edits content but may not (D5-A). */
+function guildPage(canManageEditors: boolean): GuildPageDto {
+    return {
+        guild: {
+            id: 7, gameId: 1, kind: 'wow_guild', name: 'Iron Vanguard', region: 'us',
+            realmSlug: 'doomhowl', realmName: 'Doomhowl', faction: 'Horde', memberCount: 1, lastSnapshotAt: null,
+        },
+        importedBy: null,
+        viewer: { role: canManageEditors ? 'leader' : 'officer', canEdit: true, canManageEditors },
+        ranks: [{ rankIndex: 0, rankName: 'Guild Master', members: [GM] }],
+        roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 1 },
+    };
+}
 
 interface Call { method: string; body: unknown }
 let calls: Call[] = [];
 
-function serve(mirror: GuildDiscordMirrorDto, list: GuildDiscordChannelListDto = LIST): void {
+function serve(mirror: GuildDiscordMirrorDto, list: GuildDiscordChannelListDto = LIST, page: GuildPageDto = guildPage(true)): void {
     server.use(
+        http.get(GUILD, () => HttpResponse.json(page)),
         http.get(BASE, () => HttpResponse.json(mirror)),
         http.get(`${BASE}/channels`, () => HttpResponse.json(list)),
         http.put(`${BASE}/channel`, async ({ request }) => {
@@ -31,9 +62,13 @@ function serve(mirror: GuildDiscordMirrorDto, list: GuildDiscordChannelListDto =
     );
 }
 
+function renderHub(): void {
+    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+}
+
 async function openPicker(mirror: GuildDiscordMirrorDto = { state: 'unset' }, list?: GuildDiscordChannelListDto): Promise<void> {
     serve(mirror, list);
-    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit />);
+    renderHub();
     const trigger = await screen.findByTestId(mirror.state === 'unset' ? 'guild-discord-choose' : 'guild-discord-change');
     await userEvent.click(trigger);
     await screen.findByTestId('guild-discord-picker-body');
@@ -44,7 +79,8 @@ function optionValues(): string[] {
     return Array.from(select.querySelectorAll('option')).map((o) => o.getAttribute('value') ?? '');
 }
 
-beforeEach(() => { calls = []; });
+beforeEach(() => { calls = []; activateWowPlugin(); });
+afterEach(() => { window.location.hash = ''; });
 
 describe('GuildDiscordPicker — private channels', () => {
     it('hides private channels until "Show private channels" is ticked', async () => {
@@ -139,5 +175,16 @@ describe('GuildDiscordPicker — binding and bot state', () => {
         expect(await screen.findByTestId('guild-discord-picker-disconnected')).toBeInTheDocument();
         expect(screen.queryByTestId('guild-discord-channel-select')).toBeNull();
         expect(screen.getByTestId('guild-discord-save')).toBeDisabled();
+    });
+});
+
+describe('GuildDiscordPicker — who can reach it (ROK-1830 D5-A)', () => {
+    it('an Officer gets no way to open the picker', async () => {
+        serve(okMirror([]), LIST, guildPage(false));
+        renderHub();
+        await screen.findByTestId('guild-discord-mirror');
+        expect(screen.queryByTestId('guild-discord-change'), 'an Officer must get no in-card shortcut').toBeNull();
+        expect(screen.queryByTestId('guild-settings-trigger'), 'and no settings entry point to reach it behind').toBeNull();
+        expect(screen.queryByTestId('guild-discord-picker-body'), 'so no picker can be mounted').toBeNull();
     });
 });

@@ -13,20 +13,23 @@ import type { GuildMemberRow, GuildPage as GuildPageDto } from '@raid-ledger/con
 import { server } from '../../test/mocks/server';
 import { renderWithProviders } from '../../test/render-helpers';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
 import { WOW_MEMBER_COLUMNS } from '../../plugins/wow/hub/wow-members.helpers';
 import { GuildPage } from './hub-page';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
 const originalMatchMedia = window.matchMedia;
 
-/** Every media query matches — the desktop branch of `useMediaQuery(DESKTOP_MQ)`. */
+/** Only `DESKTOP_MQ` matches, so a motion- or phone-gated branch stays itself. */
+const matchMediaStub: typeof window.matchMedia = (query: string) => ({
+    matches: query === DESKTOP_MQ, media: query, onchange: null,
+    addListener: () => undefined, removeListener: () => undefined,
+    addEventListener: () => undefined, removeEventListener: () => undefined,
+    dispatchEvent: () => false,
+});
+
 function mockDesktop(): void {
-    window.matchMedia = ((query: string) => ({
-        matches: true, media: query, onchange: null,
-        addListener: () => undefined, removeListener: () => undefined,
-        addEventListener: () => undefined, removeEventListener: () => undefined,
-        dispatchEvent: () => false,
-    })) as unknown as typeof window.matchMedia;
+    window.matchMedia = matchMediaStub;
 }
 
 function row(memberId: number, name: string, rankIndex: number, rankName: string): GuildMemberRow {
@@ -44,7 +47,7 @@ const PAGE: GuildPageDto = {
     roleCounts: { tank: 0, healer: 0, dps: 0, unknown: 2 },
 };
 
-afterEach(() => { window.matchMedia = originalMatchMedia; });
+afterEach(() => { window.matchMedia = originalMatchMedia; window.location.hash = ''; });
 
 describe('HubMemberTable (desktop shell)', () => {
     it('renders the table with one head cell per module column, and no cards', async () => {

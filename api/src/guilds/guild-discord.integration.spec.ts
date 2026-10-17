@@ -7,6 +7,7 @@
  * exempt), cache clears on rebind/unbind, and `set_by` ON DELETE SET NULL.
  * Booting `getTestApp()` also proves `ChannelMirrorModule` adds no DI cycle.
  */
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { eq } from 'drizzle-orm';
 import type { GuildDiscordChannelOptionDto } from '@raid-ledger/contract';
@@ -445,12 +446,14 @@ describe('PUT private channel (D7)', () => {
   });
 
   it("acked, but the chooser's Discord account can't see it → 403", async () => {
-    await expect(
-      service.setChannel(asActor('editor'), guildId, {
-        channelId: PRIVATE.id,
-        privateAck: true,
-      }),
-    ).rejects.toThrow(CHOOSER_CANNOT_VIEW_MESSAGE);
+    // Both the type and the message: swapping Forbidden for BadRequest (the
+    // HTTP contract these cases carried before D5-A closed the route) goes red.
+    const rejected = service.setChannel(asActor('editor'), guildId, {
+      channelId: PRIVATE.id,
+      privateAck: true,
+    });
+    await expect(rejected).rejects.toThrow(ForbiddenException);
+    await expect(rejected).rejects.toThrow(CHOOSER_CANNOT_VIEW_MESSAGE);
     expect(mirror.canDiscordUserView).toHaveBeenCalledWith(
       EDITOR_DISCORD_ID,
       PRIVATE.id,
@@ -471,12 +474,12 @@ describe('PUT private channel (D7)', () => {
 
   it('a chooser without a linked Discord account → 400', async () => {
     fake.chooserCanView = true;
-    await expect(
-      service.setChannel(asActor('local'), guildId, {
-        channelId: PRIVATE.id,
-        privateAck: true,
-      }),
-    ).rejects.toThrow(LINK_DISCORD_MESSAGE);
+    const rejected = service.setChannel(asActor('local'), guildId, {
+      channelId: PRIVATE.id,
+      privateAck: true,
+    });
+    await expect(rejected).rejects.toThrow(BadRequestException);
+    await expect(rejected).rejects.toThrow(LINK_DISCORD_MESSAGE);
     expect(mirror.canDiscordUserView).not.toHaveBeenCalled();
     expect(await profileRow()).toBeUndefined();
   });

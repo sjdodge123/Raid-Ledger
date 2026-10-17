@@ -1039,8 +1039,9 @@ table saying what each chip in a cell means, and a `title` on every chip.
 come from the active plugin's hub module rather than the file
 (`web/src/components/hub/hub-member-table.tsx`, driven by `HubMemberColumn`). Rules for that shape: every
 column carries a `header`, which is the `<th>` on desktop only — a phone card carries no field labels, so the
-first column is the row's identity line and the rest wrap into one unlabelled meta line, which means every
-cell must read on its own (a cell that can render `null` would otherwise leave an orphan label); a grouped list draws its band as a
+first column is the row's identity line and the rest wrap into one unlabelled meta line. Every cell must
+therefore read on its own — a `cell` that can render `null` (WoW's Main / Raid role) would leave an orphan
+label. A grouped list draws its band as a
 `<th scope="colgroup">` row on `bg-panel` (phone: the same line above the card group), never a second table;
 any per-row accent is a `border-l-2` on the first cell with a token class the module supplies. Tools above
 the box are the shared `SearchInput` (max-width `xs`) and, when a column offers grouping, a `Checkbox`

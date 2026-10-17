@@ -119,8 +119,10 @@ describe('HubSettingsSheet (ROK-1830 S4)', () => {
             http.get(`${BASE}/editors`, () => HttpResponse.json({ editors: [] })),
         );
         renderSheet();
-        const alert = await screen.findByTestId('guild-settings-channel-error');
-        expect(alert, 'a 500 must surface the inline error, not Loading…').toHaveTextContent('Couldn’t load the Discord channel.');
-        expect(screen.queryByTestId('guild-settings-channel')).toBeNull();
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-settings-channel'),
+            'a 500 must stop showing the channel line, not sit on “Loading…”',
+        ).toBeNull());
+        expect(screen.getByTestId('guild-settings-channel-error')).toHaveTextContent('Couldn’t load the Discord channel.');
     });
 });
