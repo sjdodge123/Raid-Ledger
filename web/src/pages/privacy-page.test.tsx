@@ -53,6 +53,8 @@ describe('PrivacyPage', () => {
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
         expect(page).toHaveTextContent('usernames, email addresses and IP addresses are stripped wherever they can be detected.');
+        expect(page).toHaveTextContent('removed from error reports and from feedback before they leave your browser');
+        expect(page).toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');
         expect(page).toHaveTextContent("Error reports are on by default, and this site's admins can turn them off.");
     });
 
