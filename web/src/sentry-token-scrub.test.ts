@@ -111,13 +111,44 @@ describe('ROK-1366: Replay beforeAddRecordingEvent scrubs recorded URLs', () => 
         expectNoSecret(push);
     });
 
-    // No rrweb Meta (type 4) case on purpose. At runtime Replay hands
-    // beforeAddRecordingEvent only type-5 custom events, so a synthetic Meta
-    // event scrubbed here would pass while the real Meta `href` ships as-is.
-    // The Meta href is clean only if the URL is clean when recording starts:
-    // the magic-link fragment relies on being stripped before Sentry.init
-    // (magic-link-capture.test.ts), and the join page's intent `?token=` is
-    // not stripped at all (TECH-DEBT-BACKLOG.md, 2026-09-27).
+    // ROK-1838 / Codex P1: the hook itself must scrub a recorded `href`,
+    // whatever event shape carries it — error reporting is now ON by default,
+    // so Replay runs on instances that never opted in.
+    //
+    // CAVEAT, do not read this as the Meta leak being closed: at runtime
+    // Replay applies this hook only to type-5 custom events
+    // (`maybeApplyCallback` → `isCustomEvent`,
+    // node_modules/@sentry/replay/build/npm/esm/index.js:5893), so the real
+    // rrweb Meta (type 4) `href` never reaches it. The Meta href is clean
+    // only if the address bar is clean when recording starts: the magic-link
+    // fragment is stripped before Sentry.init (magic-link-capture.test.ts),
+    // but the join page's intent `?token=` is not stripped at all
+    // (TECH-DEBT-BACKLOG.md 2026-09-27 + 2026-10-17).
+    it('scrubs a token-bearing href carried by a recording event', () => {
+        const out = recordingHook({
+            type: 4,
+            timestamp: 1,
+            data: { href: `https://rl.test/join?intent=signup&token=${SECRET}`, width: 1280 },
+        }) as { data: { href: string; width: number } };
+        expectNoSecret(out);
+        expect(out.data.href).toBe(
+            'https://rl.test/join?intent=signup&token=[Filtered]',
+        );
+        expect(out.data.width).toBe(1280);
+    });
+
+    it('scrubs a token-bearing href nested in a custom event payload', () => {
+        const out = recordingHook({
+            type: 5,
+            timestamp: 1,
+            data: {
+                tag: 'breadcrumb',
+                payload: { category: 'replay.hydrate-error', href: `/join?token=${SECRET}` },
+            },
+        }) as { data: { payload: { href: string } } };
+        expectNoSecret(out);
+        expect(out.data.payload.href).toBe('/join?token=[Filtered]');
+    });
 
     it('passes an unrelated rrweb event through unchanged', () => {
         const event = { type: 2, timestamp: 1, data: { node: { id: 1 } } };
