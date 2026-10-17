@@ -104,6 +104,7 @@ import { DemoTestEphemeralVoiceController } from './demo-test-ephemeral-voice.co
 import { DemoTestLobbyPresenceController } from './demo-test-lobby-presence.controller';
 import { PlayingCommand } from './commands/playing.command';
 import { LfgCommand } from './commands/lfg.command';
+import { LfgLeaveCommand } from './commands/lfg-leave.command';
 import { LfgWithdrawListener } from './listeners/lfg-withdraw.listener';
 import { LfgLeaveListener } from './listeners/lfg-leave.listener';
 import { LfgJoinListener } from './listeners/lfg-join.listener';
@@ -230,6 +231,7 @@ import { GameRoleAccountDeleteListener } from './game-roles/game-role-account-de
     HelpCommand,
     PlayingCommand,
     LfgCommand,
+    LfgLeaveCommand,
     LfgWithdrawListener,
     LfgLeaveListener,
     LfgJoinListener,
