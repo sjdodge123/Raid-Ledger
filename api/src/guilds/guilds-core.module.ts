@@ -6,6 +6,7 @@ import { GuildDiscordService } from './guild-discord.service';
 import { GuildEditorGuard } from './guild-editor.guard';
 import { GuildEditorsService } from './guild-editors.service';
 import { GuildProfileService } from './guild-profile.service';
+import { HubKindActiveGuard } from './hub-kind-active.guard';
 import { HubKindRegistry } from './hub-kind.registry';
 
 /**
@@ -23,6 +24,7 @@ import { HubKindRegistry } from './hub-kind.registry';
     GuildEditorsService,
     GuildProfileService,
     GuildDiscordService,
+    HubKindActiveGuard,
     HubKindRegistry,
   ],
   exports: [

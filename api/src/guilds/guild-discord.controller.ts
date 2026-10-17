@@ -16,13 +16,9 @@ import type {
   GuildDiscordMirrorDto,
 } from '@raid-ledger/contract';
 import type { AuthenticatedRequest } from '../auth/types';
-import {
-  PluginActiveGuard,
-  RequirePlugin,
-} from '../plugins/plugin-host/plugin-active.guard';
-import { WOW_COMMON_MANIFEST } from '../plugins/wow-common/manifest';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildEditorGuard } from './guild-editor.guard';
+import { HubKindActiveGuard } from './hub-kind-active.guard';
 
 const jwt = AuthGuard('jwt');
 
@@ -32,8 +28,7 @@ const jwt = AuthGuard('jwt');
  * service); the channel list and the binding writes need `GuildEditorGuard`.
  */
 @Controller('plugins/wow/guilds/:id/discord')
-@UseGuards(PluginActiveGuard)
-@RequirePlugin(WOW_COMMON_MANIFEST.id)
+@UseGuards(HubKindActiveGuard)
 export class GuildDiscordController {
   constructor(private readonly discord: GuildDiscordService) {}
 
