@@ -88,9 +88,12 @@ export class PelicanPresenceSession {
     return this.opts.source.pelicanServerId;
   }
 
-  /** Who is on this server now, tagged with its source (ROK-1801 read port). */
+  /**
+   * Who is on this server now, tagged with its source (ROK-1801 read port),
+   * with each named player's character owner (ROK-1828).
+   */
   players(): ServerRosterPlayer[] {
-    return rosterOf(this.opts.source, this.tracker.snapshot());
+    return rosterOf(this.opts.source, this.tracker.snapshotWithOwners());
   }
 
   async start(): Promise<void> {

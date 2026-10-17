@@ -27,6 +27,12 @@ export interface ServerRosterPlayer extends ServerPresenceSource {
   steamId: string;
   /** In-game character name; null until a character line names them. */
   name: string | null;
+  /**
+   * ROK-1828: the owner id of the character that named them (Valheim: the
+   * ZDOID session id). Set only next to a name. An enrol from the tracker
+   * persists it, so a restart can tell a same-named stranger from a respawn.
+   */
+  characterOwnerId?: string;
 }
 
 export interface ServerPresenceReader {
@@ -42,5 +48,14 @@ export function rosterOf(
   players: PresentPlayer[],
 ): ServerRosterPlayer[] {
   const { pelicanServerId, gameId } = source;
-  return players.map((p) => ({ pelicanServerId, gameId, ...p }));
+  return players.map(({ steamId, name, owner }) => ({
+    pelicanServerId,
+    gameId,
+    steamId,
+    name,
+    // The owner only means something next to its name (ROK-1822 r3).
+    ...(name !== null && owner !== undefined
+      ? { characterOwnerId: owner }
+      : {}),
+  }));
 }
