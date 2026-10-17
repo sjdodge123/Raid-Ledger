@@ -128,9 +128,10 @@ export class InviteService {
     }
     assertSlotClaimable(slot);
     const event = await findClaimEventOrThrow(this.db, slot.eventId);
-    await checkNotAlreadySignedUp(this.db, slot.eventId, userId, slot.id);
+    // Ownership first: the duplicate-signup check DELETES the slot (ROK-1825).
     const user = await this.findUserOrThrow(userId);
     assertClaimerIsInvitee(slot, user.discordId);
+    await checkNotAlreadySignedUp(this.db, slot.eventId, userId, slot.id);
     const role =
       roleOverride ?? (slot.role as 'tank' | 'healer' | 'dps' | 'player');
     return user.discordId

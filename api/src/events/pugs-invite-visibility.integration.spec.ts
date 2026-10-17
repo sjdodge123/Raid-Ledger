@@ -141,6 +141,25 @@ describe('ROK-1825 PUG invite code visibility + claim binding (integration)', ()
     expect(slot?.status).toBe('invited');
   });
 
+  it('an already-signed-up non-invitee cannot destroy the reserved slot', async () => {
+    const intruder = await createMemberAndLogin(testApp, 'dup', 'dup@t.local');
+    await testApp.db
+      .insert(schema.eventSignups)
+      .values({ eventId: f.eventId, userId: intruder.userId });
+    const res = await testApp.request
+      .post(`/invite/${INVITE_CODE}/claim`)
+      .set('Authorization', `Bearer ${intruder.token}`)
+      .send({});
+    const slots = await testApp.db
+      .select({ status: schema.pugSlots.status })
+      .from(schema.pugSlots)
+      .where(eq(schema.pugSlots.inviteCode, INVITE_CODE));
+    expect({ status: res.status, slots }).toEqual({
+      status: 403,
+      slots: [{ status: 'invited' }],
+    });
+  });
+
   it('the reserved invitee can still claim the slot', async () => {
     const pug = await createMemberAndLogin(testApp, 'pug', 'pug@test.local');
     await testApp.db
