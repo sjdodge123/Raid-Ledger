@@ -12,6 +12,7 @@ import { truncateAllTables } from '../../../common/testing/integration-helpers';
 import { nonEmpty } from '../../../common/testing/narrow';
 import * as schema from '../../../drizzle/schema';
 import { AdHocParticipantService } from '../../../discord-bot/services/ad-hoc-participant.service';
+import { SettingsService } from '../../../settings/settings.service';
 import { PelicanPresenceSession } from './pelican-presence.session';
 import {
   fakeLogger,
@@ -108,6 +109,14 @@ beforeAll(async () => {
   });
 });
 
+// The sink drops every server join while Quick Play is switched off, so a
+// new player's row (and the absence assertions) only mean something with it on.
+beforeEach(async () => {
+  await testApp.app
+    .get(SettingsService)
+    .set(schema.SETTING_KEYS.AD_HOC_EVENTS_ENABLED, 'true');
+});
+
 afterEach(async () => {
   testApp.seed = await truncateAllTables(testApp.db);
 });
@@ -199,6 +208,11 @@ describe('Presence session rehydrate — character owner ids (ROK-1822 r3)', () 
     expect([rowB.characterName, rowB.characterOwnerId]).toEqual([
       'rok',
       'zdo-owner-b',
+    ]);
+    const [rowA] = nonEmpty(await steamRows(eventId, STEAM_A), 'linked row');
+    expect([rowA.characterName, rowA.characterOwnerId]).toEqual([
+      'rok',
+      'zdo-owner-a',
     ]);
     await session.stop(false);
   });
