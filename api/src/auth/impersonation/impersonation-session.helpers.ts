@@ -39,11 +39,6 @@ export function markerExpiry(now: Date): Date {
   return new Date(now.getTime() + IMPERSONATION_TTL_MS);
 }
 
-/** Whole seconds until `expiresAt` (≥1), for `jwtService.sign({ expiresIn })`. */
-export function secondsUntil(expiresAt: Date, now: Date): number {
-  return Math.max(1, Math.floor((expiresAt.getTime() - now.getTime()) / 1000));
-}
-
 /**
  * A kick still in its cooldown at `now`. Same boundary as `isKickExpired`
  * (§9.3) — `kickedAt` is cleared lazily at the next login, so a stale value

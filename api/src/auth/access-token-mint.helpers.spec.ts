@@ -7,7 +7,12 @@ import { JwtService } from '@nestjs/jwt';
 import type Redis from 'ioredis';
 import { TokenBlocklistService } from './token-blocklist.service';
 import { mockRedisEval } from '../common/testing/redis-mock';
-import { issuedAtFor, signAccessToken } from './access-token-mint.helpers';
+import {
+  ACCESS_TOKEN_TTL_SECONDS,
+  BornExpiredTokenError,
+  issuedAtFor,
+  signAccessToken,
+} from './access-token-mint.helpers';
 
 const NOW = new Date('2026-10-16T12:00:00.250Z');
 const CLAIMS = { username: 'admin', sub: 7, role: 'admin' as const };
@@ -115,5 +120,57 @@ describe('ROK-1810 Codex r3 — impersonation vs a same-second block of either i
     const iat = iatOf(t.jwt, await signAccessToken(t, IMP));
     expect(await t.blocklist.isBlocked(CLAIMS.sub, iat)).toBe(false);
     expect(await t.blocklist.isBlocked(99, iat)).toBe(false);
+  });
+});
+
+describe('ROK-1820 exp is anchored to the clock, not the floored iat', () => {
+  beforeEach(() => jest.useFakeTimers({ now: NOW }));
+  afterEach(() => jest.useRealTimers());
+
+  const SECOND = Math.floor(NOW.getTime() / 1000);
+  const claimsOf = (jwt: JwtService, token: string) =>
+    jwt.decode<{ iat: number; exp: number }>(token);
+
+  it('a floored iat does not lengthen the token: exp = clock + ttl', async () => {
+    const t = build();
+    await t.blocklist.blockUser(CLAIMS.sub);
+    const { iat, exp } = claimsOf(t.jwt, await signAccessToken(t, CLAIMS));
+    expect({ iat, exp }).toEqual({
+      iat: SECOND + 1,
+      exp: SECOND + ACCESS_TOKEN_TTL_SECONDS,
+    });
+  });
+
+  it('an explicit ttl is also counted from the clock', async () => {
+    const t = build();
+    await t.blocklist.blockUser(CLAIMS.sub);
+    const token = await signAccessToken(t, CLAIMS, { ttlSeconds: 60 });
+    expect(claimsOf(t.jwt, token).exp).toBe(SECOND + 60);
+  });
+
+  it('impersonation exp never passes the marker deadline when iat is floored', async () => {
+    const t = build();
+    await t.blocklist.blockUser(99);
+    const notAfter = new Date((SECOND + 10) * 1000 + 900);
+    const token = await signAccessToken(
+      t,
+      { ...CLAIMS, impersonatedBy: 99 },
+      { ttlSeconds: 3600, notAfter },
+    );
+    expect(claimsOf(t.jwt, token)).toMatchObject({
+      iat: SECOND + 1,
+      exp: SECOND + 10,
+    });
+  });
+
+  it('refuses to mint a token the floor would make born expired', async () => {
+    const t = build();
+    await t.blocklist.blockUser(99);
+    const notAfter = new Date((SECOND + 1) * 1000);
+    const sign = jest.spyOn(t.jwt, 'sign');
+    await expect(
+      signAccessToken(t, { ...CLAIMS, impersonatedBy: 99 }, { notAfter }),
+    ).rejects.toBeInstanceOf(BornExpiredTokenError);
+    expect(sign).not.toHaveBeenCalled();
   });
 });

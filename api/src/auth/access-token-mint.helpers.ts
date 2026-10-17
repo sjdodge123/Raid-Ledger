@@ -4,7 +4,8 @@
  * second as a `blockUser` would be born revoked. Every access-token mint goes
  * through `signAccessToken`, which signs with `iat = max(now, stamp + 1)`.
  */
-import type { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { UnauthorizedException } from '@nestjs/common';
+import type { JwtService } from '@nestjs/jwt';
 import type { UserRole } from '@raid-ledger/contract';
 import type { TokenBlocklistService } from './token-blocklist.service';
 
@@ -15,6 +16,31 @@ export interface AccessTokenClaims {
   role: UserRole;
   /** Set on an impersonation token; `JwtStrategy` checks this id's block too. */
   impersonatedBy?: number;
+}
+
+/** Access-token lifetime when a mint gives no `ttlSeconds` (ROK-1353: 1h). */
+export const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
+
+/**
+ * ROK-1820: how long a token may live, both measured from the real clock —
+ * never from a floor-raised `iat`.
+ */
+export interface MintOptions {
+  /** Lifetime from the clock; defaults to `ACCESS_TOKEN_TTL_SECONDS`. */
+  ttlSeconds?: number;
+  /** Absolute deadline (an impersonation marker's `expires_at`). */
+  notAfter?: Date;
+}
+
+/**
+ * ROK-1820: the block floor pushed `iat` to or past the token's deadline, so
+ * the token would be born expired. Never signed; callers end the session or
+ * fall back (refresh mints the holder's own token).
+ */
+export class BornExpiredTokenError extends UnauthorizedException {
+  constructor() {
+    super('Session expired');
+  }
 }
 
 type MintDeps = {
@@ -49,17 +75,36 @@ async function blockFloor(
 }
 
 /**
- * Sign an access JWT whose `iat` a live block can never reject. `nowMs` lets
- * a caller pin the clock to the moment it read the block floor (the refresh
- * path's revoke-race guard), so a block written after that read still
- * covers the token.
+ * `exp` in seconds: `clock + ttl`, capped at `notAfter`. Anchored to the
+ * clock so a floor-raised `iat` never lengthens the token (ROK-1820).
+ */
+export function expiresAtFor(
+  options: MintOptions | undefined,
+  nowMs: number,
+): number {
+  const ttl = options?.ttlSeconds ?? ACCESS_TOKEN_TTL_SECONDS;
+  const exp = Math.floor(nowMs / 1000) + ttl;
+  const notAfter = options?.notAfter;
+  return notAfter ? Math.min(exp, Math.floor(notAfter.getTime() / 1000)) : exp;
+}
+
+/**
+ * Sign an access JWT whose `iat` a live block can never reject and whose
+ * `exp` is anchored to the clock (and to `notAfter`). `nowMs` lets a caller
+ * pin the clock to the moment it read the block floor (the refresh path's
+ * revoke-race guard), so a block written after that read still covers the
+ * token. Throws `BornExpiredTokenError` when the floor leaves no lifetime.
  */
 export async function signAccessToken(
   deps: MintDeps,
   claims: AccessTokenClaims,
-  options?: JwtSignOptions,
+  options?: MintOptions,
   nowMs: number = Date.now(),
 ): Promise<string> {
   const iat = issuedAtFor(await blockFloor(deps.blocklist, claims), nowMs);
-  return deps.jwt.sign({ ...claims, iat }, options);
+  const exp = expiresAtFor(options, nowMs);
+  if (exp <= iat) throw new BornExpiredTokenError();
+  // `expiresIn` is counted from the payload `iat`; it also overrides the
+  // module default so the two can never disagree.
+  return deps.jwt.sign({ ...claims, iat }, { expiresIn: exp - iat });
 }
