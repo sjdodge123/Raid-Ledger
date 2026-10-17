@@ -214,19 +214,20 @@ describe('toPublicSignup — anonymous viewer', () => {
     });
   });
 
-  it('builds the CDN avatar URL for a linked member', () => {
-    expect(toPublicSignup(memberSignup()).user.avatar).toBe(
-      `${CDN}/${MEMBER_SNOWFLAKE}/memberhash.png`,
-    );
+  it('sends no CDN avatar URL for a linked member (ROK-1827)', () => {
+    const out = toPublicSignup(memberSignup());
+    expect(out.user.avatar).toBeNull();
+    expect(JSON.stringify(out)).not.toContain(MEMBER_SNOWFLAKE);
   });
 
-  it('builds the avatar for an anonymous Discord signup from the row hash', () => {
+  it('sends no avatar for an anonymous Discord signup either (ROK-1827)', () => {
     const out = toPublicSignup(anonDiscordSignup());
     expect(out.user).toEqual({
       id: 0,
       username: 'DiscordGuest',
-      avatar: `${CDN}/${ANON_SNOWFLAKE}/anonhash.png`,
+      avatar: null,
     });
+    expect(JSON.stringify(out)).not.toContain(ANON_SNOWFLAKE);
     expect(out.isAnonymous).toBe(true);
     expect(out.discordUsername).toBe('DiscordGuest');
   });
@@ -238,10 +239,11 @@ describe('toPublicSignup — anonymous viewer', () => {
 });
 
 describe('toPublicSignupUser / toPublicCreator', () => {
-  it('drops discordId and builds the avatar URL', () => {
+  it('drops discordId AND the avatar hash (ROK-1827)', () => {
     const out = toPublicSignupUser(memberSignup().user);
     expect(Object.keys(out)).not.toContain('discordId');
-    expect(out.avatar).toBe(`${CDN}/${MEMBER_SNOWFLAKE}/memberhash.png`);
+    expect(out.avatar).toBeNull();
+    expect(JSON.stringify(out)).not.toContain(CDN);
     expect(out.characters).toEqual([
       { gameId: 1, avatarUrl: 'https://img/c.png' },
     ]);
@@ -252,11 +254,17 @@ describe('toPublicSignupUser / toPublicCreator', () => {
     expect(toPublicSignupUser(local).avatar).toBeNull();
   });
 
+  it('passes a custom absolute avatar URL through (no id inside it)', () => {
+    const custom = { ...memberSignup().user, avatar: 'https://ex.com/a.png' };
+    expect(toPublicSignupUser(custom).avatar).toBe('https://ex.com/a.png');
+  });
+
   it('projects the event creator without discordId', () => {
     const out = toPublicCreator(event().creator);
     expect(Object.keys(out)).not.toContain('discordId');
     expect(out).toMatchObject({ id: 3, username: 'Jaina' });
-    expect(out.avatar).toBe(`${CDN}/${CREATOR_SNOWFLAKE}/creatorhash.png`);
+    expect(out.avatar).toBeNull();
+    expect(JSON.stringify(out)).not.toContain(CREATOR_SNOWFLAKE);
   });
 });
 
@@ -275,8 +283,14 @@ describe('toPublicRosterAssignment — anonymous viewer', () => {
       position: 1,
       signupStatus: 'signed_up',
       character: { className: 'Shaman', role: 'tank' },
-      avatar: `${CDN}/${MEMBER_SNOWFLAKE}/memberhash.png`,
+      avatar: null,
     });
+  });
+
+  it('leaks no snowflake and no CDN url in the serialised row (ROK-1827)', () => {
+    const body = JSON.stringify(toPublicRosterAssignment(assignment()));
+    expect(body).not.toContain(MEMBER_SNOWFLAKE);
+    expect(body).not.toContain(CDN);
   });
 
   it('nulls the avatar for an unlinked member', () => {
@@ -292,6 +306,10 @@ describe('route projections — anonymous viewer has no Discord id key anywhere'
     const out = projectRosterForViewer(roster(), false);
     expect(forbiddenKeyPaths(out)).toEqual([]);
     expect(out.signups).toHaveLength(2);
+    const body = JSON.stringify(out);
+    expect(body).not.toContain(MEMBER_SNOWFLAKE);
+    expect(body).not.toContain(ANON_SNOWFLAKE);
+    expect(body).not.toContain(CDN);
   });
 
   it('GET /events/:id/roster/assignments', () => {

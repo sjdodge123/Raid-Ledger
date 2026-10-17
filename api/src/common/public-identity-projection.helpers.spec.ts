@@ -104,11 +104,11 @@ function nowPlaying(): GameNowPlayingResponseDto {
   return { players: [{ userId: 1, username: 'linked', ...linked }], count: 1 };
 }
 
-describe('toPublicIdentity (ROK-1734)', () => {
-  it('drops discordId and builds the CDN URL for a linked user', () => {
+describe('toPublicIdentity (ROK-1734, tightened by ROK-1827)', () => {
+  it('drops discordId AND the avatar hash for a linked user — no CDN URL', () => {
     expect(toPublicIdentity({ id: 1, ...linked })).toEqual({
       id: 1,
-      avatar: CDN,
+      avatar: null,
       customAvatarUrl: CUSTOM,
     });
   });
@@ -121,8 +121,11 @@ describe('toPublicIdentity (ROK-1734)', () => {
     ).toBeNull();
   });
 
-  it('passes an absolute avatar URL through', () => {
+  it('passes an absolute avatar URL through (a custom upload has no id)', () => {
     expect(toPublicIdentity({ discordId: null, avatar: CUSTOM }).avatar).toBe(
+      CUSTOM,
+    );
+    expect(toPublicIdentity({ discordId: SNOWFLAKE, avatar: CUSTOM }).avatar).toBe(
       CUSTOM,
     );
   });
@@ -141,11 +144,17 @@ describe.each(cases)('%s — anonymous viewer', (_name, run) => {
     expectNoIdentityKeys(run());
   });
 
-  it('serves the linked user a server-built CDN avatar and keeps customAvatarUrl', () => {
+  it('sends the linked user no avatar at all, but keeps customAvatarUrl (ROK-1827)', () => {
     const body = JSON.stringify(run());
-    expect(body).toContain(`"avatar":"${CDN}"`);
+    expect(body).toContain('"avatar":null');
     expect(body).toContain(`"customAvatarUrl":"${CUSTOM}"`);
     expect(body).not.toContain('"avatar":"hash1"');
+    expect(body).not.toContain(CDN);
+    expect(body).not.toContain('cdn.discordapp.com/avatars');
+  });
+
+  it('carries the Discord snowflake nowhere in the serialised body (ROK-1827)', () => {
+    expect(JSON.stringify(run())).not.toContain(SNOWFLAKE);
   });
 });
 
@@ -175,9 +184,9 @@ describe('anonymous shapes', () => {
     expect(out.data.steamLinked).toBe(true);
   });
 
-  it('local:/unlinked: users get a null avatar on /users', () => {
+  it('every user gets a null avatar on /users — linked included (ROK-1827)', () => {
     const out = projectPlayersList(playersList(), false);
-    expect(out.data.map((u) => u.avatar)).toEqual([CDN, null, null]);
+    expect(out.data.map((u) => u.avatar)).toEqual([null, null, null]);
   });
 });
 

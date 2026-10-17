@@ -1,6 +1,7 @@
 /**
  * ROK-1629 (Q4) — the scheduling poll page strips voter / member Discord ids
  * for anonymous and deactivated viewers; members keep the full payload.
+ * ROK-1827 — and the avatar goes with them: a Discord CDN URL embeds the id.
  */
 import type { SchedulePollPageResponseDto } from '@raid-ledger/contract';
 import { projectSchedulePollForViewer } from './scheduling-public-projection.helpers';
@@ -38,11 +39,26 @@ describe('projectSchedulePollForViewer (ROK-1629 Q4)', () => {
     expect(out.slots[0]?.votes[0]?.displayName).toBe('Thrall');
   });
 
-  it('turns the avatar hash into a server-built CDN URL', () => {
+  it('drops the avatar hash entirely — no CDN URL to read the id out of (ROK-1827)', () => {
     const out = projectSchedulePollForViewer(poll(), false);
-    const url = `https://cdn.discordapp.com/avatars/${SNOWFLAKE}/hash1.png`;
-    expect(out.slots[0]?.noVotes[0]?.avatar).toBe(url);
-    expect(out.match.members[0]?.avatar).toBe(url);
+    expect(out.slots[0]?.noVotes[0]?.avatar).toBeNull();
+    expect(out.match.members[0]?.avatar).toBeNull();
+    expect(JSON.stringify(out)).not.toContain('cdn.discordapp.com');
+  });
+
+  it('carries the Discord snowflake nowhere in the serialised body (ROK-1827)', () => {
+    expect(JSON.stringify(projectSchedulePollForViewer(poll(), false)))
+      .not.toContain(SNOWFLAKE);
+  });
+
+  it('passes a custom absolute avatar URL through (no id inside it)', () => {
+    const p = poll();
+    const member = p.match.members[0];
+    if (!member) throw new Error('fixture: no member');
+    member.avatar = 'https://example.com/custom.png';
+    expect(projectSchedulePollForViewer(p, false).match.members[0]?.avatar).toBe(
+      'https://example.com/custom.png',
+    );
   });
 
   it('returns the member payload untouched', () => {
