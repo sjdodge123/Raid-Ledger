@@ -30,6 +30,10 @@ export const INTRO_LEGACY_TITLES: readonly string[] = ['How this board works'];
 export const INTRO_TITLES: readonly string[] = [INTRO_TITLE, ...INTRO_LEGACY_TITLES];
 /** `LFG_JOIN_BUTTON_LABEL`. U+00B7 MIDDLE DOT, as the API constant spells it. */
 export const JOIN_LABEL = "+1 · I'm in";
+/** `LFG_LEAVE_BUTTON_LABEL` (ROK-1660). Plain ASCII apostrophe. */
+export const LEAVE_LABEL = "I'm out";
+/** `LFG_BUTTON_IDS.LEAVE` (ROK-1660) — the board post's `I'm out` id prefix. */
+export const LEAVE_CUSTOM_ID = 'lfg:leave';
 /** `LFG_OPEN_GROUP_LABEL`. U+2197 NORTH EAST ARROW. */
 export const OPEN_GROUP_LABEL = 'Open group ↗';
 /** `LFG_BUTTON_IDS.JOIN` — the custom id prefix the join listener slices. */

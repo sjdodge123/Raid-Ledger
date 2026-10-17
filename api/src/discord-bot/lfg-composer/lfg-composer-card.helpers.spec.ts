@@ -157,8 +157,30 @@ describe('the pinned card never carries a link or a token (ROK-1685 AC3)', () =>
     'omits View games when no client URL is configured (%p)',
     (clientUrl) => {
       const card = buildComposerCard(clientUrl);
-      expect(card.components[0]?.toJSON().components).toHaveLength(1);
+      const ids = at(card.components, 0)
+        .toJSON()
+        .components.map((c) => ('custom_id' in c ? c.custom_id : null));
+      expect(ids).toEqual(['lfgc:open', 'lfgc:mine']);
       expect(JSON.stringify(card.components)).not.toContain('lfgc:view');
     },
   );
+});
+
+describe('the intro carries My LFGs (ROK-1660)', () => {
+  it('is the third button: Post an LFG · View games ↗ · My LFGs', () => {
+    const row = at(buildComposerCard(CLIENT_URL).components, 0).toJSON();
+    const labels = row.components.map((c) => ('label' in c ? c.label : null));
+    expect(labels).toEqual(['+ Post an LFG', 'View games ↗', 'My LFGs']);
+    expect(row.components[2]).toMatchObject({
+      type: ComponentType.Button,
+      style: ButtonStyle.Secondary,
+      label: LFG_COMPOSER_COPY.MY_LFGS_BUTTON,
+      custom_id: 'lfgc:mine',
+    });
+  });
+
+  it('is a press, never a link — the intro is public', () => {
+    const row = at(buildComposerCard(CLIENT_URL).components, 0).toJSON();
+    expect(row.components[2]).not.toHaveProperty('url');
+  });
 });

@@ -19,6 +19,7 @@ import { BindingsCommand } from '../discord-bot/commands/bindings.command';
 import { InviteCommand } from '../discord-bot/commands/invite.command';
 import { PlayingCommand } from '../discord-bot/commands/playing.command';
 import { LfgCommand } from '../discord-bot/commands/lfg.command';
+import { LfgLeaveCommand } from '../discord-bot/commands/lfg-leave.command';
 
 type HandlerClass = new (...args: any[]) => CommandInteractionHandler;
 
@@ -34,6 +35,7 @@ const HANDLER_MAP: Record<string, HandlerClass> = {
   invite: InviteCommand,
   playing: PlayingCommand,
   lfg: LfgCommand,
+  'lfg-leave': LfgLeaveCommand,
 };
 
 export interface ExecuteCommandDto {

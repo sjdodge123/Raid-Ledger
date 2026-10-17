@@ -49,6 +49,11 @@ export const LFG_COMPOSER_IDS = {
    * magic link instead of one token everyone could reuse.
    */
   VIEW: 'lfgc:view',
+  /**
+   * The intro's `My LFGs` (ROK-1660). Answers the presser privately with their
+   * own `/lfg` list; the shared intro message is never edited.
+   */
+  MINE: 'lfgc:mine',
 } as const;
 
 /**
@@ -71,6 +76,8 @@ export const LFG_COMPOSER_COPY = {
   /** The leading `+` is the approved prototype's label (ROK-1658), not an emoji. */
   POST_BUTTON: '+ Post an LFG',
   VIEW_GAMES_BUTTON: 'View games ↗',
+  /** ROK-1660 — the presser's own list, with a `Leave · {game}` per row. */
+  MY_LFGS_BUTTON: 'My LFGs',
   MODAL_TITLE: 'Post an LFG',
   MODAL_INPUT_LABEL: 'Game',
   MODAL_PLACEHOLDER: 'Start typing a game name',

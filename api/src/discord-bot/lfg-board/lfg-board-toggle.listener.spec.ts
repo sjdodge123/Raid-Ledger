@@ -255,7 +255,10 @@ describe('LfgBoardToggleListener (ROK-1471 A4)', () => {
     const body = message.content;
     expect(body).toContain('+1');
     expect(body).toContain('/lfg');
-    expect(body.toLowerCase()).toContain('withdraw');
+    // ROK-1660: the intro names every way out (was: "Run /lfg and press Withdraw").
+    expect(body).toContain("I'm out");
+    expect(body).toContain('My LFGs');
+    expect(body).toContain('/lfg-leave');
     // ROK-1658 concise copy: posts "close" (was: retagged + archived).
     expect(body).toContain('Posts close');
     expect(body).toBe(LFG_BOARD_INTRO_BODY);
@@ -653,10 +656,18 @@ describe('LFG_BOARD_INTRO_BODY (ROK-1658 concise intro)', () => {
       '**Start one**: press **Post an LFG** below, or use `/lfg` or the Raid Ledger site.',
       "**Join one**: press **+1 · I'm in** on a post. It's interest, not a commitment.",
       '**When**: Right now (drops after 30 min) · Tonight (until 4 AM) · This week (next 7 days).',
-      '**Changed your mind?** Run `/lfg` and press **Withdraw**.',
+      "**Leave one**: press **I'm out** on the post, **My LFGs** below, or `/lfg-leave`.",
       '',
       "Posts close when the group becomes an event, when everyone's hand expires, or 7 days after they open. Still looking? Post again.",
     ]);
+  });
+
+  it('names every way to leave and drops the old Withdraw line (ROK-1660)', () => {
+    expect(LFG_BOARD_INTRO_BODY).not.toContain('Changed your mind');
+    expect(LFG_BOARD_INTRO_BODY).not.toContain('**Withdraw**');
+    expect(LFG_BOARD_INTRO_BODY).toContain("**I'm out**");
+    expect(LFG_BOARD_INTRO_BODY).toContain('**My LFGs**');
+    expect(LFG_BOARD_INTRO_BODY).toContain('`/lfg-leave`');
   });
 
   it('no longer tells members they cannot post (the composer lets them)', () => {

@@ -65,7 +65,8 @@ describe('buildComposerCard', () => {
 
   it('keeps View games as permanent furniture beside Post an LFG', () => {
     const row = at(buildComposerCard(CLIENT_URL).components, 0).toJSON();
-    expect(row.components).toHaveLength(2);
+    // ROK-1660 adds My LFGs as the third button.
+    expect(row.components).toHaveLength(3);
     expect(row.components[0]).toMatchObject({
       style: ButtonStyle.Primary,
       label: '+ Post an LFG',
@@ -81,7 +82,12 @@ describe('buildComposerCard', () => {
 
   it('drops View games rather than the card when no client URL is configured', () => {
     const row = at(buildComposerCard(null).components, 0).toJSON();
-    expect(row.components).toHaveLength(1);
+    // Post an LFG + My LFGs (ROK-1660) — My LFGs needs no client URL.
+    expect(row.components).toHaveLength(2);
+    expect(row.components[1]).toMatchObject({
+      label: LFG_COMPOSER_COPY.MY_LFGS_BUTTON,
+      custom_id: 'lfgc:mine',
+    });
     expect(gamesPageUrl(null)).toBeNull();
   });
 
