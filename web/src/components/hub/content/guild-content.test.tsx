@@ -15,6 +15,7 @@ import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { usePluginHydration } from '../../../hooks/use-plugins';
 import { usePluginStore } from '../../../stores/plugin-store';
 import { at } from '../../../test/defined';
+import { guildPageKey } from '../api/use-guild';
 import { GuildPage } from '../hub-page';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
@@ -354,41 +355,82 @@ function HydrationHost(): null {
     return null;
 }
 
+const HERO = '[data-testid="guild-hero"]';
+
+/**
+ * Count every hero attach/detach across the WHOLE hydration window, not just
+ * the endpoints: comparing the node before and after would miss a frame that
+ * remounted and settled back before the next query ran.
+ */
+function watchHero(): { counts: () => { attaches: number; detaches: number }; stop: () => void } {
+    let attaches = 0;
+    let detaches = 0;
+    const holdsHero = (node: Node): boolean =>
+        node instanceof HTMLElement && (node.matches(HERO) || node.querySelector(HERO) !== null);
+    const absorb = (records: MutationRecord[]): void => {
+        for (const record of records) {
+            for (const node of Array.from(record.addedNodes)) if (holdsHero(node)) attaches += 1;
+            for (const node of Array.from(record.removedNodes)) if (holdsHero(node)) detaches += 1;
+        }
+    };
+    const observer = new MutationObserver(absorb);
+    observer.observe(document.body, { childList: true, subtree: true });
+    return {
+        counts: () => { absorb(observer.takeRecords()); return { attaches, detaches }; },
+        stop: () => observer.disconnect(),
+    };
+}
+
 describe('the hub frame and an asynchronous plugin list', () => {
     it('holds the loading state until the plugin list hydrates, then mounts the hero exactly once', async () => {
-        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false });
+        usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: false, settled: false });
         let releaseStatus = (): void => {};
         const statusSettled = new Promise<void>((resolve) => { releaseStatus = (): void => { resolve(); }; });
-        let pageFetches = 0;
         serve(false, EMPTY_PROFILE, list);
         server.use(
-            http.get(BASE, () => { pageFetches += 1; return HttpResponse.json(makePage(false)); }),
             http.get('http://localhost:3000/system/status', async () => {
                 await statusSettled;
                 return HttpResponse.json({ status: 'ok', activePlugins: ['blizzard'] });
             }),
         );
 
-        renderWithProviders(
-            <><HydrationHost /><Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes></>,
-            { initialEntries: ['/guilds/7'] },
-        );
-        await waitFor(() => expect(pageFetches, 'the guild payload must have been served').toBeGreaterThan(0));
-        await waitFor(() => expect(
-            screen.queryByTestId('guild-loading'),
-            'the page must still be loading while the plugin list is in flight, not showing a frame built without the module',
-        ).not.toBeNull());
-        expect(
-            screen.queryByTestId('guild-hero'),
-            'the frame must not mount while the plugin list is still in flight — the module arriving would remount it',
-        ).toBeNull();
+        const heroMoves = watchHero();
+        const queryClient = createTestQueryClient();
+        try {
+            renderWithProviders(
+                <><HydrationHost /><Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes></>,
+                { initialEntries: ['/guilds/7'], queryClient },
+            );
+            // The guild payload is COMMITTED to the cache — a served request is
+            // not yet data the page could have drawn, so counting handler calls
+            // would judge the loading state too early.
+            await waitFor(() => expect(
+                queryClient.getQueriesData({ queryKey: guildPageKey(7) }).some(([, data]) => data !== undefined),
+                'the guild payload must be in the query cache before we judge what the page is showing',
+            ).toBe(true));
+            expect(
+                screen.queryByTestId('guild-loading'),
+                'with the guild payload cached and the plugin list still in flight, the page must still be loading',
+            ).not.toBeNull();
+            expect(
+                screen.queryByTestId('guild-hero'),
+                'the frame must not mount while the plugin list is still in flight — the module arriving would remount it',
+            ).toBeNull();
 
-        releaseStatus();
-        const hero = await screen.findByTestId('guild-hero');
-        expect(await tabLabels(), 'the module tabs must be present as soon as the frame is').toContain('Raids');
-        expect(
-            screen.getByTestId('guild-hero'),
-            'hydrating the plugin list must not remount the frame: the hero must be the same DOM node',
-        ).toBe(hero);
+            releaseStatus();
+            const hero = await screen.findByTestId('guild-hero');
+            expect(await tabLabels(), 'the module tabs must be present as soon as the frame is').toContain('Raids');
+            expect(
+                screen.getByTestId('guild-hero'),
+                'hydrating the plugin list must not remount the frame: the hero must be the same DOM node',
+            ).toBe(hero);
+            await waitFor(() => expect(heroMoves.counts().attaches, 'the hero must have attached').toBe(1));
+            expect(
+                heroMoves.counts(),
+                'across the whole hydration window the hero must attach exactly once and never detach',
+            ).toEqual({ attaches: 1, detaches: 0 });
+        } finally {
+            heroMoves.stop();
+        }
     });
 });

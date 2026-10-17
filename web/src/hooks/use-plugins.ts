@@ -30,9 +30,26 @@ export function usePluginHydration(): void {
  * A failed status request, and a response that carries no `activePlugins`,
  * both settle as "no plugins": `usePluginHydration` has nothing to apply, so
  * waiting for `initialized` would wait forever.
+ *
+ * Those two outcomes are read off a live query, so they can be withdrawn —
+ * a new observer on a warm navigation re-triggers the failed query and it is
+ * pending again. The answer is therefore latched in the store (`settled`,
+ * one-way): once ANY outcome has settled, a later remount or retry can no
+ * longer send a page that has already rendered back to `<LoadingState/>`.
+ * That also covers the offline case, where the query is paused and never
+ * settles at all — the first settled outcome is the last word.
  */
 export function usePluginsHydrated(): boolean {
     const initialized = usePluginStore((s) => s.initialized);
+    const settled = usePluginStore((s) => s.settled);
+    const markSettled = usePluginStore((s) => s.markSettled);
     const { data, isError } = useSystemStatus();
-    return initialized || isError || (data !== undefined && !Array.isArray(data.activePlugins));
+    const hydrated =
+        settled || initialized || isError || (data !== undefined && !Array.isArray(data.activePlugins));
+
+    useEffect(() => {
+        if (hydrated) markSettled();
+    }, [hydrated, markSettled]);
+
+    return hydrated;
 }
