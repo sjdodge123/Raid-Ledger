@@ -52,6 +52,22 @@ describe('publicAvatarUrl (ROK-1827)', () => {
     expect(publicAvatarUrl('httpnonsense')).toBeNull();
   });
 
+  it('nulls the Codex-found bypasses: trailing-dot host, encoded path, odd scheme', () => {
+    expect(
+      publicAvatarUrl('https://cdn.discordapp.com./avatars/123/hash.png'),
+    ).toBeNull();
+    expect(
+      publicAvatarUrl('https://example.com/%61vatars/123/hash.png'),
+    ).toBeNull();
+    expect(publicAvatarUrl('httpx://example.com/photo.png')).toBeNull();
+    expect(publicAvatarUrl('https://example.com/AVATARS/1/h.png')).toBeNull();
+  });
+
+  it('accepts an upper-case http(s) scheme as a custom URL', () => {
+    const url = 'HTTP://example.com/photo.png';
+    expect(publicAvatarUrl(url)).toBe(url);
+  });
+
   it('takes no Discord id parameter, so no caller can reintroduce one', () => {
     expect(publicAvatarUrl.length).toBe(1);
   });

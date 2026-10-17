@@ -24,9 +24,10 @@ const DISCORD_CDN_HOSTS = new Set([
 /**
  * Project a stored avatar value for an anonymous viewer.
  *
- * - absolute `http(s)` URL (custom upload) → returned as-is.
- * - absolute URL on a Discord CDN host, or any URL whose path contains
- *   `/avatars/` → `null` (it would carry the snowflake).
+ * - absolute `http(s)` URL (custom upload, any scheme casing) → returned as-is.
+ * - absolute URL on a Discord CDN host (trailing-dot form included), or any
+ *   URL whose decoded path contains `/avatars/` → `null` (it would carry the
+ *   snowflake). Non-http(s) schemes → `null`.
  * - anything else (a Discord avatar hash, missing, empty, unparsable) → `null`.
  *
  * The Discord id is deliberately NOT a parameter: no caller can reintroduce it.
@@ -34,14 +35,25 @@ const DISCORD_CDN_HOSTS = new Set([
 export function publicAvatarUrl(
   avatar: string | null | undefined,
 ): string | null {
-  if (!avatar || !avatar.startsWith('http')) return null;
+  if (!avatar) return null;
   let parsed: URL;
   try {
     parsed = new URL(avatar);
   } catch {
     return null;
   }
-  if (DISCORD_CDN_HOSTS.has(parsed.hostname.toLowerCase())) return null;
-  if (parsed.pathname.includes('/avatars/')) return null;
+  // `URL` lower-cases the scheme, so `HTTP://` is fine and `httpx://` is not.
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+  // A trailing dot (`cdn.discordapp.com.`) is the same host to DNS.
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, '');
+  if (DISCORD_CDN_HOSTS.has(host)) return null;
+  // Compare the decoded path so `/%61vatars/` cannot slip past the check.
+  let path: string;
+  try {
+    path = decodeURIComponent(parsed.pathname);
+  } catch {
+    return null;
+  }
+  if (path.toLowerCase().includes('/avatars/')) return null;
   return avatar;
 }
