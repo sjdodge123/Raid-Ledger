@@ -13,7 +13,7 @@
 # move off jammy needs that guard's regex edited in the same change. After the
 # bump merges, the operator rebuilds the runners per rl-infra/README.md
 # ("After changing rl-infra/runner/Dockerfile ...").
-FROM mcr.microsoft.com/playwright:v1.64.0-jammy
+FROM mcr.microsoft.com/playwright:v1.64.1-jammy
 
 # ROK-1568 — the disk-pressure ladder's rung 2 spares images matching
 # `--filter label!=rl.role=runner`. That filter reads IMAGE labels, while
