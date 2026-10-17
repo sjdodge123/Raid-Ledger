@@ -53,7 +53,7 @@ describe('PrivacyPage', () => {
         expect(page).toHaveTextContent('Error reports.');
         expect(page).toHaveTextContent("sent to the Raid Ledger developers' error tracker, Sentry");
         expect(page).toHaveTextContent('we strip usernames, email addresses and IP addresses wherever they can be detected');
-        expect(page).toHaveTextContent('we remove passwords, sign-in links and other tokens from every piece of text in the report and in feedback you send');
+        expect(page).toHaveTextContent('we remove the secrets that appear in web addresses, headers and sign-in links from the report and from feedback you send');
         // ROK-1838 r3: the copy must still name what is NOT scrubbed.
         expect(page).toHaveTextContent('Two things this does not cover:');
         expect(page).toHaveTextContent('the page address stored with a session recording can still contain a sign-in link');

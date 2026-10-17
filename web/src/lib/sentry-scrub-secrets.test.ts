@@ -3,7 +3,7 @@
  * `transaction` / `request` / trace fields the ROK-1366 scrub covered.
  */
 import { describe, it, expect } from 'vitest';
-import { scrubSecretsFromText } from './sentry-scrub-secrets';
+import { isSecretKey, scrubSecretsFromText } from './sentry-scrub-secrets';
 import { scrubPiiBreadcrumb, scrubPiiEvent } from './sentry-scrub-pii';
 import { CreateFeedbackSchema } from '@raid-ledger/contract';
 import {
@@ -63,40 +63,94 @@ describe('scrubPiiEvent applies the secret rules at any depth', () => {
 });
 
 /**
- * ROK-1838 r3 (Codex): the value must stop at JSON/log structure, a bare
- * `key=value` must match with no URL delimiter, a one-character Bearer token
- * counts, and `code`/`state` must NOT fire in source-like text.
+ * ROK-1838 r4: the rules were redesigned rather than patched a fourth time,
+ * and this table IS the specification. Every row is checked twice — once for
+ * the expected output and once for `scrub(scrub(x)) === scrub(x)`, because
+ * every r1–r3 regression was an overlapping second pass.
  */
-describe('scrubSecretsFromText — before/after table (r3)', () => {
+describe('scrubSecretsFromText — rule table (r4)', () => {
     it.each([
-        // JSON log line: only the token goes, `status` survives (MEDIUM 1).
-        ['{"url":"/join?token=abc","status":500}', '{"url":"/join?token=[Filtered]","status":500}'],
-        // URL in a query string.
+        // --- 2a: query/fragment params, inside something that is a URL.
+        ['https://raid.example.test/join?token=abc', 'https://raid.example.test/join?token=[Filtered]'],
         ['https://rl.test/cb?code=xyz&next=/events', 'https://rl.test/cb?code=[Filtered]&next=/events'],
-        // Bearer header, one character (r3: no 8-char floor).
-        ['Authorization: Bearer x', 'Authorization: Bearer [Filtered]'],
-        // Bare `key=value`, no `?`/`&`/`#` in front.
+        ['/cb?code=xyz&state=s1&next=/events', '/cb?code=[Filtered]&state=[Filtered]&next=/events'],
+        // A comma ends a value: no credential format contains one, so `,def`
+        // belongs to the log line, not to the token.
+        ['/join?token=abc,def', '/join?token=[Filtered],def'],
+        // No length cap: a 5,000-character token goes whole, and the tail stays.
+        [`/j?token=${'a'.repeat(5000)} tail`, '/j?token=[Filtered] tail'],
+        // ...and a long path does not hide the param that follows it.
+        [`/${'a'.repeat(3000)}?code=TAIL`, `/${'a'.repeat(3000)}?code=[Filtered]`],
+        // --- 3: path tokens (ROK-1366/1750 + the r4 ICS feed).
+        ['https://a.test/api/cal/u/AAAAAAAAAAAAAAAAAAAA.ics', 'https://a.test/api/cal/u/[Filtered].ics'],
+        ['/p/poll/AAAAAAAAAAAAAAAAAAAA', '/p/poll/[Filtered]'],
+        // --- 2b: `key=value` / `key: value` / `"key":"value"` anywhere.
         ['password=swordfish', 'password=[Filtered]'],
-        // JSON object form.
+        // Whitespace after `=` is consumed, so a second pass sees what the
+        // first one wrote.
+        ['password= x', 'password=[Filtered]'],
+        // A spoofed or partial placeholder with secret bytes glued on goes whole.
+        ['password=[Filtered]swordfish', 'password=[Filtered]'],
         ['{"access_token":"abc"}', '{"access_token":"[Filtered]"}'],
-        // Quoted JSON ambiguous key still fires.
-        ['{"code":"xyz","ok":true}', '{"code":"[Filtered]","ok":true}'],
+        // A quoted value runs to its closing quote, so the JSON stays valid.
+        ['{"password": "hunter 2"}', '{"password":"[Filtered]"}'],
+        ['clientSecret: abc123', 'clientSecret:[Filtered]'],
+        ['Set-Cookie: sid=1; Path=/', 'Set-Cookie:[Filtered] Path=/'],
+        // A JSON log line: the secret goes, `status` survives.
+        ['{"url":"/join?token=abc","status":500}', '{"url":"/join?token=[Filtered]","status":500}'],
+        ['?access_token=a&refresh_token=b&api_key=c&secret=d&password=e',
+            '?access_token=[Filtered]&refresh_token=[Filtered]&api_key=[Filtered]&secret=[Filtered]&password=[Filtered]'],
+        // --- 2c: Bearer, any run of whitespace, any length >= 1.
+        ['Authorization: Bearer eyJhbGciOi.payload.sig', 'Authorization: Bearer [Filtered]'],
+        ['Authorization: Bearer x', 'Authorization: Bearer [Filtered]'],
+        ['Bearer          x', 'Bearer          [Filtered]'],
     ])('scrubs %j', (input: string, expected: string) => {
         expect(scrubSecretsFromText(input)).toBe(expected);
-        // Idempotent: the passes overlap, and a second one must change nothing.
         expect(scrubSecretsFromText(expected)).toBe(expected);
     });
 
     it.each([
-        // LOW 2: source-like text, not a URL — must be byte-identical.
+        // Source-like text, not a URL — the `/` is division, not a path.
         'ready?state=nextState:previousState;dispatch(state)',
+        'a/b?state=next:prev',
         // A plain diagnostic line that merely contains the word `token`.
         'Signup failed on /events/42 after 3 retries (token-bucket empty)',
-        // A JSON line with no secret key at all.
         '{"status":500,"route":"/events","retries":3}',
+        // r4: `code`/`state`/`key` are credentials only as URL params — here
+        // they are an HTTP status, a UI state and a keyboard key.
+        '{"code":500,"state":"idle","key":"ArrowUp"}',
+        // Substring matching used to drop all four of these.
+        '{"tokenCount":5,"tokenizer":"bpe","passwordPolicy":"strong","keyboard":"qwerty"}',
     ])('leaves %j byte-identical', (input: string) => {
         expect(scrubSecretsFromText(input)).toBe(input);
     });
+
+    it('stays linear on a 200k-character string', () => {
+        const big = `${'a'.repeat(200_000)}?token=${'b'.repeat(200_000)}`;
+        const started = Date.now();
+        const scrubbed = scrubSecretsFromText(big);
+
+        expect(scrubbed).toBe(`${'a'.repeat(200_000)}?token=[Filtered]`);
+        expect(Date.now() - started).toBeLessThan(2000);
+    });
+});
+
+/** r4 rule 1: a key is secret only when it is unambiguous. */
+describe('isSecretKey', () => {
+    it.each([
+        'password', 'PASSWORD', 'passwd', 'pwd', 'secret', 'token', 'access_token', 'refresh_token',
+        'id_token', 'api_key', 'apikey', 'Authorization', 'cookie', 'set-cookie', 'session',
+        'sessionid', 'csrf', 'accessToken', 'clientSecret', 'apiKey', 'user_api_key',
+    ])('redacts %j', (key: string) => {
+        expect(isSecretKey(key)).toBe(true);
+    });
+
+    it.each(['tokenCount', 'tokenizer', 'passwordPolicy', 'keyboard', 'code', 'state', 'key', 'url', 'status'])(
+        'keeps %j',
+        (key: string) => {
+            expect(isSecretKey(key)).toBe(false);
+        },
+    );
 });
 
 describe('scrubPiiEvent — r3 coverage gaps', () => {
@@ -186,16 +240,25 @@ describe('scrubFeedbackPayload', () => {
         const scrubbed = scrubFeedbackPayload({ category: 'bug', message });
 
         expect(scrubbed.message).not.toContain('?token=x');
-        expect(scrubbed.message.length).toBe(FEEDBACK_MESSAGE_MAX_CHARS);
+        expect(scrubbed.message.length).toBeLessThanOrEqual(FEEDBACK_MESSAGE_MAX_CHARS);
         expect(CreateFeedbackSchema.safeParse(scrubbed).success).toBe(true);
+        // r4: the cut lands exactly where `[Filtered]` starts, so it is taken
+        // in FRONT of the placeholder, never through it.
+        expect(scrubbed.message.endsWith('?token=')).toBe(true);
+        // ...and a second scrub of the clamped text is a no-op that cannot
+        // grow it back past the contract limit.
+        expect(scrubSecretsFromText(scrubbed.message)).toBe(scrubbed.message);
     });
 
     it('clamps scrubbed client logs to the contract limit', () => {
         const clientLogs = `${'b'.repeat(49_992)}?token=x`;
         const scrubbed = scrubFeedbackPayload({ category: 'bug', message: 'ten chars.', clientLogs });
 
-        expect(scrubbed.clientLogs?.length).toBe(FEEDBACK_CLIENT_LOGS_MAX_CHARS);
+        expect(scrubbed.clientLogs?.length).toBeLessThanOrEqual(FEEDBACK_CLIENT_LOGS_MAX_CHARS);
+        expect(scrubbed.clientLogs).not.toContain('?token=x');
         expect(CreateFeedbackSchema.safeParse(scrubbed).success).toBe(true);
+        const clamped = scrubbed.clientLogs ?? '';
+        expect(scrubSecretsFromText(clamped)).toBe(clamped);
     });
 
     it('leaves optional fields absent rather than undefined', () => {
