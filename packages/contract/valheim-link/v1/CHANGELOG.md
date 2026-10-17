@@ -18,4 +18,17 @@ Newest first. Every entry states **additive** or **breaking** (see
 - Map grid constants (2048 px, 12 m/px, origin centre) are carried in the
   message and are UNVERIFIED against the game build.
 - `schema.json` generated from `ValheimLinkMessageSchema`; golden fixtures:
-  6 valid, 9 invalid.
+  6 valid, 19 invalid.
+- Pre-release hardening (review round, still v1 — nothing shipped yet):
+  bitmap `data` must be one gzip member (`H4sI…`), 28 chars minimum, a
+  multiple of 4, within `valheimLinkBitmapMaxGzipBytes(w, h)`, checked with
+  a stack-safe single-class regex; the server MUST gunzip with
+  `maxOutputLength = valheimLinkBitmapBytes(w, h)` and reject any other
+  length (CONTRACT.md §6). int64 ids canonical and inside the signed 64-bit
+  range; SteamID64 = 17 digits ≥ the individual-account base (no fixed
+  prefix). `capturedAt` ≤ 3 fractional digits, rejected when > 5 min in the
+  future. `baseMap` must be `grid.textureSize` square, and the server checks
+  the PNG `IHDR`. `extraRows` lists exactly the rows past the vanilla four.
+  Latest-wins keys include `serverId`. Body caps raised to cover the largest
+  schema-valid message: `character` 2 MiB, `items` 10 MiB (`map` unchanged at
+  8 MiB).

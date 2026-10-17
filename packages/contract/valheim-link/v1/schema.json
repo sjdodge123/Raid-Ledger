@@ -14,6 +14,7 @@
         },
         "capturedAt": {
           "type": "string",
+          "maxLength": 24,
           "format": "date-time",
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
         },
@@ -34,11 +35,11 @@
           "properties": {
             "steamId": {
               "type": "string",
-              "pattern": "^7656119\\d{10}$"
+              "pattern": "^[1-9]\\d{16}$"
             },
             "playerId": {
               "type": "string",
-              "pattern": "^-?\\d{1,19}$"
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
             },
             "name": {
               "type": "string",
@@ -47,7 +48,7 @@
             },
             "worldUid": {
               "type": "string",
-              "pattern": "^-?\\d{1,19}$"
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
             },
             "worldName": {
               "type": "string",
@@ -378,6 +379,7 @@
         },
         "capturedAt": {
           "type": "string",
+          "maxLength": 24,
           "format": "date-time",
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
         },
@@ -398,15 +400,15 @@
           "properties": {
             "steamId": {
               "type": "string",
-              "pattern": "^7656119\\d{10}$"
+              "pattern": "^[1-9]\\d{16}$"
             },
             "playerId": {
               "type": "string",
-              "pattern": "^-?\\d{1,19}$"
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
             },
             "worldUid": {
               "type": "string",
-              "pattern": "^-?\\d{1,19}$"
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
             }
           },
           "required": [
@@ -455,8 +457,9 @@
             },
             "data": {
               "type": "string",
+              "minLength": 28,
               "maxLength": 3000000,
-              "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+              "pattern": "^H4sI[A-Za-z0-9+/]*={0,2}$"
             }
           },
           "required": [
@@ -488,8 +491,9 @@
                 },
                 "data": {
                   "type": "string",
+                  "minLength": 28,
                   "maxLength": 3000000,
-                  "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$"
+                  "pattern": "^H4sI[A-Za-z0-9+/]*={0,2}$"
                 }
               },
               "required": [
@@ -620,6 +624,7 @@
         },
         "capturedAt": {
           "type": "string",
+          "maxLength": 24,
           "format": "date-time",
           "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
         },
@@ -813,5 +818,5 @@
   ],
   "$id": "https://raid.gamernight.net/contracts/valheim-link/v1/schema.json",
   "title": "RL Valheim Link message v1",
-  "description": "GENERATED from ValheimLinkMessageSchema (packages/contract/src/valheim-link-*.schema.ts) — do not edit by hand. Refinements (grid bounds, uniqueness, bitmap size) are enforced by the server but not expressible here; see CONTRACT.md."
+  "description": "GENERATED from ValheimLinkMessageSchema (packages/contract/src/valheim-link-*.schema.ts) — do not edit by hand. Refinements (grid bounds, uniqueness, extraRows coverage, bitmap and base-map size, base64 length, compressed-bitmap cap, int64 / SteamID64 ranges) are enforced by the Zod schema but not expressible here, and the server alone inflates bitmaps and checks the clock; see CONTRACT.md §6."
 }

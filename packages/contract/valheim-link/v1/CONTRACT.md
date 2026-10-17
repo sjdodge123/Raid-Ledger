@@ -24,16 +24,25 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
   Ledger for one game server; `serverId` in the body must be that server's
   id, or the message is rejected.
 - The body may be sent with `Content-Encoding: gzip`. The size caps (§7) apply
-  to the **decoded** JSON.
+  to the **decoded** JSON; the server inflates with the kind's cap as its
+  output limit, so a gzip body can never expand past it.
 - Binaries (the base-map PNG and the icon atlas) are **not** in the JSON. A
   message references them by `{ sha256, byteLength, contentType, width,
   height }`, and the mod uploads the bytes separately (ROK-1833 defines the
   route; proposal: `PUT …/blobs/<sha256>` with the raw PNG). Raid Ledger
-  checks the hash and length and accepts the message and its blob in either
-  order.
-- Latest wins: Raid Ledger keeps the newest `capturedAt` per character (and
-  per character + world for `map`; per server + `gameVersion` for `items`) and
-  ignores an older one. No history in v1.
+  checks the hash and length, and reads the PNG's `IHDR` width/height and
+  rejects the blob unless they equal the reference's `width`/`height`
+  **before** decoding any pixels (a 16 384² decode is 1 GiB). It accepts the
+  message and its blob in either order.
+- Latest wins: Raid Ledger keeps the newest `capturedAt` per snapshot key and
+  ignores an older one. No history in v1. Keys always include `serverId`,
+  because a Valheim character is portable and may be pushed by several
+  servers — one server's token can never overwrite another server's snapshot:
+  `character` → (`serverId`, `steamId`, `playerId`); `map` → (`serverId`,
+  `steamId`, `playerId`, `worldUid`); `items` → (`serverId`, `gameVersion`).
+- Clock skew: the server **rejects** a message whose `capturedAt` is more than
+  5 minutes (`VALHEIM_LINK_CAPTURED_AT_MAX_FUTURE_MS`) past its own clock, so
+  a bad game-server clock cannot pin a snapshot as "latest" forever.
 
 ## 2. Header (every message)
 
@@ -42,7 +51,7 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
 | `schemaVersion` | `1` | Contract version. The mod emits **exactly one**. |
 | `kind` | `"character"` \| `"map"` \| `"items"` | Discriminator (§3–§5). |
 | `serverId` | string `^[A-Za-z0-9_-]{1,64}$` | Raid Ledger's id for the game server, issued with the token. |
-| `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`, fraction allowed) | When the mod read the data. |
+| `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`), at most 3 fractional digits (≤ 24 chars) | When the mod read the data. Not later than server time + 5 min (§1). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,5}){1,3}$` (`0.220.5`) | `Version.GetVersionString()`. |
 | `modVersion` | SemVer (`1.0.0`, `1.2.0-beta.1`) | The mod's own version. |
 
@@ -50,8 +59,8 @@ Shared value types:
 
 | Type | Format | Notes |
 |---|---|---|
-| SteamID64 | decimal **string** `^7656119\d{10}$` | Exceeds JS safe integers; never a JSON number. |
-| int64 id (`playerId`, `worldUid`) | decimal string `^-?\d{1,19}$` | .NET `long`; opaque to Raid Ledger. |
+| SteamID64 | decimal **string**, 17 digits, ≥ `76561197960265728` (the individual-account base) | Exceeds JS safe integers; never a JSON number. No fixed `7656119` prefix — it rolls over to `7656120…` past account id ~2.04 B. |
+| int64 id (`playerId`, `worldUid`) | canonical decimal string `^(0\|-?[1-9]\d{0,18})$`, within −9223372036854775808…9223372036854775807 | .NET `long`; opaque to Raid Ledger. No leading zeros or `-0`, so one id has exactly one spelling. |
 | prefab id | `^[A-Za-z0-9_.-]{1,96}$` | The game's prefab name (`SwordIron`), never a `$item_…` localisation token. |
 | sha256 | 64 lowercase hex | Of the uploaded binary. |
 
@@ -66,7 +75,7 @@ Sent on every vanilla save broadcast, on logout and on quit.
 | `character.name` | 1–32 chars | Free text; display only, never used to claim. |
 | `character.worldUid` / `worldName` | int64 string / 1–64 chars | The world it was captured on; opaque. |
 | `equipment[]` (≤ 32) | `{ slot, item }` | One entry per occupied slot; `slot` unique. `slot` ∈ `head chest legs shoulder utility trinket rightHand leftHand ammo`. |
-| `inventory.grid` | `{ width 1–32, height 1–32, extraRows[] }` | Explicit size. Vanilla 8×4. Inventory mods (EquipmentAndQuickSlots, Extended Player Inventory) add rows; each row past the vanilla four is listed in `extraRows` as `{ y, purpose }`, `purpose` ∈ `equipment quickslot extended other`. |
+| `inventory.grid` | `{ width 1–32, height 1–32, extraRows[] }` | Explicit size. Vanilla 8×4. Inventory mods (EquipmentAndQuickSlots, Extended Player Inventory) add rows; `extraRows` lists **exactly** the rows past the vanilla four — every `y` in `[4, height)` once, nothing else (empty when `height ≤ 4`) — as `{ y, purpose }`, `purpose` ∈ `equipment quickslot extended other`. |
 | `inventory.items[]` (≤ 512) | `{ x, y, equipped, item }` | 0-based grid cell, `x < width`, `y < height`, one stack per cell. `equipped` = also listed in `equipment`. |
 | `skills[]` (≤ 128) | `{ id, level, accumulator }` | `id` = `Skills.SkillType.ToString()` (a name for vanilla, a signed integer string for a modded skill), unique. `level` 0–100 float; `accumulator` ≥ 0 float (progress toward the next level, game units). |
 | `trophies[]` (≤ 1024) | prefab ids | `m_trophies`. |
@@ -104,8 +113,13 @@ message and never hardcodes them.
 `width` = `height` = `grid.textureSize`. Packed bitset, row-major: pixel
 (px, py) is bit `i = py · width + px`, stored in byte `i >> 3` at bit `i & 7`
 (least significant first); `1` = explored; `py = 0` is the **south** edge. The
-`⌈width·height/8⌉` bytes are gzip-compressed, then standard padded base64
-(RFC 4648 §4). `data` ≤ 3 000 000 chars.
+`⌈width·height/8⌉` bytes (`valheimLinkBitmapBytes(width, height)`) are
+compressed as **one gzip member** (magic `1f 8b 08`, so `data` starts with
+`H4sI`), then standard padded base64 (RFC 4648 §4). `data` is 28–3 000 000
+chars, a multiple of 4, and at most the base64 length of
+`valheimLinkBitmapMaxGzipBytes(width, height)` (raw + raw/8 + raw/64 + 64 —
+zlib's conservative deflate bound; anything larger is not an honest
+compression of the bitset). The server's inflate rule is in §6.
 
 **Pin.** `type` = `Minimap.PinType.ToString()` (`Icon0`…`Icon4`, `Death`,
 `Bed`, `Shout`, `Boss`, `Hildir1`…; open set, unknown types get a generic
@@ -118,7 +132,8 @@ icon); `label` ≤ 64 chars (player free text, may be empty — never logged);
 `textureSize × textureSize` PNG aligned to the grid above (vanilla 2048×2048,
 12 m/px, origin centre — UNVERIFIED). The seed never leaves the server; only
 the PNG does. `baseMap` = `{ sha256, byteLength, contentType: "image/png",
-width, height }`.
+width, height }` with `width` = `height` = `grid.textureSize` (Zod-enforced);
+the server checks the uploaded PNG's real dimensions against it (§1).
 
 ## 5. `kind: "items"` — item catalogue export
 
@@ -146,23 +161,50 @@ Every object is **strict**: an unknown key rejects the whole message. These
 rules are enforced by the Zod schema but **cannot be expressed in
 `schema.json`** — the mod must honour them too:
 
-- inventory cells inside the grid and unique; `extraRows[].y < grid.height`;
+- inventory cells inside the grid and unique; `extraRows` = exactly the rows
+  `4 … height − 1`, each once;
 - `equipment[].slot` and `skills[].id` unique; `items[].prefab` unique;
 - `durability` and `maxDurability` null together;
-- both bitmaps exactly `grid.textureSize` square;
+- both bitmaps and `baseMap` exactly `grid.textureSize` square;
+- bitmap `data` length a multiple of 4 and within the size-tied gzip cap (§4);
+- int64 ids inside the signed 64-bit range; SteamID64 ≥ the individual base;
 - an `atlas` icon needs a non-null `atlas` and must lie inside it.
+
+**Server-enforced (not in Zod, not in `schema.json`).** The contract package
+stays synchronous and browser-safe, so it never inflates. The ingest endpoint
+(ROK-1833) **MUST**, for every non-null bitmap:
+
+1. base64-decode `data` and gunzip it with
+   `maxOutputLength = valheimLinkBitmapBytes(width, height)` (Node
+   `zlib.gunzipSync(buf, { maxOutputLength })`, or an equivalent bounded
+   inflater) — never an unbounded inflate;
+2. **reject** the message on any decode error (bad header, corrupt data, CRC
+   or length-trailer mismatch, truncated stream, output over the limit);
+3. **reject** unless the inflated length is **exactly**
+   `valheimLinkBitmapBytes(width, height)`.
+
+It also enforces the `capturedAt` skew rule and the PNG `IHDR` check (§1).
+`api/src/plugins/valheim/valheim-link-contract.spec.ts` pins this rule
+against truncated, corrupt-CRC, short and 64× "bomb" gzip that all pass Zod.
 
 ## 7. Size caps (exported constants — for ROK-1833 limits)
 
 | Constant | Value | Applies to | Typical |
 |---|---|---|---|
-| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 524 288 (512 KiB) | one `character` body | 10–40 KB; the cap fits full known-item/recipe lists |
-| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Worst case: two 4096² incompressible layers ≈ 5.6 MB |
+| `VALHEIM_LINK_CHARACTER_MAX_BYTES` | 2 097 152 (2 MiB) | one `character` body | 10–40 KB. Largest schema-valid ≈ 1.9 MB |
+| `VALHEIM_LINK_MAP_MAX_BYTES` | 8 388 608 (8 MiB) | one `map` body | tens to a few hundred KB (UNVERIFIED). Largest schema-valid (two 3 M-char layers, 2 000 pins) ≈ 7.0 MB |
 | `VALHEIM_LINK_BITMAP_DATA_MAX_CHARS` | 3 000 000 | one bitmap's `data` | a 2048² mask is 512 KiB raw before gzip; ≤ ~700 KB base64 even if incompressible |
 | `VALHEIM_LINK_BITMAP_EDGE_MAX` | 4096 | `textureSize`, bitmap edges | 2048 vanilla |
-| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 4 194 304 (4 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB |
+| `VALHEIM_LINK_ITEMS_MAX_BYTES` | 10 485 760 (10 MiB) | one `items` body | ~150 B per item; ~2 000 vanilla items ≈ 300 KB. Largest schema-valid ≈ 9.4 MB |
 | `VALHEIM_LINK_BINARY_MAX_BYTES` | 16 777 216 (16 MiB) | one uploaded PNG (base map, atlas) | base map a few MB; a 64 px atlas of ~3 000 icons ≈ 8–12 MB (UNVERIFIED) |
 | array caps | see §3–§5 | | |
+
+The body caps were **raised** (not the array caps tightened) so that each is
+≥ the largest message the schema accepts — every array full, every string at
+its max length, free text made of control characters that JSON escapes to 6
+bytes each. A schema-valid message therefore never trips a body cap; the
+array and string caps are what bind. Recompute and raise these if an array or
+string cap grows.
 
 ## 8. Fixtures
 
@@ -171,7 +213,8 @@ All values are synthetic: SteamID64s `765611980000000xx`, invented names
 
 - `fixtures/<name>.json` — a message that **must parse**. Map bitmaps must
   inflate to exactly `⌈width·height/8⌉` bytes.
-- `fixtures/invalid/<name>.json` — a message that **must be rejected**;
+- `fixtures/invalid/<name>.json` — a message that **must be rejected by the
+  schema**;
   `fixtures/invalid/EXPECTED.json` maps each name to the `{ path, code }` of
   the Zod issue it must raise (path joined with `.`, `""` = root).
 

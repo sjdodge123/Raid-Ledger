@@ -16,13 +16,16 @@ import { z } from 'zod';
 export const VALHEIM_LINK_SCHEMA_VERSION = 1;
 
 // ---------- size caps (CONTRACT.md §7; the ingest endpoint, ROK-1833) ----------
+// Each body cap is >= the LARGEST schema-valid message of its kind (every
+// array full, every string at max length, free text of control characters
+// that JSON escapes to 6 bytes), so the array caps always bind first.
 
-/** Recommended request-body cap for a `character` message (UTF-8 JSON). */
-export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 524_288;
-/** Recommended request-body cap for a `map` message (inline bitmaps). */
+/** Request-body cap for a `character` message (UTF-8 JSON); worst case ≈ 1.9 MB. */
+export const VALHEIM_LINK_CHARACTER_MAX_BYTES = 2_097_152;
+/** Request-body cap for a `map` message (inline bitmaps); worst case ≈ 7.0 MB. */
 export const VALHEIM_LINK_MAP_MAX_BYTES = 8_388_608;
-/** Recommended request-body cap for an `items` message. */
-export const VALHEIM_LINK_ITEMS_MAX_BYTES = 4_194_304;
+/** Request-body cap for an `items` message; worst case ≈ 9.4 MB. */
+export const VALHEIM_LINK_ITEMS_MAX_BYTES = 10_485_760;
 /** Recommended cap for one binary upload (base-map PNG or icon atlas). */
 export const VALHEIM_LINK_BINARY_MAX_BYTES = 16_777_216;
 
