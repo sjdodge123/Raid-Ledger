@@ -54,6 +54,9 @@ const LOCK_NAME = 'rl-refresh';
 
 let inFlight: Promise<RefreshOutcome> | null = null;
 
+/** >0 while this tab holds `rl-refresh` for `installSessionExclusively` (ROK-1820). */
+let installDepth = 0;
+
 /**
  * Identity generation (review m1). Impersonation start/exit and a cross-tab
  * identity change bump it; a refresh whose POST began under an older
@@ -136,6 +139,10 @@ async function doRefresh(): Promise<RefreshOutcome> {
 }
 
 function sharedRefresh(): Promise<RefreshOutcome> {
+  // A refresh asked for while this tab holds the lock for a session install
+  // would queue behind it forever (the install may be awaiting this very
+  // refresh) — answer indeterminate, which never clears the session.
+  if (installDepth > 0) return Promise.resolve(INDETERMINATE);
   if (!inFlight) {
     inFlight = doRefresh().finally(() => {
       inFlight = null;
@@ -169,4 +176,36 @@ export async function freshRefresh(): Promise<RefreshOutcome> {
   bumpRefreshGeneration();
   if (inFlight) await inFlight;
   return sharedRefresh();
+}
+
+async function underInstallLock<T>(locks: LockManager, issue: () => Promise<T>): Promise<T> {
+  return locks.request(LOCK_NAME, async () => {
+    installDepth += 1;
+    try {
+      return await issue();
+    } finally {
+      installDepth -= 1;
+    }
+  });
+}
+
+/**
+ * ROK-1820: run a request that ISSUES a new session (a password change that
+ * revokes every session and re-mints one) so no refresh can land on top of it.
+ *
+ * - The request runs under the `rl-refresh` Web Lock, so no refresh POST from
+ *   any tab of this browser is in flight while it runs: a sibling's rotated
+ *   `rl_rt` Set-Cookie lands BEFORE the re-issued cookie, never after it.
+ * - The generation is bumped before AND after, so a refresh that began under
+ *   the pre-change session (no `navigator.locks`, or another code path) is
+ *   dropped instead of overwriting the re-issued access token.
+ */
+export async function installSessionExclusively<T>(issue: () => Promise<T>): Promise<T> {
+  bumpRefreshGeneration();
+  try {
+    const locks = lockManager();
+    return locks ? await underInstallLock(locks, issue) : await issue();
+  } finally {
+    bumpRefreshGeneration();
+  }
 }
