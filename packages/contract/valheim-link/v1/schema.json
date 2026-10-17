@@ -1,0 +1,825 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "serverId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "gameVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,4}(\\.\\d{1,5}){1,3}$"
+        },
+        "modVersion": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "character"
+        },
+        "character": {
+          "type": "object",
+          "properties": {
+            "steamId": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{16}$"
+            },
+            "playerId": {
+              "type": "string",
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
+            },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 32
+            },
+            "worldUid": {
+              "type": "string",
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
+            },
+            "worldName": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "steamId",
+            "playerId",
+            "name",
+            "worldUid",
+            "worldName"
+          ],
+          "additionalProperties": false
+        },
+        "equipment": {
+          "maxItems": 32,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "slot": {
+                "type": "string",
+                "enum": [
+                  "head",
+                  "chest",
+                  "legs",
+                  "shoulder",
+                  "utility",
+                  "trinket",
+                  "rightHand",
+                  "leftHand",
+                  "ammo"
+                ]
+              },
+              "item": {
+                "type": "object",
+                "properties": {
+                  "prefab": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+                  },
+                  "stack": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 100000
+                  },
+                  "quality": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10
+                  },
+                  "variant": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 63
+                  },
+                  "durability": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "maxDurability": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1000000
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "prefab",
+                  "stack",
+                  "quality",
+                  "variant",
+                  "durability",
+                  "maxDurability"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "slot",
+              "item"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "inventory": {
+          "type": "object",
+          "properties": {
+            "grid": {
+              "type": "object",
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 32
+                },
+                "extraRows": {
+                  "maxItems": 32,
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "y": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 31
+                      },
+                      "purpose": {
+                        "type": "string",
+                        "enum": [
+                          "equipment",
+                          "quickslot",
+                          "extended",
+                          "other"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "y",
+                      "purpose"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "width",
+                "height",
+                "extraRows"
+              ],
+              "additionalProperties": false
+            },
+            "items": {
+              "maxItems": 512,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 31
+                  },
+                  "y": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 31
+                  },
+                  "equipped": {
+                    "type": "boolean"
+                  },
+                  "item": {
+                    "type": "object",
+                    "properties": {
+                      "prefab": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+                      },
+                      "stack": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 100000
+                      },
+                      "quality": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 10
+                      },
+                      "variant": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 63
+                      },
+                      "durability": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1000000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "maxDurability": {
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "minimum": 0,
+                            "maximum": 1000000
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "prefab",
+                      "stack",
+                      "quality",
+                      "variant",
+                      "durability",
+                      "maxDurability"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "required": [
+                  "x",
+                  "y",
+                  "equipped",
+                  "item"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "grid",
+            "items"
+          ],
+          "additionalProperties": false
+        },
+        "skills": {
+          "maxItems": 128,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^-?[A-Za-z0-9_]{1,64}$"
+              },
+              "level": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "accumulator": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "id",
+              "level",
+              "accumulator"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "trophies": {
+          "maxItems": 1024,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+          }
+        },
+        "knownItems": {
+          "maxItems": 8192,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+          }
+        },
+        "knownRecipes": {
+          "maxItems": 8192,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "serverId",
+        "capturedAt",
+        "gameVersion",
+        "modVersion",
+        "kind",
+        "character",
+        "equipment",
+        "inventory",
+        "skills",
+        "trophies",
+        "knownItems",
+        "knownRecipes"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "serverId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "gameVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,4}(\\.\\d{1,5}){1,3}$"
+        },
+        "modVersion": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "map"
+        },
+        "character": {
+          "type": "object",
+          "properties": {
+            "steamId": {
+              "type": "string",
+              "pattern": "^[1-9]\\d{16}$"
+            },
+            "playerId": {
+              "type": "string",
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
+            },
+            "worldUid": {
+              "type": "string",
+              "pattern": "^(0|-?[1-9]\\d{0,18})$"
+            }
+          },
+          "required": [
+            "steamId",
+            "playerId",
+            "worldUid"
+          ],
+          "additionalProperties": false
+        },
+        "grid": {
+          "type": "object",
+          "properties": {
+            "textureSize": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 4096
+            },
+            "pixelSizeMetres": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 256
+            }
+          },
+          "required": [
+            "textureSize",
+            "pixelSizeMetres"
+          ],
+          "additionalProperties": false
+        },
+        "explored": {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "const": "gzip+base64-bitset-lsb0"
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 4096
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 64,
+              "maximum": 4096
+            },
+            "data": {
+              "type": "string",
+              "minLength": 28,
+              "maxLength": 3000000,
+              "pattern": "^H4sI[A-Za-z0-9+/]*={0,2}$"
+            }
+          },
+          "required": [
+            "encoding",
+            "width",
+            "height",
+            "data"
+          ],
+          "additionalProperties": false
+        },
+        "sharedExplored": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "encoding": {
+                  "type": "string",
+                  "const": "gzip+base64-bitset-lsb0"
+                },
+                "width": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 4096
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 64,
+                  "maximum": 4096
+                },
+                "data": {
+                  "type": "string",
+                  "minLength": 28,
+                  "maxLength": 3000000,
+                  "pattern": "^H4sI[A-Za-z0-9+/]*={0,2}$"
+                }
+              },
+              "required": [
+                "encoding",
+                "width",
+                "height",
+                "data"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pins": {
+          "maxItems": 2000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,32}$"
+              },
+              "label": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "x": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "z": {
+                "type": "number",
+                "minimum": -32768,
+                "maximum": 32768
+              },
+              "checked": {
+                "type": "boolean"
+              },
+              "shared": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "type",
+              "label",
+              "x",
+              "z",
+              "checked",
+              "shared"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "baseMap": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16777216
+                },
+                "contentType": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "width": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16384
+                },
+                "height": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16384
+                }
+              },
+              "required": [
+                "sha256",
+                "byteLength",
+                "contentType",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "serverId",
+        "capturedAt",
+        "gameVersion",
+        "modVersion",
+        "kind",
+        "character",
+        "grid",
+        "explored",
+        "sharedExplored",
+        "pins",
+        "baseMap"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "schemaVersion": {
+          "type": "number",
+          "const": 1
+        },
+        "serverId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,64}$"
+        },
+        "capturedAt": {
+          "type": "string",
+          "maxLength": 24,
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        },
+        "gameVersion": {
+          "type": "string",
+          "pattern": "^\\d{1,4}(\\.\\d{1,5}){1,3}$"
+        },
+        "modVersion": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$"
+        },
+        "kind": {
+          "type": "string",
+          "const": "items"
+        },
+        "locale": {
+          "type": "string",
+          "pattern": "^[A-Za-z_-]{2,32}$"
+        },
+        "atlas": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{64}$"
+                },
+                "byteLength": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16777216
+                },
+                "contentType": {
+                  "type": "string",
+                  "const": "image/png"
+                },
+                "width": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16384
+                },
+                "height": {
+                  "type": "integer",
+                  "exclusiveMinimum": 0,
+                  "maximum": 16384
+                }
+              },
+              "required": [
+                "sha256",
+                "byteLength",
+                "contentType",
+                "width",
+                "height"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "items": {
+          "minItems": 1,
+          "maxItems": 10000,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "prefab": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_.-]{1,96}$"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 96
+              },
+              "category": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_]{1,48}$"
+              },
+              "maxStack": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 100000
+              },
+              "maxQuality": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 10
+              },
+              "variants": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 64
+              },
+              "icon": {
+                "anyOf": [
+                  {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "atlas"
+                          },
+                          "x": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 16383
+                          },
+                          "y": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 16383
+                          },
+                          "w": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 512
+                          },
+                          "h": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 512
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "x",
+                          "y",
+                          "w",
+                          "h"
+                        ],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "kind": {
+                            "type": "string",
+                            "const": "file"
+                          },
+                          "file": {
+                            "type": "string",
+                            "pattern": "^[A-Za-z0-9_.-]{1,100}\\.png$"
+                          }
+                        },
+                        "required": [
+                          "kind",
+                          "file"
+                        ],
+                        "additionalProperties": false
+                      }
+                    ]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "prefab",
+              "name",
+              "category",
+              "maxStack",
+              "maxQuality",
+              "variants",
+              "icon"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schemaVersion",
+        "serverId",
+        "capturedAt",
+        "gameVersion",
+        "modVersion",
+        "kind",
+        "locale",
+        "atlas",
+        "items"
+      ],
+      "additionalProperties": false
+    }
+  ],
+  "$id": "https://raid.gamernight.net/contracts/valheim-link/v1/schema.json",
+  "title": "RL Valheim Link message v1",
+  "description": "GENERATED from ValheimLinkMessageSchema (packages/contract/src/valheim-link-*.schema.ts) — do not edit by hand. Refinements (grid bounds, uniqueness, extraRows coverage, bitmap and base-map size, base64 length, compressed-bitmap cap, int64 / SteamID64 ranges) are enforced by the Zod schema but not expressible here, and the server alone inflates bitmaps and checks the clock; see CONTRACT.md §6."
+}
