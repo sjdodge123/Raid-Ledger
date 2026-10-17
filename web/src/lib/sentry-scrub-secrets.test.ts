@@ -141,6 +141,7 @@ describe('scrubSecretsFromText — rule table (r4)', () => {
         // r6: broadening the compound must not swallow these — only a
         // TRAILING `pwd`, and only a credential noun in front of `key`.
         '{"pwdTimeout":30,"monkey":"george","hotkey":"ctrl+k","turnkey":true}',
+        'OLDPWD=/srv/previous-release PWD=/srv/current',
     ])('leaves %j byte-identical', (input: string) => {
         expect(scrubSecretsFromText(input)).toBe(input);
     });
@@ -198,7 +199,7 @@ describe('isSecretKey', () => {
         // r5 P2: `key` on its own, and every non-credential compound of it.
         'status', 'queryKey', 'primaryKey', 'monkey', 'hotkey', 'Key',
         // r6: a leading `pwd` and a `key` with no credential noun in front.
-        'pwdTimeout', 'turnkey', 'keyring',
+        'pwdTimeout', 'turnkey', 'keyring', 'OLDPWD', 'PWD',
     ])(
         'keeps %j',
         (key: string) => {

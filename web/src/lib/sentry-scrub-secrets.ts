@@ -70,9 +70,10 @@ const SECRET_KEY_EXACT = [
  * in the noun. r6: `pwd` is a suffix, not only an exact name, because
  * `db_pwd=` and `db-pwd=` leaked. The whole-name anchor (`SECRET_KEY_WHOLE`)
  * and the `(?![A-Za-z0-9_-])` lookahead in the matcher mean only a TRAILING
- * `pwd` counts — `pwdTimeout` keeps its value.
+ * `pwd` counts — `pwdTimeout` keeps its value. r7: the `pwd` suffix needs a
+ * `_`/`-` right before it, so the shell's `OLDPWD=`/`PWD=` keep their paths.
  */
-const SECRET_NOUN_SUFFIX = String.raw`[A-Za-z0-9_-]*(?:token|secret|password|passwd|pwd)`;
+const SECRET_NOUN_SUFFIX = String.raw`(?:[A-Za-z0-9_-]*(?:token|secret|password|passwd)|[A-Za-z0-9_-]*[_-]pwd)`;
 
 /**
  * r5 P2: a bare `key`/`Key` suffix is NOT a secret noun — `queryKey`,
