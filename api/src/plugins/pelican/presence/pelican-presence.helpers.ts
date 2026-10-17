@@ -37,6 +37,40 @@ export function netPresenceChanges(
   return changes;
 }
 
+/**
+ * Players still present under the same name whose character owner alone
+ * changed (ROK-1822 r4) — a repeat handshake clears it, a respawn line
+ * adopts one. Not a presence change, but the sink must persist it, or a
+ * restart rehydrates a stale owner. Players in `changes` already carry theirs.
+ */
+export function netOwnerChanges(
+  before: PresentPlayer[],
+  after: PresentPlayer[],
+  changes: PresenceChange[],
+): PresentPlayer[] {
+  const moved = new Set(changes.map((c) => c.steamId));
+  const prior = new Map(before.map((p) => [p.steamId, p]));
+  return after.filter((p) => {
+    const was = prior.get(p.steamId);
+    if (!was || p.name === null || was.name !== p.name) return false;
+    return !moved.has(p.steamId) && was.owner !== p.owner;
+  });
+}
+
+/** A tracker player as the sink sees them; the owner rides only with a name. */
+export function toSinkPlayer(
+  player: PresentPlayer,
+  owner: string | null,
+): ServerPresencePlayer {
+  const base = {
+    steamId: player.steamId,
+    displayName: player.name ?? player.steamId,
+  };
+  return owner === null || player.name === null
+    ? base
+    : { ...base, characterOwnerId: owner };
+}
+
 /** Rehydrated roster → tracker players (a SteamID-only label means "unnamed"). */
 export function toPresentPlayers(
   players: ServerPresencePlayer[],

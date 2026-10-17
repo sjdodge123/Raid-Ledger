@@ -44,8 +44,22 @@ describe('spawnOrFindServerQuickPlay — character owner (ROK-1822 r4)', () => {
     });
     expect(result).toEqual({ kind: 'created', eventId: 55, joined: [9, null] });
     expect(jest.mocked(upsertSteamParticipant).mock.calls).toEqual([
-      [db, 55, { steamId: 'S1', displayName: 'Bjorn', userId: 9, pelicanServerId: 7, characterOwnerId: '222' }],
-      [db, 55, { steamId: 'S2', displayName: 'S2', userId: null, pelicanServerId: 7 }],
+      [
+        db,
+        55,
+        {
+          steamId: 'S1',
+          displayName: 'Bjorn',
+          userId: 9,
+          pelicanServerId: 7,
+          characterOwnerId: '222',
+        },
+      ],
+      [
+        db,
+        55,
+        { steamId: 'S2', displayName: 'S2', userId: null, pelicanServerId: 7 },
+      ],
     ]);
   });
 });

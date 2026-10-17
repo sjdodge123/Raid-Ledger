@@ -89,6 +89,8 @@ async function enrolOn(
       displayName: pl.displayName,
       userId,
       pelicanServerId: input.pelicanServerId,
+      // ROK-1822 r4: the owner id goes with the name, or a restart loses it.
+      ...(pl.characterOwnerId ? { characterOwnerId: pl.characterOwnerId } : {}),
     });
     if (outcome === 'inserted') joined.push(userId);
     // ROK-1802: a linked player is signed up in the same transaction.

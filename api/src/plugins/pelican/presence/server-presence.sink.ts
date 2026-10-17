@@ -35,7 +35,11 @@ export interface ServerPresenceSink {
     source: ServerPresenceSource,
     player: ServerPresencePlayer,
   ): Promise<void>;
-  /** A character line named a player who was already present. */
+  /**
+   * A character line named a player who was already present — or, under
+   * the unchanged name, their character owner alone changed (ROK-1822 r4),
+   * so the persisted owner never goes stale.
+   */
   playerRenamed(
     source: ServerPresenceSource,
     player: ServerPresencePlayer,

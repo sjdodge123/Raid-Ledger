@@ -458,7 +458,13 @@ describe('real Wings frames through the Valheim parser (ROK-1821 F2)', () => {
 describe('character owner persistence (ROK-1822 r4)', () => {
   const ALICE = { steamId: 'A', displayName: 'Alice', characterOwnerId: '111' };
   const aliceAs = (ownerId: string, loggedAt: string) =>
-    line({ kind: 'character', name: 'Alice', zdoidZero: false, ownerId, loggedAt });
+    line({
+      kind: 'character',
+      name: 'Alice',
+      zdoidZero: false,
+      ownerId,
+      loggedAt,
+    });
 
   it('a live repeat handshake persists the cleared then adopted owner, with no join/leave', async () => {
     const h = harness([ALICE]);

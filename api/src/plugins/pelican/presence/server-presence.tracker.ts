@@ -8,8 +8,9 @@ export interface PresentPlayer {
   steamId: string;
   name: string | null;
   /**
-   * Hydrate input only (ROK-1822 r3): the persisted owner id of the
-   * character that named them, so a same-named stranger is not their respawn.
+   * The owner id of the character that named them (ROK-1822 r3), so a
+   * same-named stranger is not their respawn. Hydrate/restore input and
+   * {@link ServerPresenceTracker.snapshotWithOwners} output only.
    */
   owner?: string;
 }
@@ -82,6 +83,19 @@ export class ServerPresenceTracker {
   /** Every present player, in join order. */
   snapshot(): PresentPlayer[] {
     return [...this.present].map(([steamId, e]) => ({ steamId, name: e.name }));
+  }
+
+  /**
+   * {@link snapshot} plus each named player's owner id (ROK-1822 r4): the
+   * restore point of a cold replay, and the before/after of an owner-only
+   * change the sink must persist.
+   */
+  snapshotWithOwners(): PresentPlayer[] {
+    return [...this.present].map(([steamId, e]) =>
+      e.owner === null
+        ? { steamId, name: e.name }
+        : { steamId, name: e.name, owner: e.owner },
+    );
   }
 
   /** The owner id of a present player's character, else null (ROK-1822 r3). */
