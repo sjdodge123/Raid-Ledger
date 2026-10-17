@@ -101,6 +101,27 @@ async function statusOf(userId: number, gameId: number): Promise<string[]> {
 const isActive = async (userId: number, gameId: number) =>
   (await statusOf(userId, gameId)).includes('active');
 
+/**
+ * LFG_LIST_LIMIT one-hand groups held by `holderId` that all expire within the
+ * hour, so any later one-hand group sorts LAST in `GET /lfg` and falls off
+ * the capped list.
+ */
+async function crowdPastListCap(holderId: number): Promise<void> {
+  const filler = await testApp.db
+    .insert(schema.games)
+    .values(
+      Array.from({ length: LFG_LIST_LIMIT }, (_, i) => ({
+        name: `Filler ${i}`,
+        slug: `filler-${i}`,
+      })),
+    )
+    .returning({ id: schema.games.id });
+  const soon = new Date(Date.now() + 60 * 60 * 1000);
+  await testApp.db.insert(schema.lfgIntents).values(
+    filler.map((g) => ({ userId: holderId, gameId: g.id, expiresAt: soon })),
+  );
+}
+
 function pressLeave(gameId: number, discordId: string) {
   const editReply = jest.fn().mockResolvedValue(undefined);
   const interaction = {
@@ -267,25 +288,7 @@ describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
   it(`All my LFGs reaches a hand ranked past the ${LFG_LIST_LIMIT}-group list cap`, async () => {
     const a = await linkedMember();
     const b = await linkedMember();
-    // LFG_LIST_LIMIT busier groups that all expire sooner, so the caller's
-    // own group sorts LAST in `GET /lfg` and falls off the capped list.
-    const filler = await testApp.db
-      .insert(schema.games)
-      .values(
-        Array.from({ length: LFG_LIST_LIMIT }, (_, i) => ({
-          name: `Filler ${i}`,
-          slug: `filler-${i}`,
-        })),
-      )
-      .returning({ id: schema.games.id });
-    const soon = new Date(Date.now() + 60 * 60 * 1000);
-    await testApp.db.insert(schema.lfgIntents).values(
-      filler.map((g) => ({
-        userId: b.userId,
-        gameId: g.id,
-        expiresAt: soon,
-      })),
-    );
+    await crowdPastListCap(b.userId);
     const quiet = await createGame(testApp, 'Quiet Game');
     await raise(a.userId, quiet.id);
     const capped = await lfg.listGroups(a.userId);
@@ -297,6 +300,89 @@ describe('LfgLeaveCommand — All my LFGs (ROK-1660)', () => {
     expect(await isActive(a.userId, quiet.id)).toBe(false);
     expect(editReply).toHaveBeenCalledWith("You're out — **Quiet Game**.");
   });
+
+  it.each(['hidden', 'banned'] as const)(
+    'All my LFGs also withdraws a hand on a %s game',
+    async (flag) => {
+      const a = await linkedMember();
+      const shown = await createGame(testApp, 'Valheim');
+      const gone = await createGame(testApp, 'Gone Game');
+      await raise(a.userId, shown.id);
+      await raise(a.userId, gone.id);
+      await testApp.db
+        .update(schema.games)
+        .set(flag === 'hidden' ? { hidden: true } : { banned: true })
+        .where(eq(schema.games.id, gone.id));
+      // The display list hides the game — the bulk leave must not.
+      const listed = await lfg.listOwnGroups(a.userId);
+      expect(listed.map((g) => g.gameId)).toEqual([shown.id]);
+
+      const { interaction, editReply } = slash('all', a.discordId);
+      await command.handleInteraction(interaction);
+
+      expect(
+        `shown=${String(await isActive(a.userId, shown.id))} gone=${String(await isActive(a.userId, gone.id))}`,
+      ).toBe('shown=false gone=false');
+      expect(String(editReply.mock.calls[0]?.[0])).toMatch(
+        /^You're out of all 2 — /,
+      );
+    },
+  );
+});
+
+type LeaveSurface = (gameId: number, discordId: string) => Promise<unknown>;
+
+/** Each leave surface, returning the first reply it sent. */
+const surfaces: Array<[string, LeaveSurface]> = [
+  [
+    "the board's I'm out",
+    async (gameId, discordId) => {
+      const { interaction, editReply } = pressLeave(gameId, discordId);
+      await listener.handleButtonInteraction(interaction);
+      return editReply.mock.calls[0]?.[0];
+    },
+  ],
+  [
+    '/lfg-leave <game>',
+    async (gameId, discordId) => {
+      const { interaction, editReply } = slash(String(gameId), discordId);
+      await command.handleInteraction(interaction);
+      return editReply.mock.calls[0]?.[0];
+    },
+  ],
+  [
+    '/lfg-leave All my LFGs (one hand)',
+    async (_gameId, discordId) => {
+      const { interaction, editReply } = slash('all', discordId);
+      await command.handleInteraction(interaction);
+      return editReply.mock.calls[0]?.[0];
+    },
+  ],
+];
+
+describe('the still-looking count is game-scoped (ROK-1660)', () => {
+  it.each(surfaces)(
+    `%s counts a group ranked past the ${LFG_LIST_LIMIT}-group list cap`,
+    async (_label, leave) => {
+      const a = await linkedMember();
+      const b = await linkedMember();
+      const c = await linkedMember();
+      await crowdPastListCap(b.userId);
+      const quiet = await createGame(testApp, 'Quiet Game');
+      await raise(a.userId, quiet.id);
+      await raise(c.userId, quiet.id);
+
+      const reply = await leave(quiet.id, a.discordId);
+
+      // Precondition: the global list no longer carries the group at all, so
+      // a count read from it would say nobody is left.
+      const capped = await lfg.listGroups(a.userId);
+      expect(capped.some((g) => g.gameId === quiet.id)).toBe(false);
+      expect(JSON.stringify(reply)).toContain(
+        "You're out — **Quiet Game**. 1 still looking.",
+      );
+    },
+  );
 });
 
 describe('LfgLeaveCommand — guards (ROK-1660)', () => {
