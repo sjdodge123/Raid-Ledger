@@ -207,3 +207,17 @@ test('real budgets are the 2026-09-26 baseline + 15%, rounded up', () => {
     assert.ok(o.budgetKB >= o.baselineKB * HEADROOM && o.budgetKB < o.baselineKB * HEADROOM + 0.1, o.name ?? o.label);
   }
 });
+
+test('the contract package stays side-effect free, so the shared zod chunk holds no schemas (ROK-1803)', () => {
+  // Without this flag rolldown keeps every module the barrel re-exports and
+  // one shared chunk carries every contract schema (48.8 KB gz before ROK-1803).
+  const pkgPath = path.join(path.dirname(CHECKER), '..', 'packages', 'contract', 'package.json');
+  const { sideEffects } = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+  assert.ok(
+    sideEffects === false || (Array.isArray(sideEffects) && !sideEffects.some((p) => /index\.js$|\*/.test(p))),
+    `packages/contract/package.json "sideEffects" must be false (or a narrow file list without the barrel); got ${JSON.stringify(sideEffects)}`,
+  );
+  const schemas = realBudgets.lazyOverrides.find((o) => o.name === 'schemas');
+  assert.ok(schemas, 'bundle-budget.config.mjs must budget the zod-only `schemas` chunk');
+  assert.ok(!realBudgets.lazyOverrides.some((o) => o.name === 'dist'), 'the pre-ROK-1803 `dist` barrel chunk entry must not come back');
+});
