@@ -11,6 +11,7 @@ import { GuildAttendance } from './events/guild-attendance';
 import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { GmPostCard } from './content/gm-post-card';
+import { useHubSettings } from './settings/hub-settings-context';
 
 /**
  * ROK-1788: lazy so the mirror (and its editor-only picker, a further lazy
@@ -21,6 +22,8 @@ const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').t
 
 const SPAN_2 = 'md:col-span-2';
 const OVERVIEW_ATTENDANCE_TOP = 5;
+/** "All events" always lands on the core Events tab now that one exists (ROK-1830 S3c). */
+const EVENTS_TAB = 'events';
 
 interface Cell {
     key: string;
@@ -29,16 +32,16 @@ interface Cell {
     node: ReactNode;
 }
 
-/** The core band. Module widgets land between these orders — WoW uses 50/60/80. */
-function coreCells({ page, raids }: HubCtx, jumpTab: string | null): Cell[] {
+/** The core band. Module widgets land between these orders — WoW uses 50/60. */
+function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null): Cell[] {
     const data = raids.data;
     const cells: Cell[] = [
         { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
-        { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} /></Suspense> },
+        { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
     if (!data) return cells;
     cells.push({ key: 'schedule', order: 30, span: 1, node: <GuildRaidSchedule schedule={data.schedule} /> });
-    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={jumpTab} /> });
+    cells.push({ key: 'events', order: 40, span: 2, node: <GuildEvents raids={data} compact jumpTab={EVENTS_TAB} /> });
     cells.push({ key: 'attendance', order: 70, span: 1, node: <GuildAttendance attendance={data.attendance} limit={OVERVIEW_ATTENDANCE_TOP} /> });
     return cells;
 }
@@ -50,7 +53,8 @@ function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
 }
 
 export function HubOverview({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
-    const cells = [...coreCells(ctx, mod?.eventsJumpTab ?? null), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const { openChannelPicker } = useHubSettings();
+    const cells = [...coreCells(ctx, openChannelPicker), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

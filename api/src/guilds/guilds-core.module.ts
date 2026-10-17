@@ -5,6 +5,7 @@ import { GuildDiscordController } from './guild-discord.controller';
 import { GuildDiscordService } from './guild-discord.service';
 import { GuildEditorGuard } from './guild-editor.guard';
 import { GuildEditorsService } from './guild-editors.service';
+import { GuildLeaderGuard } from './guild-leader.guard';
 import { GuildProfileService } from './guild-profile.service';
 import { HubKindActiveGuard } from './hub-kind-active.guard';
 import { HubKindRegistry } from './hub-kind.registry';
@@ -21,6 +22,7 @@ import { HubKindRegistry } from './hub-kind.registry';
   providers: [
     GuildAccessService,
     GuildEditorGuard,
+    GuildLeaderGuard,
     GuildEditorsService,
     GuildProfileService,
     GuildDiscordService,
@@ -30,6 +32,7 @@ import { HubKindRegistry } from './hub-kind.registry';
   exports: [
     GuildAccessService,
     GuildEditorGuard,
+    GuildLeaderGuard,
     GuildEditorsService,
     GuildProfileService,
     HubKindRegistry,

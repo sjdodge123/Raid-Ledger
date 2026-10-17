@@ -10,7 +10,7 @@
  */
 import type { ComponentType } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
+import type { CreateGuildEditorInput, GuildEditor, GuildMemberRow, GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
 import { usePluginStore } from '../stores/plugin-store';
 import { getHubModuleRegistrations } from './plugin-registry';
 
@@ -65,19 +65,43 @@ export interface HubResourceSection {
     useVisible?: (guildId: number) => boolean;
 }
 
-/** One cell of a member row, rendered in `memberColumns` order. */
-export interface HubMemberColumn {
-    id: string;
-    cell: ComponentType<{ row: HubMemberRow }>;
+/**
+ * What the settings sheet hands a module's editor-delegation pickers
+ * (ROK-1830 S4). Core owns the editor list, the chips and the mutations; a
+ * module only offers the grants its game can express — WoW adds whole ranks,
+ * which core knows nothing about.
+ */
+export interface HubEditorDelegationCtx {
+    page: GuildPage;
+    editors: readonly GuildEditor[];
+    /** A mutation is in flight — disable the pickers. */
+    pending: boolean;
+    onAdd: (input: CreateGuildEditorInput) => void;
 }
 
-/** A collapsible band of members (WoW: one guild rank). */
-export interface HubMemberGroup {
+/** The band one row belongs to while the Members list is grouped. */
+export interface HubMemberGrouping {
     key: string;
     label: string;
-    testId: string;
-    defaultOpen: boolean;
-    rows: readonly HubMemberRow[];
+    /** Kept stable across the ROK-1830 rename; defaults to `guild-group-<key>`. */
+    testId?: string;
+}
+
+/**
+ * One column of the Members list (ROK-1830 S3b). `header` names it in the
+ * desktop table head ONLY — a phone card shows the first column as the row's
+ * identity line and wraps the rest into one unlabelled meta line, so every
+ * cell must read on its own (a column whose `cell` can render `null`, such as
+ * WoW's Main/Raid role, would otherwise leave an orphan label). A column with
+ * `groupBy` also offers core the "Group by <header>" toggle — core bands the
+ * rows by the returned key, in first-appearance order, so the module's own row
+ * order decides the band order.
+ */
+export interface HubMemberColumn {
+    id: string;
+    header: string;
+    cell: ComponentType<{ row: HubMemberRow }>;
+    groupBy?: (row: HubMemberRow) => HubMemberGrouping;
 }
 
 export interface HubModule {
@@ -86,8 +110,10 @@ export interface HubModule {
     overviewWidgets: readonly HubWidget[];
     memberColumns: readonly HubMemberColumn[];
     heroPills: readonly ComponentType<HubCtx>[];
-    /** Rows arrive already grouped per kind; empty groups are dropped by the module. */
-    memberGroups: (page: GuildPage) => readonly HubMemberGroup[];
+    /** Every member of the hub, in the order the module wants them listed. */
+    memberRows: (page: GuildPage) => readonly HubMemberRow[];
+    /** Text the Members search box matches a row against. Default: the row's name. */
+    memberSearch?: (row: HubMemberRow) => string;
     /** Band above the groups in the Members frame (WoW: role counts). */
     membersSummary?: ComponentType<HubCtx>;
     /** Sub-title under the Members heading. */
@@ -99,11 +125,19 @@ export interface HubModule {
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */
     heroNote?: (ctx: HubCtx) => string | null;
     /**
-     * Tab id the hero's next-event chip and the Overview events widget jump to
-     * (WoW: `raids`). Unset = no jump, so a module without an events tab never
-     * renders a dead chip.
+     * Tab id the hero's next-event chip jumps to. Core's own Events tab owns
+     * the Overview "All events" jump (ROK-1830 S3c); this is only the chip, so
+     * a module can send "Next raid" at its own tab — WoW points at `raids`,
+     * where the next raid's role composition is (approved prototype). Unset =
+     * the core Events tab.
      */
     eventsJumpTab?: string;
+    /**
+     * Rows added to the settings sheet's "Page editors" section (ROK-1830 S4).
+     * WoW contributes its rank + member pickers here; the rank-based mapping
+     * itself stays WoW-side. Unset = core shows the list with no way to add.
+     */
+    editorDelegation?: ComponentType<HubEditorDelegationCtx>;
     /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` component is fine. */
     resourceSections?: readonly HubResourceSection[];
 }

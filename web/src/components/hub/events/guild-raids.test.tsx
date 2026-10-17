@@ -1,5 +1,6 @@
 /**
- * ROK-1787: the guild page Raids tab, Overview raid widgets and hero chip.
+ * ROK-1787/ROK-1830: the core Events tab, the WoW Raids tab, the Overview
+ * raid widgets and the hero chip.
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -63,31 +64,67 @@ afterEach(() => { window.location.hash = ''; });
 
 beforeEach(() => { activateWowPlugin(); });
 
-describe('Guild Raids tab (ROK-1787)', () => {
-    it('renders schedule, composition, attendance and full events from the payload', async () => {
+describe('Core Events tab (ROK-1830 S3c)', () => {
+    it('renders the schedule, the whole attendance board and the full event lists', async () => {
         serve(FULL);
-        renderPage('#raids');
-        const tab = await screen.findByTestId('guild-raids-tab');
+        renderPage('#events');
+        const tab = await screen.findByTestId('guild-events-tab');
         expect(within(tab).getByTestId('guild-schedule-night')).toHaveTextContent('Molten Core Night');
         expect(within(tab).getByTestId('guild-schedule-night')).toHaveTextContent('Next');
-        expect(within(tab).getByTestId('guild-composition-tank')).toHaveTextContent('Need 1');
-        expect(within(tab).getByTestId('guild-composition-healer')).toHaveTextContent('Full');
-        expect(within(tab).getByTestId('guild-bench')).toHaveTextContent('Benchwarmer');
-        expect(within(tab).getAllByTestId('guild-attendance-row'), 'the Raids tab shows every attendance row').toHaveLength(7);
+        expect(within(tab).getAllByTestId('guild-attendance-row'), 'the Events tab shows every attendance row').toHaveLength(7);
         expect(within(tab).getAllByTestId('guild-upcoming-event')).toHaveLength(3);
         expect(within(tab).getByTestId('guild-recent-event')).toHaveTextContent('3 of 4 attended (75%)');
         expect(within(tab).getByText('Shown in your local time')).toBeInTheDocument();
         expect(within(tab).getByText('Last 8 weeks')).toBeInTheDocument();
     });
 
+    it('leaves role composition to the WoW Raids tab', async () => {
+        serve(FULL);
+        renderPage('#events');
+        const tab = await screen.findByTestId('guild-events-tab');
+        expect(within(tab).queryByTestId('guild-composition-tank'), 'composition is the module tab\u2019s, not core\u2019s').toBeNull();
+        expect(within(tab).queryByTestId('guild-bench')).toBeNull();
+    });
+
     it('shows the viewer status pill or a Sign up link to the event', async () => {
         serve(FULL);
-        renderPage('#raids');
+        renderPage('#events');
         const cards = await screen.findAllByTestId('guild-upcoming-event');
         expect(at(cards, 0)).toHaveTextContent("You're signed up");
         expect(at(cards, 1)).toHaveTextContent("You're tentative");
         expect(within(at(cards, 2)).getByRole('link', { name: 'Sign up for Raid 43' })).toHaveAttribute('href', '/events/43');
         expect(within(at(cards, 0)).getByRole('link', { name: 'Molten Core Night' })).toHaveAttribute('href', '/events/41');
+    });
+
+    it('shows a quiet empty state in every widget when the guild has no tagged events', async () => {
+        serve(emptyGuildRaids);
+        renderPage('#events');
+        const tab = await screen.findByTestId('guild-events-tab');
+        expect(tab).toHaveTextContent('No recurring raids yet.');
+        expect(tab).toHaveTextContent('No attendance recorded yet.');
+        expect(tab).toHaveTextContent('No upcoming guild events.');
+        expect(screen.queryByTestId('guild-next-raid'), 'no next raid \u2192 no hero chip').toBeNull();
+    });
+
+    it('a failed raids load keeps the page and explains the tab', async () => {
+        serve(null, 500);
+        renderPage('#events');
+        expect(await screen.findByTestId('guild-events-error', {}, { timeout: 5000 })).toHaveTextContent("We couldn't load this guild's events.");
+        expect(screen.getByTestId('guild-hero')).toBeInTheDocument();
+    });
+});
+
+describe('WoW Raids tab (ROK-1787, narrowed by ROK-1830 S3c)', () => {
+    it('keeps role composition and the bench, and nothing core already shows', async () => {
+        serve(FULL);
+        renderPage('#raids');
+        const tab = await screen.findByTestId('guild-raids-tab');
+        expect(within(tab).getByTestId('guild-composition-tank')).toHaveTextContent('Need 1');
+        expect(within(tab).getByTestId('guild-composition-healer')).toHaveTextContent('Full');
+        expect(within(tab).getByTestId('guild-bench')).toHaveTextContent('Benchwarmer');
+        expect(within(tab).queryByTestId('guild-schedule-night'), 'the schedule moved to the core Events tab').toBeNull();
+        expect(within(tab).queryByTestId('guild-attendance-row'), 'attendance moved to the core Events tab').toBeNull();
+        expect(within(tab).queryByTestId('guild-upcoming-event'), 'the event list moved to the core Events tab').toBeNull();
     });
 
     it('meters expose role="meter" with a clamped value', async () => {
@@ -97,15 +134,10 @@ describe('Guild Raids tab (ROK-1787)', () => {
         expect(within(tank).getByRole('meter')).toHaveAttribute('aria-valuenow', '50');
     });
 
-    it('shows a quiet empty state in every widget when the guild has no tagged events', async () => {
+    it('shows the composition empty state when no upcoming raid has role slots', async () => {
         serve(emptyGuildRaids);
         renderPage('#raids');
-        const tab = await screen.findByTestId('guild-raids-tab');
-        expect(tab).toHaveTextContent('No recurring raids yet.');
-        expect(tab).toHaveTextContent('No upcoming raid with role slots.');
-        expect(tab).toHaveTextContent('No attendance recorded yet.');
-        expect(tab).toHaveTextContent('No upcoming guild events.');
-        expect(screen.queryByTestId('guild-next-raid'), 'no next raid → no hero chip').toBeNull();
+        expect(await screen.findByTestId('guild-raids-tab')).toHaveTextContent('No upcoming raid with role slots.');
     });
 
     it('a failed raids load keeps the page and explains the tab', async () => {
@@ -117,18 +149,18 @@ describe('Guild Raids tab (ROK-1787)', () => {
 });
 
 describe('Guild Overview raid widgets + hero chip (ROK-1787)', () => {
-    it('caps attendance at 5 and the events card at two of each, with an #raids jump', async () => {
+    it('caps attendance at 5 and the events card at two of each, with an #events jump', async () => {
         serve(FULL);
         renderPage();
         const overview = await screen.findByTestId('guild-overview');
         await waitFor(() => expect(within(overview).getAllByTestId('guild-attendance-row')).toHaveLength(5));
         expect(within(overview).getAllByTestId('guild-upcoming-event')).toHaveLength(2);
-        expect(within(overview).getByTestId('guild-all-events')).toHaveAttribute('href', '#raids');
+        expect(within(overview).getByTestId('guild-all-events'), 'core owns the event list now').toHaveAttribute('href', '#events');
         expect(within(overview).getByTestId('guild-schedule-night')).toBeInTheDocument();
         expect(within(overview).getByTestId('guild-composition-dps')).toBeInTheDocument();
     });
 
-    it('the hero chip jumps to #raids with the next raid signups', async () => {
+    it('the hero chip still jumps to the module tab (#raids) with the next raid signups', async () => {
         serve(FULL);
         renderPage();
         const chip = await screen.findByTestId('guild-next-raid');
@@ -140,7 +172,7 @@ describe('Guild Overview raid widgets + hero chip (ROK-1787)', () => {
 
     it('upcoming cards show the start time once (date, then the time range)', async () => {
         serve(FULL);
-        renderPage('#raids');
+        renderPage('#events');
         const cards = await screen.findAllByTestId('guild-upcoming-event');
         const start = timeShort('2030-01-08T20:00:00.000Z');
         const range = timeRange('2030-01-08T20:00:00.000Z', '2030-01-08T23:00:00.000Z');

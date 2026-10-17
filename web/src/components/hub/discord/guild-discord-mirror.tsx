@@ -5,19 +5,21 @@
  * disconnected, access lost, channel deleted, and the latest 3 messages.
  * Messages reuse the ROK-1483 `ThreadMessageRow`; the embed block rides in
  * its `children` slot.
+ *
+ * ROK-1830 S4: the card no longer OWNS the picker — it is mounted by the hub
+ * frame behind the settings sheet (Leader + admin, D10/Q4). The card keeps the
+ * in-context shortcut and only renders it when `onChangeChannel` is given, so
+ * an Officer (who can still edit content) sees none.
  */
-import { lazy, Suspense, useState, type JSX, type ReactNode } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
 import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
 import { Button } from '../../ui/button';
 import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle } from '../hub-bits';
-import { boundChannelId, latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
+import { latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
-
-/** Editor-only: its own lazy chunk, fetched when an editor opens it. The modal mounts on load. */
-const GuildDiscordPicker = lazy(() => import('./guild-discord-picker').then((m) => ({ default: m.GuildDiscordPicker })));
 
 type OkMirror = Extract<GuildDiscordMirrorDto, { state: 'ok' }>;
 
@@ -76,7 +78,7 @@ function Quiet({ testId, children }: { testId: string; children: ReactNode }): J
     return <p data-testid={testId} className="py-6 text-center text-sm text-muted">{children}</p>;
 }
 
-interface BodyProps { mirror: GuildDiscordMirrorDto; canEdit: boolean; onChoose: () => void }
+interface BodyProps { mirror: GuildDiscordMirrorDto; canEdit: boolean; onChoose: (() => void) | null }
 
 function MirrorBody({ mirror, canEdit, onChoose }: BodyProps): JSX.Element {
     const name = 'channelName' in mirror && mirror.channelName ? `#${mirror.channelName}` : null;
@@ -89,7 +91,7 @@ function MirrorBody({ mirror, canEdit, onChoose }: BodyProps): JSX.Element {
         case 'unset': return (
             <div className="flex flex-col items-start gap-2" data-testid="guild-discord-state-unset">
                 <p className="text-sm text-muted">Pick a Discord channel to show its latest messages here, read-only.</p>
-                <Button variant="secondary" size="sm" onClick={onChoose} data-testid="guild-discord-choose">Choose channel</Button>
+                {onChoose && <Button variant="secondary" size="sm" onClick={onChoose} data-testid="guild-discord-choose">Choose channel</Button>}
             </div>
         );
     }
@@ -108,34 +110,38 @@ function PrivateTag(): JSX.Element {
     );
 }
 
-function headerAction({ mirror, canEdit, onChange }: { mirror: GuildDiscordMirrorDto | undefined; canEdit: boolean; onChange: () => void }): JSX.Element | undefined {
+function headerAction({ mirror, onChange }: { mirror: GuildDiscordMirrorDto | undefined; onChange: (() => void) | null }): JSX.Element | undefined {
     const isPrivate = mirror?.state === 'ok' && mirror.channel.visibility === 'private';
-    const change = canEdit && mirror && mirror.state !== 'unset'
+    const change = onChange && mirror && mirror.state !== 'unset'
         ? <Button variant="ghost" size="sm" onClick={onChange} data-testid="guild-discord-change">Change channel</Button>
         : null;
     if (!isPrivate && !change) return undefined;
     return <div className="flex items-center gap-2">{isPrivate && <PrivateTag />}{change}</div>;
 }
 
-/** Hidden while loading (no layout jump) and for non-editors while nothing is bound. */
-export function GuildDiscordMirror({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element | null {
-    const [picking, setPicking] = useState(false);
+interface MirrorProps {
+    guildId: number;
+    /** Officers included — it only decides the "give the bot access again" hint copy. */
+    canEdit: boolean;
+    /** Opens the picker behind the settings sheet; `null` for a viewer who may not pick (D10/Q4). */
+    onChangeChannel?: (() => void) | null;
+}
+
+/** Hidden while loading (no layout jump) and, while nothing is bound, for anyone who cannot pick. */
+export function GuildDiscordMirror({ guildId, canEdit, onChangeChannel = null }: MirrorProps): JSX.Element | null {
     const query = useGuildDiscord(guildId);
     const mirror = query.data;
-    if (query.isPending || (mirror?.state === 'unset' && !canEdit)) return null;
-    const open = (): void => setPicking(true);
-    const action = headerAction({ mirror, canEdit, onChange: open });
+    // Gated on the affordance, not on `canEdit`: an Officer may edit content
+    // but not pick a channel (D5-A), so an unset card would be a dead end.
+    if (query.isPending || (mirror?.state === 'unset' && onChangeChannel === null)) return null;
+    const open = onChangeChannel;
+    const action = headerAction({ mirror, onChange: open });
     return (
         <section id="discord-mirror" aria-labelledby="discord-mirror-title" className="scroll-mt-4 md:col-span-2"
             data-testid="guild-discord-mirror" data-state={mirror?.state ?? 'error'}>
             <SectionTitle headingId="discord-mirror-title" title={mirror ? mirrorTitle(mirror) : 'Discord channel'}
                 blurb={mirrorBlurb(mirror)} action={action} />
             <Card>{mirror ? <MirrorBody mirror={mirror} canEdit={canEdit} onChoose={open} /> : <MirrorError />}</Card>
-            {canEdit && picking && (
-                <Suspense fallback={null}>
-                    <GuildDiscordPicker guildId={guildId} currentId={boundChannelId(mirror)} onClose={() => setPicking(false)} />
-                </Suspense>
-            )}
         </section>
     );
 }

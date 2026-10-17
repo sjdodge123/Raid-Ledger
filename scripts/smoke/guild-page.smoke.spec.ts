@@ -74,14 +74,14 @@ async function openGuildAs(page: Page, guild: SeededGuild, role: Role, hash = ''
     await page.goto(`/guilds/${guild.guildId}${hash}`);
 }
 
-test('GM: hero, rank-grouped roster, character link, no Page editors card', async ({ page }, testInfo) => {
+test('GM: hero, rank-grouped members, character link, no Page editors card', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'gm');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('guild-overview')).toBeVisible();
         await expect(page.getByTestId('guild-editors-panel'), 'rank 0 confers no editor management (GM_RANK_IMPLIES_EDIT off)').toHaveCount(0);
-        await page.goto(`/guilds/${guild.guildId}#roster`);
-        await expect(page.getByTestId('guild-roster')).toBeVisible({ timeout: 15_000 });
+        await page.goto(`/guilds/${guild.guildId}#members`);
+        await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         for (const rank of [0, 1, 2, 3, 4]) {
             await expect(page.getByTestId(`guild-rank-${rank}`)).toBeVisible();
         }
@@ -92,33 +92,46 @@ test('GM: hero, rank-grouped roster, character link, no Page editors card', asyn
     });
 });
 
-test('admin: Page editors card with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
+test('admin: the settings sheet holds the editors, with the rank-1 grant and the "add your Guild Master" hint', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await signInAsAdmin(page.context());
         await page.goto(`/guilds/${guild.guildId}`);
+        const trigger = page.getByTestId('guild-settings-trigger');
+        await expect(trigger, 'admins get the single settings entry point (ROK-1830 S4)').toBeVisible({ timeout: 15_000 });
+        await trigger.click();
         const panel = page.getByTestId('guild-editors-panel');
-        await expect(panel, 'admins manage page editors').toBeVisible({ timeout: 15_000 });
-        await panel.getByText('Page editors').click();
+        await expect(panel, 'admins manage page editors').toBeVisible();
         await expect(panel.getByTestId('guild-editors-gm-hint')).toHaveText('Add your Guild Master as an editor.');
         await expect(panel.getByTestId('guild-editor-chip')).toHaveCount(1);
+        const hide = page.getByTestId('guild-settings-hide-hub');
+        await expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831)').toBeDisabled();
+        await expect(hide).toHaveAttribute('aria-checked', 'false');
     });
 });
 
-test('officer (rank-1 grant): can edit, but no Page editors card', async ({ page }, testInfo) => {
+test('officer (rank-1 grant): can edit, but no settings sheet and no editors', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'officer');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('guild-overview')).toBeVisible();
+        await expect(page.getByTestId('guild-settings-trigger'), 'the sheet is Leader/admin only (D10/Q4)').toHaveCount(0);
         await expect(page.getByTestId('guild-editors-panel'), 'managing editors is admin/operator-only').toHaveCount(0);
     });
 });
 
-test('#roster deep-links straight to the Roster tab', async ({ page }, testInfo) => {
+test('#members deep-links straight to the Members tab, and the retired #roster still lands there', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
-        await openGuildAs(page, guild, 'gm', '#roster');
+        await openGuildAs(page, guild, 'gm', '#members');
         const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-        await expect(tabs.locator('a[href="#roster"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
-        await expect(page.getByTestId('guild-roster')).toBeVisible();
+        await expect(tabs.locator('a[href="#members"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expect(page.getByTestId('guild-members')).toBeVisible();
+
+        // ROK-1830 D7-A: links shared before the rename keep working, and the
+        // address bar is rewritten so the next copy of the link is current.
+        await page.goto(`/guilds/${guild.guildId}#roster`);
+        await expect(tabs.locator('a[href="#members"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expect(page.getByTestId('guild-members')).toBeVisible();
+        await expect(page).toHaveURL(new RegExp('#members$'));
     });
 });
 
@@ -173,22 +186,39 @@ test('entry points: header text link / user menu item / drawer "Your guild" reac
 /*
  * ROK-1787 (S3) — the seed-guild fixture also tags a weekly "Molten Core Night"
  * series (3 nights from next week) and a past "Onyxia Clear" with attendance.
+ * ROK-1830 S3c split that content: core #events holds schedule + attendance +
+ * events, the WoW #raids tab keeps role composition.
  */
-test('#raids: schedule, composition, attendance and guild events', async ({ page }, testInfo) => {
+test('#events: the core tab carries the schedule, attendance and every tagged event', async ({ page }, testInfo) => {
+    await withGuild(testInfo, async (guild) => {
+        await openGuildAs(page, guild, 'member', '#events');
+        const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
+        await expect(tabs.locator('a[href="#events"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        const tab = page.getByTestId('guild-events-tab');
+        await expect(tab).toBeVisible({ timeout: 15_000 });
+        const night = tab.getByTestId('guild-schedule-night');
+        await expect(night, 'one row per tagged recurring series').toHaveCount(1);
+        await expect(night).toContainText('Molten Core Night');
+        await expect(tab.getByText('Shown in your local time')).toBeVisible();
+        await expect(tab.getByTestId('guild-attendance-row').first()).toBeVisible();
+        await expect(tab.getByTestId('guild-upcoming-event'), 'the three seeded series nights').toHaveCount(3);
+        await expect(tab.getByTestId('guild-recent-event').filter({ hasText: 'Onyxia Clear' })).toBeVisible();
+        // ROK-1830 S3c: role composition is the WoW module's, on #raids.
+        await expect(tab.getByTestId('guild-composition-tank')).toHaveCount(0);
+    });
+});
+
+test('#raids: the WoW module tab keeps role composition and nothing core already shows', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'member', '#raids');
         const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
         await expect(tabs.locator('a[href="#raids"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
         const tab = page.getByTestId('guild-raids-tab');
         await expect(tab).toBeVisible({ timeout: 15_000 });
-        const night = tab.getByTestId('guild-schedule-night');
-        await expect(night, 'one row per tagged recurring series').toHaveCount(1);
-        await expect(night).toContainText('Molten Core Night');
-        await expect(tab.getByText('Shown in your local time')).toBeVisible();
         await expect(tab.getByTestId('guild-composition-tank')).toBeVisible();
-        await expect(tab.getByTestId('guild-attendance-row').first()).toBeVisible();
-        await expect(tab.getByTestId('guild-upcoming-event'), 'the three seeded series nights').toHaveCount(3);
-        await expect(tab.getByTestId('guild-recent-event').filter({ hasText: 'Onyxia Clear' })).toBeVisible();
+        await expect(tab.getByTestId('guild-schedule-night'), 'the schedule moved to #events').toHaveCount(0);
+        await expect(tab.getByTestId('guild-upcoming-event'), 'the event list moved to #events').toHaveCount(0);
+        await expect(tab.getByTestId('guild-attendance-row'), 'attendance moved to #events').toHaveCount(0);
     });
 });
 

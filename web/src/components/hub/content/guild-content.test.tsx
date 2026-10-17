@@ -128,19 +128,19 @@ describe('Resources tab visibility', () => {
         serve(false);
         renderPage();
         await screen.findByTestId('guild-gm-post-empty');
-        expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids']);
+        expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids']);
     });
 
     it('shows for a viewer once there is content', async () => {
         serve(false, { ...EMPTY_PROFILE, rules: [{ title: 'Loot', body: 'Need before greed' }] });
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
     });
 
     it('shows for an editor even when empty', async () => {
         serve(true);
         renderPage();
-        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Roster', 'Raids', 'Resources']));
+        await waitFor(async () => expect(await tabLabels()).toEqual(['Overview', 'Members', 'Events', 'Raids', 'Resources']));
     });
 });
 

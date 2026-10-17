@@ -6,16 +6,30 @@
  * `selectTab` — a react-router `<Link to="#roster">` uses pushState, which
  * fires neither `hashchange` nor `popstate`, so the hook would not see it.
  */
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useSyncExternalStore } from 'react';
+
+/** Stable identity so the alias effect does not re-run every render. */
+const EMPTY_ALIASES: Readonly<Record<string, string>> = {};
 
 /** The id a consumer gives the panel of tab `id`: `<prefix>-tab-<id>`. */
 export function tabPanelId(prefix: string, id: string): string {
     return `${prefix}-tab-${id}`;
 }
 
-/** `#roster` → `roster` when it is one of `ids`; anything else → `defaultId`. */
-export function tabFromHash(hash: string, ids: readonly string[], defaultId: string): string {
-    const id = hash.replace(/^#/, '');
+/**
+ * `#members` → `members` when it is one of `ids`; anything else → `defaultId`.
+ *
+ * `aliases` maps a retired hash onto its current tab id, so a link shared
+ * before a tab was renamed still lands on it (ROK-1830: `#roster` → Members).
+ */
+export function tabFromHash(
+    hash: string,
+    ids: readonly string[],
+    defaultId: string,
+    aliases: Readonly<Record<string, string>> = {},
+): string {
+    const raw = hash.replace(/^#/, '');
+    const id = aliases[raw] ?? raw;
     return ids.includes(id) ? id : defaultId;
 }
 
@@ -36,10 +50,27 @@ const serverHash = (): string => '';
  * `hashchange` / `popstate`. Returns `[activeId, selectTab]`; `selectTab`
  * writes the hash (a history entry, like clicking the tab).
  */
-export function useHashTab(ids: readonly string[], defaultId: string): [string, (id: string) => void] {
+export function useHashTab(
+    ids: readonly string[],
+    defaultId: string,
+    aliases: Readonly<Record<string, string>> = EMPTY_ALIASES,
+): [string, (id: string) => void] {
     const hash = useSyncExternalStore(subscribeToHash, readHash, serverHash);
+    const active = tabFromHash(hash, ids, defaultId, aliases);
+    // A retired hash is rewritten in place, so the address bar and any copy of
+    // the link settle on the current id without adding a history entry — but
+    // only when the alias actually landed on its tab. A hidden target falls
+    // through to `defaultId`, and rewriting then would point the link at a tab
+    // that isn't there.
+    useEffect(() => {
+        const raw = window.location.hash.replace(/^#/, '');
+        const target = raw ? aliases[raw] : undefined;
+        if (target !== undefined && target !== raw && target === active) {
+            window.history.replaceState(null, '', `#${target}`);
+        }
+    }, [hash, aliases, active]);
     const selectTab = useCallback((id: string) => {
         window.location.hash = id;
     }, []);
-    return [tabFromHash(hash, ids, defaultId), selectTab];
+    return [active, selectTab];
 }

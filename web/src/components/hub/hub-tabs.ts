@@ -1,7 +1,7 @@
 /**
- * ROK-1830 — the hub's tab frame. Core pins Overview and Roster first and
- * Resources last (D7-A); a module's tabs sit between them, ordered by their
- * own `order`. A module cannot take the first or the last slot.
+ * ROK-1830 — the hub's tab frame. Core pins Overview, Members and Events
+ * first and Resources last (D7-A); a module's tabs sit between them, ordered
+ * by their own `order`. A module cannot take the first or the last slot.
  */
 import type { HubCtx, HubModule } from '../../plugins/hub-module';
 
@@ -18,11 +18,19 @@ export function hubTabs(mod: HubModule | undefined, ctx: HubCtx, showResources: 
         .map((t) => ({ id: t.id, label: t.label, hidden: t.visible ? !t.visible(ctx) : false }));
     return [
         { id: 'overview', label: 'Overview', hidden: false },
-        { id: 'roster', label: 'Roster', hidden: false },
+        { id: 'members', label: 'Members', hidden: false },
+        { id: 'events', label: 'Events', hidden: false },
         ...moduleTabs,
         { id: 'resources', label: 'Resources', hidden: !showResources },
     ];
 }
+
+/**
+ * Hashes that are no longer tab ids, mapped onto the tab that replaced them.
+ * `#roster` predates the D7-A rename to Members (ROK-1830) and is kept so
+ * links shared from the old page still open the right tab.
+ */
+export const HUB_TAB_HASH_ALIASES: Readonly<Record<string, string>> = { roster: 'members' };
 
 export function visibleHubTabIds(tabs: readonly HubTabEntry[]): string[] {
     return tabs.filter((t) => !t.hidden).map((t) => t.id);

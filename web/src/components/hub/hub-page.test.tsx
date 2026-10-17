@@ -1,10 +1,11 @@
 /**
- * ROK-1785: `/guilds/:id` — roster grouped by rank, the hidden tabs, the
- * friendly 403 state, and the Page editors card shown only to
- * `viewer.canManageEditors`.
+ * ROK-1785: `/guilds/:id` — members grouped by rank, the hidden tabs, the
+ * friendly 403 state, and (ROK-1830 S4) the Guild settings sheet — the single
+ * entry point for editors, the Discord picker and hub visibility, shown only
+ * to `viewer.canManageEditors`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
@@ -54,20 +55,20 @@ function serve(page: GuildPageDto | null, status = 200, editors: GuildEditor[] =
     );
 }
 
-function renderPage(): void {
-    renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
+function renderPage() {
+    return renderWithProviders(<Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>, { initialEntries: ['/guilds/7'] });
 }
 
 beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GuildPage (ROK-1785)', () => {
-    it('shows only the Overview, Roster and Raids tabs (S1 + S3)', async () => {
+    it('shows the Overview, Members, Events and Raids tabs (S1 + S3)', async () => {
         serve(makePage());
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
-        expect(labels).toEqual(['Overview', 'Roster', 'Raids']);
+        expect(labels).toEqual(['Overview', 'Members', 'Events', 'Raids']);
     });
 
     it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {
@@ -77,8 +78,8 @@ describe('GuildPage (ROK-1785)', () => {
         expect(hero, 'a realm-less guild with raw_realm must still show its realm').toHaveTextContent('Doomhowl · US');
     });
 
-    it('renders the roster grouped by rank, linking only RL characters', async () => {
-        window.location.hash = '#roster';
+    it('renders the members grouped by rank, linking only RL characters', async () => {
+        window.location.hash = '#members';
         serve(makePage());
         renderPage();
         const gm = await screen.findByTestId('guild-rank-0');
@@ -89,14 +90,27 @@ describe('GuildPage (ROK-1785)', () => {
         expect(within(raiders).getByTestId('guild-member-unlinked')).toHaveTextContent('Nolinkadin');
     });
 
-    it('shows the server role counts (one per user) in the Overview summary with a #roster jump', async () => {
+    it('an old #roster link opens Members and the hash is rewritten to #members (ROK-1830 D7-A)', async () => {
+        window.location.hash = '#roster';
+        serve(makePage());
+        renderPage();
+        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        await waitFor(() => expect(
+            within(nav).getByRole('link', { name: 'Members' }),
+            'the retired #roster hash must still select the Members tab',
+        ).toHaveAttribute('aria-current', 'page'));
+        expect(screen.getByTestId('guild-members')).toBeInTheDocument();
+        expect(window.location.hash, 'the retired hash must be rewritten in place').toBe('#members');
+    });
+
+    it('shows the server role counts (one per user) in the Overview summary with a #members jump', async () => {
         serve(makePage());
         renderPage();
         const summary = await screen.findByTestId('guild-members-summary');
         expect(within(summary).getByTestId('guild-role-count-tank')).toHaveTextContent('2Tank');
         expect(within(summary).getByTestId('guild-role-count-healer')).toHaveTextContent('4Heal');
         expect(within(summary).getByTestId('guild-role-count-dps')).toHaveTextContent('7DPS');
-        expect(screen.getByTestId('guild-see-roster')).toHaveAttribute('href', '#roster');
+        expect(screen.getByTestId('guild-see-members')).toHaveAttribute('href', '#members');
     });
 
     it('shows the friendly not-a-member state on a 403', async () => {
@@ -108,19 +122,46 @@ describe('GuildPage (ROK-1785)', () => {
         expect(screen.queryByTestId('guild-hero')).toBeNull();
     });
 
-    it('hides the Page editors card unless the viewer can manage editors', async () => {
+});
+
+describe('GuildPage — Guild settings sheet (ROK-1830 S4)', () => {
+    it('hides the settings trigger, and with it the editors, unless the viewer can manage editors', async () => {
         serve(makePage(false));
         renderPage();
         await screen.findByTestId('guild-members-summary');
+        expect(screen.queryByTestId('guild-settings-trigger'), 'a member gets no settings entry point').toBeNull();
         expect(screen.queryByTestId('guild-editors-panel')).toBeNull();
+        expect(screen.queryByTestId('guild-discord-change'), 'and no way to reach the channel picker (D10/Q4)').toBeNull();
         expect(editorCalls).toBe(0);
+    });
+
+    it('opens one settings sheet holding the channel picker, the editors and hub visibility', async () => {
+        serve(makePage(true));
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        const sheet = await screen.findByTestId('guild-settings-sheet');
+        expect(within(sheet).getByTestId('guild-editors-panel')).toBeInTheDocument();
+        expect(within(sheet).getByTestId('guild-settings-choose-channel')).toBeInTheDocument();
+        const hide = within(sheet).getByTestId('guild-settings-hide-hub');
+        expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831), so the switch must be off and disabled').toBeDisabled();
+        expect(hide).toHaveAttribute('aria-checked', 'false');
+        expect(within(sheet).getByText(/Hiding a hub isn’t available yet/)).toBeInTheDocument();
+    });
+
+    it('swaps the sheet for the channel picker when the Leader changes the channel', async () => {
+        serve(makePage(true));
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        await userEvent.click(await screen.findByTestId('guild-settings-choose-channel'));
+        expect(await screen.findByTestId('guild-discord-picker-body')).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-sheet'), 'the picker replaces the sheet rather than stacking on it').toBeNull();
     });
 
     it('lists editors and adds a member for a viewer who can manage editors', async () => {
         serve(makePage(true));
         renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
-        await userEvent.click(within(panel).getByText('Page editors'));
         expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Rank: Raider');
         expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Add your Guild Master as an editor.');
         const memberSelect = within(panel).getByTestId('guild-editor-member-select');
@@ -136,9 +177,49 @@ describe('GuildPage (ROK-1785)', () => {
         const gmGrant: GuildEditor = { ...RANK_EDITOR, id: 13, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 1, memberName: 'Grimtusk' };
         serve(makePage(true), 200, [RANK_EDITOR, gmGrant]);
         renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
-        await userEvent.click(within(panel).getByText('Page editors'));
         await waitFor(() => expect(within(panel).getAllByTestId('guild-editor-chip')).toHaveLength(2));
         expect(within(panel).queryByTestId('guild-editors-gm-hint'), 'the GM is already an editor, so the hint must hide').toBeNull();
+    });
+
+});
+
+// ROK-1830 r1 (Codex P2): both overlays are Leader-only, so a refetched page
+// that demotes the viewer must take the open one off the screen rather than
+// leave a dialog whose writes the server now refuses.
+describe('GuildPage — a demotion closes the Leader-only overlays (ROK-1830 r1)', () => {
+    it('closes an open settings sheet when canManageEditors flips false', async () => {
+        let canManage = true;
+        serve(makePage(true));
+        server.use(http.get(BASE, () => HttpResponse.json(makePage(canManage))));
+        const { queryClient } = renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        expect(await screen.findByTestId('guild-settings-sheet')).toBeInTheDocument();
+
+        canManage = false;
+        await act(async () => { await queryClient.invalidateQueries(); });
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-settings-sheet'),
+            'a demoted viewer must not keep the Leader-only sheet open',
+        ).toBeNull());
+        expect(screen.queryByTestId('guild-settings-trigger')).toBeNull();
+    });
+
+    it('closes an open channel picker when canManageEditors flips false', async () => {
+        let canManage = true;
+        serve(makePage(true));
+        server.use(http.get(BASE, () => HttpResponse.json(makePage(canManage))));
+        const { queryClient } = renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        await userEvent.click(await screen.findByTestId('guild-settings-choose-channel'));
+        expect(await screen.findByTestId('guild-discord-picker-body')).toBeInTheDocument();
+
+        canManage = false;
+        await act(async () => { await queryClient.invalidateQueries(); });
+        await waitFor(() => expect(
+            screen.queryByTestId('guild-discord-picker-body'),
+            'a demoted viewer must not keep the Leader-only picker open',
+        ).toBeNull());
     });
 });

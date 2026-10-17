@@ -9,7 +9,7 @@
  * a warm cache needs no second commit; it runs no plugin query itself).
  * A 403 (not a member) is a friendly empty state.
  */
-import { useEffect, useRef, type JSX, type ReactNode } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';
 import type { GuildPage as GuildPageDto } from '@raid-ledger/contract';
 import { Button } from '../ui/button';
@@ -21,12 +21,19 @@ import { HubHero } from './hub-hero';
 import { HubOverview } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
-import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
+import { HubEventsTab } from './events/events-tab';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
 import { usePluginsHydrated } from '../../hooks/use-plugins';
 import { HubResourceVisibility } from './hub-resource-visibility';
+import { HubSettingsProvider, type HubSettingsValue } from './settings/hub-settings-context';
+import { HubSettingsTrigger } from './settings/settings-trigger';
+
+/** Leader/admin only and opened on demand, so neither chunk rides in the page bundle. */
+const HubSettingsSheet = lazy(() => import('./settings/settings-sheet').then((m) => ({ default: m.HubSettingsSheet })));
+const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount').then((m) => ({ default: m.HubDiscordPickerMount })));
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
 
@@ -71,7 +78,8 @@ interface PanelProps {
 
 function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
-    if (active === 'roster') return <HubMembers ctx={ctx} module={mod} />;
+    if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
+    if (active === 'events') return <HubEventsTab query={ctx.raids} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
@@ -92,6 +100,47 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     );
 }
 
+/**
+ * One overlay at a time. The picker REPLACES the sheet rather than stacking on
+ * it: two dialogs deep is a shell the inventory doesn't have, and the sheet has
+ * nothing in flight — so a single state, not two booleans that can both be true.
+ */
+type HubOverlay = 'closed' | 'settings' | 'picker';
+
+interface OverlayProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    overlay: HubOverlay;
+    onClose: () => void;
+    openPicker: () => void;
+}
+
+function HubOverlays({ ctx, module: mod, overlay, onClose, openPicker }: OverlayProps): JSX.Element {
+    return (
+        <Suspense fallback={null}>
+            {overlay === 'settings' && <HubSettingsSheet ctx={ctx} module={mod} onClose={onClose} onChangeChannel={openPicker} />}
+            {overlay === 'picker' && <HubDiscordPickerMount guildId={ctx.page.guild.id} onClose={onClose} />}
+        </Suspense>
+    );
+}
+
+/** The sheet, the picker it opens, and the hero trigger that starts both (ROK-1830 S4). */
+function useHubSettingsState(canManage: boolean) {
+    const [requested, setRequested] = useState<HubOverlay>('closed');
+    const openPicker = useCallback(() => setRequested('picker'), []);
+    const openSettings = useCallback(() => setRequested('settings'), []);
+    const onClose = useCallback(() => setRequested('closed'), []);
+    // Both overlays are Leader-only, so the rights gate the RENDER rather than
+    // an effect that resets the state: a refetched page that demotes the viewer
+    // mid-session takes the open dialog off the screen in the same commit, and
+    // nothing cascades. (The stale request is harmless — a re-promoted viewer
+    // reopens from the trigger.)
+    const overlay: HubOverlay = canManage ? requested : 'closed';
+    const value: HubSettingsValue = useMemo(
+        () => ({ openChannelPicker: canManage ? openPicker : null }), [canManage, openPicker]);
+    return { overlay, openPicker, onClose, openSettings, value };
+}
+
 interface FrameProps {
     ctx: HubCtx;
     module: HubModule | undefined;
@@ -101,13 +150,19 @@ interface FrameProps {
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
 function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
-    const [active] = useHashTab(visibleHubTabIds(tabs), 'overview');
+    const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
+    const canManage = ctx.page.viewer.canManageEditors;
+    const s = useHubSettingsState(canManage);
     return (
-        <div className={PAGE}>
-            <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null} />
-            <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
-            <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
-        </div>
+        <HubSettingsProvider value={s.value}>
+            <div className={PAGE}>
+                <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null}
+                    action={canManage ? <HubSettingsTrigger onOpen={s.openSettings} /> : null} />
+                <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
+                <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
+                <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
+            </div>
+        </HubSettingsProvider>
     );
 }
 

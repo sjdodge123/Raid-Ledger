@@ -13,11 +13,13 @@ import { WowRoleSummaryBand } from './wow-members';
 import {
     WOW_MEMBERS_EMPTY,
     WOW_MEMBER_COLUMNS,
-    wowMemberGroups,
     wowMemberRowClass,
+    wowMemberRows,
+    wowMemberSearch,
     wowMembersBlurb,
 } from './wow-members.helpers';
-import { WowEditorsWidget, WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
+import { WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
+import { WowEditorDelegation } from './editor-delegation';
 import { useWowAddonsVisible } from './wow-resources.helpers';
 
 /**
@@ -38,16 +40,17 @@ export const wowHubModule: HubModule = {
     overviewWidgets: [
         { id: 'role-composition', order: 50, component: WowRoleCompositionWidget, visible: (ctx) => ctx.raids.data !== undefined },
         { id: 'members-summary', order: 60, component: WowMembersSummary },
-        { id: 'editors', order: 80, span: 2, component: WowEditorsWidget, visible: (ctx) => ctx.page.viewer.canManageEditors },
     ],
     memberColumns: WOW_MEMBER_COLUMNS,
     heroPills: [WowWhereFact, WowFactionPill],
-    memberGroups: wowMemberGroups,
+    memberRows: wowMemberRows,
+    memberSearch: wowMemberSearch,
     membersSummary: WowRoleSummaryBand,
     membersBlurb: wowMembersBlurb,
     membersEmpty: WOW_MEMBERS_EMPTY,
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
     eventsJumpTab: 'raids',
+    editorDelegation: WowEditorDelegation,
     resourceSections: [{ id: 'wow-addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
 };

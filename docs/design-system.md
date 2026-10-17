@@ -310,7 +310,7 @@ Mounted once at app level — never a second instance, and root-only: a scoped p
 | `modal-helpers.tsx` → `ModalSearchInput`, `ModalEmptyState`, `ModalListBody` | Search + empty + list body inside a modal. `ModalSearchInput` is now a thin wrapper that delegates to `SearchInput` (ROK-1647) and still requires a `label` (→ `aria-label`) | Any searchable picker modal. New code uses `SearchInput` directly | see file |
 | `fab.tsx` → `FAB` | Floating action button | One primary create action per mobile page — a neutral-toned Filters FAB (§4.1, ROK-1659) may stack directly above it, same right edge, 12px gap; the create FAB keeps the emerald fill | `onClick`, `icon` (default `PlusIcon`), `label` |
 | `nav-chip.tsx` → `NavChip`, `NAV_CHIP_CLASS` | Navigational link chip | Linking to a sibling lineup/page from a banner | `to`, `children`, `testId` |
-| `tab-row.tsx` → `TabRow` (+ `tab-row.helpers.ts` → `useHashTab`, `tabFromHash`, `tabPanelId`) (ROK-1785) | Underline tab **links** promoted from the ROK-1781 guild-page prototype: a `<nav aria-label>` of plain `<a href="#id">`, the active one `aria-current="page"` with the `border-success` underline (OFF `text-muted`, `hover:border-edge-strong`), 44px tall, `FOCUS_RING` inset so the scroller never clips it. `useHashTab(ids, defaultId)` → `[activeId, selectTab]` reads `location.hash` and follows `hashchange` / `popstate`; no hash, an unknown one or a hidden tab's id resolves to `defaultId`. Phone: the row never wraps — it scrolls sideways inside its own `<nav>` (thin scrollbar, `overscroll-x-contain`), never the page; an active tab the row clips (a deep link to the last tab) gets `scrollIntoView({ inline: 'nearest', block: 'nearest' })` on mount and on change, an unclipped one is left alone so the page never jumps to the row. **Panel ids are `tabPanelId(prefix, id)` → `<prefix>-tab-<id>`, never the bare id** — a bare id makes the browser jump to the panel on load and on every click. In-page jump links ("See roster") are plain `<a href="#roster">` or call `selectTab`; a react-router `<Link to="#roster">` pushes state without a `hashchange`, so the hook misses it. New pattern: TabRow — hash-synced underline tab links; nothing in §3.1 deep-links or scrolls without wrapping. | Deep-linkable page **sections** — each tab is a URL (`/guilds/7#roster`) a user can share or return to (the guild page). **Not** for a choice or a filter value — that is the segmented `RadioGroup` (§4.11); not for switching content inside a card, modal or sheet, where a URL hash means nothing. | `tabs` (`{ id, label, hidden? }[]`, hidden ones not rendered — leave their ids out of `useHashTab` too), `activeId`, `label` (the nav's name), `className` |
+| `tab-row.tsx` → `TabRow` (+ `tab-row.helpers.ts` → `useHashTab`, `tabFromHash`, `tabPanelId`) (ROK-1785) | Underline tab **links** promoted from the ROK-1781 guild-page prototype: a `<nav aria-label>` of plain `<a href="#id">`, the active one `aria-current="page"` with the `border-success` underline (OFF `text-muted`, `hover:border-edge-strong`), 44px tall, `FOCUS_RING` inset so the scroller never clips it. `useHashTab(ids, defaultId)` → `[activeId, selectTab]` reads `location.hash` and follows `hashchange` / `popstate`; no hash, an unknown one or a hidden tab's id resolves to `defaultId`. Phone: the row never wraps — it scrolls sideways inside its own `<nav>` (thin scrollbar, `overscroll-x-contain`), never the page; an active tab the row clips (a deep link to the last tab) gets `scrollIntoView({ inline: 'nearest', block: 'nearest' })` on mount and on change, an unclipped one is left alone so the page never jumps to the row. **Panel ids are `tabPanelId(prefix, id)` → `<prefix>-tab-<id>`, never the bare id** — a bare id makes the browser jump to the panel on load and on every click. In-page jump links ("See members") are plain `<a href="#members">` or call `selectTab`; a react-router `<Link to="#members">` pushes state without a `hashchange`, so the hook misses it. New pattern: TabRow — hash-synced underline tab links; nothing in §3.1 deep-links or scrolls without wrapping. | Deep-linkable page **sections** — each tab is a URL (`/guilds/7#members`) a user can share or return to (the guild page). **Not** for a choice or a filter value — that is the segmented `RadioGroup` (§4.11); not for switching content inside a card, modal or sheet, where a URL hash means nothing. | `tabs` (`{ id, label, hidden? }[]`, hidden ones not rendered — leave their ids out of `useHashTab` too), `activeId`, `label` (the nav's name), `className` |
 | `switch.tsx` → `Switch` | Accessible on/off switch: native `<button role="switch" aria-checked>`, Space/Enter toggle, `focus-visible` ring, disabled dims + blocks, `bg-success` on / `bg-dim` off (ROK-1612). The track is 24px tall but a transparent `::before` (`before:-inset-y-2.5`) makes the hit area 44px | Any boolean setting that applies immediately (admin toggles, feature opt-ins). Not for form fields submitted later — use a checkbox | `checked`, `onChange(next)`, `label` (accessible name), `aria-describedby` (link a visible helper line), `disabled`, `className`, `testId` |
 | `new-badge.tsx` → `NewBadge` | "New" marker | Freshly added items | `visible` |
 | `plugin-badge.tsx` → `PluginBadge` | Image-only plugin attribution badge | Marking plugin-contributed UI | `icon`, `iconSmall`, `label`, `size` |
@@ -518,6 +518,16 @@ same split elsewhere.
 
 **DON'T** render a desktop `Modal` on mobile and rely on scrolling, or build a custom overlay — `Modal`
 carries the focus trap and ARIA dialog semantics you would otherwise have to re-earn.
+
+**A settings panel is this pair too, not a third shell** (ROK-1830 S4). The hub's "Guild settings"
+(`components/hub/settings/settings-sheet.tsx`) holds the Discord channel row, Page editors and hub
+visibility in a `Modal maxWidth="max-w-lg"` at ≥1024px and a `BottomSheet maxHeight="85vh"` below — the
+same split `GuildDiscordPicker` and `AddonImportDialog` ship. Its rows are `SettingsSection` +
+`SettingsSwitchRow` (`settings-rows.tsx`): a switch with no endpoint behind it renders **disabled with
+the reason in its helper line**, never hidden. The approved prototype drew a 440px panel anchored to the
+trigger; that shell exists nowhere in §3.1, so it was not built — the anchored-popover idiom stays the
+§4.14 action list. **Don't stack two dialogs** to reach a nested picker: the sheet closes and the picker
+opens in its place (`useHubSettingsState`, `hub-page.tsx`), because nothing in the sheet is in flight.
 
 **Sheet layout rules** (ROK-1640 / ROK-1641):
 
@@ -1023,6 +1033,19 @@ rounded-xl` box so a phone never gets page overflow; header row `border-b border
 with a tone map on tokens only: success `bg-success/10 border-success/30 text-success`, warning and danger the
 same recipe, neutral/expected-refusal `bg-panel border-edge text-muted`. Put a one-line legend above the
 table saying what each chip in a cell means, and a `title` on every chip.
+
+**Module-extended list table (ROK-1830).** The hub's Members list is the read-only sibling: the same
+`max-w-full overflow-x-auto border border-edge` box + `useMediaQuery(DESKTOP_MQ)` split, except the columns
+come from the active plugin's hub module rather than the file
+(`web/src/components/hub/hub-member-table.tsx`, driven by `HubMemberColumn`). Rules for that shape: every
+column carries a `header`, which is the `<th>` on desktop only — a phone card carries no field labels, so the
+first column is the row's identity line and the rest wrap into one unlabelled meta line. Every cell must
+therefore read on its own — a `cell` that can render `null` (WoW's Main / Raid role) would leave an orphan
+label. A grouped list draws its band as a
+`<th scope="colgroup">` row on `bg-panel` (phone: the same line above the card group), never a second table;
+any per-row accent is a `border-l-2` on the first cell with a token class the module supplies. Tools above
+the box are the shared `SearchInput` (max-width `xs`) and, when a column offers grouping, a `Checkbox`
+labelled `Group by <header>`, with a `text-xs text-muted` count line between them and the box.
 
 **Editable admin table (ROK-1094).** When each row carries controls (pickers, a `Switch`, a ghost button),
 keep the same box/header/divider idiom at ≥1024px and switch to one stacked card per row below it via
