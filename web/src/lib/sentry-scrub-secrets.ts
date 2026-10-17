@@ -20,9 +20,11 @@
  * an input → expected row plus `scrub(scrub(x)) === scrub(x)`:
  *
  *  1. A KEY is secret only when it is unambiguous: an exact name, a name
- *     ending in token/secret/password/passwd, or one of the explicit `*_key`
- *     compounds. `tokenCount`, `tokenizer`, `passwordPolicy`, `keyboard`,
- *     `queryKey` and `primaryKey` survive.
+ *     ending in token/secret/password/passwd/pwd, or a credential-noun `key`
+ *     compound (`api-key`, `X-Api-Key`, `awsSecretAccessKey`, `authKey`).
+ *     `tokenCount`, `tokenizer`, `passwordPolicy`, `pwdTimeout`, `keyboard`,
+ *     `queryKey`, `primaryKey`, `monkey` and `hotkey` survive. `_` and `-`
+ *     are interchangeable everywhere a name is joined.
  *  2. A VALUE is scrubbed when (a) it is a known query/fragment param inside
  *     something that is actually a URL, (b) it follows a rule-1 key as
  *     `key=value` / `key: value` / `"key":"value"` anywhere in text, or (c) it
@@ -63,16 +65,28 @@ const SECRET_KEY_EXACT = [
     'credentials',
 ] as const;
 
-/** `accessToken`, `user_api_secret`, `clientSecret` — any name ending in the noun. */
-const SECRET_NOUN_SUFFIX = String.raw`[A-Za-z0-9_-]*(?:token|secret|password|passwd)`;
+/**
+ * `accessToken`, `user_api_secret`, `clientSecret`, `db_pwd` — any name ENDING
+ * in the noun. r6: `pwd` is a suffix, not only an exact name, because
+ * `db_pwd=` and `db-pwd=` leaked. The whole-name anchor (`SECRET_KEY_WHOLE`)
+ * and the `(?![A-Za-z0-9_-])` lookahead in the matcher mean only a TRAILING
+ * `pwd` counts — `pwdTimeout` keeps its value.
+ */
+const SECRET_NOUN_SUFFIX = String.raw`[A-Za-z0-9_-]*(?:token|secret|password|passwd|pwd)`;
 
 /**
  * r5 P2: a bare `key`/`Key` suffix is NOT a secret noun — `queryKey`,
- * `primaryKey` and `keyboard` are ordinary diagnostics whose values are worth
- * keeping. Only these explicit compounds name a credential.
+ * `primaryKey`, `monkey`, `hotkey` and `keyboard` are ordinary diagnostics
+ * whose values are worth keeping. A credential noun immediately in front of
+ * `key` is what makes it one.
+ *
+ * r6: the prefix no longer demands a trailing `_`/`-`, and the joiner accepts
+ * a hyphen, because `api-key=`, `X-Api-Key:`, `awsAccessKey=` and
+ * `awsSecretAccessKey=` leaked under the r5 shape (all were scrubbed before
+ * it). `client` and `auth` join the noun list for `clientKey` / `authKey`.
  */
 const SECRET_KEY_COMPOUND =
-    String.raw`(?:[A-Za-z0-9_-]*[_-])?(?:api|secret|private|access|signing|encryption)_?key`;
+    String.raw`[A-Za-z0-9_-]*(?:api|secret|private|access|signing|encryption|client|auth)[_-]?key`;
 
 /**
  * THE one definition of a secret key. `isSecretKey` (object keys) and the

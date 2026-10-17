@@ -138,6 +138,9 @@ describe('scrubSecretsFromText — rule table (r4)', () => {
         '{"queryKey":["events",42],"primaryKey":17}',
         // r5 P1: a non-secret key still leaves its own value alone.
         'message: hello',
+        // r6: broadening the compound must not swallow these — only a
+        // TRAILING `pwd`, and only a credential noun in front of `key`.
+        '{"pwdTimeout":30,"monkey":"george","hotkey":"ctrl+k","turnkey":true}',
     ])('leaves %j byte-identical', (input: string) => {
         expect(scrubSecretsFromText(input)).toBe(input);
     });
@@ -152,6 +155,29 @@ describe('scrubSecretsFromText — rule table (r4)', () => {
     });
 });
 
+/**
+ * ROK-1838 r6: every row here was scrubbed BEFORE r5 and leaked after it. The
+ * r5 compound rule demanded an underscore-joined `_key`, so hyphenated and
+ * run-together camelCase credential names stopped matching, and `pwd` was an
+ * exact name only, so `db_pwd=` shipped the password.
+ */
+describe('scrubSecretsFromText — r6 compound keys', () => {
+    it.each([
+        ['api-key=abc123', 'api-key=[Filtered]'],
+        ['X-Api-Key: abc123', 'X-Api-Key:[Filtered]'],
+        ['private-key=abc123', 'private-key=[Filtered]'],
+        ['awsAccessKey=abc123', 'awsAccessKey=[Filtered]'],
+        ['awsSecretAccessKey=abc123', 'awsSecretAccessKey=[Filtered]'],
+        ['clientKey=abc123', 'clientKey=[Filtered]'],
+        ['authKey=abc123', 'authKey=[Filtered]'],
+        ['db_pwd=swordfish', 'db_pwd=[Filtered]'],
+        ['db-pwd=swordfish', 'db-pwd=[Filtered]'],
+    ])('scrubs %j', (input: string, expected: string) => {
+        expect(scrubSecretsFromText(input)).toBe(expected);
+        expect(scrubSecretsFromText(expected)).toBe(expected);
+    });
+});
+
 /** r4 rule 1: a key is secret only when it is unambiguous. */
 describe('isSecretKey', () => {
     it.each([
@@ -160,6 +186,9 @@ describe('isSecretKey', () => {
         'sessionid', 'csrf', 'accessToken', 'clientSecret', 'apiKey', 'user_api_key',
         'secret_key', 'secretKey', 'private_key', 'privateKey', 'accessKey', 'signingKey',
         'encryptionKey', 'client_secret',
+        // r6: hyphenated / camelCase compounds and the `pwd` suffix.
+        'api-key', 'X-Api-Key', 'private-key', 'awsAccessKey', 'awsSecretAccessKey',
+        'clientKey', 'authKey', 'db_pwd', 'db-pwd',
     ])('redacts %j', (key: string) => {
         expect(isSecretKey(key)).toBe(true);
     });
@@ -168,6 +197,8 @@ describe('isSecretKey', () => {
         'tokenCount', 'tokenizer', 'passwordPolicy', 'keyboard', 'code', 'state', 'key', 'url',
         // r5 P2: `key` on its own, and every non-credential compound of it.
         'status', 'queryKey', 'primaryKey', 'monkey', 'hotkey', 'Key',
+        // r6: a leading `pwd` and a `key` with no credential noun in front.
+        'pwdTimeout', 'turnkey', 'keyring',
     ])(
         'keeps %j',
         (key: string) => {
