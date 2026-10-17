@@ -122,10 +122,15 @@ describe('PlayersGuildCard (players:header-cards)', () => {
         expect(screen.getAllByTestId('players-guild-member-count')[1]).toHaveTextContent('1 member');
     });
 
-    it('not a member → nothing', async () => {
+    // ROK-1830 S5b (D11-B): the slot is no longer empty for a hub-less viewer —
+    // it offers core's dismissible "get your guild" prompt with the WoW how-to.
+    it('not a member → the "get your guild" prompt, with the LedgerLink line', async () => {
         serve([]);
-        const { container } = renderWithProviders(<PlayersGuildCard />);
-        await expectEmpty(container, '/guilds/mine');
+        server.use(http.get('http://localhost:3000/guilds/onboarding', () => HttpResponse.json({ dismissed: [] })));
+        renderWithProviders(<PlayersGuildCard />);
+        await screen.findByTestId('get-your-guild-card');
+        expect(screen.getByTestId('get-your-guild-how')).toHaveTextContent('LedgerLink');
+        expect(screen.queryByTestId('players-guild-card')).not.toBeInTheDocument();
     });
 });
 
