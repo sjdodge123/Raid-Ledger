@@ -21,6 +21,11 @@ import type {
   PugSlotListResponseDto,
 } from '@raid-ledger/contract';
 import { defined } from '../common/defined.helpers';
+import {
+  findEventCreatorIdOrThrow,
+  projectPugSlotsForViewer,
+  type PugViewer,
+} from './pugs-visibility.helpers';
 
 export interface PugSlotCreatedPayload {
   pugSlotId: string;
@@ -177,8 +182,15 @@ export class PugsService {
     return slot ?? null;
   }
 
-  async findAll(eventId: number): Promise<PugSlotListResponseDto> {
-    await verifyEventExists(this.db, eventId);
+  /**
+   * Non-claimed PUG slots for an event. ROK-1825: invite credentials are
+   * served only to the event's managers; a null viewer gets them stripped.
+   */
+  async findAll(
+    eventId: number,
+    viewer: PugViewer = null,
+  ): Promise<PugSlotListResponseDto> {
+    const creatorId = await findEventCreatorIdOrThrow(this.db, eventId);
     const pugs = await this.db
       .select()
       .from(schema.pugSlots)
@@ -189,7 +201,8 @@ export class PugsService {
         ),
       )
       .orderBy(schema.pugSlots.createdAt);
-    return { pugs: pugs.map(toPugSlotResponse) };
+    const slots = pugs.map(toPugSlotResponse);
+    return { pugs: projectPugSlotsForViewer(slots, creatorId, viewer) };
   }
 
   async update(

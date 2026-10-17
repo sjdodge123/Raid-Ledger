@@ -65,13 +65,20 @@ export class EventsPugsController {
     );
   }
 
-  /** ROK-1626: guarded like every sibling route on this controller. */
+  /**
+   * ROK-1626: guarded like every sibling route on this controller.
+   * ROK-1825: invite codes only reach the event's creator and operators/admins.
+   */
   @Get(':id/pugs')
   @UseGuards(AuthGuard('jwt'), NotDeactivatedGuard)
   async listPugs(
     @Param('id', ParseIntPipe) eventId: number,
+    @Request() req: AuthenticatedRequest,
   ): Promise<PugSlotListResponseDto> {
-    return this.pugsService.findAll(eventId);
+    return this.pugsService.findAll(eventId, {
+      id: req.user.id,
+      isAdmin: isOperatorOrAdmin(req.user.role),
+    });
   }
 
   @Patch(':id/pugs/:pugId')

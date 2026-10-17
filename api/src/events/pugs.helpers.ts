@@ -8,6 +8,7 @@ import { randomInt } from 'node:crypto';
 import { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import * as schema from '../drizzle/schema';
 import type { PugSlotResponseDto, PugRole } from '@raid-ledger/contract';
+import { canManageEvent } from './pugs-visibility.helpers';
 
 type SlotRow = typeof schema.pugSlots.$inferSelect;
 
@@ -102,7 +103,7 @@ export async function verifyEventPermission(
   if (!event) {
     throw new NotFoundException(`Event with ID ${eventId} not found`);
   }
-  if (event.creatorId !== userId && !isAdmin) {
+  if (!canManageEvent(event.creatorId, userId, isAdmin)) {
     throw new ForbiddenException(
       'Only event creator or admin/operator can manage PUG slots',
     );

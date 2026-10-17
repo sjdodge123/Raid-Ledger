@@ -8,9 +8,22 @@ import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { DrizzleAsyncProvider } from '../../drizzle/drizzle.module';
 import { ApplicationCommandOptionType, MessageFlags } from 'discord.js';
+import { LFG_BLOCKED_REPLY } from './lfg.command.helpers';
 
 const originalClientUrl = process.env.CLIENT_URL;
 const mockUser = { id: 1, username: 'testuser', role: 'member' as const };
+
+/** ROK-1826: the caller row with a deactivation or ban stamp. */
+function blockedUser(stamp: { deactivatedAt?: Date; bannedAt?: Date }) {
+  return { ...mockUser, deactivatedAt: null, bannedAt: null, ...stamp };
+}
+
+/** Widen a typed mock so a partial user row can be resolved. */
+function asMock(
+  fn: jest.MockInstance<Promise<unknown>, [string]>,
+): jest.MockInstance<Promise<unknown>, [string]> {
+  return fn;
+}
 const mockGame = { id: 1, name: 'WoW', coverUrl: null };
 
 const mockCreatedEvent = {
@@ -231,6 +244,26 @@ describe('EventCreateCommand — validation: defer & account', () => {
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.stringContaining('Raid Ledger account'),
     );
+    expect(eventsService.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a deactivated caller with the /lfg blocked reply and creates nothing (ROK-1826)', async () => {
+    asMock(usersService.findByDiscordId).mockResolvedValue(
+      blockedUser({ deactivatedAt: new Date('2026-10-01T00:00:00Z') }),
+    );
+    const interaction = makeInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    expect(interaction.editReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
+    expect(eventsService.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses a banned caller with the /lfg blocked reply and creates nothing (ROK-1826)', async () => {
+    asMock(usersService.findByDiscordId).mockResolvedValue(
+      blockedUser({ bannedAt: new Date('2026-10-01T00:00:00Z') }),
+    );
+    const interaction = makeInteraction();
+    await command.handleInteraction(castInteraction(interaction));
+    expect(interaction.editReply).toHaveBeenCalledWith(LFG_BLOCKED_REPLY);
     expect(eventsService.create).not.toHaveBeenCalled();
   });
 });
