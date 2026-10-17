@@ -43,6 +43,7 @@ import { ActivityLogService } from '../activity-log/activity-log.service';
 import {
   findEventsForViewer,
   findEventForViewer,
+  findEventActivityForViewer,
   type EventViewer,
   type PublicEventListResponseDto,
 } from './events-public-read.helpers';
@@ -122,10 +123,12 @@ export class EventsController {
   }
 
   @Get(':id/activity')
+  @UseGuards(OptionalJwtGuard)
   async getActivity(
     @Param('id', ParseIntPipe) id: number,
+    @Request() req: { user?: NonNullable<EventViewer> },
   ): Promise<ActivityTimelineResponseDto> {
-    return this.activityLog.getTimeline('event', id);
+    return findEventActivityForViewer(this.activityLog, id, req.user);
   }
 
   @Get(':id/variant-context')
