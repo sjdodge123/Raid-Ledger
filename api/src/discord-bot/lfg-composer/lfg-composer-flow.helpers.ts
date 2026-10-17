@@ -57,10 +57,11 @@ import {
 /** What every step needs. Narrowed so a spec fakes only what is used. */
 export interface ComposerFlowDeps {
   db: Db;
-  lfgService: Pick<LfgService, 'createIntent'>;
+  /** `listOwnGroups` — ROK-1660 `My LFGs` reads the presser's own list. */
+  lfgService: Pick<LfgService, 'createIntent' | 'listOwnGroups'>;
   settingsService: Pick<
     SettingsService,
-    'getClientUrl' | 'getDiscordBotTimezone'
+    'getClientUrl' | 'getDiscordBotTimezone' | 'getDiscordBotCommunityName'
   >;
   /** ROK-1685 — mints the clicker's own `View games ↗` magic link. */
   magicLinkService: Pick<MagicLinkService, 'generateLink'>;

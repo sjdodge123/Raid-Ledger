@@ -46,6 +46,12 @@ describe('HelpCommand — command listing', () => {
     expect(line).toMatch(/^\*\*\/lfg\*\* — \S.*$/u);
   });
 
+  it('lists /lfg-leave beside /lfg (ROK-1660)', async () => {
+    expect(await lineFor('/lfg-leave')).toBe(
+      "**/lfg-leave** — Leave an LFG you're in",
+    );
+  });
+
   it('still lists /playing — the new row is appended, not substituted', async () => {
     expect(await lineFor('/playing')).not.toBeNull();
   });
