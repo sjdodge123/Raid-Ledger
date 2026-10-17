@@ -64,15 +64,14 @@ async function seedLinkedOnServer(src: ServerPresenceSource): Promise<number> {
       .returning(),
     'user',
   );
-  await testApp.app.get(AdHocParticipantService).addServerParticipant(
-    event.id,
-    {
+  await testApp.app
+    .get(AdHocParticipantService)
+    .addServerParticipant(event.id, {
       steamId: STEAM_A,
       displayName: 'rok',
       userId: user.id,
       pelicanServerId: src.pelicanServerId,
-    },
-  );
+    });
   return event.id;
 }
 

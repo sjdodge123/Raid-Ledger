@@ -121,7 +121,9 @@ function mergedCharacterName(
 ): { characterName?: string } {
   const { steamId, displayName } = member;
   const named =
-    displayName === undefined ? null : characterNameOf({ steamId, displayName });
+    displayName === undefined
+      ? null
+      : characterNameOf({ steamId, displayName });
   const name = named ?? steam?.characterName ?? null;
   return name === null ? {} : { characterName: name };
 }
