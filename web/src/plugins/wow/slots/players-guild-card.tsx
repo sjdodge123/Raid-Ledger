@@ -12,7 +12,7 @@ import { NavChip } from '../../../components/ui/nav-chip';
 import { GetYourGuildCard } from '../../../components/hub/onboarding/get-your-guild-card';
 import { guildRealm } from '../hub/wow-guild.helpers';
 import { GuildCrest } from './guild-entry-bits';
-import { guildHref, memberCountLabel, useMyGuilds } from './guild-queries';
+import { guildHref, memberCountLabel, useMyGuildsQuery } from './guild-queries';
 
 function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
     const where = [guildRealm(guild), guild.region.toUpperCase()].filter(Boolean).join(' · ');
@@ -38,7 +38,14 @@ function GuildCard({ guild }: { guild: MyGuild }): JSX.Element {
 const WOW_HOW = 'Install the LedgerLink addon and run an export — your guild page appears as soon as the first roster snapshot lands.';
 
 export function PlayersGuildCard(): JSX.Element | null {
-    const guilds = useMyGuilds();
+    // Nothing until `/guilds/mine` has actually answered: an empty list is
+    // also what loading, an error and a signed-out viewer look like, and
+    // showing the "get your guild" prompt to a real member — who can then
+    // dismiss a card they never meant to see — is worse than a beat of
+    // nothing. On an error we stay silent rather than claim they have none.
+    const query = useMyGuildsQuery();
+    if (query.isPending || query.isError || query.data === undefined) return null;
+    const guilds = query.data.guilds;
     if (guilds.length === 0) return <GetYourGuildCard how={WOW_HOW} />;
     return (
         <div className="space-y-3" data-testid="players-guild-cards">

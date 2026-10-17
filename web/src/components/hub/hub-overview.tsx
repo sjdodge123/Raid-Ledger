@@ -34,12 +34,16 @@ interface Cell {
 }
 
 /** The core band. Module widgets land between these orders — WoW uses 50/60. */
-function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null, modsConfigured: boolean): Cell[] {
+function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null, mods: ModsState): Cell[] {
     const data = raids.data;
     const cells: Cell[] = [
         // Above everything on purpose: it is the one widget that tells an
         // editor what is still missing, and it removes itself once nothing is.
-        { key: 'setup-checklist', order: 5, span: 2, node: <HubSetupChecklist guildId={page.guild.id} canEdit={page.viewer.canEdit} modsConfigured={modsConfigured} /> },
+        // A span-1 Fragment cell, not a span-2 <div>: the card renders null
+        // for a dismissed, finished or non-editor viewer, and a wrapper would
+        // leave an empty grid item (a dead `gap-4` row) above the first widget.
+        // The card carries its own `md:col-span-2` when it does render.
+        { key: 'setup-checklist', order: 5, span: 1, node: <HubSetupChecklist guildId={page.guild.id} canEdit={page.viewer.canEdit} memberCount={page.guild.memberCount} nextRaid={data === undefined ? undefined : data.nextRaid} modsConfigured={mods.configured} hasModSources={mods.hasSources} /> },
         { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
@@ -56,15 +60,21 @@ function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
         .map((w) => ({ key: `module:${w.id}`, order: w.order, span: w.span ?? 1, node: <w.component {...ctx} /> }));
 }
 
+/** Whether the hub kind has mod sources at all, and whether any reports content. */
+export interface ModsState {
+    hasSources: boolean;
+    configured: boolean;
+}
+
 interface HubOverviewProps {
     ctx: HubCtx;
     module: HubModule | undefined;
-    modsConfigured: boolean;
+    mods: ModsState;
 }
 
-export function HubOverview({ ctx, module: mod, modsConfigured }: HubOverviewProps): JSX.Element {
+export function HubOverview({ ctx, module: mod, mods }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
-    const cells = [...coreCells(ctx, openChannelPicker, modsConfigured), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const cells = [...coreCells(ctx, openChannelPicker, mods), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

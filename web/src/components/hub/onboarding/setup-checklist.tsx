@@ -41,19 +41,39 @@ function StepRow({ step, onPickChannel }: { step: SetupStep; onPickChannel: (() 
     );
 }
 
-export function HubSetupChecklist({ guildId, canEdit, modsConfigured }: { guildId: number; canEdit: boolean; modsConfigured: boolean }): JSX.Element | null {
+export interface HubSetupChecklistProps {
+    guildId: number;
+    canEdit: boolean;
+    /** The hub's roster size (spec D11-B "roster imported"). */
+    memberCount: number;
+    /** `undefined` until the raids query settles; `null` = nothing tagged yet. */
+    nextRaid: unknown | undefined;
+    modsConfigured: boolean;
+    /** The hub kind registers mod sources at all (Lead ruling 3). */
+    hasModSources: boolean;
+}
+
+/** The grid cell is a Fragment, so the card owns its own two-column span. */
+const SPAN = 'md:col-span-2';
+
+export function HubSetupChecklist(props: HubSetupChecklistProps): JSX.Element | null {
+    const { guildId, canEdit, memberCount, nextRaid, modsConfigured, hasModSources } = props;
     const prompt = useHubOnboarding('hub-setup-checklist', guildId);
     const profile = useGuildProfile(guildId, canEdit);
     const discord = useGuildDiscord(guildId);
     const { openChannelPicker } = useHubSettings();
-    const steps = setupSteps({ profile: profile.data, discord: discord.data, modsConfigured });
+    const steps = setupSteps({
+        profile: profile.data, discord: discord.data, memberCount,
+        hasNextRaid: nextRaid !== null && nextRaid !== undefined,
+        modsConfigured, hasModSources, canPickChannel: openChannelPicker !== null,
+    });
     const progress = setupProgress(steps);
-    // Both queries have to have answered: a missing profile reads exactly like
+    // Every query has to have answered: a missing profile reads exactly like
     // an empty one, so an unsettled page would show every step as "not done".
-    const settled = profile.data !== undefined && discord.data !== undefined;
+    const settled = profile.data !== undefined && discord.data !== undefined && nextRaid !== undefined;
     if (!canEdit || !prompt.visible || !settled || progress.complete) return null;
     return (
-        <WidgetCard
+        <div className={SPAN}><WidgetCard
             id="setup-checklist"
             title="Finish setting up"
             action={<Button variant="ghost" size="sm" onClick={prompt.dismiss} data-testid="setup-checklist-dismiss">Dismiss</Button>}
@@ -63,6 +83,6 @@ export function HubSetupChecklist({ guildId, canEdit, modsConfigured }: { guildI
             <ul className="flex flex-col gap-2" data-testid="setup-checklist">
                 {steps.map((s) => <StepRow key={s.id} step={s} onPickChannel={openChannelPicker} />)}
             </ul>
-        </WidgetCard>
+        </WidgetCard></div>
     );
 }

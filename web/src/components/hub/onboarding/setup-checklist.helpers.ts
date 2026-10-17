@@ -3,6 +3,10 @@
  * from page data the Overview already has. No new endpoint and no stored
  * progress: a step is done because the thing it asks for exists, so undoing
  * the edit puts the step back.
+ *
+ * The step set is the spec's D11-B list (Leader, roster, leader post, Discord
+ * channel, next raid) merged with the prototype's content steps (rules, links,
+ * recommended mods); the spec's wording wins (Lead ruling, PR-3 r1).
  */
 import type { GuildDiscordMirrorDto, GuildProfile } from '@raid-ledger/contract';
 
@@ -19,9 +23,31 @@ export interface SetupStep {
 export interface SetupStepsInput {
     profile: GuildProfile | undefined;
     discord: GuildDiscordMirrorDto | undefined;
+    /** Spec D11-B "roster imported" — the hub's member count. */
+    memberCount: number;
+    /** Spec D11-B "tag your next raid" — a raid sits on the schedule. */
+    hasNextRaid: boolean;
     /** A mod source reports content for this hub (core asks the module, S5b). */
     modsConfigured: boolean;
+    /** The hub kind registers at least one mod source. Lead ruling 3: no sources, no step. */
+    hasModSources: boolean;
+    /** This viewer can open the channel picker — Leader and admin only. */
+    canPickChannel: boolean;
 }
+
+/**
+ * Spec Q1: Leader is the GM or an admin today and there is nowhere to store
+ * an admin-named one, so D11-B's first step is listed with its reason instead
+ * of being actionable.
+ */
+export const LEADER_BLOCKED_REASON = 'An admin is the hub Leader for now — naming one from the roster is coming.';
+
+/**
+ * Lead ruling 1: an Officer has no channel picker, so the step renders as a
+ * non-actionable "ask your Leader" row. Blocked steps leave `countable`, so it
+ * no longer pins the card below 100% — the checklist can still self-remove.
+ */
+export const CHANNEL_BLOCKED_REASON = 'Ask your Leader or an admin to set the hub channel.';
 
 /**
  * ROK-1831 owns `guilds.hidden_at`, so publishing cannot be done from here
@@ -30,15 +56,23 @@ export interface SetupStepsInput {
  */
 export const PUBLISH_BLOCKED_REASON = 'Hubs are visible to members already — a hidden-by-default hub is coming.';
 
-export function setupSteps({ profile, discord, modsConfigured }: SetupStepsInput): SetupStep[] {
-    return [
+export function setupSteps(input: SetupStepsInput): SetupStep[] {
+    const { profile, discord, memberCount, hasNextRaid, modsConfigured, hasModSources, canPickChannel } = input;
+    const channel: SetupStepAction = canPickChannel ? { kind: 'channel' } : { kind: 'blocked', reason: CHANNEL_BLOCKED_REASON };
+    const steps: SetupStep[] = [
+        { id: 'leader', label: 'Assign a Leader', done: false, action: { kind: 'blocked', reason: LEADER_BLOCKED_REASON } },
+        { id: 'roster', label: 'Import your roster', done: memberCount > 0, action: { kind: 'tab', hash: '#members' } },
         { id: 'leader-post', label: 'Write a leader post', done: (profile?.gmPost?.body ?? '').trim().length > 0, action: { kind: 'tab', hash: '#overview' } },
         { id: 'rules', label: 'Add your guild rules', done: (profile?.rules.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' } },
         { id: 'links', label: 'Add useful links', done: (profile?.links.length ?? 0) > 0, action: { kind: 'tab', hash: '#resources' } },
-        { id: 'discord', label: 'Pick a Discord channel', done: discord !== undefined && discord.state !== 'unset', action: { kind: 'channel' } },
-        { id: 'mods', label: 'Recommend mods', done: modsConfigured, action: { kind: 'tab', hash: '#resources' } },
-        { id: 'publish', label: 'Publish this hub', done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON } },
+        { id: 'discord', label: 'Pick a Discord channel', done: discord !== undefined && discord.state !== 'unset', action: channel },
     ];
+    if (hasModSources) {
+        steps.push({ id: 'mods', label: 'Recommend mods', done: modsConfigured, action: { kind: 'tab', hash: '#resources' } });
+    }
+    steps.push({ id: 'next-raid', label: 'Tag your next raid', done: hasNextRaid, action: { kind: 'tab', hash: '#events' } });
+    steps.push({ id: 'publish', label: 'Publish this hub', done: false, action: { kind: 'blocked', reason: PUBLISH_BLOCKED_REASON } });
+    return steps;
 }
 
 export interface SetupProgress {

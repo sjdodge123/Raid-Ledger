@@ -30,6 +30,13 @@ export function isPromptDismissed(
     return (state?.dismissed ?? []).some((d) => d.key === key && d.guildId === guildId);
 }
 
+/** The state with this dismissal removed — the rollback of one optimistic add. */
+export function withoutDismissal(
+    state: HubOnboardingStateDto | undefined, key: HubOnboardingKey, guildId: HubOnboardingScope,
+): HubOnboardingStateDto {
+    return { dismissed: (state?.dismissed ?? []).filter((d) => !(d.key === key && d.guildId === guildId)) };
+}
+
 /** The state with this dismissal added — what the optimistic update writes. */
 export function withDismissal(
     state: HubOnboardingStateDto | undefined, key: HubOnboardingKey, guildId: HubOnboardingScope, at: string,
@@ -59,21 +66,30 @@ export function useHubOnboarding(key: HubOnboardingKey, guildId: HubOnboardingSc
         enabled: isAuthenticated,
         retry: false,
     });
-    const mutation = useMutation<HubOnboardingStateDto, Error, void, { previous: HubOnboardingStateDto | undefined }>({
+    const mutation = useMutation<HubOnboardingStateDto, Error, void, { added: boolean }>({
         mutationFn: () => dismissHubOnboarding(key, guildId),
         onMutate: async () => {
             await queryClient.cancelQueries({ queryKey });
             const previous = queryClient.getQueryData<HubOnboardingStateDto>(queryKey);
+            const added = !isPromptDismissed(previous, key, guildId);
             queryClient.setQueryData(queryKey, withDismissal(previous, key, guildId, new Date().toISOString()));
-            return { previous };
+            return { added };
         },
         // Rollback puts the prompt back rather than leaving it hidden on a
         // dismissal the server never stored — it would silently return on the
-        // next page load with no explanation.
-        onError: (_e, _v, ctx) => { queryClient.setQueryData(queryKey, ctx?.previous); },
+        // next page load with no explanation. It reconciles only THIS (key,
+        // guildId) entry: restoring the whole snapshot would also undo a
+        // sibling prompt's dismissal that succeeded while this one was in
+        // flight (Codex P2, PR-3).
+        onError: (_e, _v, ctx) => {
+            if (ctx?.added !== true) return;
+            queryClient.setQueryData<HubOnboardingStateDto>(
+                queryKey, (cur) => withoutDismissal(cur, key, guildId),
+            );
+        },
         onSuccess: (fresh) => { queryClient.setQueryData(queryKey, fresh); },
     });
-    const dismiss = useCallback(() => { mutation.mutate(); }, [mutation]);
+    const dismiss = useCallback(() => { mutation.mutate(); }, [mutation.mutate]);
     const known = isAuthenticated && state.data !== undefined;
     return {
         visible: known && !isPromptDismissed(state.data, key, guildId),
