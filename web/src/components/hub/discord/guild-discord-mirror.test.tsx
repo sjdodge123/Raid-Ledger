@@ -20,8 +20,14 @@ function serve(mirror: GuildDiscordMirrorDto): { served: () => boolean } {
     return { served: () => hit };
 }
 
-function renderCard(canEdit: boolean): void {
-    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} />);
+/**
+ * ROK-1830 S4 setup shim: the picker moved behind the settings sheet, so the
+ * card's Change/Choose affordance is driven by `onChangeChannel` instead of
+ * `canEdit`. The old editor ⇒ can-change pairing is reproduced here so every
+ * assertion below still reads the same behaviour.
+ */
+function renderCard(canEdit: boolean, onChangeChannel: (() => void) | null = canEdit ? (): void => undefined : null): void {
+    renderWithProviders(<GuildDiscordMirror guildId={7} canEdit={canEdit} onChangeChannel={onChangeChannel} />);
 }
 
 describe('GuildDiscordMirror — ok', () => {

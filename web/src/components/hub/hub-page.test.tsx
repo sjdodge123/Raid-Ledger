@@ -1,7 +1,8 @@
 /**
  * ROK-1785: `/guilds/:id` — members grouped by rank, the hidden tabs, the
- * friendly 403 state, and the Page editors card shown only to
- * `viewer.canManageEditors`.
+ * friendly 403 state, and (ROK-1830 S4) the Guild settings sheet — the single
+ * entry point for editors, the Discord picker and hub visibility, shown only
+ * to `viewer.canManageEditors`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
@@ -121,19 +122,43 @@ describe('GuildPage (ROK-1785)', () => {
         expect(screen.queryByTestId('guild-hero')).toBeNull();
     });
 
-    it('hides the Page editors card unless the viewer can manage editors', async () => {
+    it('hides the settings trigger, and with it the editors, unless the viewer can manage editors', async () => {
         serve(makePage(false));
         renderPage();
         await screen.findByTestId('guild-members-summary');
+        expect(screen.queryByTestId('guild-settings-trigger'), 'a member gets no settings entry point').toBeNull();
         expect(screen.queryByTestId('guild-editors-panel')).toBeNull();
+        expect(screen.queryByTestId('guild-discord-change'), 'and no way to reach the channel picker (D10/Q4)').toBeNull();
         expect(editorCalls).toBe(0);
+    });
+
+    it('opens one settings sheet holding the channel picker, the editors and hub visibility', async () => {
+        serve(makePage(true));
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        const sheet = await screen.findByTestId('guild-settings-sheet');
+        expect(within(sheet).getByTestId('guild-editors-panel')).toBeInTheDocument();
+        expect(within(sheet).getByTestId('guild-settings-choose-channel')).toBeInTheDocument();
+        const hide = within(sheet).getByTestId('guild-settings-hide-hub');
+        expect(hide, 'no endpoint hides a hub yet (spec Q7 → ROK-1831), so the switch must be off and disabled').toBeDisabled();
+        expect(hide).toHaveAttribute('aria-checked', 'false');
+        expect(within(sheet).getByText(/Hiding a hub isn’t available yet/)).toBeInTheDocument();
+    });
+
+    it('swaps the sheet for the channel picker when the Leader changes the channel', async () => {
+        serve(makePage(true));
+        renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
+        await userEvent.click(await screen.findByTestId('guild-settings-choose-channel'));
+        expect(await screen.findByTestId('guild-discord-picker-body')).toBeInTheDocument();
+        expect(screen.queryByTestId('guild-settings-sheet'), 'the picker replaces the sheet rather than stacking on it').toBeNull();
     });
 
     it('lists editors and adds a member for a viewer who can manage editors', async () => {
         serve(makePage(true));
         renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
-        await userEvent.click(within(panel).getByText('Page editors'));
         expect(await within(panel).findByTestId('guild-editor-chip')).toHaveTextContent('Rank: Raider');
         expect(within(panel).getByTestId('guild-editors-gm-hint')).toHaveTextContent('Add your Guild Master as an editor.');
         const memberSelect = within(panel).getByTestId('guild-editor-member-select');
@@ -149,8 +174,8 @@ describe('GuildPage (ROK-1785)', () => {
         const gmGrant: GuildEditor = { ...RANK_EDITOR, id: 13, kind: 'member', rankIndex: null, rankName: null, guildMemberId: 1, memberName: 'Grimtusk' };
         serve(makePage(true), 200, [RANK_EDITOR, gmGrant]);
         renderPage();
+        await userEvent.click(await screen.findByTestId('guild-settings-trigger'));
         const panel = await screen.findByTestId('guild-editors-panel');
-        await userEvent.click(within(panel).getByText('Page editors'));
         await waitFor(() => expect(within(panel).getAllByTestId('guild-editor-chip')).toHaveLength(2));
         expect(within(panel).queryByTestId('guild-editors-gm-hint'), 'the GM is already an editor, so the hint must hide').toBeNull();
     });
