@@ -1,0 +1,51 @@
+{
+  "schemaVersion": 1,
+  "serverId": "srv_fixture_01",
+  "capturedAt": "2026-10-17T20:15:00Z",
+  "gameVersion": "0.220.5",
+  "modVersion": "1.0.0",
+  "kind": "map",
+  "character": {
+    "steamId": "76561198000000001",
+    "playerId": "1000000000000001",
+    "worldUid": "1234567890123"
+  },
+  "grid": {
+    "textureSize": 2048,
+    "pixelSizeMetres": 12
+  },
+  "explored": {
+    "encoding": "gzip+base64-bitset-lsb0",
+    "width": 2048,
+    "height": 2048,
+    "data": ""
+  },
+  "sharedExplored": null,
+  "pins": [
+    {
+      "type": "Icon0",
+      "label": "Camp",
+      "x": 120.5,
+      "z": -42.25,
+      "checked": false,
+      "shared": false
+    },
+    {
+      "type": "Death",
+      "label": "",
+      "x": 900,
+      "z": 1450,
+      "checked": true,
+      "shared": false
+    },
+    {
+      "type": "Boss",
+      "label": "Fixture boss",
+      "x": -300,
+      "z": 610,
+      "checked": false,
+      "shared": false
+    }
+  ],
+  "baseMap": null
+}

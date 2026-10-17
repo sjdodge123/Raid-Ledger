@@ -5,7 +5,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { gzipSync } from 'node:zlib';
+import { deflateSync, gzipSync } from 'node:zlib';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const dir = join(root, 'valheim-link', 'v1', 'fixtures');
@@ -64,7 +64,11 @@ const characterVanilla = {
 };
 
 const characterEaqs = clone(characterVanilla);
-characterEaqs.character = { ...identity, steamId: '76561198000000002', playerId: '1000000000000002', name: 'Fixturebjorn' };
+// int64 boundaries: the most negative playerId and the largest world uid.
+characterEaqs.character = {
+    ...identity, steamId: '76561198000000002', playerId: '-9223372036854775808',
+    name: 'Fixturebjorn', worldUid: '9223372036854775807',
+};
 characterEaqs.inventory.grid = {
     width: 8, height: 6,
     extraRows: [{ y: 4, purpose: 'equipment' }, { y: 5, purpose: 'quickslot' }],
@@ -101,6 +105,15 @@ const mapPersonal = {
     ],
     baseMap: null,
 };
+
+/** Deterministic incompressible bytes (LCG), so the fixture never changes. */
+function noise(n) {
+    const out = Buffer.alloc(n);
+    let x = 0x2545f491;
+    for (let i = 0; i < n; i++) { x = (Math.imul(x, 1103515245) + 12345) >>> 0; out[i] = x >>> 24; }
+    return out;
+}
+const bitmapWith = (size, data) => ({ encoding: 'gzip+base64-bitset-lsb0', width: size, height: size, data });
 
 const sha = (c) => c.repeat(64);
 const mapShared = clone(mapPersonal);
@@ -154,6 +167,18 @@ const invalid = {
     'durability-half-null': [(() => { const c = clone(characterVanilla); c.equipment[0].item = { ...sword, maxDurability: null }; return c; })(), { path: 'equipment.0.item.maxDurability', code: 'custom' }],
     'map-bitmap-size-mismatch': [{ ...mapPersonal, explored: disc(1024, 512, 512, 60) }, { path: 'explored', code: 'custom' }],
     'items-atlas-icon-without-atlas': [{ ...itemsAtlas, atlas: null }, { path: 'atlas', code: 'custom' }],
+    'int64-out-of-range': [{ ...characterVanilla, character: { ...identity, playerId: '9223372036854775808' } }, { path: 'character.playerId', code: 'custom' }],
+    'int64-leading-zero': [{ ...characterVanilla, character: { ...identity, playerId: '01000000000000001' } }, { path: 'character.playerId', code: 'invalid_format' }],
+    'steamid-below-individual-base': [{ ...characterVanilla, character: { ...identity, steamId: '76561197960265727' } }, { path: 'character.steamId', code: 'custom' }],
+    'captured-at-too-precise': [{ ...characterVanilla, capturedAt: '2026-10-17T20:15:00.1234Z' }, { path: 'capturedAt', code: 'too_big' }],
+    'extra-row-unlisted': [(() => { const c = clone(characterEaqs); c.inventory.grid.extraRows.pop(); return c; })(), { path: 'inventory.grid.extraRows', code: 'custom' }],
+    'extra-row-vanilla': [(() => { const c = clone(characterVanilla); c.inventory.grid.extraRows = [{ y: 2, purpose: 'other' }]; return c; })(), { path: 'inventory.grid.extraRows.0', code: 'custom' }],
+    // Schema-level bitmap rejections. Corrupt / short / bomb gzip that LOOKS
+    // valid is the server's job (CONTRACT.md §6) — the api spec covers it.
+    'map-bitmap-not-gzip': [{ ...mapPersonal, explored: bitmapWith(2048, deflateSync(Buffer.alloc(524_288)).toString('base64')) }, { path: 'explored.data', code: 'invalid_format' }],
+    'map-bitmap-empty': [{ ...mapPersonal, explored: bitmapWith(2048, '') }, { path: 'explored.data', code: 'too_small' }],
+    'map-bitmap-oversized-compressed': [{ ...mapPersonal, grid: { textureSize: 64, pixelSizeMetres: 12 }, explored: bitmapWith(64, gzipSync(noise(4096), { level: 0 }).toString('base64')) }, { path: 'explored.data', code: 'custom' }],
+    'map-basemap-size-mismatch': [{ ...mapShared, baseMap: { ...mapShared.baseMap, width: 1024, height: 1024 } }, { path: 'baseMap', code: 'custom' }],
 };
 const expected = {};
 for (const [name, [msg, want]] of Object.entries(invalid)) {

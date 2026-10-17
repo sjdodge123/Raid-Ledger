@@ -34,5 +34,45 @@
   "items-atlas-icon-without-atlas": {
     "path": "atlas",
     "code": "custom"
+  },
+  "int64-out-of-range": {
+    "path": "character.playerId",
+    "code": "custom"
+  },
+  "int64-leading-zero": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "steamid-below-individual-base": {
+    "path": "character.steamId",
+    "code": "custom"
+  },
+  "captured-at-too-precise": {
+    "path": "capturedAt",
+    "code": "too_big"
+  },
+  "extra-row-unlisted": {
+    "path": "inventory.grid.extraRows",
+    "code": "custom"
+  },
+  "extra-row-vanilla": {
+    "path": "inventory.grid.extraRows.0",
+    "code": "custom"
+  },
+  "map-bitmap-not-gzip": {
+    "path": "explored.data",
+    "code": "invalid_format"
+  },
+  "map-bitmap-empty": {
+    "path": "explored.data",
+    "code": "too_small"
+  },
+  "map-bitmap-oversized-compressed": {
+    "path": "explored.data",
+    "code": "custom"
+  },
+  "map-basemap-size-mismatch": {
+    "path": "baseMap",
+    "code": "custom"
   }
 }

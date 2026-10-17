@@ -7,9 +7,9 @@
   "kind": "character",
   "character": {
     "steamId": "76561198000000002",
-    "playerId": "1000000000000002",
+    "playerId": "-9223372036854775808",
     "name": "Fixturebjorn",
-    "worldUid": "1234567890123",
+    "worldUid": "9223372036854775807",
     "worldName": "Fixtureheim"
   },
   "equipment": [
