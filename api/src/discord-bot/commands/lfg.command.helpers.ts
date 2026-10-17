@@ -435,11 +435,14 @@ function withdrawRows(
   return rows;
 }
 
-/** One `Withdraw · {game}` button, labelled within Discord's 80-char cap. */
+/**
+ * One `Leave · {game}` button (ROK-1660: was `Withdraw · {game}`), labelled
+ * within Discord's 80-char cap. The `lfg:withdraw:` id is unchanged.
+ */
 function withdrawButton(group: LfgGroupSummaryDto): ButtonBuilder {
   return new ButtonBuilder()
     .setCustomId(withdrawCustomId(group.gameId))
-    .setLabel(`Withdraw · ${group.gameName}`.slice(0, LABEL_CAP))
+    .setLabel(`Leave · ${group.gameName}`.slice(0, LABEL_CAP))
     .setStyle(ButtonStyle.Secondary);
 }
 

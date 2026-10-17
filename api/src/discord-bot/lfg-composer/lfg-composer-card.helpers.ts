@@ -143,7 +143,8 @@ export interface LfgComposerCard {
  * not having to leave the channel.
  *
  * @param clientUrl - Deployment client URL; absent drops `View games ↗`,
- *   whose handler would have nothing to link to.
+ *   whose handler would have nothing to link to. `My LFGs` (ROK-1660) needs
+ *   no link, so it is always there.
  * @returns Content and one button row.
  */
 export function buildComposerCard(clientUrl?: string | null): LfgComposerCard {
@@ -155,7 +156,11 @@ export function buildComposerCard(clientUrl?: string | null): LfgComposerCard {
     .setCustomId(LFG_COMPOSER_IDS.VIEW)
     .setStyle(ButtonStyle.Secondary)
     .setLabel(LFG_COMPOSER_COPY.VIEW_GAMES_BUTTON);
-  const buttons = clientUrl?.trim() ? [post, view] : [post];
+  const mine = new ButtonBuilder()
+    .setCustomId(LFG_COMPOSER_IDS.MINE)
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(LFG_COMPOSER_COPY.MY_LFGS_BUTTON);
+  const buttons = clientUrl?.trim() ? [post, view, mine] : [post, mine];
   return {
     content: LFG_COMPOSER_COPY.CARD_TITLE,
     components: [new ActionRowBuilder<ButtonBuilder>().addComponents(buttons)],

@@ -5,6 +5,9 @@
  * - Window: events overlapping [now − 7 days, now + 90 days).
  * - Sign-ups `signed_up` and `tentative` (the write path's set); cancelled
  *   events are left out (the write path deletes their copies).
+ * - ROK-1807: an event under a rescheduling poll (`rescheduling_poll_id` set)
+ *   is left out while the poll runs — its old time is no longer committed —
+ *   and returns at the new time once the poll resolves and clears the column.
  * - Presentation is the write path's (D4 + F11): "(Tentative) " / "(Bench) "
  *   titles and Free (TRANSP:TRANSPARENT); a confirmed sign-up is Busy.
  * - UID is the shared copy id `rl:<instance>:<event>:<user>`, so a feed seen
@@ -83,6 +86,20 @@ const benchedSql = () => {
   return sql<boolean>`exists (select 1 from ${ra} where ${ra.signupId} = ${schema.eventSignups.id} and ${ra.role} = 'bench')`;
 };
 
+/** Which sign-ups make the feed: status, live event, inside the window. */
+function feedWhere(userId: number, now: Date) {
+  const s = schema.eventSignups;
+  const e = schema.events;
+  const { from, to } = feedWindow(now);
+  return and(
+    eq(s.userId, userId),
+    inArray(s.status, [...FEED_SIGNUP_STATUSES]),
+    isNull(e.cancelledAt),
+    isNull(e.reschedulingPollId),
+    sql`${e.duration} && ${`[${from.toISOString()},${to.toISOString()})`}::tsrange`,
+  );
+}
+
 /** The user's feed rows, earliest first. One row per sign-up. */
 export async function loadFeedEntries(
   db: Db,
@@ -91,7 +108,6 @@ export async function loadFeedEntries(
 ): Promise<FeedEntry[]> {
   const s = schema.eventSignups;
   const e = schema.events;
-  const { from, to } = feedWindow(now);
   const rows = await db
     .select({
       eventId: e.id,
@@ -103,14 +119,7 @@ export async function loadFeedEntries(
     })
     .from(s)
     .innerJoin(e, eq(s.eventId, e.id))
-    .where(
-      and(
-        eq(s.userId, userId),
-        inArray(s.status, [...FEED_SIGNUP_STATUSES]),
-        isNull(e.cancelledAt),
-        sql`${e.duration} && ${`[${from.toISOString()},${to.toISOString()})`}::tsrange`,
-      ),
-    )
+    .where(feedWhere(userId, now))
     .orderBy(sql`lower(${e.duration})`, e.id);
   return rows.map(toFeedEntry);
 }

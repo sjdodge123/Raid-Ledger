@@ -96,6 +96,7 @@ import {
   threadIdOf,
 } from './lfg-board.mirror.js';
 import { withLfgSurface } from '../lfg-surface-lock.js';
+import { assertSlashLeaveRoundTrip } from '../lfg-leave-slash.js';
 // ROK-1522: the scan windows (and why they are disjoint) live in one place.
 import { boardCandidates } from '../lfg-smoke-scope.js';
 import type { SmokeTest, TestContext } from '../types.js';
@@ -681,6 +682,8 @@ const lfgBoardLifecycle: SmokeTest = {
       // withdraw removes them; leaves the group at two hands.
       await assertThreadMembersFollowGroup(run);
       await assertEditsOnThirdHand(run);
+      // ROK-1660 — /lfg-leave drops the third hand, /lfg raises it again.
+      await assertSlashLeaveRoundTrip(run);
       await assertMirrorsCompanionReply(run);
       const poll = await createPollForGroup(run);
       await assertConvertedThread(run, poll);
