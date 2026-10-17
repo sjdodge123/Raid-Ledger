@@ -8,7 +8,7 @@ import type { CreateGuildEditorInput, GuildEditor, GuildPage } from '@raid-ledge
 import { Button } from '../../../components/ui/button';
 import { Field } from '../../../components/ui/field';
 import { Select } from '../../../components/ui/select';
-import { delegableMembers, delegableRanks, rankLabel } from './guild-roster.helpers';
+import { delegableMembers, delegableRanks, rankLabel } from './wow-guild.helpers';
 
 interface PickerProps {
     page: GuildPage;

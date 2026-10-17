@@ -8,9 +8,9 @@ import {
     GUILD_LINK_GROUPS_MAX, GUILD_LINK_LABEL_MAX, GUILD_LINK_NOTE_MAX, GUILD_LINKS_PER_GROUP_MAX, GUILD_URL_MAX,
     type GuildLink, type GuildLinkGroup,
 } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Input } from '../../../components/ui/input';
+import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
 import { moveItem } from './guild-content.helpers';
 import { EditorFooter, ItemControls } from './list-editor-bits';
 

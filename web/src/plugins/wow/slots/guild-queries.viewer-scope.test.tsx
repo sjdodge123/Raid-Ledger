@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { useMyGuilds } from './guild-queries';
-import { useGuildPage } from '../guild/use-guild';
+import { useGuildPage } from '../../../components/hub/api/use-guild';
 
 const viewer = vi.hoisted(() => ({ id: 1 }));
 

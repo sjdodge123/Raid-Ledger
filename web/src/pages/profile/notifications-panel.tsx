@@ -1,4 +1,4 @@
-import { NotificationPreferencesSection } from '../../components/profile';
+import { NotificationPreferencesSection } from '../../components/profile/index';
 
 export function NotificationsPanel() {
     return (

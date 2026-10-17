@@ -5,10 +5,10 @@
 import type { JSX } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { GuildRaidsDto } from '@raid-ledger/contract';
-import { GuildAttendance } from './guild-attendance';
-import { GuildEvents } from './guild-events';
-import { GuildRaidSchedule } from './guild-raid-schedule';
-import { GuildRoleComposition } from './guild-role-composition';
+import { GuildAttendance } from '../../../components/hub/events/guild-attendance';
+import { GuildEvents } from '../../../components/hub/events/guild-events';
+import { GuildRaidSchedule } from '../../../components/hub/events/guild-raid-schedule';
+import { GuildRoleComposition } from './role-composition';
 
 export function GuildRaidsTab({ query }: { query: UseQueryResult<GuildRaidsDto, Error> }): JSX.Element {
     if (query.error) {

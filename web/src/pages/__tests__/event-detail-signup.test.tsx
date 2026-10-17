@@ -180,7 +180,7 @@ vi.mock('../../components/events/EventBanner', () => ({
     EventBanner: () => <div data-testid="event-banner">Banner</div>,
 }));
 
-vi.mock('../../components/roster', () => ({
+vi.mock('../../components/roster/index', () => ({
     RosterBuilder: () => null,
 }));
 
@@ -200,7 +200,7 @@ vi.mock('../../components/features/game-time/GameTimeWidget', () => ({
     GameTimeWidget: () => null,
 }));
 
-vi.mock('../../plugins', () => ({
+vi.mock('../../plugins/index', () => ({
     PluginSlot: () => null,
 }));
 

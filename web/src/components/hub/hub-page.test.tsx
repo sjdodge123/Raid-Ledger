@@ -9,10 +9,10 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildEditor, GuildMemberRow, GuildPage as GuildPageDto } from '@raid-ledger/contract';
-import { server } from '../../../test/mocks/server';
-import { at } from '../../../test/defined';
-import { renderWithProviders } from '../../../test/render-helpers';
-import { GuildPage } from './guild-page';
+import { server } from '../../test/mocks/server';
+import { at } from '../../test/defined';
+import { renderWithProviders } from '../../test/render-helpers';
+import { GuildPage } from './hub-page';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
 const LINKED_ID = '3f6c1a52-8a3b-4c0e-9d2f-1b2c3d4e5f60';

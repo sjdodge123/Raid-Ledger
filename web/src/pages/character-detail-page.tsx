@@ -4,7 +4,7 @@ import { useUpdateCharacter } from '../hooks/use-character-mutations';
 import { useAuth, isAdmin } from '../hooks/use-auth';
 import { useState, useEffect, useRef } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
-import { PluginSlot } from '../plugins';
+import { PluginSlot } from '../plugins/index';
 import { useCharacterLocationLabel } from '../plugins/character-identity';
 import { CharacterPortraitFallback } from '../plugins/character-portrait';
 

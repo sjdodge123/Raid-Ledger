@@ -8,10 +8,10 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildSummary } from '@raid-ledger/contract';
-import { guildAddonView, pinnedAddonView, type AddonView } from '../guild/addon-view';
-import { Card, Pill } from '../guild/guild-bits';
-import { guildRealm } from '../guild/guild-roster.helpers';
-import { useGuildAddons } from '../guild/use-guild-content';
+import { guildAddonView, pinnedAddonView, type AddonView } from '../../../components/hub/content/addon-view';
+import { Card, Pill } from '../../../components/hub/hub-bits';
+import { guildRealm } from '../hub/wow-guild.helpers';
+import { useGuildAddons } from '../../../components/hub/api/use-guild-content';
 import { guildHref, useCharacterGuild } from './guild-queries';
 
 function CompactRow({ addon }: { addon: AddonView }): JSX.Element {

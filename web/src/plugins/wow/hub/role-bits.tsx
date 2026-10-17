@@ -7,7 +7,7 @@
 import type { JSX } from 'react';
 import type { CharacterRole } from '@raid-ledger/contract';
 import { RoleIcon } from '../../../components/shared/RoleIcon';
-import { ROLE_META, ROLE_ORDER } from './guild-roster.helpers';
+import { ROLE_META, ROLE_ORDER } from './wow-guild.helpers';
 
 /** Read-only role pill: role-coloured border + the shared role icon + a neutral label. */
 export function CharRoleBadge({ role }: { role: CharacterRole }): JSX.Element {

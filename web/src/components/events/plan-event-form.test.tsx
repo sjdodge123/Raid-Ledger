@@ -46,7 +46,7 @@ vi.mock('../../hooks/use-game-registry', () => ({
 
 // ─── Plugin mocks ────────────────────────────────────────────────────────────
 
-vi.mock('../../plugins', () => ({
+vi.mock('../../plugins/index', () => ({
     PluginSlot: vi.fn(() => null),
 }));
 

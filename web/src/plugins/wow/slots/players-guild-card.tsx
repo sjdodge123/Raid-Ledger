@@ -6,7 +6,7 @@
 import type { JSX } from 'react';
 import type { MyGuild } from '@raid-ledger/contract';
 import { NavChip } from '../../../components/ui/nav-chip';
-import { guildRealm } from '../guild/guild-roster.helpers';
+import { guildRealm } from '../hub/wow-guild.helpers';
 import { GuildCrest } from './guild-entry-bits';
 import { guildHref, memberCountLabel, useMyGuilds } from './guild-queries';
 

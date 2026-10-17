@@ -9,16 +9,16 @@
  */
 import { lazy, Suspense, type JSX } from 'react';
 import type { GuildPage, GuildRaidsDto } from '@raid-ledger/contract';
-import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { WidgetCard } from './guild-bits';
-import { GuildAttendance } from './guild-attendance';
-import { GuildEditorsCard } from './guild-editors-panel';
-import { GuildEvents } from './guild-events';
-import { GuildRaidSchedule } from './guild-raid-schedule';
-import { GuildRoleComposition } from './guild-role-composition';
-import { GmPostCard } from './gm-post-card';
-import { rankLabel } from './guild-roster.helpers';
-import { RoleSummary } from './role-bits';
+import { FOCUS_RING } from '../ui/form-classes';
+import { WidgetCard } from './hub-bits';
+import { GuildAttendance } from './events/guild-attendance';
+import { GuildEditorsCard } from '../../plugins/wow/hub/editors-panel';
+import { GuildEvents } from './events/guild-events';
+import { GuildRaidSchedule } from './events/guild-raid-schedule';
+import { GuildRoleComposition } from '../../plugins/wow/hub/role-composition';
+import { GmPostCard } from './content/gm-post-card';
+import { rankLabel } from '../../plugins/wow/hub/wow-guild.helpers';
+import { RoleSummary } from '../../plugins/wow/hub/role-bits';
 
 function RankCounts({ page }: { page: GuildPage }): JSX.Element {
     return (
@@ -59,7 +59,7 @@ function MembersSummary({ page }: { page: GuildPage }): JSX.Element {
  * chunk) stays out of the guild-page chunk. Fallback `null` matches the card's
  * own loading state, which renders nothing until the mirror query settles.
  */
-const GuildDiscordMirror = lazy(() => import('./guild-discord-mirror').then((m) => ({ default: m.GuildDiscordMirror })));
+const GuildDiscordMirror = lazy(() => import('./discord/guild-discord-mirror').then((m) => ({ default: m.GuildDiscordMirror })));
 
 const SPAN_2 = 'md:col-span-2';
 const OVERVIEW_ATTENDANCE_TOP = 5;

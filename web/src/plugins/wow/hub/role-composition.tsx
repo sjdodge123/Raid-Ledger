@@ -5,11 +5,11 @@ import type { GuildCompositionDto, GuildRoleNeedDto } from '@raid-ledger/contrac
 import { RoleIcon } from '../../../components/shared/RoleIcon';
 import { FOCUS_RING } from '../../../components/ui/form-classes';
 import { CharacterLink } from './character-link';
-import { Pill, WidgetCard } from './guild-bits';
-import { GuildMeter } from './guild-meter';
-import { percent, whenLabel } from './guild-raids.helpers';
-import { QuietEmpty } from './guild-raids-bits';
-import { ROLE_META } from './guild-roster.helpers';
+import { Pill, WidgetCard } from '../../../components/hub/hub-bits';
+import { GuildMeter } from '../../../components/hub/events/guild-meter';
+import { percent, whenLabel } from '../../../components/hub/events/guild-raids.helpers';
+import { QuietEmpty } from './raids-bits';
+import { ROLE_META } from './wow-guild.helpers';
 
 function RoleRow({ need }: { need: GuildRoleNeedDto }): JSX.Element {
     const meta = ROLE_META[need.role];

@@ -7,10 +7,10 @@ import { PlusIcon } from '@heroicons/react/24/outline';
 import {
     GUILD_RULE_BODY_MAX, GUILD_RULE_TITLE_MAX, GUILD_RULES_MAX_SECTIONS, type GuildRuleSection,
 } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Input } from '../../../components/ui/input';
-import { Textarea } from '../../../components/ui/textarea';
+import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { Textarea } from '../../ui/textarea';
 import { moveItem } from './guild-content.helpers';
 import { EditorFooter, ItemControls } from './list-editor-bits';
 

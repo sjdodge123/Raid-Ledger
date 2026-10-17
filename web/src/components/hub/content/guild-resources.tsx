@@ -6,7 +6,7 @@ import type { JSX } from 'react';
 import { GuildAddons } from './guild-addons';
 import { GuildLinks } from './guild-links';
 import { GuildRules } from './guild-rules';
-import { useGuildAddons, useGuildProfile } from './use-guild-content';
+import { useGuildAddons, useGuildProfile } from '../api/use-guild-content';
 
 export function GuildResources({ guildId, canEdit }: { guildId: number; canEdit: boolean }): JSX.Element {
     const profile = useGuildProfile(guildId);

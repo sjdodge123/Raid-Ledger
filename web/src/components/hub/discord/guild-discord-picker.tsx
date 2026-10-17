@@ -6,12 +6,12 @@
  */
 import { useState, type JSX } from 'react';
 import type { GuildDiscordChannelListDto, GuildDiscordChannelOptionDto } from '@raid-ledger/contract';
-import { BottomSheet } from '../../../components/ui/bottom-sheet';
-import { Button } from '../../../components/ui/button';
-import { Checkbox } from '../../../components/ui/checkbox';
-import { Field } from '../../../components/ui/field';
-import { Modal } from '../../../components/ui/modal';
-import { Select } from '../../../components/ui/select';
+import { BottomSheet } from '../../ui/bottom-sheet';
+import { Button } from '../../ui/button';
+import { Checkbox } from '../../ui/checkbox';
+import { Field } from '../../ui/field';
+import { Modal } from '../../ui/modal';
+import { Select } from '../../ui/select';
 import { useDirtyCloseGuard } from '../../../hooks/use-dirty-close-guard';
 import { useMediaQuery } from '../../../hooks/use-media-query';
 import { DESKTOP_MQ } from '../../../lib/breakpoints';

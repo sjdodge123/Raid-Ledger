@@ -27,7 +27,7 @@ const { registryGames } = vi.hoisted(() => ({
 }));
 vi.mock('../../hooks/use-game-registry', () => ({ useGameRegistry: vi.fn() }));
 vi.mock('../events/game-search-input', () => ({ GameSearchInput: vi.fn(() => null) }));
-vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
+vi.mock('../../plugins/index', () => ({ PluginSlot: () => null }));
 
 const createMutate = vi.fn();
 const updateMutate = vi.fn();

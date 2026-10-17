@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom';
-import { PluginSlot } from '../../plugins';
+import { PluginSlot } from '../../plugins/index';
 import { usePluginStore } from '../../stores/plugin-store';
 
 function NoConfigFallback() {

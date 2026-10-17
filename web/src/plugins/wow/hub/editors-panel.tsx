@@ -12,10 +12,10 @@ import type { GuildEditor, GuildPage } from '@raid-ledger/contract';
 import { Button } from '../../../components/ui/button';
 import { RoleBadge } from '../../../components/ui/role-badge';
 import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
-import { Card } from './guild-bits';
-import { AddMemberEditor, AddRankEditor } from './guild-editor-forms';
-import { gmIsEditor } from './guild-roster.helpers';
-import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from './use-guild';
+import { Card } from '../../../components/hub/hub-bits';
+import { AddMemberEditor, AddRankEditor } from './editor-forms';
+import { gmIsEditor } from './wow-guild.helpers';
+import { useAddGuildEditor, useGuildEditors, useRemoveGuildEditor } from '../../../components/hub/api/use-guild';
 
 /** Rank 0 is not an implicit editor: staff grant the GM explicitly. */
 const GM_HINT = 'Add your Guild Master as an editor.';

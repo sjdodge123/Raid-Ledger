@@ -12,7 +12,7 @@ import { useViewerCacheScope } from '../../../hooks/use-auth';
 import {
     deleteGuildDiscordChannel, fetchGuildDiscord, fetchGuildDiscordChannels, putGuildDiscordChannel,
 } from './guild-discord-api';
-import { guildPageKey } from './use-guild';
+import { guildPageKey } from '../api/use-guild';
 
 export const GUILD_DISCORD_REFRESH_MS = 60_000;
 

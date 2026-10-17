@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import type { CharacterRole, CharacterDto } from '@raid-ledger/contract';
 import { useCreateCharacter } from '../../hooks/use-character-mutations';
-import { PluginSlot } from '../../plugins';
+import { PluginSlot } from '../../plugins/index';
 import { Button } from '../ui/button';
 import { Field } from '../ui/field';
 import { Input } from '../ui/input';

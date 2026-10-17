@@ -2,7 +2,7 @@ import type { JSX, ReactNode } from 'react';
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { addDays, subDays, addMonths, subMonths } from 'date-fns';
-import { CalendarView, MiniCalendar } from '../components/calendar';
+import { CalendarView, MiniCalendar } from '../components/calendar/index';
 import { CalendarMobileToolbar, type CalendarViewMode } from '../components/calendar/calendar-mobile-toolbar';
 import { CalendarMobileNav } from '../components/calendar/calendar-mobile-nav';
 import { useGameTime } from '../hooks/use-game-time';

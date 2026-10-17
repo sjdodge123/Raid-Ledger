@@ -9,10 +9,10 @@
 import { lazy, Suspense, useState, type JSX, type ReactNode } from 'react';
 import { ArrowTopRightOnSquareIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import type { GuildDiscordEmbedDto, GuildDiscordMessageDto, GuildDiscordMirrorDto } from '@raid-ledger/contract';
-import { ThreadMessageRow } from '../../../components/discord/ThreadMessageRow';
-import { Button } from '../../../components/ui/button';
-import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { Card, Pill, SectionTitle } from './guild-bits';
+import { ThreadMessageRow } from '../../discord/ThreadMessageRow';
+import { Button } from '../../ui/button';
+import { FOCUS_RING } from '../../ui/form-classes';
+import { Card, Pill, SectionTitle } from '../hub-bits';
 import { boundChannelId, latestMessages, mirrorBlurb, mirrorTitle } from './guild-discord.helpers';
 import { useGuildDiscord } from './use-guild-discord';
 

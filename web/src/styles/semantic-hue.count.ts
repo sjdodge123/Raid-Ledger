@@ -11,7 +11,7 @@
  * `web/scripts/semantic-hue-baseline.mjs`, so the two can never count
  * differently. Pure string work: the caller hands in the file-system reader.
  */
-import { stripComments } from '../test/strip-comments.ts';
+import { stripComments } from '../test/strip-comments';
 
 /** `{path relative to web/src: raw count}`; a baseline also carries `__total`. */
 export type HueCounts = Record<string, number>;

@@ -12,7 +12,7 @@ import { useGameRegistry } from '../hooks/use-game-registry';
 import { useMyCharacters } from '../hooks/use-characters';
 import { getEventStatus } from '../lib/event-utils';
 import { useNotifReadSync } from '../hooks/use-notif-read-sync';
-import { PluginSlot } from '../plugins';
+import { PluginSlot } from '../plugins/index';
 import { useVoiceRoster } from '../hooks/use-voice-roster';
 import { EventDetailSkeleton } from './event-detail/EventDetailSkeleton';
 import { EventDetailRoster } from './event-detail/EventDetailRoster';

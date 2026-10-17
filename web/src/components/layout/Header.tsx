@@ -1,13 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
 import { UserMenu } from './UserMenu';
 import { ThemeToggle } from './ThemeToggle';
-import { NotificationBell } from '../notifications';
+import { NotificationBell } from '../notifications/index';
 import { useAuth, type User } from '../../hooks/use-auth';
 import { useSystemStatus } from '../../hooks/use-system-status';
 import { useScrollDirection } from '../../hooks/use-scroll-direction';
 import { API_BASE_URL } from '../../lib/config';
 import { Z_INDEX } from '../../lib/z-index';
-import { PluginSlot } from '../../plugins';
+import { PluginSlot } from '../../plugins/index';
 import { navClass } from './nav-class';
 
 interface HeaderProps {

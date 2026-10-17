@@ -4,7 +4,7 @@
  */
 import type { JSX } from 'react';
 import { ArrowDownIcon, ArrowUpIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { Button } from '../../../components/ui/button';
+import { Button } from '../../ui/button';
 
 export function ItemControls({ name, index, count, onMove, onRemove }: {
     name: string; index: number; count: number; onMove: (dir: -1 | 1) => void; onRemove: () => void;

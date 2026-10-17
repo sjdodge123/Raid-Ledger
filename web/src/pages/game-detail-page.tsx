@@ -16,7 +16,7 @@ import { CommunityActivitySection } from './game-detail/CommunityActivitySection
 import { CoopFeaturesSection } from './game-detail/CoopFeaturesSection';
 import { GameTasteSection } from './game-detail/taste-vector/GameTasteSection';
 import { GameBanner } from './game-detail/GameBanner';
-import { PluginSlot } from '../plugins';
+import { PluginSlot } from '../plugins/index';
 import { LfgToggleButton } from './game-detail/lfg-toggle-button';
 import { GameNotifyBell } from './game-detail/game-notify-bell';
 import { LineupVoteBanner } from '../components/lineups/LineupVoteBanner';

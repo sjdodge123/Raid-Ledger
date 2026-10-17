@@ -6,12 +6,12 @@
 import { useState, type JSX } from 'react';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildRuleSection } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
-import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
-import { WidgetCard } from './guild-bits';
+import { Button } from '../../ui/button';
+import { ScrollCollapsible } from '../../ui/scroll-collapsible';
+import { WidgetCard } from '../hub-bits';
 import { ruleLines } from './guild-content.helpers';
 import { RulesEditor } from './guild-rules-editor';
-import { useUpdateGuildProfile } from './use-guild-content';
+import { useUpdateGuildProfile } from '../api/use-guild-content';
 
 function RuleSection({ section, index }: { section: GuildRuleSection; index: number }): JSX.Element {
     return (

@@ -6,11 +6,11 @@
  */
 import type { JSX } from 'react';
 import type { GuildMemberRow, GuildPage, GuildRankGroup } from '@raid-ledger/contract';
-import { ScrollCollapsible } from '../../../components/ui/scroll-collapsible';
-import { CharacterLink } from './character-link';
-import { Card, Pill, SectionTitle } from './guild-bits';
-import { ROLE_META, rankLabel } from './guild-roster.helpers';
-import { CharRoleBadge, RoleSummary } from './role-bits';
+import { ScrollCollapsible } from '../ui/scroll-collapsible';
+import { CharacterLink } from '../../plugins/wow/hub/character-link';
+import { Card, Pill, SectionTitle } from './hub-bits';
+import { ROLE_META, rankLabel } from '../../plugins/wow/hub/wow-guild.helpers';
+import { CharRoleBadge, RoleSummary } from '../../plugins/wow/hub/role-bits';
 
 const OPEN_RANKS_UP_TO = 2;
 

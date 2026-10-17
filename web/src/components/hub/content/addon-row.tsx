@@ -7,10 +7,10 @@ import { useState, type JSX } from 'react';
 import {
     ArrowDownIcon, ArrowTopRightOnSquareIcon, ArrowUpIcon, LockClosedIcon, PencilSquareIcon, TrashIcon,
 } from '@heroicons/react/24/outline';
-import { Button } from '../../../components/ui/button';
+import { Button } from '../../ui/button';
 import { AddonDetailFields } from './addon-form';
 import type { AddonDetails, AddonView } from './addon-view';
-import { Pill } from './guild-bits';
+import { Pill } from '../hub-bits';
 
 /** Per-call outcome of a row save; the editor closes only on success. */
 export interface SaveCallbacks { onSuccess: () => void; onError: (error: Error) => void }

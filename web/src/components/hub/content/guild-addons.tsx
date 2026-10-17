@@ -6,14 +6,14 @@
  */
 import { useState, type JSX } from 'react';
 import type { GuildAddonList } from '@raid-ledger/contract';
-import { RadioGroup } from '../../../components/ui/radio-group';
+import { RadioGroup } from '../../ui/radio-group';
 import { AddAddonForm, type NewAddon } from './addon-form';
 import { AddonRow, type RowActions } from './addon-row';
 import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
-import { SectionTitle } from './guild-bits';
-import { useGuildAddonMutations } from './use-guild-content';
+import { SectionTitle } from '../hub-bits';
+import { useGuildAddonMutations } from '../api/use-guild-content';
 
 const FILTER_OPTIONS = [
     { value: 'any', label: 'All' },

@@ -8,7 +8,7 @@ import { LiveRegionProvider } from './live-region-provider';
 import { FeedbackWidget } from '../feedback/FeedbackWidget';
 import { SpaceEffects } from './SpaceEffects';
 import { UnderwaterAmbience } from './UnderwaterAmbience';
-import { ImpersonationBanner } from '../auth';
+import { ImpersonationBanner } from '../auth/index';
 import { DiscordJoinBanner } from '../ui/DiscordJoinBanner';
 import { CurrentUserAvatarSync } from '../shared/CurrentUserAvatarSync';
 import { useThemeSync } from '../../hooks/use-theme-sync';

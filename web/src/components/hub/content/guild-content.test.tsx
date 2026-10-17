@@ -11,7 +11,7 @@ import type { GuildAddon, GuildAddonList, GuildPage as GuildPageDto, GuildProfil
 import { server } from '../../../test/mocks/server';
 import { renderWithProviders } from '../../../test/render-helpers';
 import { at } from '../../../test/defined';
-import { GuildPage } from './guild-page';
+import { GuildPage } from '../hub-page';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';
 

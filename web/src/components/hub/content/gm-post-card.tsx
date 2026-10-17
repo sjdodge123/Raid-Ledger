@@ -5,13 +5,13 @@
 import { useState, type JSX } from 'react';
 import { PencilSquareIcon } from '@heroicons/react/24/outline';
 import { GUILD_GM_POST_MAX, type GuildGmPost } from '@raid-ledger/contract';
-import { AvatarWithFallback } from '../../../components/shared/AvatarWithFallback';
-import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Textarea } from '../../../components/ui/textarea';
-import { Card, Pill } from './guild-bits';
+import { AvatarWithFallback } from '../../shared/AvatarWithFallback';
+import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Textarea } from '../../ui/textarea';
+import { Card, Pill } from '../hub-bits';
 import { updatedLabel } from './guild-content.helpers';
-import { useGuildProfile, useUpdateGuildProfile } from './use-guild-content';
+import { useGuildProfile, useUpdateGuildProfile } from '../api/use-guild-content';
 
 function PostByline({ post }: { post: GuildGmPost }): JSX.Element {
     const author = post.updatedBy ?? 'A former member';

@@ -13,7 +13,7 @@ import '../../pages/event-detail-page.css';
 import { type SlotState } from './shared/event-form-constants';
 import { GameDetailsSection } from './shared/game-details-section';
 import { useRegistryGameId } from './shared/use-registry-game-id';
-import { PluginSlot } from '../../plugins';
+import { PluginSlot } from '../../plugins/index';
 import { RosterSection } from './shared/roster-section';
 import { RemindersSection } from './shared/reminders-section';
 import type { FormState, FormErrors, EventFormProps } from './create-event-form.types';

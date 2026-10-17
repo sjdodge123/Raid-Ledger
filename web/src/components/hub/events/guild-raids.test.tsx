@@ -10,7 +10,7 @@ import { server } from '../../../test/mocks/server';
 import { emptyGuildRaids } from '../../../test/mocks/guild-raids-handlers';
 import { at } from '../../../test/defined';
 import { renderWithProviders } from '../../../test/render-helpers';
-import { GuildPage } from './guild-page';
+import { GuildPage } from '../hub-page';
 import { dayLabel, timeRange, timeShort } from './guild-raids.helpers';
 
 const BASE = 'http://localhost:3000/plugins/wow/guilds/7';

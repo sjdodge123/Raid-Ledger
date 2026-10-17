@@ -5,10 +5,10 @@
 import { useState, type JSX } from 'react';
 import { ArrowTopRightOnSquareIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import type { GuildLinkGroup } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
-import { WidgetCard } from './guild-bits';
+import { Button } from '../../ui/button';
+import { WidgetCard } from '../hub-bits';
 import { LinksEditor } from './guild-links-editor';
-import { useUpdateGuildProfile } from './use-guild-content';
+import { useUpdateGuildProfile } from '../api/use-guild-content';
 
 function LinkGroupView({ group }: { group: GuildLinkGroup }): JSX.Element {
     return (

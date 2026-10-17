@@ -21,7 +21,7 @@ vi.mock('./live-region-provider', () => ({ LiveRegionProvider: () => null }));
 vi.mock('../feedback/FeedbackWidget', () => ({ FeedbackWidget: () => <div data-testid="feedback-fab" /> }));
 vi.mock('./SpaceEffects', () => ({ SpaceEffects: () => null }));
 vi.mock('./UnderwaterAmbience', () => ({ UnderwaterAmbience: () => null }));
-vi.mock('../auth', () => ({ ImpersonationBanner: () => null }));
+vi.mock('../auth/index', () => ({ ImpersonationBanner: () => null }));
 vi.mock('../ui/DiscordJoinBanner', () => ({ DiscordJoinBanner: () => null }));
 vi.mock('../shared/CurrentUserAvatarSync', () => ({ CurrentUserAvatarSync: () => null }));
 vi.mock('../../hooks/use-theme-sync', () => ({ useThemeSync: () => undefined }));

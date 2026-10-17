@@ -7,11 +7,11 @@
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { GuildEventCardDto, GuildRaidsDto, GuildRecentEventDto } from '@raid-ledger/contract';
-import { FOCUS_RING } from '../../../components/ui/form-classes';
-import { Card, Pill, SectionTitle, WidgetCard } from './guild-bits';
+import { FOCUS_RING } from '../../ui/form-classes';
+import { Card, Pill, SectionTitle, WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
 import { dateTile, dayLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
-import { JumpLink, QuietEmpty } from './guild-raids-bits';
+import { JumpLink, QuietEmpty } from '../../../plugins/wow/hub/raids-bits';
 
 const SUBHEAD = 'mb-2 text-xs font-semibold uppercase tracking-wider text-muted';
 const COMPACT_COUNT = 2;

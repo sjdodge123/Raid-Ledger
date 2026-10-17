@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { PluginIntegrationPanel } from './plugin-integration-panel';
-import { clearRegistry, registerSlotComponent } from '../../plugins';
+import { clearRegistry, registerSlotComponent } from '../../plugins/index';
 import { usePluginStore } from '../../stores/plugin-store';
 
 const FALLBACK = /No configuration UI available for this integration/;

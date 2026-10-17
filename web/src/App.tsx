@@ -12,7 +12,7 @@ import { getCachedUser, fetchCurrentUser } from './hooks/use-auth';
 import { getAuthMethod } from './lib/api/silent-reauth';
 import { startBootSession, awaitBootSession } from './lib/api/boot-session';
 import { installCrossTabAuth } from './lib/api/cross-tab-auth';
-import { Layout } from './components/layout';
+import { Layout } from './components/layout/index';
 import { LoadingSpinner } from './components/ui/loading-spinner';
 import { StartupGate } from './components/ui/StartupGate';
 import { ConnectivityBanner } from './components/ui/ConnectivityBanner';

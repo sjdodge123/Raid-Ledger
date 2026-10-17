@@ -7,7 +7,7 @@ import { useCreateCharacter, useUpdateCharacter, useSetMainCharacter } from '../
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
 import { GameSearchInput } from '../events/game-search-input';
-import { PluginSlot } from '../../plugins';
+import { PluginSlot } from '../../plugins/index';
 import { isConflictError } from '../../lib/api/api-error';
 import { CharacterFormFields } from './character-form-fields';
 import { useCharacterIdentity, type CharacterIdentityProvider, type CharacterPrefill, type IdentityErrors } from '../../plugins/character-identity';

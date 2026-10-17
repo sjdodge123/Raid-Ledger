@@ -10,7 +10,7 @@ import { useCreateCharacter } from '../../hooks/use-character-mutations';
 import { activateWowPlugin } from '../../test/activate-wow-plugin';
 
 vi.mock('../../hooks/use-character-mutations', () => ({ useCreateCharacter: vi.fn() }));
-vi.mock('../../plugins', () => ({ PluginSlot: () => null }));
+vi.mock('../../plugins/index', () => ({ PluginSlot: () => null }));
 
 const mutate = vi.fn();
 beforeEach(() => {

@@ -2,7 +2,7 @@ import { useMemo, useEffect, useRef, useCallback } from 'react';
 import type { IgdbGameDto, EventTypeDto } from '@raid-ledger/contract';
 import { GameSearchInput } from '../game-search-input';
 import { useGameRegistry, useEventTypes } from '../../../hooks/use-game-registry';
-import { PluginSlot } from '../../../plugins';
+import { PluginSlot } from '../../../plugins/index';
 import { getWowVariant, getContentType } from '../../../plugins/wow/utils';
 import { applyEventTypeDefaults, type SlotState } from './event-form-constants';
 import { Field } from '../../ui/field';

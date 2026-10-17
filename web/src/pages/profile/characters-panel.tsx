@@ -5,7 +5,7 @@ import { readCharacterPrefill, type CharacterPrefill } from '../../plugins/chara
 import { useAuth } from '../../hooks/use-auth';
 import { useMyCharacters } from '../../hooks/use-characters';
 import { useGameRegistry } from '../../hooks/use-game-registry';
-import { CharacterList, AddCharacterModal } from '../../components/profile';
+import { CharacterList, AddCharacterModal } from '../../components/profile/index';
 
 function useCharacterModal(games: { id: number }[]) {
     const [showAddModal, setShowAddModal] = useState(false);

@@ -6,7 +6,7 @@ import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
 import type { EventResponseDto } from '@raid-ledger/contract';
 import type { ViewerEventRosterDto, ViewerRosterWithAssignments } from '../../lib/api/viewer-event-schemas';
-import { RosterBuilder } from '../../components/roster';
+import { RosterBuilder } from '../../components/roster/index';
 import { GameTimeWidget } from '../../components/features/game-time/GameTimeWidget';
 import { AutoSubToggle, SignedUpActions } from './EventDetailSubComponents';
 import type { useEventDetailHandlers } from './use-event-detail-handlers';

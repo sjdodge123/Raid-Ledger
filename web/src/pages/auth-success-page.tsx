@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from '../lib/toast';
 import { useAuth } from '../hooks/use-auth';
-import { consumeAuthRedirect } from '../components/auth';
+import { consumeAuthRedirect } from '../components/auth/index';
 import { API_BASE_URL } from '../lib/config';
 import { setAuthMethod, clearSilentGuard, armSilentGuard } from '../lib/api/silent-reauth';
 import { clearAccessToken } from '../lib/api/access-token-store';

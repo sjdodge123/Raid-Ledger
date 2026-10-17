@@ -18,7 +18,7 @@
  */
 import type { JSX } from 'react';
 import type { MatchDetailResponseDto } from '@raid-ledger/contract';
-import { JourneyHero } from '../../shared/journey-hero';
+import { JourneyHero } from '../../shared/journey-hero/index';
 import { LineupParticipantsButton } from '../LineupParticipantsButton';
 import type { JourneyHeroProps } from '../../shared/journey-hero/types';
 import { SchedulingGameRefBanner } from './SchedulingGameRefBanner';

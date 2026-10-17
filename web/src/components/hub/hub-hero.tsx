@@ -7,10 +7,10 @@
 import type { JSX } from 'react';
 import { CalendarDaysIcon } from '@heroicons/react/24/outline';
 import type { GuildEventCardDto, GuildPage } from '@raid-ledger/contract';
-import { NAV_CHIP_CLASS } from '../../../components/ui/nav-chip';
-import { Pill } from './guild-bits';
-import { signedShort, whenLabel } from './guild-raids.helpers';
-import { crestInitials, guildRealm } from './guild-roster.helpers';
+import { NAV_CHIP_CLASS } from '../ui/nav-chip';
+import { Pill } from './hub-bits';
+import { signedShort, whenLabel } from './events/guild-raids.helpers';
+import { crestInitials, guildRealm } from '../../plugins/wow/hub/wow-guild.helpers';
 
 function Crest({ name }: { name: string }): JSX.Element {
     return (

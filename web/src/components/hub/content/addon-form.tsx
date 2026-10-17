@@ -6,14 +6,14 @@
  */
 import { useState, type JSX } from 'react';
 import { GUILD_ADDON_FLAVORS, GUILD_ADDON_NOTE_MAX, GUILD_URL_MAX } from '@raid-ledger/contract';
-import { Button } from '../../../components/ui/button';
-import { Field } from '../../../components/ui/field';
-import { Input } from '../../../components/ui/input';
-import { RadioGroup } from '../../../components/ui/radio-group';
-import { Select } from '../../../components/ui/select';
+import { Button } from '../../ui/button';
+import { Field } from '../../ui/field';
+import { Input } from '../../ui/input';
+import { RadioGroup } from '../../ui/radio-group';
+import { Select } from '../../ui/select';
 import { previewAddonUrl } from './addon-url';
 import type { AddonDetails } from './addon-view';
-import { Pill } from './guild-bits';
+import { Pill } from '../hub-bits';
 import { FLAVOR_LABEL, SOURCE_LABEL } from './guild-content.helpers';
 
 const REQUIRED_OPTIONS = [

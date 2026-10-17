@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useInfinitePlayers } from '../hooks/use-players';
 import { usePlayerFilters } from '../hooks/use-player-filters';
 import { resolveAvatar, toAvatarUser } from '../lib/avatar';
-import { PluginSlot } from '../plugins';
+import { PluginSlot } from '../plugins/index';
 import { NewMembersSection } from '../components/players/NewMembersSection';
 import { MobilePlayerCard } from '../components/players/mobile-player-card';
 import { PlayersMobileToolbar } from '../components/players/players-mobile-toolbar';

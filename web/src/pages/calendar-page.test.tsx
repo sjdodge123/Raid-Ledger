@@ -24,7 +24,7 @@ vi.mock('../hooks/use-game-registry', () => ({
 let mockIsDesktop = true;
 vi.mock('../hooks/use-media-query', () => ({ useMediaQuery: () => mockIsDesktop }));
 
-vi.mock('../components/calendar', () => ({
+vi.mock('../components/calendar/index', () => ({
     // ROK-1662: the page hands the Filters funnel + inline panel to CalendarView's toolbar slots.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     CalendarView: (props: any) => <div data-testid="calendar-view">{props.toolbarAction}{props.belowToolbar}</div>,

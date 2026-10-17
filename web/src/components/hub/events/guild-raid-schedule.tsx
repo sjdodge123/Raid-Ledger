@@ -1,9 +1,9 @@
 /** ROK-1787 — weekly raid schedule (prototype `proposed/RaidSchedule.tsx`): one row per recurring series. */
 import type { JSX } from 'react';
 import type { GuildScheduleNightDto } from '@raid-ledger/contract';
-import { Pill, WidgetCard } from './guild-bits';
+import { Pill, WidgetCard } from '../hub-bits';
 import { timeRange, weekdayShort } from './guild-raids.helpers';
-import { CardFootnote, QuietEmpty } from './guild-raids-bits';
+import { CardFootnote, QuietEmpty } from '../../../plugins/wow/hub/raids-bits';
 
 const FREQUENCY: Record<NonNullable<GuildScheduleNightDto['frequency']>, string> = {
     weekly: 'Weekly',
