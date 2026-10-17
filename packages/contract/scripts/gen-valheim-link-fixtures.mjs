@@ -176,6 +176,7 @@ const invalid = {
     'items-atlas-icon-without-atlas': [{ ...itemsAtlas, atlas: null }, { path: 'atlas', code: 'custom' }],
     'int64-out-of-range': [{ ...characterVanilla, character: { ...identity, playerId: '9223372036854775808' } }, { path: 'character.playerId', code: 'custom' }],
     'int64-leading-zero': [{ ...characterVanilla, character: { ...identity, playerId: '01000000000000001' } }, { path: 'character.playerId', code: 'invalid_format' }],
+    'mod-version-not-semver': [{ ...characterVanilla, modVersion: '01.0.0' }, { path: 'modVersion', code: 'invalid_format' }],
     'steamid-below-individual-base': [{ ...characterVanilla, character: { ...identity, steamId: '76561197960265727' } }, { path: 'character.steamId', code: 'custom' }],
     // Junk id spellings: the regex aborts, so the range refine never meets
     // them (`BigInt('abc')` would throw out of safeParse). int64 '-1' is a

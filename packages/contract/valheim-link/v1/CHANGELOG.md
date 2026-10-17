@@ -40,3 +40,6 @@ Newest first. Every entry states **additive** or **breaking** (see
   The server bitmap rule (CONTRACT.md §6 step 4) now also requires **one**
   gzip member with `FLG = 0`, rejecting concatenated members that Node's
   gunzip would join. `schema.json` unchanged.
+- `modVersion` is checked as SemVer 2.0.0 (build metadata allowed, leading
+  zeros rejected), ≤ 64 chars; `schema.json` regenerated; invalid fixture
+  `mod-version-not-semver` (28 in all).

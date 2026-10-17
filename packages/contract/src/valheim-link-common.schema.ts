@@ -109,10 +109,17 @@ export const ValheimServerIdSchema = z.string().regex(/^[A-Za-z0-9_-]{1,64}$/);
 /** Game build as `Version.GetVersionString()` prints it, e.g. `0.220.5`. */
 export const ValheimGameVersionSchema = z.string().regex(/^\d{1,4}(\.\d{1,5}){1,3}$/);
 
-/** The mod's own SemVer, e.g. `1.0.0` or `1.2.0-beta.1`. */
+/**
+ * The mod's own version: SemVer 2.0.0 (`1.0.0`, `1.2.0-beta.1`, `1.0.0+build.1`),
+ * at most 64 chars. Both checks abort so the regex never runs on an oversized
+ * string and nothing later sees a rejected value.
+ */
+const SEMVER_PATTERN =
+    /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*))*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 export const ValheimModVersionSchema = z
     .string()
-    .regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.-]{1,32})?$/);
+    .max(64, { abort: true })
+    .regex(SEMVER_PATTERN, { abort: true });
 
 /** Longest `capturedAt`: `YYYY-MM-DDTHH:MM:SS.sssZ` (≤ 3 fractional digits). */
 export const VALHEIM_LINK_TIMESTAMP_MAX_CHARS = 24;

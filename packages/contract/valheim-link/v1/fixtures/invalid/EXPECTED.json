@@ -43,6 +43,10 @@
     "path": "character.playerId",
     "code": "invalid_format"
   },
+  "mod-version-not-semver": {
+    "path": "modVersion",
+    "code": "invalid_format"
+  },
   "steamid-below-individual-base": {
     "path": "character.steamId",
     "code": "custom"

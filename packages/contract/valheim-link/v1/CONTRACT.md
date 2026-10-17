@@ -53,7 +53,7 @@ The endpoint itself is ROK-1833; this section is what the mod may rely on.
 | `serverId` | string `^[A-Za-z0-9_-]{1,64}$` | Raid Ledger's id for the game server, issued with the token. |
 | `capturedAt` | ISO-8601 UTC, `Z` offset (`2026-10-17T20:15:00Z`), at most 3 fractional digits (≤ 24 chars) | When the mod read the data. Not later than server time + 5 min (§1). |
 | `gameVersion` | `^\d{1,4}(\.\d{1,5}){1,3}$` (`0.220.5`) | `Version.GetVersionString()`. |
-| `modVersion` | SemVer (`1.0.0`, `1.2.0-beta.1`) | The mod's own version. |
+| `modVersion` | SemVer 2.0.0 (`1.0.0`, `1.2.0-beta.1`, `1.0.0+build.1`), ≤ 64 chars | The mod's own version. |
 
 Shared value types:
 
