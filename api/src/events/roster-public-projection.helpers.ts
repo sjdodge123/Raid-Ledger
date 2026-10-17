@@ -44,7 +44,7 @@ import type {
   PublicEventResponseDto,
   PublicEventDetailResponseDto,
 } from '@raid-ledger/contract';
-import { discordAvatarUrl } from '../common/discord-avatar-url.helpers';
+import { publicAvatarUrl } from '../common/public-avatar-url.helpers';
 
 /** Viewer rule (Q6): signed in AND not deactivated. Anything else is anonymous. */
 export function isMemberViewer(
@@ -57,7 +57,7 @@ export function toPublicSignupUser(user: SignupUserDto): PublicSignupUserDto {
   return PublicSignupUserSchema.parse({
     id: user.id,
     username: user.username,
-    avatar: discordAvatarUrl(user.discordId, user.avatar),
+    avatar: publicAvatarUrl(user.avatar),
     customAvatarUrl: user.customAvatarUrl,
     characters: user.characters,
   });
@@ -104,7 +104,7 @@ export function toPublicRosterAssignment(
     signupId: a.signupId,
     userId: a.userId,
     username: a.username,
-    avatar: discordAvatarUrl(a.discordId, a.avatar),
+    avatar: publicAvatarUrl(a.avatar),
     customAvatarUrl: a.customAvatarUrl,
     slot: a.slot,
     position: a.position,
@@ -130,7 +130,7 @@ export function toPublicCreator(c: EventCreatorDto): PublicEventCreatorDto {
   return PublicEventCreatorSchema.parse({
     id: c.id,
     username: c.username,
-    avatar: discordAvatarUrl(c.discordId, c.avatar),
+    avatar: publicAvatarUrl(c.avatar),
     customAvatarUrl: c.customAvatarUrl,
   });
 }

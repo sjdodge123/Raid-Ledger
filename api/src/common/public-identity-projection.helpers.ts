@@ -35,19 +35,22 @@ import type {
   GameNowPlayingResponseDto,
   PublicGameNowPlayingResponseDto,
 } from '@raid-ledger/contract';
-import { discordAvatarUrl } from './discord-avatar-url.helpers';
+import { publicAvatarUrl } from './public-avatar-url.helpers';
 
 type IdentityRow = {
   discordId?: string | null | undefined;
   avatar: string | null;
 };
 
-/** Drop `discordId`; replace the raw avatar hash with a server-built absolute URL. */
+/**
+ * Drop `discordId`; drop any avatar that would need it (ROK-1827 — a CDN url
+ * embeds the snowflake). A custom absolute avatar URL still passes through.
+ */
 export function toPublicIdentity<T extends IdentityRow>(
   row: T,
 ): Omit<T, 'discordId'> {
   const { discordId, ...rest } = row;
-  return { ...rest, avatar: discordAvatarUrl(discordId, row.avatar) };
+  return { ...rest, avatar: publicAvatarUrl(row.avatar) };
 }
 
 /** Strict-parse, then narrow back to the DTO type (values are checked loosely). */
