@@ -16,35 +16,21 @@
  */
 export const TELEMETRY_DEFAULT_ENABLED = true;
 
-/** Opt-out spellings, compared trimmed + lower-cased. */
-const ENABLE_OFF_VALUES: ReadonlySet<string> = new Set([
-  'false',
-  '0',
-  'no',
-  'off',
-]);
-const DISABLE_ON_VALUES: ReadonlySet<string> = new Set([
-  'true',
-  '1',
-  'yes',
-  'on',
-]);
-
-function normalised(value: string | undefined): string {
-  return (value ?? '').trim().toLowerCase();
-}
-
 /**
- * The opt-out is forgiving (review MAJOR 1): `DISABLE_TELEMETRY` of
- * true/1/yes/on → off (always wins, back-compat). Otherwise `ENABLE_TELEMETRY`
- * of false/0/no/off → off. Case and surrounding whitespace are ignored.
- * Anything else (unset, empty, `'true'`, a typo) → {@link TELEMETRY_DEFAULT_ENABLED}.
+ * The opt-out is EXACT (review MAJOR 1 — a lenient set was tried and
+ * rejected): only `DISABLE_TELEMETRY='true'` (always wins, back-compat) and
+ * `ENABLE_TELEMETRY='false'` turn reporting off. Every other value — unset,
+ * empty, `'FALSE'`, `'0'`, `'no'`, `'off'`, `' false '`, a typo — keeps
+ * {@link TELEMETRY_DEFAULT_ENABLED}. An env var that does not say exactly
+ * `false` must never be guessed into an opt-out the operator did not write,
+ * and the same two spellings are what every compose file, workflow and
+ * `.env.example` in this repo sets.
  */
 export function isTelemetryEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
-  if (DISABLE_ON_VALUES.has(normalised(env.DISABLE_TELEMETRY))) return false;
-  if (ENABLE_OFF_VALUES.has(normalised(env.ENABLE_TELEMETRY))) return false;
+  if (env.DISABLE_TELEMETRY === 'true') return false;
+  if (env.ENABLE_TELEMETRY === 'false') return false;
   return TELEMETRY_DEFAULT_ENABLED;
 }
 

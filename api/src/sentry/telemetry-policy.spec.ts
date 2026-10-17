@@ -50,37 +50,39 @@ describe('isTelemetryEnabled (ROK-1838)', () => {
     ).toBe(false);
   });
 
-  it.each(['1', '', 'yes', ' true ', 'flase'])(
-    "ENABLE_TELEMETRY='%s' → on",
-    (value) => {
-      expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(true);
-    },
-  );
+  // Review MAJOR 1: the opt-out is EXACT. Anything that is not literally
+  // 'false' keeps the default (ON) — a near-miss must never be guessed into
+  // an opt-out the operator did not write.
+  it.each([
+    '1',
+    '',
+    'yes',
+    'true',
+    ' true ',
+    'flase',
+    'FALSE',
+    'False',
+    ' false',
+    'false ',
+    'false\n',
+    '0',
+    'no',
+    'off',
+    'OFF',
+  ])("ENABLE_TELEMETRY='%s' → on (only exact 'false' opts out)", (value) => {
+    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(true);
+  });
 
-  // Review MAJOR 1: an operator who writes the opt-out any common way is out.
-  it.each(['False', ' false', 'false\n', 'OFF', 'off', 'no', 'NO', '0'])(
-    "ENABLE_TELEMETRY='%s' → off (forgiving opt-out)",
-    (value) => {
-      expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(false);
-    },
-  );
-
-  it.each(['TRUE', ' true', '1', 'yes', 'On'])(
-    "DISABLE_TELEMETRY='%s' → off, even with ENABLE_TELEMETRY='true'",
+  // Same for the back-compat kill switch: only exact 'true' turns it off.
+  it.each(['TRUE', 'True', ' true', 'true ', '1', 'yes', 'on', 'On', '0', ''])(
+    "DISABLE_TELEMETRY='%s' leaves it on (only exact 'true' wins)",
     (value) => {
       expect(
         isTelemetryEnabled({
           ENABLE_TELEMETRY: 'true',
           DISABLE_TELEMETRY: value,
         }),
-      ).toBe(false);
-    },
-  );
-
-  it.each(['0', 'no', 'off', ''])(
-    "DISABLE_TELEMETRY='%s' alone leaves it on",
-    (value) => {
-      expect(isTelemetryEnabled({ DISABLE_TELEMETRY: value })).toBe(true);
+      ).toBe(true);
     },
   );
 
