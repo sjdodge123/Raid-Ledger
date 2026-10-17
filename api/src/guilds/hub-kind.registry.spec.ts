@@ -24,16 +24,17 @@ function testHubKind(role: LadderRole): HubKindAdapter {
     pluginSlug: TEST_PLUGIN,
     isMember: (userId) => Promise.resolve(userId === 7),
     resolveLadder: () => Promise.resolve(role),
+    memberGroupIds: () => Promise.resolve([1]),
+    rankNames: () => Promise.resolve(new Map<number, string | null>()),
+    isLiveMember: () => Promise.resolve(true),
   };
 }
 
 function build(): { plugins: PluginRegistryService; hubs: HubKindRegistry } {
-  const db: unknown = createDrizzleMock();
-  const plugins = new PluginRegistryService(
-    db as PostgresJsDatabase<typeof schema>,
-    new EventEmitter2(),
-  );
-  return { plugins, hubs: new HubKindRegistry(plugins) };
+  const mock: unknown = createDrizzleMock();
+  const db = mock as PostgresJsDatabase<typeof schema>;
+  const plugins = new PluginRegistryService(db, new EventEmitter2());
+  return { plugins, hubs: new HubKindRegistry(plugins, db) };
 }
 
 describe('HubKindRegistry (ROK-1830)', () => {

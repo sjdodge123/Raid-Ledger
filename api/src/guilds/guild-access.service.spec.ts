@@ -1,160 +1,135 @@
 /**
- * ROK-1785 — GuildAccessService access matrix (spec §3) against the drizzle
- * mock. The membership query (`findLinkedMemberRows`) and the delegation
- * lookup both end at `.where()`; the SQL semantics of soft removal and
- * deactivation are proven in `guild-access.integration.spec.ts`.
+ * ROK-1830 S2b — core access is now game-agnostic: staff rights, the ladder →
+ * boolean mapping, and delegation to the group's HUB_KIND adapter. The WoW
+ * rank/delegation rules these cases used to assert live in
+ * `plugins/wow-common/guilds/wow-hub-kind.adapter.spec.ts`; the SQL semantics
+ * stay in `guild-access.integration.spec.ts`.
  */
-import { Test } from '@nestjs/testing';
-import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
+import { NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
+import type { GuildKind, LadderRole } from '@raid-ledger/contract';
 import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
+import type * as schema from '../drizzle/schema';
+import { PluginRegistryService } from '../plugins/plugin-host/plugin-registry.service';
 import {
-  GM_RANK_IMPLIES_EDIT,
-  GuildAccessService,
-  viewerAccess,
-  type GuildActor,
-} from './guild-access.service';
-import type { LinkedMemberRow } from '../plugins/wow-common/guilds/guild-membership.helpers';
+  EXTENSION_POINTS,
+  type HubKindAdapter,
+} from '../plugins/plugin-host/extension-points';
+import { GuildAccessService, viewerAccess, type GuildActor } from './guild-access.service';
+import { HubKindRegistry } from './hub-kind.registry';
 
 const GUILD = 7;
-const member = (id: number, rankIndex: number | null): LinkedMemberRow => ({
-  guildId: GUILD,
-  memberId: id,
-  rankIndex,
-});
 const actor = (role: GuildActor['role']): GuildActor => ({ id: 42, role });
 
 let db: MockDb;
 let service: GuildAccessService;
+let hub: HubKindAdapter;
 
-beforeEach(async () => {
-  db = createDrizzleMock();
-  const mod = await Test.createTestingModule({
-    providers: [
-      GuildAccessService,
-      { provide: DrizzleAsyncProvider, useValue: db },
-    ],
-  }).compile();
-  service = mod.get(GuildAccessService);
-});
-
-/** Queue the membership rows, then the delegation grants (if queried). */
-function queue(rows: LinkedMemberRow[], grants: { id: number }[] = []) {
-  db.where.mockResolvedValueOnce(rows).mockResolvedValueOnce(grants);
-}
-
-async function matrix(a: GuildActor) {
+/** A hub kind that records what core asked it, and answers `role`. */
+function stubHub(role: LadderRole, memberGroupIds: number[] = []): HubKindAdapter {
   return {
-    view: await service.canView(a, GUILD),
-    edit: await service.canEdit(a, GUILD),
-    manage: await service.canManageEditors(a, GUILD),
+    kind: 'wow_guild',
+    pluginSlug: 'blizzard',
+    isMember: (userId) => Promise.resolve(userId === 42),
+    resolveLadder: () => Promise.resolve(role),
+    memberGroupIds: () => Promise.resolve(memberGroupIds),
+    rankNames: () => Promise.resolve(new Map<number, string | null>()),
+    isLiveMember: () => Promise.resolve(true),
   };
 }
 
+function build(adapter: HubKindAdapter | null): void {
+  db = createDrizzleMock();
+  const asDb: unknown = db;
+  const typedDb = asDb as PostgresJsDatabase<typeof schema>;
+  const plugins = new PluginRegistryService(typedDb, new EventEmitter2());
+  if (adapter) {
+    plugins.registerAdapter(EXTENSION_POINTS.HUB_KIND, adapter.kind, adapter);
+  }
+  service = new GuildAccessService(typedDb, new HubKindRegistry(plugins, typedDb));
+}
+
+/** The guild row `findGuildKind` reads (ends at `.limit(1)`). */
+function guildOfKind(kind: GuildKind): void {
+  db.limit.mockResolvedValueOnce([{ kind }]);
+}
+
+beforeEach(() => {
+  hub = stubHub('member');
+  build(hub);
+});
+
 describe('GuildAccessService access matrix', () => {
   it.each(['admin', 'operator'] as const)(
-    '%s may view, edit and manage without any member row',
+    '%s may view, edit and manage without consulting the hub kind',
     async (role) => {
-      expect(await matrix(actor(role))).toEqual({
-        view: true,
-        edit: true,
-        manage: true,
-      });
+      const a = actor(role);
+      expect({
+        view: await service.canView(a, GUILD),
+        edit: await service.canEdit(a, GUILD),
+        manage: await service.canManageEditors(a, GUILD),
+      }).toEqual({ view: true, edit: true, manage: true });
       expect(db.select).not.toHaveBeenCalled();
     },
   );
 
-  it('the GM (rank 0) without a grant may view only (GM_RANK_IMPLIES_EDIT off)', async () => {
-    db.where
-      .mockResolvedValueOnce([member(1, 0)]) // canView
-      .mockResolvedValueOnce([member(1, 0)]) // canEdit membership
-      .mockResolvedValueOnce([]); // canEdit delegation: no grant
-    expect(await matrix(actor('member'))).toEqual({
-      view: true,
-      edit: false,
-      manage: false,
-    });
+  it.each([
+    ['leader', true, false],
+    ['officer', true, false],
+    ['member', false, false],
+    ['visitor', false, false],
+  ] as const)(
+    'a non-staff %s may edit %s and manage editors %s',
+    async (role, edit, manage) => {
+      build(stubHub(role));
+      guildOfKind('wow_guild');
+      expect(await service.canEdit(actor('member'), GUILD)).toBe(edit);
+      expect(await service.canManageEditors(actor('member'), GUILD)).toBe(
+        manage,
+      );
+    },
+  );
+
+  it('asks the hub kind whether the caller is a member', async () => {
+    guildOfKind('wow_guild');
+    expect(await service.isMember(42, GUILD)).toBe(true);
+    guildOfKind('wow_guild');
+    expect(await service.canView(actor('member'), GUILD)).toBe(true);
   });
 
-  it('the GM with an explicit member grant may edit but not manage editors', async () => {
-    db.where
-      .mockResolvedValueOnce([member(1, 0)]) // canView
-      .mockResolvedValueOnce([member(1, 0)]) // canEdit membership
-      .mockResolvedValueOnce([{ id: 8 }]); // canEdit delegation
-    expect(await matrix(actor('member'))).toEqual({
-      view: true,
-      edit: true,
-      manage: false,
-    });
-  });
-
-  it('a delegated rank may edit but not manage editors', async () => {
-    db.where
-      .mockResolvedValueOnce([member(2, 1)]) // canView
-      .mockResolvedValueOnce([member(2, 1)]) // canEdit membership
-      .mockResolvedValueOnce([{ id: 9 }]); // canEdit delegation
-    expect(await matrix(actor('member'))).toEqual({
-      view: true,
-      edit: true,
-      manage: false,
-    });
-  });
-
-  it('a delegated member row may edit (grant keyed by member id)', async () => {
-    queue([member(3, 4)], [{ id: 10 }]);
-    expect(await service.canEdit(actor('member'), GUILD)).toBe(true);
-  });
-
-  it('a plain member may view only', async () => {
-    db.where
-      .mockResolvedValueOnce([member(4, 3)]) // canView
-      .mockResolvedValueOnce([member(4, 3)]) // canEdit membership
-      .mockResolvedValueOnce([]); // canEdit delegation: no grant
-    expect(await matrix(actor('member'))).toEqual({
-      view: true,
-      edit: false,
-      manage: false,
-    });
-  });
-
-  it('a non-member or soft-removed member (no live row) gets nothing', async () => {
-    db.where.mockResolvedValue([]);
-    expect(await matrix(actor('member'))).toEqual({
-      view: false,
-      edit: false,
-      manage: false,
-    });
+  it('is not a member of a guild that does not exist', async () => {
+    db.limit.mockResolvedValueOnce([]);
     expect(await service.isMember(42, GUILD)).toBe(false);
-  });
-
-  it('a rank-less member row is still checked for a member grant', async () => {
-    queue([member(5, null)], [{ id: 11 }]);
-    expect(await service.canEdit(actor('member'), GUILD)).toBe(true);
   });
 });
 
 describe('GuildAccessService.resolveLadder (ROK-1830)', () => {
   it.each(['admin', 'operator'] as const)(
-    '%s is leader without any member row',
+    '%s is leader without any lookup',
     async (role) => {
       expect(await service.resolveLadder(actor(role), GUILD)).toBe('leader');
       expect(db.select).not.toHaveBeenCalled();
     },
   );
 
-  it('an explicit grant (rank or member) makes an officer', async () => {
-    queue([member(2, 1)], [{ id: 9 }]);
+  it('returns whatever the guild kind adapter answers', async () => {
+    build(stubHub('officer'));
+    guildOfKind('wow_guild');
     expect(await service.resolveLadder(actor('member'), GUILD)).toBe('officer');
   });
 
-  it('a live member without a grant — the GM included — is a member', async () => {
-    queue([member(1, 0)], []);
-    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('member');
+  it('a guild that does not exist has no ladder: visitor', async () => {
+    db.limit.mockResolvedValueOnce([]);
+    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('visitor');
   });
 
-  it('no live linked row is a visitor and skips the delegation lookup', async () => {
-    db.where.mockResolvedValueOnce([]);
-    expect(await service.resolveLadder(actor('member'), GUILD)).toBe('visitor');
-    expect(db.where).toHaveBeenCalledTimes(1);
+  it('refuses a kind no plugin registered with a 404', async () => {
+    build(null);
+    guildOfKind('wow_guild');
+    await expect(service.resolveLadder(actor('member'), GUILD)).rejects.toThrow(
+      new NotFoundException('No hub module for kind "wow_guild"'),
+    );
   });
 });
 
@@ -173,24 +148,15 @@ describe('viewerAccess (ROK-1830)', () => {
   });
 });
 
-describe('GM_RANK_IMPLIES_EDIT', () => {
-  it('is off until character ownership is verified', () => {
-    expect(GM_RANK_IMPLIES_EDIT).toBe(false);
-  });
-});
-
 describe('GuildAccessService.myGuilds', () => {
-  it('returns [] and skips the guild query for a non-member', async () => {
-    db.where.mockResolvedValueOnce([]);
+  it('returns [] and skips the guild query when no hub kind claims the user', async () => {
     expect(await service.myGuilds(42)).toEqual([]);
     expect(db.orderBy).not.toHaveBeenCalled();
   });
 
-  it('maps each distinct guild to a summary with ISO timestamps', async () => {
+  it('maps each distinct guild id a hub kind reports to a summary with ISO timestamps', async () => {
+    build(stubHub('member', [GUILD, GUILD]));
     const snap = new Date('2026-10-01T12:00:00.000Z');
-    db.where
-      .mockResolvedValueOnce([member(1, 0), member(2, 5)])
-      .mockReturnValueOnce(db);
     db.orderBy.mockResolvedValueOnce([
       {
         id: GUILD,
