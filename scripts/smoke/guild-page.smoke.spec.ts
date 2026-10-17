@@ -268,4 +268,3 @@ test('plain member: no setup checklist, and Resources frames the addons as Recom
         await expect(frame.getByRole('list', { name: 'Recommended addons' }), 'the WoW list keeps its own DOM').toBeVisible();
     });
 })
-;
