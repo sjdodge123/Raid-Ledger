@@ -46,10 +46,23 @@ function useAddonActions(guildId: number, list: GuildAddonList, visible: Readonl
     return { actions, add, adding: m.add.isPending, addFailure: m.add.error?.message ?? null, listError };
 }
 
-/** The Resources-tab section: core has already settled this query before the tab renders. */
-export function GuildAddonsSection({ guildId, canEdit }: HubResourceCtx): JSX.Element | null {
+/**
+ * The Resources-tab section. Core no longer runs this query, so pending and
+ * failed are answered here: a bare `null` conflated them and took the whole
+ * panel (an editor's Add form included) away with nothing said.
+ */
+export function GuildAddonsSection({ guildId, canEdit }: HubResourceCtx): JSX.Element {
     const addons = useGuildAddons(guildId);
-    if (!addons.data) return null;
+    if (addons.error) {
+        return (
+            <p className="py-8 text-center text-sm text-muted" data-testid="guild-addons-load-error">
+                We couldn&apos;t load this guild&apos;s recommended addons. Try again in a moment.
+            </p>
+        );
+    }
+    if (!addons.data) {
+        return <div className="h-20 animate-pulse rounded-lg border border-edge bg-surface" aria-busy="true" data-testid="guild-addons-loading" />;
+    }
     return <GuildAddons guildId={guildId} list={addons.data} canEdit={canEdit} />;
 }
 

@@ -19,31 +19,43 @@ export interface ResourceSectionVisibility {
     probes: JSX.Element;
 }
 
+const NO_IDS: ReadonlySet<string> = new Set<string>();
+
+/** Answers are only ever read back for the guild they were reported for. */
+interface ReportedVisibility {
+    guildId: number;
+    ids: ReadonlySet<string>;
+}
+
 export function useResourceSectionVisibility(
     sections: readonly HubResourceSection[], guildId: number,
 ): ResourceSectionVisibility {
-    const [visibleIds, setVisibleIds] = useState<ReadonlySet<string>>(() => new Set<string>());
+    const [reported, setReported] = useState<ReportedVisibility>(() => ({ guildId, ids: NO_IDS }));
     const report = useCallback<ResourceSectionReport>((id, visible) => {
-        setVisibleIds((prev) => {
-            if (prev.has(id) === visible) return prev;
-            const next = new Set(prev);
+        setReported((prev) => {
+            const ids = prev.guildId === guildId ? prev.ids : NO_IDS;
+            if (ids.has(id) === visible) return prev.guildId === guildId ? prev : { guildId, ids };
+            const next = new Set(ids);
             if (visible) next.add(id);
             else next.delete(id);
-            return next;
+            return { guildId, ids: next };
         });
-    }, []);
+    }, [guildId]);
     const probes = (
         <>
             {sections.map((section) => (section.useVisible
                 ? (
                     <ResourceSectionProbe
-                        key={section.id} id={section.id} guildId={guildId}
+                        key={`${guildId}:${section.id}`} id={section.id} guildId={guildId}
                         useSectionVisible={section.useVisible} report={report}
                     />
                 )
                 : null))}
         </>
     );
+    // Navigating to another guild drops the previous guild's answers outright,
+    // rather than showing them until its probes have re-reported.
+    const visibleIds = reported.guildId === guildId ? reported.ids : NO_IDS;
     // A section that declares no `useVisible` always counts as having content.
     const anyVisible = sections.some((section) => !section.useVisible) || visibleIds.size > 0;
     return { anyVisible, probes };

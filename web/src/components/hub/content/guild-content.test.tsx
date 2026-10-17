@@ -9,7 +9,7 @@ import { http, HttpResponse } from 'msw';
 import { Route, Routes } from 'react-router-dom';
 import type { GuildAddon, GuildAddonList, GuildPage as GuildPageDto, GuildProfile } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
-import { renderWithProviders } from '../../../test/render-helpers';
+import { createTestQueryClient, renderWithProviders } from '../../../test/render-helpers';
 import { activateWowPlugin } from '../../../test/activate-wow-plugin';
 import { at } from '../../../test/defined';
 import { GuildPage } from '../hub-page';
@@ -256,5 +256,50 @@ describe('Resources: addon write failures', () => {
         await userEvent.type(input, 'https://www.curseforge.com/wow/addons/dbm');
         await userEvent.click(screen.getByTestId('guild-addon-add'));
         expect(await screen.findByRole('alert')).toHaveTextContent('Couldn’t add that addon. This addon is already on the guild list');
+    });
+});
+
+/**
+ * ROK-1830 r3 — the section owns its own query now, so a failed or pending
+ * addons fetch must say so. Before r3 both returned `null` and an editor lost
+ * the Add form with no message.
+ */
+describe('Resources: the addons section while it loads and when it fails', () => {
+    it('holds the skeleton while the addons query is still in flight', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.get(`${BASE}/addons`, () => new Promise<never>(() => { /* never settles */ })));
+        renderPage('#resources');
+        const skeleton = await screen.findByTestId('guild-addons-loading');
+        expect(skeleton, 'a pending addons fetch must keep a busy placeholder, not vanish').toHaveAttribute('aria-busy', 'true');
+        expect(screen.queryByTestId('guild-addons-load-error'), 'pending is not an error').toBeNull();
+    });
+
+    it('tells an editor the addons failed to load instead of silently dropping the panel', async () => {
+        serve(true, EMPTY_PROFILE, list);
+        server.use(http.get(`${BASE}/addons`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
+        renderPage('#resources');
+        const failure = await screen.findByTestId('guild-addons-load-error');
+        expect(failure).toHaveTextContent('We couldn’t load this guild’s recommended addons.');
+        expect(screen.queryByLabelText('Addon link'), 'the Add form belongs to a loaded list').toBeNull();
+    });
+});
+
+/**
+ * ROK-1830 r3 — the probe reports in a LAYOUT effect and its answers are keyed
+ * by guild, so a warm cache paints the Resources tab in the same frame.
+ */
+describe('Resources tab visibility on a warm cache', () => {
+    it('offers Resources on the first render when the addons answer is already cached', async () => {
+        serve(false, EMPTY_PROFILE, list);
+        const queryClient = createTestQueryClient();
+        const page = <Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>;
+        const warm = renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        await waitFor(async () => expect(await tabLabels()).toContain('Resources'));
+        warm.unmount();
+
+        renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
+        const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
+        expect(labels, 'a cached answer must not need a second commit to show Resources').toContain('Resources');
     });
 });

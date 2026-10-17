@@ -7,7 +7,7 @@
  * which is legal, where calling a varying number of hooks inside core's own
  * body would not be. See `hub-resource-visibility.tsx`.
  */
-import { useEffect } from 'react';
+import { useLayoutEffect } from 'react';
 
 export type ResourceSectionReport = (id: string, visible: boolean) => void;
 
@@ -20,7 +20,9 @@ export interface ResourceSectionProbeProps {
 
 export function ResourceSectionProbe({ id, guildId, useSectionVisible, report }: ResourceSectionProbeProps): null {
     const visible = useSectionVisible(guildId);
-    useEffect(() => {
+    // Layout, not passive: a passive effect reports one PAINTED commit late, so
+    // on a warm react-query cache the tab row flashes without Resources first.
+    useLayoutEffect(() => {
         report(id, visible);
         return () => report(id, false);
     }, [id, visible, report]);
