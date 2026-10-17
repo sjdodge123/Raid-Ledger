@@ -290,16 +290,19 @@ describe('Resources: the addons section while it loads and when it fails', () =>
  * by guild, so a warm cache paints the Resources tab in the same frame.
  *
  * Phase-sensitive on purpose: `PaintSpy` is a later sibling whose PASSIVE
- * effect snapshots the tab labels. A layout-effect probe has already forced
- * the sync re-render by then, so the snapshot holds Resources; a passive-effect
- * probe would still be queued and the snapshot would miss it (RTL's `act`
- * flushes everything afterwards, so a post-render query cannot tell them apart).
+ * effect snapshots the tab labels after every commit. In the first commit that
+ * renders the nav, a layout-effect probe has already forced the sync re-render,
+ * so that snapshot holds Resources; a passive-effect probe would still be
+ * queued and the snapshot would miss it (RTL's `act` flushes everything
+ * afterwards, so a post-render query cannot tell them apart).
  */
 function PaintSpy({ onPaint }: { onPaint: (labels: (string | null)[]) => void }): null {
+    // No dependency array on purpose: snapshot after EVERY commit, so the first
+    // commit that shows the tab nav at all is the one that gets judged.
     useEffect(() => {
-        const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
-        onPaint(within(nav).getAllByRole('link').map((a) => a.textContent));
-    }, [onPaint]);
+        const nav = screen.queryByRole('navigation', { name: 'Guild page sections' });
+        if (nav) onPaint(within(nav).getAllByRole('link').map((a) => a.textContent));
+    });
     return null;
 }
 
@@ -320,9 +323,10 @@ describe('Resources tab visibility on a warm cache', () => {
         painted.length = 0;
 
         renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        await waitFor(() => expect(painted.length).toBeGreaterThan(0));
         const first = painted[0];
-        expect(first, 'the spy must have observed the first passive flush').toBeDefined();
-        expect(first, 'a cached answer must show Resources before the first passive flush').toContain('Resources');
+        expect(first, 'the spy must have observed the first commit that renders the tab nav').toBeDefined();
+        expect(first, 'a cached answer must show Resources in the first nav commit, before the first passive flush').toContain('Resources');
         const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
         expect(labels, 'a cached answer must not need a second commit to show Resources').toContain('Resources');
