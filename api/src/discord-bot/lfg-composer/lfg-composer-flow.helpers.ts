@@ -57,8 +57,8 @@ import {
 /** What every step needs. Narrowed so a spec fakes only what is used. */
 export interface ComposerFlowDeps {
   db: Db;
-  /** `listGroups` — ROK-1660 `My LFGs` reads the presser's own list. */
-  lfgService: Pick<LfgService, 'createIntent' | 'listGroups'>;
+  /** `listOwnGroups` — ROK-1660 `My LFGs` reads the presser's own list. */
+  lfgService: Pick<LfgService, 'createIntent' | 'listOwnGroups'>;
   settingsService: Pick<
     SettingsService,
     'getClientUrl' | 'getDiscordBotTimezone' | 'getDiscordBotCommunityName'

@@ -118,7 +118,7 @@ export class LfgWithdrawListener {
       gameId,
     );
     const [groups, ctx] = await Promise.all([
-      this.lfgService.listGroups(caller.id),
+      this.lfgService.listOwnGroups(caller.id),
       this.replyContext(),
     ]);
     await interaction.editReply(buildListReply(groups, ctx));

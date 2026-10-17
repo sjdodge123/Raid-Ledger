@@ -268,7 +268,7 @@ export class LfgCommand
     userId: number,
     ctx: LfgReplyContext,
   ): Promise<void> {
-    const groups = await this.lfgService.listGroups(userId);
+    const groups = await this.lfgService.listOwnGroups(userId);
     const postLinks = await this.postLinks(groups);
     await interaction.editReply(buildListReply(groups, ctx, postLinks));
   }

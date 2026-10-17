@@ -26,7 +26,7 @@ import type { Db } from './lfg-composer-search.db-helpers';
 /** What `My LFGs` reads: the caller, their groups and the reply context. */
 export interface ComposerMineDeps {
   db: Db;
-  lfgService: Pick<LfgService, 'listGroups'>;
+  lfgService: Pick<LfgService, 'listOwnGroups'>;
   settingsService: Pick<
     SettingsService,
     'getDiscordBotCommunityName' | 'getClientUrl' | 'getDiscordBotTimezone'
@@ -53,7 +53,7 @@ export async function showComposerMyLfgs(
     await interaction.editReply(LFG_BLOCKED_REPLY);
     return;
   }
-  const groups = await deps.lfgService.listGroups(caller.id);
+  const groups = await deps.lfgService.listOwnGroups(caller.id);
   const own = groups.filter((g) => g.hasOwnIntent);
   const [ctx, postLinks] = await Promise.all([
     loadLfgReplyContext(deps.settingsService),
