@@ -8,7 +8,9 @@
  * and whoever gets `[]` back must not.
  *
  * The custom id is assembled from `LFG_BUTTON_IDS.JOIN`, the same constant
- * `parseJoinCustomId` (`listeners/lfg-join.listener.ts`) slices it apart with.
+ * `parseJoinCustomId` (`listeners/lfg-join.listener.ts`) slices it apart with;
+ * ROK-1660's `I'm out` id comes from `leaveCustomId`, the twin of the parser
+ * `LfgLeaveListener` reads it back with.
  * Nothing here calls `.setColor` — the chrome owns colour (D14b).
  */
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
@@ -18,8 +20,10 @@ import {
   type LfgNowIndicatorEmoji,
 } from '../lfg-now/lfg-now-indicator.helpers';
 import type { LfmRenderState } from '../lfm/lfm-embed.helpers';
+import { leaveCustomId } from '../listeners/lfg-leave.helpers';
 import {
   LFG_JOIN_BUTTON_LABEL,
+  LFG_LEAVE_BUTTON_LABEL,
   LFG_OPEN_GROUP_LABEL,
 } from './lfg-board.constants';
 
@@ -76,7 +80,13 @@ export function buildLfgPostComponents(
   // knows what the press does. The custom id is untouched — the mark changes
   // how the press READS, never what it writes.
   if (inputs.spawnsNow && inputs.spawnEmoji) join.setEmoji(inputs.spawnEmoji);
-  const buttons = [join];
+  // ROK-1660: the way out sits beside the way in, the same for every viewer
+  // (the post is shared). Never swapped by the now-spawn variant.
+  const leave = new ButtonBuilder()
+    .setCustomId(leaveCustomId(inputs.gameId))
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel(LFG_LEAVE_BUTTON_LABEL);
+  const buttons = [join, leave];
   // Discord REJECTS a Link button with an empty URL, so an unconfigured
   // deployment loses the link rather than the whole post.
   if (inputs.clientUrl) {

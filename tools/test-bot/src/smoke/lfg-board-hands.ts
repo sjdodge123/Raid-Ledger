@@ -32,6 +32,8 @@ import {
   isGroupThread,
   JOIN_CUSTOM_ID,
   JOIN_LABEL,
+  LEAVE_CUSTOM_ID,
+  LEAVE_LABEL,
   OPEN_GROUP_LABEL,
   pollForThread,
   readGroup,
@@ -158,6 +160,20 @@ function assertLookingState(
   assertTag(t, LOOKING_TAG, label);
 }
 
+/** ROK-1660 — the `I'm out` button sits beside `+1` on every open post. */
+function assertLeaveButton(run: Run, t: ForumThreadSnapshot, label: string): void {
+  const components = t.starterMessage?.components ?? [];
+  const leaveId = `${LEAVE_CUSTOM_ID}:${String(run.game.id)}`;
+  const leave = components.find((c) => c.customId === leaveId);
+  if (!leave || leave.label !== LEAVE_LABEL) {
+    throw new Error(
+      `${label}: the open post must carry the "${LEAVE_LABEL}" button ` +
+        `(customId "${leaveId}") beside +1, got components ` +
+        `[${components.map((c) => `${c.label ?? 'null'}/${c.customId ?? 'link'}`).join(', ')}]`,
+    );
+  }
+}
+
 /** The buttons every OPEN post carries, at one hand as much as at two. */
 function assertOpenButtons(run: Run, t: ForumThreadSnapshot, label: string): void {
   const components = t.starterMessage?.components ?? [];
@@ -170,6 +186,7 @@ function assertOpenButtons(run: Run, t: ForumThreadSnapshot, label: string): voi
         `[${components.map((c) => `${c.label ?? 'null'}/${c.customId ?? 'link'}`).join(', ')}]`,
     );
   }
+  assertLeaveButton(run, t, label);
   if (!components.some((c) => c.label === OPEN_GROUP_LABEL)) {
     throw new Error(
       `${label}: the open post must carry the "${OPEN_GROUP_LABEL}" Link ` +

@@ -42,6 +42,10 @@ import {
   type LfgDb,
 } from './lfg-query.helpers';
 import { listClearOffers } from './lfg-offers.helpers';
+import {
+  countLiveIntents,
+  listOwnActiveGroups,
+} from './lfg-own-groups.helpers';
 import { readGroupDetail } from './lfg-group-detail.helpers';
 import { SettingsService } from '../settings/settings.service';
 import { getLfgNowIndicatorEmoji } from '../settings/settings-lfg-board.helpers';
@@ -59,6 +63,12 @@ import {
   type LfgUrgencyRequest,
 } from './lfg-write.helpers';
 import { bumpIntentUrgency, refreshGroupExpiry } from './lfg-urgency.helpers';
+import {
+  isFirstHand,
+  joinsOpenSession,
+  type GroupPostOutcome,
+  type ResolvedExisting,
+} from './lfg-post-outcome.helpers';
 
 /** The class every pre-ROK-1479 caller (`/lfg`, the join listener) still gets. */
 const WEEK_REQUEST: LfgUrgencyRequest = { urgency: 'week' };
@@ -67,65 +77,6 @@ const WEEK_REQUEST: LfgUrgencyRequest = { urgency: 'week' };
 export interface CreateIntentResult {
   created: boolean;
   body: LfgIntentResponseDto;
-}
-
-/** What the serialised insert-then-count transaction settled on. */
-interface GroupPostOutcome {
-  inserted: LfgIntentRow | null;
-  row: LfgIntentRow;
-  group: LfgGroupSummaryDto;
-  refreshed: boolean;
-  /** A re-heart moved the caller's OWN row onto a different clock (AC2). */
-  bumped: boolean;
-}
-
-/** The surviving row a conflicting post settled on, and how it got there. */
-interface ResolvedExisting {
-  row: LfgIntentRow;
-  bumped: boolean;
-}
-
-/**
- * ROK-1494 AC1 — a hand posted while the group's session is ALREADY open.
- *
- * The spawn converts every earlier intent, so a hand arriving after it is a
- * SOLO hand by count (`activeCount` back to 1): neither the `=== 2` nor the
- * `>= 3` branch of {@link LfgService.announcePost} fires, nothing reaches
- * `LfgNowSpawnService`, and the attach pass that writes
- * `converted_to_event_id` never runs — the newcomer sits at `null` forever
- * while everyone else is in the session.
- *
- * `playingNow` is exactly the state D8's `>= 2` floor was guarding against
- * ("a group nobody else has joined has no Discord post to re-render"): an open
- * session means the LFM post exists and is rendering PLAYING NOW, so a
- * re-render is warranted.
- *
- * The `< 2` clause keeps this DISJOINT from the `LFM_REACHED` branch, so the
- * "never both" contract (ROK-1454 AC11) still holds for a hand that lands on
- * the pair boundary before an attach pass has converted the group.
- *
- * @param outcome - What the advisory-lock transaction settled on.
- */
-function joinsOpenSession(outcome: GroupPostOutcome): boolean {
-  return outcome.group.playingNow !== null && outcome.group.activeCount < 2;
-}
-
-/**
- * ROK-1505 D1 — the game's FIRST live hand, and nothing else.
- *
- * `activeCount === 1` alone is not enough: a solo-by-count hand landing on a
- * game whose session is open is a `joined` ({@link joinsOpenSession}) — the
- * post already exists and is rendering PLAYING NOW — so the two predicates
- * are kept DISJOINT the same way `=== 2` and `>= 3` are.
- *
- * @param outcome - What the advisory-lock transaction settled on.
- */
-function isFirstHand(outcome: GroupPostOutcome): boolean {
-  return (
-    outcome.inserted !== null &&
-    outcome.group.activeCount === 1 &&
-    outcome.group.playingNow === null
-  );
 }
 
 /**
@@ -279,6 +230,21 @@ export class LfgService {
   /** `GET /lfg` — every game somebody is actively looking for. */
   listGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
     return listActiveGroups(this.db, userId);
+  }
+
+  /** The caller's own live groups — uncapped, unlike {@link listGroups}. */
+  listOwnGroups(userId: number): Promise<LfgGroupSummaryDto[]> {
+    return listOwnActiveGroups(this.db, userId);
+  }
+
+  /** Every own live hand, hidden/banned games included — `All my LFGs`. */
+  listOwnGroupsForWithdrawal(userId: number): Promise<LfgGroupSummaryDto[]> {
+    return listOwnActiveGroups(this.db, userId, { includeHidden: true });
+  }
+
+  /** Eligible live hands on one game — game-scoped, never list-capped. */
+  countStillLooking(gameId: number): Promise<number> {
+    return countLiveIntents(this.db, gameId);
   }
 
   /** `GET /lfg/:gameId` — group detail, including an empty-group read. */
