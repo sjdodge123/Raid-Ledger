@@ -102,8 +102,11 @@ type PinnedFloors = Map<number, number | undefined>;
  * sign time. ORDER MATTERS — revokeFamily/revokeAllForUser commit the revoke
  * in Postgres BEFORE `blockUser` writes Redis, and `setRole` commits the role
  * BEFORE it blocks, so:
- *   1. take the clock, 2. read the holder's floor, 3. only when a floor
- *   exists, re-read the rotated row; then, for an impersonation family,
+ *   1. take the clock, 2. read the holder's floor, 3. re-read the rotated
+ *   row (ALWAYS — ROK-1820: a password change commits its revoke before its
+ *   block, so a floor read in that gap sees no floor although the row is
+ *   already revoked; without this the refresh minted an old-session token
+ *   and Set-Cookie'd a revoked `rl_rt`); then, for an impersonation family,
  *   4. read the TARGET's floor (`pinFloor`, via `resolveForRefresh`'s
  *   `beforeValidate`), 5. only then load + validate the target's role.
  * A block visible at (2) implies its revoke is visible at (3); a promotion
@@ -118,9 +121,7 @@ async function pinHolderFloor(
 ): Promise<{ floors: PinnedFloors; nowMs: number } | null> {
   const nowMs = Date.now();
   const floor = await deps.blocklist.minIatFor(rotated.userId);
-  if (floor !== undefined && (await rowIsGone(deps.db, rotated.rawToken))) {
-    return null;
-  }
+  if (await rowIsGone(deps.db, rotated.rawToken)) return null;
   return { floors: new Map([[rotated.userId, floor]]), nowMs };
 }
 

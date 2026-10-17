@@ -130,11 +130,23 @@ describe('ROK-1810 Codex r2 — refresh mint after a concurrent revoke', () => {
     expect(q.limit).toHaveBeenCalledTimes(2);
   });
 
-  it('no floor → no revoke re-check query (only the user lookup)', async () => {
+  // ROK-1820: a password change commits the revoke BEFORE `blockUser` writes
+  // Redis. A refresh whose floor read lands in that gap sees no floor, yet its
+  // rotated row is already revoked — it must still 401 with nothing signed.
+  it('no floor + rotated row revoked → null (401), nothing signed', async () => {
     const t = build(null);
-    const q = queuedDb([USER]);
+    const q = queuedDb([{ revokedAt: new Date(NOW) }], [USER]);
+    const sign = jest.spyOn(t.jwt, 'sign');
+    const deps = { ...t.deps, db: q.db };
+    await expect(mintRefreshAccessToken(deps, ROTATED)).resolves.toBeNull();
+    expect(sign).not.toHaveBeenCalled();
+  });
+
+  it('no floor + rotated row live → re-check, then the user lookup', async () => {
+    const t = build(null);
+    const q = queuedDb([{ revokedAt: null }], [USER]);
     await mintOrFail({ ...t.deps, db: q.db });
-    expect(q.limit).toHaveBeenCalledTimes(1);
+    expect(q.limit).toHaveBeenCalledTimes(2);
   });
 });
 
