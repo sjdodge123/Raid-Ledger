@@ -30,11 +30,35 @@ export const ValheimMapGridSchema = z.object({
 }).strict();
 export type ValheimMapGrid = z.infer<typeof ValheimMapGridSchema>;
 
+/** Raw bitset bytes for a `width × height` mask: `⌈width·height/8⌉`. */
+export function valheimLinkBitmapBytes(width: number, height: number): number {
+    return Math.ceil((width * height) / 8);
+}
+
+/**
+ * Largest gzip member accepted for a `width × height` mask: the raw bytes
+ * plus zlib's conservative deflate bound (`n/8 + n/64`) plus header/trailer
+ * slack. Anything bigger cannot be an honest compression of the bitset.
+ */
+export function valheimLinkBitmapMaxGzipBytes(width: number, height: number): number {
+    const raw = valheimLinkBitmapBytes(width, height);
+    return raw + Math.ceil(raw / 8) + Math.ceil(raw / 64) + 64;
+}
+
+/** Shortest possible gzip member (empty deflate stream) as base64: 20 B → 28 chars. */
+export const VALHEIM_LINK_BITMAP_DATA_MIN_CHARS = 28;
+
 /**
  * Explored mask as a packed bitset: pixel (px, py) is bit `py * width + px`,
  * byte `i >> 3`, bit `i & 7` (LSB first); 1 = explored. `py = 0` is the
- * south edge (`py = z / pixelSize + textureSize / 2`). The bytes are gzip
- * compressed, then standard base64 (RFC 4648 §4, padded).
+ * south edge (`py = z / pixelSize + textureSize / 2`). The bytes are ONE
+ * gzip member (magic `1f 8b 08` → base64 prefix `H4sI`), then standard
+ * base64 (RFC 4648 §4, padded). The base64 check is a single character
+ * class plus a length refine — a repeated-group regex overflows V8's regex
+ * stack on multi-MB input and throws through `safeParse`. Zod cannot (and,
+ * to stay sync and browser-safe, does not) inflate: the SERVER gunzips with
+ * `maxOutputLength = valheimLinkBitmapBytes(width, height)` and rejects any
+ * other length (CONTRACT.md §6).
  */
 export const ValheimExploredBitmapSchema = z.object({
     encoding: z.literal('gzip+base64-bitset-lsb0'),
@@ -42,9 +66,18 @@ export const ValheimExploredBitmapSchema = z.object({
     height: z.number().int().min(64).max(VALHEIM_LINK_BITMAP_EDGE_MAX),
     data: z
         .string()
+        .min(VALHEIM_LINK_BITMAP_DATA_MIN_CHARS)
         .max(VALHEIM_LINK_BITMAP_DATA_MAX_CHARS)
-        .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
-}).strict();
+        .regex(/^H4sI[A-Za-z0-9+/]*={0,2}$/),
+}).strict().superRefine((bmp, ctx) => {
+    if (bmp.data.length % 4 !== 0) {
+        ctx.addIssue({ code: 'custom', path: ['data'], message: 'base64 length must be a multiple of 4' });
+    }
+    const maxChars = 4 * Math.ceil(valheimLinkBitmapMaxGzipBytes(bmp.width, bmp.height) / 3);
+    if (bmp.data.length > maxChars) {
+        ctx.addIssue({ code: 'custom', path: ['data'], message: `compressed bitmap exceeds ${maxChars} chars for ${bmp.width}×${bmp.height}` });
+    }
+});
 export type ValheimExploredBitmap = z.infer<typeof ValheimExploredBitmapSchema>;
 
 /**
@@ -98,10 +131,15 @@ export const ValheimMapMessageSchema = z.object({
     baseMap: ValheimBinaryRefSchema.nullable(),
 }).strict().superRefine((msg, ctx) => {
     const size = msg.grid.textureSize;
-    const layers = [['explored', msg.explored], ['sharedExplored', msg.sharedExplored]] as const;
-    for (const [name, bmp] of layers) {
-        if (bmp && (bmp.width !== size || bmp.height !== size)) {
-            ctx.addIssue({ code: 'custom', path: [name], message: 'bitmap size must equal grid.textureSize' });
+    const squares = [
+        ['explored', msg.explored, 'bitmap'],
+        ['sharedExplored', msg.sharedExplored, 'bitmap'],
+        // The server also checks the uploaded PNG's IHDR against this (§4).
+        ['baseMap', msg.baseMap, 'base map'],
+    ] as const;
+    for (const [name, ref, what] of squares) {
+        if (ref && (ref.width !== size || ref.height !== size)) {
+            ctx.addIssue({ code: 'custom', path: [name], message: `${what} size must equal grid.textureSize` });
         }
     }
 });

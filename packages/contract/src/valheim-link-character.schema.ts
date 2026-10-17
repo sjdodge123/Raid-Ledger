@@ -73,14 +73,40 @@ export const ValheimGridExtraRowSchema = z.object({
 
 /**
  * The player inventory grid. Vanilla is 8×4; inventory mods add rows, so
- * the size is explicit and every row past the vanilla four is listed in
- * `extraRows` with what it holds.
+ * the size is explicit and every row past the vanilla four — and only
+ * those — is listed once in `extraRows` with what it holds.
  */
 export const ValheimInventoryGridSchema = z.object({
     width: z.number().int().min(1).max(VALHEIM_LINK_GRID_EDGE_MAX),
     height: z.number().int().min(1).max(VALHEIM_LINK_GRID_EDGE_MAX),
     extraRows: z.array(ValheimGridExtraRowSchema).max(VALHEIM_LINK_GRID_EDGE_MAX),
 }).strict();
+
+/** Rows `0…3` are the vanilla inventory; `extraRows` describes the rest. */
+export const VALHEIM_LINK_VANILLA_ROWS = 4;
+
+/**
+ * `extraRows` lists EXACTLY the rows past the vanilla four: each `y` in
+ * `[4, height)`, unique, and `height − 4` of them (none when height ≤ 4).
+ */
+function checkExtraRows(grid: z.infer<typeof ValheimInventoryGridSchema>, ctx: z.RefinementCtx): void {
+    const seen = new Set<number>();
+    let bad = false;
+    grid.extraRows.forEach((row, i) => {
+        const problem = row.y < VALHEIM_LINK_VANILLA_ROWS ? 'row is a vanilla row'
+            : row.y >= grid.height ? 'row outside grid'
+            : seen.has(row.y) ? 'duplicate row' : null;
+        if (problem) {
+            bad = true;
+            ctx.addIssue({ code: 'custom', path: ['grid', 'extraRows', i], message: problem });
+        }
+        seen.add(row.y);
+    });
+    const want = Math.max(0, grid.height - VALHEIM_LINK_VANILLA_ROWS);
+    if (!bad && grid.extraRows.length !== want) {
+        ctx.addIssue({ code: 'custom', path: ['grid', 'extraRows'], message: `every row past the vanilla four must be listed (${want})` });
+    }
+}
 
 export const ValheimInventorySlotSchema = z.object({
     x: z.number().int().min(0).max(VALHEIM_LINK_GRID_EDGE_MAX - 1),
@@ -104,11 +130,7 @@ export const ValheimInventorySchema = z.object({
         }
         seen.add(key);
     });
-    inv.grid.extraRows.forEach((row, i) => {
-        if (row.y >= inv.grid.height) {
-            ctx.addIssue({ code: 'custom', path: ['grid', 'extraRows', i], message: 'row outside grid' });
-        }
-    });
+    checkExtraRows(inv.grid, ctx);
 });
 export type ValheimInventory = z.infer<typeof ValheimInventorySchema>;
 

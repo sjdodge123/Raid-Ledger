@@ -42,14 +42,42 @@ export const VALHEIM_LINK_ITEM_EXPORT_MAX = 10_000;
 
 // ---------- primitives ----------
 
+/** Signed 64-bit range (a .NET `long`, a Postgres `bigint`). */
+export const VALHEIM_LINK_INT64_MIN = '-9223372036854775808';
+export const VALHEIM_LINK_INT64_MAX = '9223372036854775807';
+/** First individual-account SteamID64 (universe 1, type 1, instance 1, account 0). */
+export const VALHEIM_LINK_STEAMID64_MIN = '76561197960265728';
+
+/** True when the canonical decimal string `v` lies in [min, max]. */
+const inBigIntRange = (v: string, min: string, max: string): boolean => {
+    const n = BigInt(v);
+    return n >= BigInt(min) && n <= BigInt(max);
+};
+
 /**
  * SteamID64 as a decimal STRING — it exceeds `Number.MAX_SAFE_INTEGER`, so
- * a JSON number would lose precision. Individual-account universe prefix.
+ * a JSON number would lose precision. 17 digits, at or above the
+ * individual-account base (no fixed `7656119` prefix: account ids past
+ * ~2.04 B roll it over to `7656120…`).
  */
-export const ValheimSteamId64Schema = z.string().regex(/^7656119\d{10}$/);
+export const ValheimSteamId64Schema = z
+    .string()
+    .regex(/^[1-9]\d{16}$/)
+    .refine((v) => inBigIntRange(v, VALHEIM_LINK_STEAMID64_MIN, VALHEIM_LINK_INT64_MAX), {
+        message: `SteamID64 must be >= ${VALHEIM_LINK_STEAMID64_MIN}`,
+    });
 
-/** A .NET `long` (Valheim `playerId`, world `uid`) as a decimal string. */
-export const ValheimInt64StringSchema = z.string().regex(/^-?\d{1,19}$/);
+/**
+ * A .NET `long` (Valheim `playerId`, world `uid`) as a CANONICAL decimal
+ * string: no leading zeros, no `-0`, inside the signed 64-bit range — so
+ * one id has exactly one spelling and always fits a `bigint` column.
+ */
+export const ValheimInt64StringSchema = z
+    .string()
+    .regex(/^(0|-?[1-9]\d{0,18})$/)
+    .refine((v) => inBigIntRange(v, VALHEIM_LINK_INT64_MIN, VALHEIM_LINK_INT64_MAX), {
+        message: 'outside the signed 64-bit range',
+    });
 
 /**
  * Prefab id exactly as the game names it (`SwordIron`, `TrophyEikthyr`,
@@ -73,8 +101,20 @@ export const ValheimModVersionSchema = z
     .string()
     .regex(/^\d{1,4}\.\d{1,4}\.\d{1,4}(-[0-9A-Za-z.-]{1,32})?$/);
 
-/** ISO-8601 UTC instant with a `Z` offset, e.g. `2026-10-17T20:15:00Z`. */
-export const ValheimTimestampSchema = z.iso.datetime();
+/** Longest `capturedAt`: `YYYY-MM-DDTHH:MM:SS.sssZ` (≤ 3 fractional digits). */
+export const VALHEIM_LINK_TIMESTAMP_MAX_CHARS = 24;
+/**
+ * How far past the server clock a `capturedAt` may be (CONTRACT.md §1). Not
+ * checkable in Zod (no clock); the ingest endpoint rejects anything later,
+ * so a skewed clock cannot pin a snapshot as "latest" forever.
+ */
+export const VALHEIM_LINK_CAPTURED_AT_MAX_FUTURE_MS = 300_000;
+
+/**
+ * ISO-8601 UTC instant with a `Z` offset, e.g. `2026-10-17T20:15:00Z`; at
+ * most millisecond precision (the length cap enforces it).
+ */
+export const ValheimTimestampSchema = z.iso.datetime().max(VALHEIM_LINK_TIMESTAMP_MAX_CHARS);
 
 /** Lowercase hex SHA-256 of a separately uploaded binary. */
 export const ValheimSha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
