@@ -17,10 +17,3 @@ export function WowFactionPill({ page }: HubCtx): JSX.Element | null {
     const { faction } = page.guild;
     return faction ? <Pill tone="success">{faction}</Pill> : null;
 }
-
-export function wowHeroNote({ page }: HubCtx): string | null {
-    const at = page.guild.lastSnapshotAt;
-    if (!at) return null;
-    const when = new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-    return page.importedBy ? `Last imported from LedgerLink ${when} by ${page.importedBy}` : `Last imported from LedgerLink ${when}`;
-}

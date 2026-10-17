@@ -6,15 +6,16 @@
  */
 import type { HubModule } from '../../hub-module';
 import { HiddenTab, WowRaidsTab } from './wow-tabs';
-import { WowFactionPill, WowWhereFact, wowHeroNote } from './wow-hero';
+import { WowFactionPill, WowWhereFact } from './wow-hero';
+import { wowHeroNote } from './wow-hero.helpers';
+import { WowRoleSummaryBand } from './wow-members';
 import {
     WOW_MEMBERS_EMPTY,
     WOW_MEMBER_COLUMNS,
-    WowRoleSummaryBand,
     wowMemberGroups,
     wowMemberRowClass,
     wowMembersBlurb,
-} from './wow-members';
+} from './wow-members.helpers';
 import { WowEditorsWidget, WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
 
 export const wowHubModule: HubModule = {

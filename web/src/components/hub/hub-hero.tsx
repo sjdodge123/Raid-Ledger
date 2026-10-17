@@ -13,7 +13,7 @@ import { NAV_CHIP_CLASS } from '../ui/nav-chip';
 import { signedShort, whenLabel } from './events/guild-raids.helpers';
 
 /** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
-export function crestInitials(name: string): string {
+function crestInitials(name: string): string {
     const letters = name.split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase());
     return letters.slice(0, 2).join('') || '?';
 }
