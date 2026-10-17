@@ -63,6 +63,17 @@ describe('parseOnboardingScope', () => {
     );
   });
 
+  // Codex P3 (PR-3): `Number()` accepts far more than a query string can
+  // carry, so three non-canonical spellings resolved to real guild ids.
+  it('refuses a guild id that is not canonical decimal digits', () => {
+    for (const guildId of ['1e3', ' 7 ', '7.0', '0x10', '+7', '007']) {
+      expect(() => parseOnboardingScope({ guildId })).toThrow(
+        BadRequestException,
+      );
+    }
+    expect(parseOnboardingScope({ guildId: '7' })).toBe(7);
+  });
+
   // A repeated query param arrives as an array; `Number(['1'])` is 1, so the
   // union has to reject it BEFORE coercion rather than silently accept it.
   it('refuses a non-scalar guildId before coercion', () => {

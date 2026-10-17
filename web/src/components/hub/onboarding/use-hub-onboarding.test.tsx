@@ -20,6 +20,10 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 const URL = 'http://localhost:3000/guilds/onboarding';
 const EMPTY: HubOnboardingStateDto = { dismissed: [] };
+const AT = '2026-10-02T00:00:00.000Z';
+const CHECKLIST_ROW = { key: 'hub-setup-checklist', guildId: 7, dismissedAt: AT } as const;
+const WITNESS_ROW = { key: 'hub-setup-checklist', guildId: 9, dismissedAt: AT } as const;
+const CARD_ROW = { key: 'players-get-your-guild', guildId: null, dismissedAt: AT } as const;
 
 function Probe({ guildId = null }: { guildId?: number | null }): JSX.Element {
     const prompt = useHubOnboarding('hub-setup-checklist', guildId);
@@ -40,6 +44,43 @@ function TwoPrompts(): JSX.Element {
         <div>
             <span data-testid="card-visible">{card.visible ? 'yes' : 'no'}</span>
             <span data-testid="checklist-visible">{checklist.visible ? 'yes' : 'no'}</span>
+            <button type="button" onClick={card.dismiss}>Dismiss card</button>
+            <button type="button" onClick={checklist.dismiss}>Dismiss checklist</button>
+        </div>
+    );
+}
+
+/** A prompt rendered twice — two hook instances racing the SAME (key, guildId). */
+function SamePairTwice(): JSX.Element {
+    const a = useHubOnboarding('hub-setup-checklist', 7);
+    const b = useHubOnboarding('hub-setup-checklist', 7);
+    const witness = useHubOnboarding('players-get-your-guild', null);
+    return (
+        <div>
+            <span data-testid="a-visible">{a.visible ? 'yes' : 'no'}</span>
+            <span data-testid="a-failed">{a.failed ? 'yes' : 'no'}</span>
+            <span data-testid="b-visible">{b.visible ? 'yes' : 'no'}</span>
+            <span data-testid="witness-visible">{witness.visible ? 'yes' : 'no'}</span>
+            <button type="button" onClick={a.dismiss}>Dismiss A</button>
+            <button type="button" onClick={b.dismiss}>Dismiss B</button>
+        </div>
+    );
+}
+
+/**
+ * Two pairs plus a witness the server dismisses on its own — the witness going
+ * away proves the sibling's response reached the cache, so the assertion that
+ * follows is about a cache the response has already been merged into.
+ */
+function SiblingPrompts(): JSX.Element {
+    const card = useHubOnboarding('players-get-your-guild', null);
+    const checklist = useHubOnboarding('hub-setup-checklist', 7);
+    const witness = useHubOnboarding('hub-setup-checklist', 9);
+    return (
+        <div>
+            <span data-testid="card-visible">{card.visible ? 'yes' : 'no'}</span>
+            <span data-testid="checklist-visible">{checklist.visible ? 'yes' : 'no'}</span>
+            <span data-testid="witness-visible">{witness.visible ? 'yes' : 'no'}</span>
             <button type="button" onClick={card.dismiss}>Dismiss card</button>
             <button type="button" onClick={checklist.dismiss}>Dismiss checklist</button>
         </div>
@@ -147,5 +188,68 @@ describe('useHubOnboarding', () => {
         await waitFor(() => expect(screen.getByTestId('card-visible')).toHaveTextContent('yes'));
         // … and the checklist, whose write SUCCEEDED, stays dismissed.
         expect(screen.getByTestId('checklist-visible')).toHaveTextContent('no');
+    });
+    // PR-3 review MINOR: `onSuccess` used to install the response wholesale.
+    // The server only knows the rows it had when it answered, so a sibling
+    // prompt's still-pending optimistic dismissal was wiped and its card
+    // flashed back on screen until its own write replied.
+    it('a sibling success merges, so a still-pending dismissal is not wiped', async () => {
+        let releaseCard: () => void = () => {};
+        const cardPosted = new Promise<void>((resolve) => { releaseCard = resolve; });
+        server.use(
+            http.get(URL, () => HttpResponse.json(EMPTY)),
+            http.post(`${URL}/players-get-your-guild/dismiss`, async () => {
+                await cardPosted;
+                return HttpResponse.json({ dismissed: [CARD_ROW, CHECKLIST_ROW, WITNESS_ROW] } satisfies HubOnboardingStateDto);
+            }),
+            // Answers first, and knows nothing about the card's row.
+            http.post(`${URL}/hub-setup-checklist/dismiss`, () => HttpResponse.json({
+                dismissed: [CHECKLIST_ROW, WITNESS_ROW],
+            } satisfies HubOnboardingStateDto)),
+        );
+        renderWithProviders(<SiblingPrompts />);
+        await waitFor(() => expect(screen.getByTestId('card-visible')).toHaveTextContent('yes'));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss card' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss checklist' }));
+        // Nothing dismissed guild 9 optimistically, so this flips only once the
+        // checklist's RESPONSE is in the cache.
+        await waitFor(() => expect(screen.getByTestId('witness-visible')).toHaveTextContent('no'));
+
+        expect(screen.getByTestId('card-visible'), 'the card\'s write is still in flight — its row must survive the sibling response').toHaveTextContent('no');
+        releaseCard();
+        await waitFor(() => expect(screen.getByTestId('card-visible')).toHaveTextContent('no'));
+    });
+
+    // Codex P2 (PR-3): two writes for the SAME pair. The older one recorded
+    // "I added this entry" and, on failing, removed it — even though a newer
+    // write had already had it stored by the server.
+    it('an older failed dismiss cannot undo a newer confirmed one for the same prompt', async () => {
+        let releaseFirst: () => void = () => {};
+        const firstPosted = new Promise<void>((resolve) => { releaseFirst = resolve; });
+        let calls = 0;
+        server.use(
+            http.get(URL, () => HttpResponse.json(EMPTY)),
+            http.post(`${URL}/hub-setup-checklist/dismiss`, async () => {
+                calls += 1;
+                if (calls === 1) {
+                    await firstPosted;
+                    return HttpResponse.json({ message: 'nope' }, { status: 500 });
+                }
+                return HttpResponse.json({ dismissed: [CHECKLIST_ROW, CARD_ROW] } satisfies HubOnboardingStateDto);
+            }),
+        );
+        renderWithProviders(<SamePairTwice />);
+        await waitFor(() => expect(screen.getByTestId('a-visible')).toHaveTextContent('yes'));
+
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss A' }));
+        await userEvent.click(screen.getByRole('button', { name: 'Dismiss B' }));
+        // The card row is only ever server-sent, so this proves B's response landed.
+        await waitFor(() => expect(screen.getByTestId('witness-visible')).toHaveTextContent('no'));
+
+        releaseFirst();
+        await waitFor(() => expect(screen.getByTestId('a-failed')).toHaveTextContent('yes'));
+        expect(screen.getByTestId('a-visible'), 'the server stored B\'s dismissal — A failing later must not undo it').toHaveTextContent('no');
+        expect(screen.getByTestId('b-visible')).toHaveTextContent('no');
     });
 });
