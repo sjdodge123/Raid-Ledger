@@ -5,11 +5,13 @@ import { PassportStrategy } from '@nestjs/passport';
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { OnEvent } from '@nestjs/event-emitter';
+import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { AuthService } from '../../auth/auth.service';
 import { SettingsService } from '../../settings/settings.service';
 import { SETTINGS_EVENTS } from '../../settings/settings.types';
 import type { DiscordOAuthConfig } from '../../settings/settings.types';
+import { DiscordLoginStateStore } from './discord-login-state.helpers';
 
 /**
  * Dynamic Discord OAuth strategy that supports hot-reload.
@@ -28,6 +30,7 @@ export class DiscordAuthStrategy
   constructor(
     private authService: AuthService,
     private settingsService: SettingsService,
+    private configService: ConfigService,
   ) {
     // Placeholder config — overwritten on first reloadConfig().
     // DI requires super() to run so the NestJS class can be constructed.
@@ -76,6 +79,12 @@ export class DiscordAuthStrategy
         clientSecret: config.clientSecret,
         callbackURL: config.callbackUrl,
         scope: ['identify'],
+        // ROK-1808: browser-bound, single-use state; verified before the
+        // code exchange, so a forwarded callback never logs anyone in.
+        store: new DiscordLoginStateStore(
+          () => this.configService.get<string>('JWT_SECRET'),
+          this.logger,
+        ),
       },
       (accessToken, refreshToken, profile, done) => {
         void this.verifyDiscordProfile(

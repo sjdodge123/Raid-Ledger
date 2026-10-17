@@ -9,6 +9,7 @@ import type { Response, Request } from 'express';
 import { getRequestOrigin } from '../../common/request-origin.helpers';
 import type { RefreshTokenService } from '../../auth/refresh/refresh-token.service';
 import { setRefreshCookie } from '../../auth/refresh/refresh-cookie.helpers';
+import { rememberVerifiedLoginState } from './discord-verified-login-state';
 
 /**
  * ROK-1353: mint a Discord refresh family for `userId` and set the httpOnly
@@ -70,6 +71,10 @@ export class DiscordAuthGuard extends AuthGuard('discord') {
       );
       return undefined as unknown as TUser;
     }
+    rememberVerifiedLoginState(
+      context.switchToHttp().getRequest<Request>(),
+      info,
+    );
     return user;
   }
 }
@@ -145,17 +150,15 @@ export function buildSilentOAuthRedirect(authorizeUrl: string): string {
  */
 export function buildSilentLoginRedirect(args: {
   oauthConfig: { clientId: string; callbackUrl: string } | null;
-  secret: string;
+  /** Signs a browser-bound login state (ROK-1808). */
+  signState: (payload: Record<string, unknown>) => string;
   returnTo: string;
   clientUrl: string;
 }): string {
   if (!args.oauthConfig) {
     return `${args.clientUrl}/auth/success?silent_failed=1`;
   }
-  const state = signOAuthState(
-    { action: 'silent', returnTo: args.returnTo, timestamp: Date.now() },
-    args.secret,
-  );
+  const state = args.signState({ action: 'silent', returnTo: args.returnTo });
   const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${args.oauthConfig.clientId}&redirect_uri=${encodeURIComponent(args.oauthConfig.callbackUrl)}&response_type=code&scope=identify&state=${encodeURIComponent(state)}`;
   return buildSilentOAuthRedirect(authorizeUrl);
 }
