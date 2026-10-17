@@ -336,9 +336,18 @@ describe('ROK-1629 public roster projection (integration)', () => {
     },
   );
 
-  it('a signed-in member of the detail bundle keeps the PUG invite + Discord fields', async () => {
+  it('a signed-in member of the detail bundle keeps the PUG Discord fields, not the invite (ROK-1825)', async () => {
     await seedPugSlot(f.eventId);
     const res = await get(`/events/${f.eventId}/detail`, f.memberToken);
+    expect(res.status).toBe(200);
+    expect(pugMemberFields(res.body as DetailBody)).toEqual([
+      { ...PUG_MEMBER_FIELDS, inviteCode: null, serverInviteUrl: null },
+    ]);
+  });
+
+  it('an admin of the detail bundle keeps the PUG invite + Discord fields', async () => {
+    await seedPugSlot(f.eventId);
+    const res = await get(`/events/${f.eventId}/detail`, adminToken);
     expect(res.status).toBe(200);
     expect(pugMemberFields(res.body as DetailBody)).toEqual([
       PUG_MEMBER_FIELDS,

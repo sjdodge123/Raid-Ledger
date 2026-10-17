@@ -5,7 +5,7 @@
  * Tests cover: direct DB logging, GET endpoints for lineups and events,
  * and that mutations (create lineup, signup) produce activity entries.
  */
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { getTestApp, type TestApp } from '../common/testing/test-app';
 import {
   truncateAllTables,
@@ -28,6 +28,47 @@ interface TimelineBody {
 
 function timeline(res: { body: unknown }): TimelineBody {
   return res.body as TimelineBody;
+}
+
+const DISCORD_ID = '184467440737095516';
+
+/** ROK-1824: an unlinked reschedule ack (Discord id in metadata) + a member signup. */
+async function seedDiscordAck(
+  testApp: TestApp,
+  entityId: number,
+): Promise<void> {
+  await testApp.db.insert(schema.activityLog).values([
+    {
+      entityType: 'event',
+      entityId,
+      action: 'signup_reconfirmed',
+      actorId: null,
+      metadata: {
+        reason: 'discord-ack',
+        discordUserId: DISCORD_ID,
+        discordUsername: 'unlinked-raider',
+      },
+    },
+    {
+      entityType: 'event',
+      entityId,
+      action: 'signup_added',
+      actorId: testApp.seed.adminUser.id,
+      metadata: { role: 'tank' },
+    },
+  ]);
+}
+
+function expectNoDiscordIdentifiers(res: {
+  body: unknown;
+  text: string;
+}): void {
+  expect(res.text).not.toContain(DISCORD_ID);
+  expect(res.text).not.toContain('unlinked-raider');
+  const entry = timeline(res).data.find(
+    (e) => e.action === 'signup_reconfirmed',
+  );
+  expect(entry?.metadata).toEqual({ reason: 'discord-ack' });
 }
 
 function describeActivityLog() {
@@ -343,5 +384,60 @@ function describeActivityLog() {
     });
   }
   describe('displayName fallback (ROK-1116)', describeUsernameFallback);
+
+  // ── Discord identifier redaction + viewer rule (ROK-1824) ─────
+
+  function describeDiscordRedaction() {
+    it('anonymous caller gets no Discord identifiers', async () => {
+      await seedDiscordAck(testApp, 91001);
+      const res = await testApp.request.get('/events/91001/activity');
+      expect(res.status).toBe(200);
+      expect(timeline(res).data).toHaveLength(2);
+      expectNoDiscordIdentifiers(res);
+    });
+
+    it('member caller gets no Discord identifiers', async () => {
+      await seedDiscordAck(testApp, 91002);
+      const res = await testApp.request
+        .get('/events/91002/activity')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expect(timeline(res).data).toHaveLength(2);
+      expectNoDiscordIdentifiers(res);
+    });
+
+    it('anonymous caller follows the event-detail rule: readable, actor is id + display name only', async () => {
+      await seedDiscordAck(testApp, 91003);
+      const res = await testApp.request.get('/events/91003/activity');
+      expect(res.status).toBe(200);
+      const added = timeline(res).data.find((e) => e.action === 'signup_added');
+      expect(added?.actor).toEqual({
+        id: testApp.seed.adminUser.id,
+        displayName: expect.any(String),
+      });
+      expect(added?.metadata).toEqual({ role: 'tank' });
+      expect(Object.keys(added ?? {}).sort()).toEqual([
+        'action',
+        'actor',
+        'createdAt',
+        'id',
+        'metadata',
+      ]);
+    });
+
+    it('a deactivated caller is treated as anonymous and still gets no Discord identifiers', async () => {
+      await seedDiscordAck(testApp, 91004);
+      await testApp.db
+        .update(schema.users)
+        .set({ deactivatedAt: new Date() })
+        .where(eq(schema.users.id, testApp.seed.adminUser.id));
+      const res = await testApp.request
+        .get('/events/91004/activity')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(res.status).toBe(200);
+      expectNoDiscordIdentifiers(res);
+    });
+  }
+  describe('Discord identifier redaction (ROK-1824)', describeDiscordRedaction);
 }
 describe('Activity Log (integration)', describeActivityLog);

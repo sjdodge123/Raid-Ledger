@@ -62,6 +62,10 @@ let mockSettingsService: {
   getTrustedClientUrl: jest.Mock;
 };
 let selectCallCount: number;
+/**
+ * select() results in call order. A slot claim reads: slot → event →
+ * claimer (ownership check, ROK-1825) → existing signup → ….
+ */
 let selectSequence: unknown[][];
 type InviteMockDb = Record<
   'select' | 'update' | 'delete' | 'insert' | 'transaction',
@@ -106,7 +110,7 @@ async function buildService() {
 }
 
 async function setupEach() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithDiscord], []];
   mockDb = buildMockDb();
   mockSignupsService = { signup: jest.fn().mockResolvedValue({ id: 1 }) };
   mockSettingsService = {
@@ -161,8 +165,8 @@ async function testPath1PlayerRole() {
   selectSequence = [
     [{ ...mockSlot, role: 'player' }],
     [mockEvent],
-    [],
     [mockUserWithDiscord],
+    [],
   ];
   const svc = await buildService();
   await svc.claimInvite('abc12345', 1);
@@ -192,7 +196,7 @@ async function testPath1DeletesSlot() {
 // ---------------------------------------------------------------------------
 
 async function testPath2ReturnsClaimed() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithoutDiscord], []];
   const svc = await buildService();
   const result = await svc.claimInvite('abc12345', 1);
   expect(result.type).toBe('claimed');
@@ -200,7 +204,7 @@ async function testPath2ReturnsClaimed() {
 }
 
 async function testPath2UpdatesStatus() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithoutDiscord], []];
   const svc = await buildService();
   await svc.claimInvite('abc12345', 1);
 
@@ -215,7 +219,7 @@ async function testPath2UpdatesStatus() {
 }
 
 async function testPath2CallsSignup() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithoutDiscord], []];
   const svc = await buildService();
   await svc.claimInvite('abc12345', 1);
   expect(mockSignupsService.signup).toHaveBeenCalledTimes(1);
@@ -230,8 +234,8 @@ async function testPath2PlayerRole() {
   selectSequence = [
     [{ ...mockSlot, role: 'player' }],
     [mockEvent],
-    [],
     [mockUserWithoutDiscord],
+    [],
   ];
   const svc = await buildService();
   await svc.claimInvite('abc12345', 1);
@@ -243,7 +247,7 @@ async function testPath2PlayerRole() {
 }
 
 async function testPath2SignupFailNoUpdate() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithoutDiscord], []];
   const svc = await buildService();
   mockSignupsService.signup.mockRejectedValueOnce(
     new ConflictException('already signed up'),
@@ -255,7 +259,7 @@ async function testPath2SignupFailNoUpdate() {
 }
 
 async function testPath2SignupBeforeUpdate() {
-  selectSequence = [[mockSlot], [mockEvent], [], [mockUserWithoutDiscord]];
+  selectSequence = [[mockSlot], [mockEvent], [mockUserWithoutDiscord], []];
   const svc = await buildService();
   const callOrder: string[] = [];
   mockSignupsService.signup.mockImplementation(() => {
@@ -307,8 +311,8 @@ async function testErrorAlreadySignedUp() {
   selectSequence = [
     [mockSlot],
     [mockEvent],
-    [{ id: 99 }],
     [mockUserWithDiscord],
+    [{ id: 99 }],
   ];
   const svc = await buildService();
   await expect(svc.claimInvite('abc12345', 1)).rejects.toThrow(

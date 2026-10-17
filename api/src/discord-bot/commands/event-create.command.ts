@@ -16,6 +16,7 @@ import { PreferencesService } from '../../users/preferences.service';
 import { SettingsService } from '../../settings/settings.service';
 import { MagicLinkService } from '../../auth/magic-link.service';
 import { parseNaturalTime } from '../utils/time-parser';
+import { LFG_BLOCKED_REPLY } from './lfg.command.helpers';
 import type { SlashCommandHandler } from './register-commands';
 import type { CommandInteractionHandler } from '../listeners/interaction.listener';
 import {
@@ -160,6 +161,12 @@ export class EventCreateCommand
       await interaction.editReply(
         'You need a Raid Ledger account linked to Discord.',
       );
+      return null;
+    }
+    // ROK-1826: same refusal as `/lfg` — the web's NotDeactivatedGuard has no
+    // slash-command equivalent, so a deactivated or banned caller stops here.
+    if (user.deactivatedAt || user.bannedAt) {
+      await interaction.editReply(LFG_BLOCKED_REPLY);
       return null;
     }
     return user;
