@@ -160,4 +160,14 @@ describe('Steam row display identity — unlinked players (ROK-1821 F4)', () => 
       null,
     ]);
   });
+
+  it('an unlinked row that rejoins without a name does not get its previous character name back', async () => {
+    const eventId = await insertEvent();
+    await service.addServerParticipant(eventId, member('Ragnhild', null));
+    await service.markServerLeave(eventId, STEAM_A);
+    await service.addServerParticipant(eventId, member(STEAM_A, null));
+
+    const row = await steamRow(eventId);
+    expect([row.discordUsername, row.characterName]).toEqual([STEAM_A, null]);
+  });
 });

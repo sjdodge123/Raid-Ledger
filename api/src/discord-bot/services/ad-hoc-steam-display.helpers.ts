@@ -67,7 +67,10 @@ export async function resolveSteamRowDisplay(
  * identity (merged) keeps its Discord name. Otherwise a linked incoming
  * player's RL identity wins; a row already tied to a user is never renamed
  * to a character name; an unlinked row takes the latest character name.
- * The character name itself always follows the latest known one.
+ * The character name is the incoming one, even when null (ROK-1822 r2): a
+ * nameless rejoin may be a different character, so keeping the old name
+ * would rehydrate it under that name and pair the next character line to
+ * another player. `renameSteamOnlyRow` records the name when the line lands.
  */
 export function steamConflictDisplaySet(): {
   discordUsername: SQL;
@@ -76,6 +79,6 @@ export function steamConflictDisplaySet(): {
   const takeIncoming = sql`${t.discordUserId} IS NULL AND (excluded.user_id IS NOT NULL OR ${t.userId} IS NULL)`;
   return {
     discordUsername: sql`CASE WHEN ${takeIncoming} THEN excluded.discord_username ELSE ${t.discordUsername} END`,
-    characterName: sql`COALESCE(excluded.character_name, ${t.characterName})`,
+    characterName: sql`excluded.character_name`,
   };
 }
