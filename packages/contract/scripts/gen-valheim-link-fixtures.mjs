@@ -156,6 +156,13 @@ const valid = {
 };
 for (const [name, v] of Object.entries(valid)) write(dir, name, v);
 
+/** `<prefix>-<case>` fixtures putting each junk value in `character.<field>`. */
+const idJunk = (prefix, field, values) =>
+    Object.fromEntries(Object.entries(values).map(([k, v]) => [
+        `${prefix}-${k}`,
+        [{ ...characterVanilla, character: { ...identity, [field]: v } }, { path: `character.${field}`, code: 'invalid_format' }],
+    ]));
+
 /** name → [message, { path, code }] of the issue it must raise. */
 const invalid = {
     'unknown-top-level-key': [{ ...characterVanilla, worldSeed: 'FAKESEED' }, { path: '', code: 'unrecognized_keys' }],
@@ -170,6 +177,11 @@ const invalid = {
     'int64-out-of-range': [{ ...characterVanilla, character: { ...identity, playerId: '9223372036854775808' } }, { path: 'character.playerId', code: 'custom' }],
     'int64-leading-zero': [{ ...characterVanilla, character: { ...identity, playerId: '01000000000000001' } }, { path: 'character.playerId', code: 'invalid_format' }],
     'steamid-below-individual-base': [{ ...characterVanilla, character: { ...identity, steamId: '76561197960265727' } }, { path: 'character.steamId', code: 'custom' }],
+    // Junk id spellings: the regex aborts, so the range refine never meets
+    // them (`BigInt('abc')` would throw out of safeParse). int64 '-1' is a
+    // valid long, so the int64 negative case is '-0'.
+    ...idJunk('steamid', 'steamId', { 'not-digits': 'abc', negative: '-1', exponent: '1e5', '40-digits': '1'.repeat(40) }),
+    ...idJunk('int64', 'playerId', { 'not-digits': 'abc', 'negative-zero': '-0', exponent: '1e5', '40-digits': '1'.repeat(40) }),
     'captured-at-too-precise': [{ ...characterVanilla, capturedAt: '2026-10-17T20:15:00.1234Z' }, { path: 'capturedAt', code: 'too_big' }],
     'extra-row-unlisted': [(() => { const c = clone(characterEaqs); c.inventory.grid.extraRows.pop(); return c; })(), { path: 'inventory.grid.extraRows', code: 'custom' }],
     'extra-row-vanilla': [(() => { const c = clone(characterVanilla); c.inventory.grid.extraRows = [{ y: 2, purpose: 'other' }]; return c; })(), { path: 'inventory.grid.extraRows.0', code: 'custom' }],

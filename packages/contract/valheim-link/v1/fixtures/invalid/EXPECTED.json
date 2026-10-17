@@ -47,6 +47,38 @@
     "path": "character.steamId",
     "code": "custom"
   },
+  "steamid-not-digits": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-negative": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-exponent": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "steamid-40-digits": {
+    "path": "character.steamId",
+    "code": "invalid_format"
+  },
+  "int64-not-digits": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-negative-zero": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-exponent": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
+  "int64-40-digits": {
+    "path": "character.playerId",
+    "code": "invalid_format"
+  },
   "captured-at-too-precise": {
     "path": "capturedAt",
     "code": "too_big"

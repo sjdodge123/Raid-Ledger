@@ -51,11 +51,21 @@ export const VALHEIM_LINK_INT64_MAX = '9223372036854775807';
 /** First individual-account SteamID64 (universe 1, type 1, instance 1, account 0). */
 export const VALHEIM_LINK_STEAMID64_MIN = '76561197960265728';
 
-/** True when the canonical decimal string `v` lies in [min, max]. */
-const inBigIntRange = (v: string, min: string, max: string): boolean => {
+/**
+ * True when `v` matches `canonical` (a length-bounded decimal pattern) AND
+ * lies in [min, max]. Re-tests the pattern itself: in Zod 4 a failed
+ * `.regex()` does not stop later checks unless it aborts, so this must
+ * never reach `BigInt` with a non-decimal or unbounded string (`BigInt('abc')`
+ * throws out of `safeParse`).
+ */
+const inBigIntRange = (v: string, canonical: RegExp, min: string, max: string): boolean => {
+    if (v.length > 20 || !canonical.test(v)) return false;
     const n = BigInt(v);
     return n >= BigInt(min) && n <= BigInt(max);
 };
+
+const STEAMID64_PATTERN = /^[1-9]\d{16}$/;
+const INT64_PATTERN = /^(0|-?[1-9]\d{0,18})$/;
 
 /**
  * SteamID64 as a decimal STRING — it exceeds `Number.MAX_SAFE_INTEGER`, so
@@ -65,8 +75,8 @@ const inBigIntRange = (v: string, min: string, max: string): boolean => {
  */
 export const ValheimSteamId64Schema = z
     .string()
-    .regex(/^[1-9]\d{16}$/)
-    .refine((v) => inBigIntRange(v, VALHEIM_LINK_STEAMID64_MIN, VALHEIM_LINK_INT64_MAX), {
+    .regex(STEAMID64_PATTERN, { abort: true })
+    .refine((v) => inBigIntRange(v, STEAMID64_PATTERN, VALHEIM_LINK_STEAMID64_MIN, VALHEIM_LINK_INT64_MAX), {
         message: `SteamID64 must be >= ${VALHEIM_LINK_STEAMID64_MIN}`,
     });
 
@@ -77,8 +87,8 @@ export const ValheimSteamId64Schema = z
  */
 export const ValheimInt64StringSchema = z
     .string()
-    .regex(/^(0|-?[1-9]\d{0,18})$/)
-    .refine((v) => inBigIntRange(v, VALHEIM_LINK_INT64_MIN, VALHEIM_LINK_INT64_MAX), {
+    .regex(INT64_PATTERN, { abort: true })
+    .refine((v) => inBigIntRange(v, INT64_PATTERN, VALHEIM_LINK_INT64_MIN, VALHEIM_LINK_INT64_MAX), {
         message: 'outside the signed 64-bit range',
     });
 
