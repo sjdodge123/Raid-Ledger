@@ -20,7 +20,10 @@ import type { ZodType } from 'zod';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import { SettingsService } from '../../../settings/settings.service';
-import { GuildAccessService, type GuildActor } from '../../../guilds/guild-access.service';
+import {
+  GuildAccessService,
+  type GuildActor,
+} from '../../../guilds/guild-access.service';
 import {
   parseAddonLink,
   type ParsedAddonLink,

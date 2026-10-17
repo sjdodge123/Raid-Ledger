@@ -23,6 +23,8 @@ import type {
   GameServerCalendarItemDto,
   GameServerStatusDto,
   UpdateCharacterDto,
+  GuildKind,
+  LadderRole,
   UserRole,
 } from '@raid-ledger/contract';
 import type * as schema from '../../drizzle/schema';
@@ -260,6 +262,23 @@ export interface EventGuildTagger {
 /** Single-adapter key the event guild tagger registers under. */
 export const EVENT_GUILD_TAGGER_KEY = '*';
 
+/**
+ * ROK-1830: the plugin that owns a hub kind (e.g. `wow_guild`) answers the
+ * membership + ladder questions core cannot. Keyed by kind; core resolves it
+ * through `HubKindRegistry` (`api/src/guilds/`) and never imports the plugin.
+ */
+export interface HubKindAdapter {
+  readonly kind: GuildKind;
+  /** Owning plugin id — core refuses the kind (403) while it is inactive. */
+  readonly pluginSlug: string;
+  isMember(userId: number, groupId: number): Promise<boolean>;
+  /** The D5-A ladder role, staff ⇒ leader included. */
+  resolveLadder(
+    actor: { id: number; role: UserRole },
+    groupId: number,
+  ): Promise<LadderRole>;
+}
+
 /** Well-known extension point identifiers */
 export const EXTENSION_POINTS = {
   CHARACTER_SYNC: 'character-sync',
@@ -273,4 +292,5 @@ export const EXTENSION_POINTS = {
   GAME_SERVER_PROVIDER: 'game-server-provider',
   EVENT_GUILD_TAGGER: 'event-guild-tagger',
   GAME_LOG_PARSER: 'game-log-parser',
+  HUB_KIND: 'hub-kind',
 } as const;

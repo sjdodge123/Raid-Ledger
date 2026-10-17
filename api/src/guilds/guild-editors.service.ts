@@ -25,7 +25,10 @@ import {
   loadEditorRows,
   toGuildEditor,
 } from './guild-editors.helpers';
-import { findGuild, rankNamesInSnapshot } from '../plugins/wow-common/guilds/guild-queries.helpers';
+import {
+  findGuild,
+  rankNamesInSnapshot,
+} from '../plugins/wow-common/guilds/guild-queries.helpers';
 
 /**
  * ROK-1785 — the Editors panel: list / grant / revoke delegated editors.

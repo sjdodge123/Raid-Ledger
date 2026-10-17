@@ -22,6 +22,7 @@ import { SettingsModule } from './settings/settings.module';
 import { NotificationModule } from './notifications/notification.module';
 import { PluginHostModule } from './plugins/plugin-host/plugin-host.module';
 import { WowCommonModule } from './plugins/wow-common';
+import { GuildsCoreModule } from './guilds/guilds-core.module';
 import { DiscordModule } from './plugins/discord';
 import { PelicanModule } from './plugins/pelican';
 import { ServerPresenceReaderModule } from './plugins/pelican/presence/server-presence-reader.module';
@@ -85,6 +86,7 @@ import { API_ENV_FILE } from './sentry/telemetry-policy';
     SettingsModule,
     NotificationModule,
     EnrichmentsModule,
+    GuildsCoreModule,
     WowCommonModule,
     DiscordModule,
     RelayModule,

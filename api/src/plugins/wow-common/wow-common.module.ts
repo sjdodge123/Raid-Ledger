@@ -2,15 +2,11 @@ import { Module, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import { bestEffortInit } from '../../common/lifecycle.util';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BlizzardService } from './blizzard.service';
-import { GuildAccessService } from '../../guilds/guild-access.service';
-import { GuildEditorGuard } from '../../guilds/guild-editor.guard';
 import { GuildsController } from './guilds/guilds.controller';
 import { GuildPageService } from './guilds/guild-page.service';
 import { GuildRaidsService } from './guilds/guild-raids.service';
-import { GuildEditorsService } from '../../guilds/guild-editors.service';
 import { GuildEventTagger } from './guilds/guild-event-tagger';
 import { GuildContentController } from './guilds/guild-content.controller';
-import { GuildProfileService } from '../../guilds/guild-profile.service';
 import { GuildAddonsService } from './guilds/guild-addons.service';
 import { BlizzardAuthService } from './blizzard-auth.service';
 import { BlizzardController } from './blizzard.controller';
@@ -34,7 +30,6 @@ import { QuestProgressService } from './quest-progress.service';
 import { QuestProgressReadService } from './quest-progress-read.service';
 import { SettingsModule } from '../../settings/settings.module';
 import { CharactersModule } from '../../characters/characters.module';
-import { ChannelMirrorModule } from '../../discord-bot/channel-mirror/channel-mirror.module';
 import { PluginRegistryService } from '../plugin-host/plugin-registry.service';
 import {
   EVENT_GUILD_TAGGER_KEY,
@@ -55,11 +50,11 @@ import { ForeverDisplayTalentsService } from './forever-display-talents.service'
 import { ForeverDisplayLockoutsService } from './forever-display-lockouts.service';
 import { CharacterQuestsController } from './character-quests.controller';
 import { CharacterQuestsService } from './character-quests.service';
-import { GuildDiscordController } from '../../guilds/guild-discord.controller';
-import { GuildDiscordService } from '../../guilds/guild-discord.service';
+import { GuildsCoreModule } from '../../guilds/guilds-core.module';
+import { WowHubKindAdapter } from './guilds/wow-hub-kind.adapter';
 
 @Module({
-  imports: [SettingsModule, CharactersModule, ChannelMirrorModule],
+  imports: [SettingsModule, CharactersModule, GuildsCoreModule],
   controllers: [
     BlizzardController,
     ForeverConfigController,
@@ -72,7 +67,6 @@ import { GuildDiscordService } from '../../guilds/guild-discord.service';
     CharacterQuestsController,
     GuildsController,
     GuildContentController,
-    GuildDiscordController,
   ],
   providers: [
     BlizzardService,
@@ -101,15 +95,11 @@ import { GuildDiscordService } from '../../guilds/guild-discord.service';
     ForeverDisplayTalentsService,
     ForeverDisplayLockoutsService,
     CharacterQuestsService,
-    GuildAccessService,
-    GuildEditorGuard,
     GuildPageService,
     GuildRaidsService,
-    GuildEditorsService,
     GuildEventTagger,
-    GuildProfileService,
     GuildAddonsService,
-    GuildDiscordService,
+    WowHubKindAdapter,
   ],
   exports: [
     BlizzardService,
@@ -118,7 +108,7 @@ import { GuildDiscordService } from '../../guilds/guild-discord.service';
     DungeonQuestsService,
     BossEncountersService,
     WowItemMetaService,
-    GuildAccessService,
+    GuildsCoreModule,
   ],
 })
 export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
@@ -137,6 +127,7 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     private readonly bossEncountersService: BossEncountersService,
     private readonly identityProvider: WowForeverIdentityProvider,
     private readonly guildEventTagger: GuildEventTagger,
+    private readonly hubKindAdapter: WowHubKindAdapter,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -277,12 +268,18 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
     this.registerGuildTagger();
   }
 
-  /** ROK-1787: guild editors tag events to their guild (core resolves it). */
+  /** ROK-1787 tagger + ROK-1830 hub kind: core resolves both, never imports WoW. */
   private registerGuildTagger(): void {
     this.pluginRegistry.registerAdapter(
       EXTENSION_POINTS.EVENT_GUILD_TAGGER,
       EVENT_GUILD_TAGGER_KEY,
       this.guildEventTagger,
+      { ownerPluginId: WOW_COMMON_MANIFEST.id },
+    ); // ROK-1830: WoW owns the `wow_guild` hub kind (core resolves it by kind).
+    this.pluginRegistry.registerAdapter(
+      EXTENSION_POINTS.HUB_KIND,
+      this.hubKindAdapter.kind,
+      this.hubKindAdapter,
       { ownerPluginId: WOW_COMMON_MANIFEST.id },
     );
   }

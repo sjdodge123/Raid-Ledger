@@ -6,10 +6,7 @@
  */
 import { Test } from '@nestjs/testing';
 import { DrizzleAsyncProvider } from '../drizzle/drizzle.module';
-import {
-  createDrizzleMock,
-  type MockDb,
-} from '../common/testing/drizzle-mock';
+import { createDrizzleMock, type MockDb } from '../common/testing/drizzle-mock';
 import {
   GM_RANK_IMPLIES_EDIT,
   GuildAccessService,
