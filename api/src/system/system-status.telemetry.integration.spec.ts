@@ -1,7 +1,8 @@
 /**
- * ROK-1779 — the public GET /system/status serves the api's telemetry decision
- * (opt-in: ENABLE_TELEMETRY='true', DISABLE_TELEMETRY='true' wins) so the web
- * app initialises Sentry only when the instance opted in.
+ * ROK-1779/ROK-1838 — the public GET /system/status serves the api's telemetry
+ * decision (on by default; ENABLE_TELEMETRY='false' opts out,
+ * DISABLE_TELEMETRY='true' still wins) so the web app initialises Sentry only
+ * when the instance has not opted out.
  *
  * The endpoint serves the decision instrument.ts recorded at boot, never a
  * live env read. The test app DOES load instrument.ts — backup.helpers.ts
@@ -17,7 +18,7 @@ import { getTestApp, type TestApp } from '../common/testing/test-app';
 
 const KEYS = ['DISABLE_TELEMETRY', 'ENABLE_TELEMETRY'] as const;
 
-describe('ROK-1779 — GET /system/status telemetryEnabled', () => {
+describe('ROK-1779/ROK-1838 — GET /system/status telemetryEnabled', () => {
   let testApp: TestApp;
   const saved: Partial<Record<(typeof KEYS)[number], string>> = {};
 
@@ -49,8 +50,15 @@ describe('ROK-1779 — GET /system/status telemetryEnabled', () => {
     resolveBootTelemetry();
   }
 
-  it('is false when nothing is set (opt-in default)', async () => {
+  it('is true when nothing is set (on by default, ROK-1838)', async () => {
     bootWith({});
+    const res = await testApp.request.get('/system/status');
+    expect(res.status).toBe(200);
+    expect(res.body.telemetryEnabled).toBe(true);
+  });
+
+  it("is false when ENABLE_TELEMETRY='false' (ROK-1838 opt-out)", async () => {
+    bootWith({ ENABLE_TELEMETRY: 'false' });
     const res = await testApp.request.get('/system/status');
     expect(res.status).toBe(200);
     expect(res.body.telemetryEnabled).toBe(false);

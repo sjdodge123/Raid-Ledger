@@ -1,5 +1,5 @@
 /**
- * ROK-1779: the single home of the telemetry on/off decision.
+ * ROK-1779/ROK-1838: the single home of the telemetry on/off decision.
  *
  * `instrument.ts` loads first in main.ts (before Nest and the DB exist), so
  * this file imports nothing. The api reads it at boot to gate Sentry.init and
@@ -8,22 +8,24 @@
  */
 
 /**
- * ROK-1779 operator ruling 2026-10-15: error reporting is OPT-IN. An instance
- * that sets nothing sends nothing. The maintainer's production instance must
- * set `ENABLE_TELEMETRY=true` to keep reporting.
+ * ROK-1838 operator ruling 2026-10-17 (reverses ROK-1779's opt-in of
+ * 2026-10-15): error reporting is ON by default. An instance that sets
+ * nothing reports; `ENABLE_TELEMETRY=false` opts out. Non-prod instances (CI,
+ * fleet envs, local dev) set `ENABLE_TELEMETRY=false` so they don't spend the
+ * shared Sentry quota.
  */
-export const TELEMETRY_DEFAULT_ENABLED = false;
+export const TELEMETRY_DEFAULT_ENABLED = true;
 
 /**
- * `DISABLE_TELEMETRY='true'` → off (always wins). Otherwise
- * `ENABLE_TELEMETRY='true'` → on. Anything else (unset, empty, `'1'`,
- * `DISABLE_TELEMETRY='false'`) → {@link TELEMETRY_DEFAULT_ENABLED}.
+ * `DISABLE_TELEMETRY='true'` → off (always wins, back-compat). Otherwise
+ * `ENABLE_TELEMETRY='false'` → off. Anything else (unset, empty, `'true'`,
+ * `'1'`, `DISABLE_TELEMETRY='false'`) → {@link TELEMETRY_DEFAULT_ENABLED}.
  */
 export function isTelemetryEnabled(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
   if (env.DISABLE_TELEMETRY === 'true') return false;
-  if (env.ENABLE_TELEMETRY === 'true') return true;
+  if (env.ENABLE_TELEMETRY === 'false') return false;
   return TELEMETRY_DEFAULT_ENABLED;
 }
 

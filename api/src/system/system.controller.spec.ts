@@ -262,7 +262,7 @@ function describeSystemController() {
       });
     });
 
-    describe('ROK-1779: telemetryEnabled', () => {
+    describe('ROK-1779/ROK-1838: telemetryEnabled', () => {
       const KEYS = ['DISABLE_TELEMETRY', 'ENABLE_TELEMETRY'] as const;
       const saved: Partial<Record<(typeof KEYS)[number], string>> = {};
       beforeEach(() => {
@@ -285,7 +285,13 @@ function describeSystemController() {
         }
       });
 
-      it('is false when nothing is set (opt-in default)', async () => {
+      it('is true when nothing is set (on by default, ROK-1838)', async () => {
+        const result = await controller.getStatus();
+        expect(result.telemetryEnabled).toBe(true);
+      });
+
+      it("is false when ENABLE_TELEMETRY='false' (ROK-1838 opt-out)", async () => {
+        process.env.ENABLE_TELEMETRY = 'false';
         const result = await controller.getStatus();
         expect(result.telemetryEnabled).toBe(false);
       });

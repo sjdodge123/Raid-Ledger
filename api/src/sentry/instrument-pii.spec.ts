@@ -1,7 +1,7 @@
 /**
  * ROK-1779: the api's beforeSend strips personal data, sendDefaultPii stays
- * off, and production reports only when ENABLE_TELEMETRY='true' (opt-in;
- * DISABLE_TELEMETRY='true' still wins).
+ * off, and production reports by default (ROK-1838) unless
+ * ENABLE_TELEMETRY='false' or DISABLE_TELEMETRY='true' (which still wins).
  * Split from instrument.spec.ts (at the 750-line test-file limit); the
  * loader mirrors its `jest.resetModules` + `jest.mock` harness.
  */
@@ -31,6 +31,8 @@ async function loadInstrument(
   }
   jest.resetModules();
   jest.mock('@sentry/nestjs', () => ({ init: jest.fn() }));
+  // Never read a real .env: an opt-out in a dev checkout would skew the gate.
+  jest.mock('dotenv', () => ({ config: jest.fn(() => ({ parsed: {} })) }));
   try {
     await import('./instrument.js');
     const sentry = (await import('@sentry/nestjs')) as unknown as {
@@ -80,7 +82,7 @@ function expectNoPii(result: Record<string, unknown> | null): void {
   expect(event['user']).toEqual({ id: 7 });
 }
 
-describe('Sentry instrument — ROK-1779 PII + runtime opt-out', () => {
+describe('Sentry instrument — ROK-1779 PII + ROK-1838 runtime opt-out', () => {
   afterEach(() => jest.resetModules());
 
   describe('production', () => {
@@ -106,8 +108,16 @@ describe('Sentry instrument — ROK-1779 PII + runtime opt-out', () => {
     });
   });
 
-  it('production with nothing set skips init (opt-in default)', async () => {
+  it('production with nothing set calls init (on by default, ROK-1838)', async () => {
     const init = await loadInstrument({ NODE_ENV: 'production' });
+    expect(init).toHaveBeenCalledTimes(1);
+  });
+
+  it("ENABLE_TELEMETRY='false' in production skips init (ROK-1838 opt-out)", async () => {
+    const init = await loadInstrument({
+      NODE_ENV: 'production',
+      ENABLE_TELEMETRY: 'false',
+    });
     expect(init).not.toHaveBeenCalled();
   });
 
@@ -119,12 +129,12 @@ describe('Sentry instrument — ROK-1779 PII + runtime opt-out', () => {
     expect(init).toHaveBeenCalledTimes(1);
   });
 
-  it("DISABLE_TELEMETRY='false' alone in production skips init", async () => {
+  it("DISABLE_TELEMETRY='false' alone in production calls init", async () => {
     const init = await loadInstrument({
       NODE_ENV: 'production',
       DISABLE_TELEMETRY: 'false',
     });
-    expect(init).not.toHaveBeenCalled();
+    expect(init).toHaveBeenCalledTimes(1);
   });
 
   it('DISABLE_TELEMETRY wins over ENABLE_TELEMETRY in production', async () => {

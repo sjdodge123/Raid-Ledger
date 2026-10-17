@@ -1,16 +1,23 @@
-/** ROK-1779: ENABLE_TELEMETRY / DISABLE_TELEMETRY truth table (opt-in). */
+/**
+ * ROK-1838: ENABLE_TELEMETRY / DISABLE_TELEMETRY truth table — ON by default,
+ * `ENABLE_TELEMETRY='false'` opts out, `DISABLE_TELEMETRY='true'` still wins.
+ */
 import {
   TELEMETRY_DEFAULT_ENABLED,
   isTelemetryEnabled,
 } from './telemetry-policy';
 
-describe('isTelemetryEnabled (ROK-1779)', () => {
-  it('defaults to off — opt-in per the 2026-10-15 ruling', () => {
-    expect(TELEMETRY_DEFAULT_ENABLED).toBe(false);
+describe('isTelemetryEnabled (ROK-1838)', () => {
+  it('defaults to on — per the 2026-10-17 ruling', () => {
+    expect(TELEMETRY_DEFAULT_ENABLED).toBe(true);
   });
 
-  it('unset → off', () => {
-    expect(isTelemetryEnabled({})).toBe(false);
+  it('unset → on', () => {
+    expect(isTelemetryEnabled({})).toBe(true);
+  });
+
+  it("ENABLE_TELEMETRY='false' → off", () => {
+    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: 'false' })).toBe(false);
   });
 
   it("ENABLE_TELEMETRY='true' → on", () => {
@@ -21,7 +28,7 @@ describe('isTelemetryEnabled (ROK-1779)', () => {
     expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'true' })).toBe(false);
   });
 
-  it('DISABLE_TELEMETRY wins when both are set', () => {
+  it("DISABLE_TELEMETRY='true' wins over ENABLE_TELEMETRY='true'", () => {
     expect(
       isTelemetryEnabled({
         ENABLE_TELEMETRY: 'true',
@@ -30,21 +37,30 @@ describe('isTelemetryEnabled (ROK-1779)', () => {
     ).toBe(false);
   });
 
-  it("DISABLE_TELEMETRY='false' alone does not opt in", () => {
-    expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'false' })).toBe(false);
+  it("DISABLE_TELEMETRY='false' alone leaves it on", () => {
+    expect(isTelemetryEnabled({ DISABLE_TELEMETRY: 'false' })).toBe(true);
   });
 
-  it.each(['1', '', 'TRUE', 'yes'])("ENABLE_TELEMETRY='%s' → off", (value) => {
-    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(false);
+  it("DISABLE_TELEMETRY='false' does not undo ENABLE_TELEMETRY='false'", () => {
+    expect(
+      isTelemetryEnabled({
+        ENABLE_TELEMETRY: 'false',
+        DISABLE_TELEMETRY: 'false',
+      }),
+    ).toBe(false);
+  });
+
+  it.each(['1', '', 'yes', '0'])("ENABLE_TELEMETRY='%s' → on", (value) => {
+    expect(isTelemetryEnabled({ ENABLE_TELEMETRY: value })).toBe(true);
   });
 
   it('reads process.env when no env is passed', () => {
     const saved = process.env.ENABLE_TELEMETRY;
     const savedOff = process.env.DISABLE_TELEMETRY;
-    process.env.ENABLE_TELEMETRY = 'true';
+    process.env.ENABLE_TELEMETRY = 'false';
     delete process.env.DISABLE_TELEMETRY;
     try {
-      expect(isTelemetryEnabled()).toBe(true);
+      expect(isTelemetryEnabled()).toBe(false);
     } finally {
       if (saved === undefined) delete process.env.ENABLE_TELEMETRY;
       else process.env.ENABLE_TELEMETRY = saved;
@@ -61,21 +77,28 @@ describe('servedTelemetryEnabled (ROK-1779 Codex P2)', () => {
   it('reads the env live when instrument.ts never ran (tests, scripts)', async () => {
     jest.resetModules();
     const policy: Policy = await import('./telemetry-policy.js');
-    expect(policy.servedTelemetryEnabled({ ENABLE_TELEMETRY: 'true' })).toBe(
-      true,
+    expect(policy.servedTelemetryEnabled({ ENABLE_TELEMETRY: 'false' })).toBe(
+      false,
     );
-    expect(policy.servedTelemetryEnabled({})).toBe(false);
+    expect(policy.servedTelemetryEnabled({})).toBe(true);
   });
 
   it('serves the boot decision once one was recorded', async () => {
     jest.resetModules();
     const policy: Policy = await import('./telemetry-policy.js');
-    expect(policy.resolveBootTelemetry({ ENABLE_TELEMETRY: 'true' })).toBe(
-      true,
-    );
+    expect(policy.resolveBootTelemetry({})).toBe(true);
     expect(policy.servedTelemetryEnabled({})).toBe(true);
     expect(policy.servedTelemetryEnabled({ DISABLE_TELEMETRY: 'true' })).toBe(
       true,
     );
+  });
+
+  it('serves a boot-time opt-out even if the env later says nothing', async () => {
+    jest.resetModules();
+    const policy: Policy = await import('./telemetry-policy.js');
+    expect(policy.resolveBootTelemetry({ ENABLE_TELEMETRY: 'false' })).toBe(
+      false,
+    );
+    expect(policy.servedTelemetryEnabled({})).toBe(false);
   });
 });
