@@ -71,7 +71,8 @@ const SECRET_KEY_EXACT = [
  * `db_pwd=` and `db-pwd=` leaked. The whole-name anchor (`SECRET_KEY_WHOLE`)
  * and the `(?![A-Za-z0-9_-])` lookahead in the matcher mean only a TRAILING
  * `pwd` counts — `pwdTimeout` keeps its value. r7: the `pwd` suffix needs a
- * `_`/`-` right before it, so the shell's `OLDPWD=`/`PWD=` keep their paths.
+ * `_`/`-` right before it, so the shell's `OLDPWD=` keeps its path. Bare
+ * `pwd` stays an exact secret name: ODBC strings carry `Pwd=<password>`.
  */
 const SECRET_NOUN_SUFFIX = String.raw`(?:[A-Za-z0-9_-]*(?:token|secret|password|passwd)|[A-Za-z0-9_-]*[_-]pwd)`;
 
