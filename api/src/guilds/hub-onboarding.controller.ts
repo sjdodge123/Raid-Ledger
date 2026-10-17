@@ -28,7 +28,9 @@ export class HubOnboardingController {
   constructor(private readonly onboarding: HubOnboardingService) {}
 
   @Get()
-  getState(@Request() req: AuthenticatedRequest): Promise<HubOnboardingStateDto> {
+  getState(
+    @Request() req: AuthenticatedRequest,
+  ): Promise<HubOnboardingStateDto> {
     return this.onboarding.getState(req.user.id);
   }
 
