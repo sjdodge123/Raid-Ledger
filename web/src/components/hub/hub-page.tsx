@@ -16,7 +16,7 @@ import { Button } from '../ui/button';
 import { TabRow } from '../ui/tab-row';
 import { tabPanelId, useHashTab } from '../ui/tab-row.helpers';
 import { httpStatusOf } from '../../lib/api/api-error';
-import { type HubCtx, type HubModule, type HubResourceSection, useHubModule } from '../../plugins/hub-module';
+import { type HubCtx, type HubModSource, type HubModule, useHubModule } from '../../plugins/hub-module';
 import { HubHero } from './hub-hero';
 import { HubOverview } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
@@ -37,8 +37,8 @@ const HubDiscordPickerMount = lazy(() => import('./discord/discord-picker-mount'
 
 const PAGE = 'max-w-5xl mx-auto px-4 py-8';
 
-/** Stable identity so the section list doesn't churn while a module is absent. */
-const NO_SECTIONS: readonly HubResourceSection[] = [];
+/** Stable identity so the source list doesn't churn while a module is absent. */
+const NO_SECTIONS: readonly HubModSource[] = [];
 
 function Notice({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
     return <div className={PAGE}><div data-testid={testId} className="py-12 text-center">{children}</div></div>;
@@ -74,20 +74,22 @@ interface PanelProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     tabs: readonly HubTabEntry[];
+    /** A mod source reports content — the setup checklist's "Recommend mods" step (ROK-1830 S5b). */
+    modsConfigured: boolean;
 }
 
-function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
+function ActiveTab({ active, ctx, module: mod, modsConfigured }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
     if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'events') return <HubEventsTab query={ctx.raids} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
-    return <HubOverview ctx={ctx} module={mod} />;
+    return <HubOverview ctx={ctx} module={mod} modsConfigured={modsConfigured} />;
 }
 
 /** Scroll the panel top back into view when a tab switch happens below it (prototype `GuildTabPanel`). */
-function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
+function TabPanel({ active, ctx, module: mod, tabs, modsConfigured }: PanelProps): JSX.Element {
     const ref = useRef<HTMLDivElement>(null);
     useEffect(() => {
         const el = ref.current;
@@ -95,7 +97,7 @@ function TabPanel({ active, ctx, module: mod, tabs }: PanelProps): JSX.Element {
     }, [active]);
     return (
         <div ref={ref} id={tabPanelId('guild', active)} role="region" aria-label={hubTabLabel(tabs, active)} className="scroll-mt-4">
-            <ActiveTab active={active} ctx={ctx} module={mod} />
+            <ActiveTab active={active} ctx={ctx} module={mod} modsConfigured={modsConfigured} />
         </div>
     );
 }
@@ -145,10 +147,11 @@ interface FrameProps {
     ctx: HubCtx;
     module: HubModule | undefined;
     showResources: boolean;
+    modsConfigured: boolean;
 }
 
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
-function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element {
+function HubFrame({ ctx, module: mod, showResources, modsConfigured }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
     const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     const canManage = ctx.page.viewer.canManageEditors;
@@ -159,7 +162,7 @@ function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element 
                 <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null}
                     action={canManage ? <HubSettingsTrigger onOpen={s.openSettings} /> : null} />
                 <TabRow tabs={tabs} activeId={active} label="Guild page sections" className="mb-6" />
-                <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} />
+                <TabPanel active={active} ctx={ctx} module={mod} tabs={tabs} modsConfigured={modsConfigured} />
                 <HubOverlays ctx={ctx} module={mod} overlay={s.overlay} onClose={s.onClose} openPicker={s.openPicker} />
             </div>
         </HubSettingsProvider>
@@ -175,8 +178,8 @@ function GuildPageBody({ page }: { page: GuildPageDto }): JSX.Element {
     // The module sections answer during THIS render pass, above the tab nav, so
     // a warm cache puts Resources in the first commit (see hub-resource-visibility).
     return (
-        <HubResourceVisibility sections={mod?.resourceSections ?? NO_SECTIONS} guildId={page.guild.id}>
-            {(anyVisible) => <HubFrame ctx={ctx} module={mod} showResources={coreResources || anyVisible} />}
+        <HubResourceVisibility sections={mod?.modSources ?? NO_SECTIONS} guildId={page.guild.id}>
+            {(anyVisible) => <HubFrame ctx={ctx} module={mod} showResources={coreResources || anyVisible} modsConfigured={anyVisible} />}
         </HubResourceVisibility>
     );
 }

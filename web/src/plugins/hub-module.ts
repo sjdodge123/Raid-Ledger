@@ -52,15 +52,20 @@ export interface HubResourceCtx {
 }
 
 /**
- * One section a module appends to core's Resources tab (ROK-1830 r2).
+ * One game's source for core's "Recommended mods" frame on the Resources tab
+ * (ROK-1830 S5b, D8-B — it was `resourceSections` in r2, when the WoW addon
+ * panel owned its own heading).
  *
- * `useVisible` is how core decides whether the Resources tab has anything in it
- * without knowing what the section renders or which endpoint feeds it — core
- * calls it inside a per-section probe component, so it may use hooks. Omitted =
- * the section always counts as having content.
+ * `useVisible` is how core decides whether the frame — and with it the
+ * Resources tab — has anything in it without knowing what the source renders
+ * or which endpoint feeds it: core calls it inside a per-source probe
+ * component, so it may use hooks. Omitted = the source always counts as having
+ * content. `label` heads the band and is only drawn once a hub has more than
+ * one source.
  */
-export interface HubResourceSection {
+export interface HubModSource {
     id: string;
+    label: string;
     component: ComponentType<HubResourceCtx>;
     useVisible?: (guildId: number) => boolean;
 }
@@ -138,8 +143,8 @@ export interface HubModule {
      * itself stays WoW-side. Unset = core shows the list with no way to add.
      */
     editorDelegation?: ComponentType<HubEditorDelegationCtx>;
-    /** Sections appended under the Resources tab's rules + links (WoW: recommended addons). Core wraps each in Suspense, so a `lazy` component is fine. */
-    resourceSections?: readonly HubResourceSection[];
+    /** Sources of the core "Recommended mods" frame under the Resources tab's rules + links (WoW: its addon panel). Core wraps each in Suspense, so a `lazy` component is fine. */
+    modSources?: readonly HubModSource[];
 }
 
 export interface HubModuleRegistration {

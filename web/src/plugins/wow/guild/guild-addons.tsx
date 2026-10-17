@@ -5,7 +5,9 @@
  * reorder (the full id list is PUT back).
  *
  * Addon flavors are a WoW concept, so the panel lives in this plugin and is
- * contributed to core's Resources tab through `HubModule.resourceSections`.
+ * contributed as a source of core's "Recommended mods" frame through
+ * `HubModule.modSources` (ROK-1830 S5b — the frame owns the heading and the
+ * blurb now, so the panel no longer draws its own `SectionTitle`).
  */
 import { useState, type JSX } from 'react';
 import type { GuildAddonList } from '@raid-ledger/contract';
@@ -15,7 +17,6 @@ import { AddonRow, type RowActions } from './addon-row';
 import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
-import { SectionTitle } from '../../../components/hub/hub-bits';
 import { useGuildAddonMutations, useGuildAddons } from '../../../components/hub/api/use-guild-content';
 import type { HubResourceCtx } from '../../hub-module';
 
@@ -73,7 +74,6 @@ function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildA
     const pinned = list.pinned.filter((p) => pinnedMatches(p, filter));
     return (
         <section id="addons" className="scroll-mt-4" data-testid="guild-addons">
-            <SectionTitle title="Recommended addons" blurb="What this guild asks members to install. Required addons come first in raid prep." />
             <RadioGroup label="Flavor" hideLabel appearance="segmented" options={FILTER_OPTIONS} value={filter} onChange={setFilter} className="mb-4" />
             {canEdit && <div className="mb-4"><AddAddonForm onAdd={add} pending={adding} failure={addFailure} /></div>}
             {listError && <p role="alert" data-testid="guild-addons-error" className="mb-3 text-sm text-danger">{listError}</p>}

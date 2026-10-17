@@ -12,6 +12,7 @@ import { GuildEvents } from './events/guild-events';
 import { GuildRaidSchedule } from './events/guild-raid-schedule';
 import { GmPostCard } from './content/gm-post-card';
 import { useHubSettings } from './settings/hub-settings-context';
+import { HubSetupChecklist } from './onboarding/setup-checklist';
 
 /**
  * ROK-1788: lazy so the mirror (and its editor-only picker, a further lazy
@@ -33,9 +34,12 @@ interface Cell {
 }
 
 /** The core band. Module widgets land between these orders — WoW uses 50/60. */
-function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null): Cell[] {
+function coreCells({ page, raids }: HubCtx, onChangeChannel: (() => void) | null, modsConfigured: boolean): Cell[] {
     const data = raids.data;
     const cells: Cell[] = [
+        // Above everything on purpose: it is the one widget that tells an
+        // editor what is still missing, and it removes itself once nothing is.
+        { key: 'setup-checklist', order: 5, span: 2, node: <HubSetupChecklist guildId={page.guild.id} canEdit={page.viewer.canEdit} modsConfigured={modsConfigured} /> },
         { key: 'gm-post', order: 10, span: 1, node: <GmPostCard guildId={page.guild.id} canEdit={page.viewer.canEdit} /> },
         { key: 'discord', order: 20, span: 1, node: <Suspense fallback={null}><GuildDiscordMirror guildId={page.guild.id} canEdit={page.viewer.canEdit} onChangeChannel={onChangeChannel} /></Suspense> },
     ];
@@ -52,9 +56,15 @@ function moduleCells(ctx: HubCtx, mod: HubModule | undefined): Cell[] {
         .map((w) => ({ key: `module:${w.id}`, order: w.order, span: w.span ?? 1, node: <w.component {...ctx} /> }));
 }
 
-export function HubOverview({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
+interface HubOverviewProps {
+    ctx: HubCtx;
+    module: HubModule | undefined;
+    modsConfigured: boolean;
+}
+
+export function HubOverview({ ctx, module: mod, modsConfigured }: HubOverviewProps): JSX.Element {
     const { openChannelPicker } = useHubSettings();
-    const cells = [...coreCells(ctx, openChannelPicker), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
+    const cells = [...coreCells(ctx, openChannelPicker, modsConfigured), ...moduleCells(ctx, mod)].sort((a, b) => a.order - b.order);
     return (
         <div className="grid grid-cols-1 gap-4 md:grid-flow-dense md:grid-cols-2 lg:grid-cols-3" data-testid="guild-overview">
             {cells.map((c) => (c.span === 2

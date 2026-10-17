@@ -25,7 +25,8 @@ import { useWowAddonsVisible } from './wow-resources.helpers';
 /**
  * `register.ts` is a boot-time side-effect import, so the addon panel (form,
  * row, URL parser) stays a lazy chunk of the Resources tab, as it was when it
- * lived in core. Core renders `resourceSections` inside a Suspense boundary.
+ * lived in core. Core renders each `modSources` entry inside a Suspense
+ * boundary, in its "Recommended mods" frame (ROK-1830 S5b).
  */
 const GuildAddonsSection = lazy(() => import('../guild/guild-addons').then((m) => ({ default: m.GuildAddonsSection })));
 
@@ -52,5 +53,5 @@ export const wowHubModule: HubModule = {
     heroNote: wowHeroNote,
     eventsJumpTab: 'raids',
     editorDelegation: WowEditorDelegation,
-    resourceSections: [{ id: 'wow-addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
+    modSources: [{ id: 'wow-addons', label: 'World of Warcraft addons', component: GuildAddonsSection, useVisible: useWowAddonsVisible }],
 };
