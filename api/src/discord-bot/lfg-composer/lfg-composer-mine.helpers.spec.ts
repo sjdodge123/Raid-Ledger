@@ -44,10 +44,10 @@ function group(gameId: number, gameName: string, own: boolean) {
 }
 
 function setup(groups: LfgGroupSummaryDto[] = []) {
-  const listGroups = jest.fn().mockResolvedValue(groups);
+  const listOwnGroups = jest.fn().mockResolvedValue(groups);
   const deps = {
     db: {} as never,
-    lfgService: { listGroups },
+    lfgService: { listOwnGroups },
     settingsService: {
       getDiscordBotCommunityName: jest.fn().mockResolvedValue(null),
       getClientUrl: jest.fn().mockResolvedValue(null),
@@ -62,7 +62,7 @@ function setup(groups: LfgGroupSummaryDto[] = []) {
     deferUpdate: jest.fn().mockResolvedValue(undefined),
     message: { edit: jest.fn().mockResolvedValue(undefined) },
   };
-  return { deps, interaction, listGroups };
+  return { deps, interaction, listOwnGroups };
 }
 
 /** The one payload edited into the ephemeral reply. */
@@ -92,12 +92,12 @@ describe('showComposerMyLfgs (ROK-1660)', () => {
   });
 
   it('lists only own groups, each with its Leave · {game} button', async () => {
-    const { deps, interaction, listGroups } = setup([
+    const { deps, interaction, listOwnGroups } = setup([
       group(1, 'Valheim', true),
       group(2, 'Deep Rock', false),
     ]);
     await showComposerMyLfgs(deps, interaction as never);
-    expect(listGroups).toHaveBeenCalledWith(7);
+    expect(listOwnGroups).toHaveBeenCalledWith(7);
     const payload = sent(interaction);
     expect(customIds(payload)).toEqual(['lfg:withdraw:1']);
     expect(JSON.stringify(payload)).toContain('Leave · Valheim');
@@ -116,10 +116,10 @@ describe('showComposerMyLfgs (ROK-1660)', () => {
 
   it('tells an unlinked presser to link, and reads no list', async () => {
     resolveCaller.mockResolvedValue(null);
-    const { deps, interaction, listGroups } = setup();
+    const { deps, interaction, listOwnGroups } = setup();
     await showComposerMyLfgs(deps, interaction as never);
     expect(sent(interaction)).toBe(LFG_UNLINKED_REPLY);
-    expect(listGroups).not.toHaveBeenCalled();
+    expect(listOwnGroups).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -127,10 +127,10 @@ describe('showComposerMyLfgs (ROK-1660)', () => {
     ['deactivated', { deactivatedAt: new Date() }],
   ])('refuses a %s presser', async (_label, patch) => {
     resolveCaller.mockResolvedValue({ ...caller, ...patch });
-    const { deps, interaction, listGroups } = setup();
+    const { deps, interaction, listOwnGroups } = setup();
     await showComposerMyLfgs(deps, interaction as never);
     expect(sent(interaction)).toBe(LFG_BLOCKED_REPLY);
-    expect(listGroups).not.toHaveBeenCalled();
+    expect(listOwnGroups).not.toHaveBeenCalled();
   });
 
   it('never edits the shared intro message', async () => {

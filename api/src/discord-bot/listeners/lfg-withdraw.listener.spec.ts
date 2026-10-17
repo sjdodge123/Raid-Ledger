@@ -66,7 +66,7 @@ function build(
 function makeService(
   withdraw: jest.Mock = jest.fn().mockResolvedValue(undefined),
 ): Record<string, jest.Mock> {
-  return { withdraw, listGroups: jest.fn().mockResolvedValue([]) };
+  return { withdraw, listOwnGroups: jest.fn().mockResolvedValue([]) };
 }
 
 describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
@@ -101,7 +101,7 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
 
   it('confirms the withdrawal by name and re-renders the caller’s list', async () => {
     const service = makeService();
-    service.listGroups = jest.fn().mockResolvedValue([]);
+    service.listOwnGroups = jest.fn().mockResolvedValue([]);
     const listener = build(
       [[{ id: 7, deactivatedAt: null, bannedAt: null }], GAME],
       service,
@@ -112,7 +112,7 @@ describe('LfgWithdrawListener (ROK-1454 D11 / AC7)', () => {
     await listener.handleButtonInteraction(interaction);
 
     expect(deferUpdate).toHaveBeenCalled();
-    expect(service.listGroups).toHaveBeenCalledWith(7);
+    expect(service.listOwnGroups).toHaveBeenCalledWith(7);
     const rendered = editReply.mock.calls[0][0] as {
       embeds: Array<{ toJSON: () => { author?: { name: string } } }>;
     };

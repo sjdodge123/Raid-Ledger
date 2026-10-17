@@ -54,7 +54,10 @@ function deps(): ComposerFlowDeps & {
     );
   return {
     db: {} as never,
-    lfgService: { createIntent, listGroups: jest.fn().mockResolvedValue([]) },
+    lfgService: {
+      createIntent,
+      listOwnGroups: jest.fn().mockResolvedValue([]),
+    },
     settingsService: {
       getClientUrl: jest.fn().mockResolvedValue('https://rl.test'),
       getDiscordBotTimezone: jest.fn().mockResolvedValue('UTC'),
