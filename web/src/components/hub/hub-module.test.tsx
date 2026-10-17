@@ -3,7 +3,7 @@
  *
  * A throwaway plugin registers a `game_server` hub module with one tab and one
  * Overview widget. The core `/guilds/:id` shell must offer the tab in the
- * frame's module band (after Overview/Roster, before Resources), render its
+ * frame's module band (after Overview/Members, before Resources), render its
  * panel when selected, and draw the widget in the Overview bento — none of
  * which this file teaches core about.
  */
@@ -46,7 +46,7 @@ const testModule: HubModule = {
     overviewWidgets: [{ id: 'uptime', order: 55, component: UptimeWidget }],
     memberColumns: [],
     heroPills: [],
-    memberGroups: () => [],
+    memberRows: () => [],
 };
 
 function renderPage(): void {
@@ -70,7 +70,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
     it('puts the module tab between the core frame tabs and renders its panel', async () => {
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
-        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Roster', 'World']);
+        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members', 'World']);
 
         await userEvent.click(within(nav).getByRole('link', { name: 'World' }));
         await waitFor(() => expect(screen.getByTestId('module-tab-panel')).toHaveTextContent('World of Valheim Longhouse'));
@@ -87,7 +87,7 @@ describe('hub module extension point (ROK-1830 AC2)', () => {
         usePluginStore.setState({ activeSlugs: new Set<string>(), initialized: true });
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
-        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Roster']);
+        expect(within(nav).getAllByRole('link').map((a) => a.textContent)).toEqual(['Overview', 'Members']);
         expect(screen.queryByTestId('module-widget')).not.toBeInTheDocument();
     });
 });

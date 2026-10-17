@@ -1,5 +1,5 @@
 /**
- * ROK-1785: `/guilds/:id` — roster grouped by rank, the hidden tabs, the
+ * ROK-1785: `/guilds/:id` — members grouped by rank, the hidden tabs, the
  * friendly 403 state, and the Page editors card shown only to
  * `viewer.canManageEditors`.
  */
@@ -62,12 +62,12 @@ beforeEach(() => { activateWowPlugin(); editorCalls = 0; posts = []; });
 afterEach(() => { window.location.hash = ''; });
 
 describe('GuildPage (ROK-1785)', () => {
-    it('shows only the Overview, Roster and Raids tabs (S1 + S3)', async () => {
+    it('shows only the Overview, Members and Raids tabs (S1 + S3)', async () => {
         serve(makePage());
         renderPage();
         const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
-        expect(labels).toEqual(['Overview', 'Roster', 'Raids']);
+        expect(labels).toEqual(['Overview', 'Members', 'Raids']);
     });
 
     it('the hero shows the addon-reported realm for a realm-less (Forever) guild', async () => {
@@ -77,8 +77,8 @@ describe('GuildPage (ROK-1785)', () => {
         expect(hero, 'a realm-less guild with raw_realm must still show its realm').toHaveTextContent('Doomhowl · US');
     });
 
-    it('renders the roster grouped by rank, linking only RL characters', async () => {
-        window.location.hash = '#roster';
+    it('renders the members grouped by rank, linking only RL characters', async () => {
+        window.location.hash = '#members';
         serve(makePage());
         renderPage();
         const gm = await screen.findByTestId('guild-rank-0');
@@ -89,14 +89,27 @@ describe('GuildPage (ROK-1785)', () => {
         expect(within(raiders).getByTestId('guild-member-unlinked')).toHaveTextContent('Nolinkadin');
     });
 
-    it('shows the server role counts (one per user) in the Overview summary with a #roster jump', async () => {
+    it('an old #roster link opens Members and the hash is rewritten to #members (ROK-1830 D7-A)', async () => {
+        window.location.hash = '#roster';
+        serve(makePage());
+        renderPage();
+        const nav = await screen.findByRole('navigation', { name: 'Guild page sections' });
+        await waitFor(() => expect(
+            within(nav).getByRole('link', { name: 'Members' }),
+            'the retired #roster hash must still select the Members tab',
+        ).toHaveAttribute('aria-current', 'page'));
+        expect(screen.getByTestId('guild-members')).toBeInTheDocument();
+        expect(window.location.hash, 'the retired hash must be rewritten in place').toBe('#members');
+    });
+
+    it('shows the server role counts (one per user) in the Overview summary with a #members jump', async () => {
         serve(makePage());
         renderPage();
         const summary = await screen.findByTestId('guild-members-summary');
         expect(within(summary).getByTestId('guild-role-count-tank')).toHaveTextContent('2Tank');
         expect(within(summary).getByTestId('guild-role-count-healer')).toHaveTextContent('4Heal');
         expect(within(summary).getByTestId('guild-role-count-dps')).toHaveTextContent('7DPS');
-        expect(screen.getByTestId('guild-see-roster')).toHaveAttribute('href', '#roster');
+        expect(screen.getByTestId('guild-see-members')).toHaveAttribute('href', '#members');
     });
 
     it('shows the friendly not-a-member state on a 403', async () => {

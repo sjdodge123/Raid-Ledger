@@ -23,6 +23,27 @@ function bandHeading(band: HubMemberBand): string {
     return `${band.label} · ${band.rows.length}`;
 }
 
+function TableBand({ band, columns, rowClass }: { band: HubMemberBand } & Omit<ListProps, 'bands'>): JSX.Element {
+    return (
+        <tbody data-testid={band.testId}>
+            {band.label !== '' && (
+                <tr>
+                    <th scope="colgroup" colSpan={columns.length} className={BAND}>{bandHeading(band)}</th>
+                </tr>
+            )}
+            {band.rows.map((row) => (
+                <tr key={row.memberId} data-testid="guild-member-row" className="border-t border-edge-subtle">
+                    {columns.map((c, i) => (
+                        <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rowClass ? rowClass(row) : 'border-transparent'}` : ''}`}>
+                            <c.cell row={row} />
+                        </td>
+                    ))}
+                </tr>
+            ))}
+        </tbody>
+    );
+}
+
 export function HubMemberTable({ bands, columns, rowClass }: ListProps): JSX.Element {
     return (
         <div className="max-w-full overflow-x-auto rounded-lg border border-edge" data-testid="guild-members-table">
@@ -32,24 +53,7 @@ export function HubMemberTable({ bands, columns, rowClass }: ListProps): JSX.Ele
                         {columns.map((c) => <th key={c.id} scope="col" className={HEAD}>{c.header}</th>)}
                     </tr>
                 </thead>
-                {bands.map((band) => (
-                    <tbody key={band.key} data-testid={band.testId}>
-                        {band.label !== '' && (
-                            <tr>
-                                <th scope="colgroup" colSpan={columns.length} className={BAND}>{bandHeading(band)}</th>
-                            </tr>
-                        )}
-                        {band.rows.map((row) => (
-                            <tr key={row.memberId} data-testid="guild-member-row" className="border-t border-edge-subtle">
-                                {columns.map((c, i) => (
-                                    <td key={c.id} className={`${CELL} ${i === 0 ? `border-l-2 ${rowClass ? rowClass(row) : 'border-transparent'}` : ''}`}>
-                                        <c.cell row={row} />
-                                    </td>
-                                ))}
-                            </tr>
-                        ))}
-                    </tbody>
-                ))}
+                {bands.map((band) => <TableBand key={band.key} band={band} columns={columns} rowClass={rowClass} />)}
             </table>
         </div>
     );

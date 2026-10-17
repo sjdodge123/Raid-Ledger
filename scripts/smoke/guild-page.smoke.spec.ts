@@ -74,14 +74,14 @@ async function openGuildAs(page: Page, guild: SeededGuild, role: Role, hash = ''
     await page.goto(`/guilds/${guild.guildId}${hash}`);
 }
 
-test('GM: hero, rank-grouped roster, character link, no Page editors card', async ({ page }, testInfo) => {
+test('GM: hero, rank-grouped members, character link, no Page editors card', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
         await openGuildAs(page, guild, 'gm');
         await expect(page.getByTestId('guild-hero')).toBeVisible({ timeout: 15_000 });
         await expect(page.getByTestId('guild-overview')).toBeVisible();
         await expect(page.getByTestId('guild-editors-panel'), 'rank 0 confers no editor management (GM_RANK_IMPLIES_EDIT off)').toHaveCount(0);
-        await page.goto(`/guilds/${guild.guildId}#roster`);
-        await expect(page.getByTestId('guild-roster')).toBeVisible({ timeout: 15_000 });
+        await page.goto(`/guilds/${guild.guildId}#members`);
+        await expect(page.getByTestId('guild-members')).toBeVisible({ timeout: 15_000 });
         for (const rank of [0, 1, 2, 3, 4]) {
             await expect(page.getByTestId(`guild-rank-${rank}`)).toBeVisible();
         }
@@ -113,12 +113,19 @@ test('officer (rank-1 grant): can edit, but no Page editors card', async ({ page
     });
 });
 
-test('#roster deep-links straight to the Roster tab', async ({ page }, testInfo) => {
+test('#members deep-links straight to the Members tab, and the retired #roster still lands there', async ({ page }, testInfo) => {
     await withGuild(testInfo, async (guild) => {
-        await openGuildAs(page, guild, 'gm', '#roster');
+        await openGuildAs(page, guild, 'gm', '#members');
         const tabs = page.getByRole('navigation', { name: 'Guild page sections' });
-        await expect(tabs.locator('a[href="#roster"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
-        await expect(page.getByTestId('guild-roster')).toBeVisible();
+        await expect(tabs.locator('a[href="#members"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expect(page.getByTestId('guild-members')).toBeVisible();
+
+        // ROK-1830 D7-A: links shared before the rename keep working, and the
+        // address bar is rewritten so the next copy of the link is current.
+        await page.goto(`/guilds/${guild.guildId}#roster`);
+        await expect(tabs.locator('a[href="#members"]')).toHaveAttribute('aria-current', 'page', { timeout: 15_000 });
+        await expect(page.getByTestId('guild-members')).toBeVisible();
+        await expect(page).toHaveURL(new RegExp('#members$'));
     });
 });
 
