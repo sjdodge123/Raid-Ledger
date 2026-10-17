@@ -33,7 +33,7 @@ import {
 // datetime / uuid / url the member schema would reject must not 500 a public
 // route). Exported TS types stay derived from the member DTOs.
 //
-// `avatar` on every public shape is an absolute URL or null (server-built).
+// `avatar` on every public shape is a custom absolute URL or null — never a Discord-CDN URL (ROK-1827).
 // ============================================================
 
 /** Character with every member key allowed (strict) but values unchecked. */

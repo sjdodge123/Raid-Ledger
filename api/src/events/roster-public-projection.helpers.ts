@@ -2,8 +2,8 @@
  * Per-viewer projection of the public roster surfaces (ROK-1629).
  *
  * Signed-in, non-deactivated members keep today's payload. Anonymous (and
- * deactivated) viewers get display name, role/class and a server-built avatar
- * URL — no Discord ids, no note / attendance outcome / running-late marker
+ * deactivated) viewers get display name, role/class and a null (or custom, non-Discord) avatar
+ * URL — no Discord ids, no Discord-CDN avatar URL (ROK-1827), no note / attendance outcome / running-late marker
  * (operator rulings 2026-10-04, Q1/Q2/Q3/Q6).
  *
  * Applied at the HTTP boundary ONLY. `getRoster` / `getRosterWithAssignments`
@@ -44,7 +44,7 @@ import type {
   PublicEventResponseDto,
   PublicEventDetailResponseDto,
 } from '@raid-ledger/contract';
-import { discordAvatarUrl } from '../common/discord-avatar-url.helpers';
+import { publicAvatarUrl } from '../common/public-avatar-url.helpers';
 
 /** Viewer rule (Q6): signed in AND not deactivated. Anything else is anonymous. */
 export function isMemberViewer(
@@ -53,11 +53,18 @@ export function isMemberViewer(
   return !!user && !user.deactivatedAt;
 }
 
-export function toPublicSignupUser(user: SignupUserDto): PublicSignupUserDto {
+/**
+ * `discordId` is deliberately not part of the input type: the public shape has
+ * no id key and `publicAvatarUrl` takes no id, so there is nothing to plumb
+ * (ROK-1827).
+ */
+export function toPublicSignupUser(
+  user: Omit<SignupUserDto, 'discordId'>,
+): PublicSignupUserDto {
   return PublicSignupUserSchema.parse({
     id: user.id,
     username: user.username,
-    avatar: discordAvatarUrl(user.discordId, user.avatar),
+    avatar: publicAvatarUrl(user.avatar),
     customAvatarUrl: user.customAvatarUrl,
     characters: user.characters,
   });
@@ -69,7 +76,6 @@ export function toPublicSignup(
 ): PublicSignupResponseDto {
   const user = toPublicSignupUser({
     ...signup.user,
-    discordId: signup.user.discordId || (signup.discordUserId ?? ''),
     avatar: signup.user.avatar ?? signup.discordAvatarHash ?? null,
   });
   return PublicSignupResponseSchema.parse({
@@ -104,7 +110,7 @@ export function toPublicRosterAssignment(
     signupId: a.signupId,
     userId: a.userId,
     username: a.username,
-    avatar: discordAvatarUrl(a.discordId, a.avatar),
+    avatar: publicAvatarUrl(a.avatar),
     customAvatarUrl: a.customAvatarUrl,
     slot: a.slot,
     position: a.position,
@@ -130,7 +136,7 @@ export function toPublicCreator(c: EventCreatorDto): PublicEventCreatorDto {
   return PublicEventCreatorSchema.parse({
     id: c.id,
     username: c.username,
-    avatar: discordAvatarUrl(c.discordId, c.avatar),
+    avatar: publicAvatarUrl(c.avatar),
     customAvatarUrl: c.customAvatarUrl,
   });
 }

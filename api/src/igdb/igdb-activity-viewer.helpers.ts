@@ -4,7 +4,7 @@
  *
  * Signed-in, non-deactivated members get the service payload unchanged;
  * anonymous and deactivated viewers get the public identity shape (no
- * `discordId`, server-built avatar URL). Lives outside `igdb.controller.ts`
+ * `discordId`, no Discord-CDN avatar URL — ROK-1827). Lives outside `igdb.controller.ts`
  * to keep that file under the 300-line cap.
  */
 import { BadRequestException, NotFoundException } from '@nestjs/common';
