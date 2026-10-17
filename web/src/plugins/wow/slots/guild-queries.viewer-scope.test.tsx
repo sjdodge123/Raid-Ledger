@@ -12,7 +12,7 @@ import { http, HttpResponse } from 'msw';
 import type { MyGuild } from '@raid-ledger/contract';
 import { server } from '../../../test/mocks/server';
 import { useMyGuilds } from './guild-queries';
-import { useGuildPage } from '../guild/use-guild';
+import { useGuildPage } from '../../../components/hub/api/use-guild';
 
 const viewer = vi.hoisted(() => ({ id: 1 }));
 
@@ -26,7 +26,7 @@ const API = 'http://localhost:3000/plugins/wow/guilds';
 
 function guild(id: number, name: string): MyGuild {
     return {
-        id, gameId: 7, name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
+        id, gameId: 7, kind: 'wow_guild', name, region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde',
         memberCount: 3, lastSnapshotAt: null, rankIndex: 2, rankName: 'Raider', canEdit: false, gmPostHeadline: null,
     };
 }

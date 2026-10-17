@@ -12,9 +12,8 @@ import { Input } from '../../../components/ui/input';
 import { RadioGroup } from '../../../components/ui/radio-group';
 import { Select } from '../../../components/ui/select';
 import { previewAddonUrl } from './addon-url';
-import type { AddonDetails } from './addon-view';
-import { Pill } from './guild-bits';
-import { FLAVOR_LABEL, SOURCE_LABEL } from './guild-content.helpers';
+import { FLAVOR_LABEL, SOURCE_LABEL, type AddonDetails } from './addon-view';
+import { Pill } from '../../../components/hub/hub-bits';
 
 const REQUIRED_OPTIONS = [
     { value: 'required', label: 'Required' },

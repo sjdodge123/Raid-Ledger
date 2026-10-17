@@ -16,21 +16,21 @@ import * as schema from '../../../drizzle/schema';
 import {
   GuildAccessService,
   isStaff,
+  viewerAccess,
   type GuildActor,
-} from './guild-access.service';
+} from '../../../guilds/guild-access.service';
 import {
   findLinkedMemberRows,
-  toGuildSummary,
   type LinkedMemberRow,
 } from './guild-membership.helpers';
+import { findGuild, toGuildSummary } from '../../../guilds/guild-core.queries';
 import {
   findCharacterGuild,
-  findGuild,
   findImportedBy,
   listGuildsOfGame,
   rankNamesByMemberId,
 } from './guild-queries.helpers';
-import { gmPostHeadlines } from './guild-profile.queries';
+import { gmPostHeadlines } from '../../../guilds/guild-profile.queries';
 import { computeRoleCounts } from './guild-role-counts.helpers';
 import { groupRoster, loadRosterRows } from './guild-roster.helpers';
 
@@ -79,16 +79,15 @@ export class GuildPageService {
     }
     const guild = await findGuild(this.db, guildId);
     if (!guild) throw new NotFoundException('Guild not found');
-    const [rows, importedBy, canEdit, canManageEditors] = await Promise.all([
+    const [rows, importedBy, role] = await Promise.all([
       loadRosterRows(this.db, guildId),
       findImportedBy(this.db, guildId),
-      this.access.canEdit(actor, guildId),
-      this.access.canManageEditors(actor, guildId),
+      this.access.resolveLadder(actor, guildId),
     ]);
     return {
       guild: toGuildSummary(guild),
       importedBy,
-      viewer: { canEdit, canManageEditors },
+      viewer: viewerAccess(role),
       ranks: groupRoster(rows),
       roleCounts: computeRoleCounts(rows),
     };

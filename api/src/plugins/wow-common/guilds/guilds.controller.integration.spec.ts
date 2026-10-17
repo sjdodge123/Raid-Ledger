@@ -137,11 +137,11 @@ beforeAll(async () => {
 
 describe('GET /:id — view matrix', () => {
   it.each([
-    ['gm', { canEdit: false, canManageEditors: false }],
-    ['officer', { canEdit: true, canManageEditors: false }],
-    ['deleg', { canEdit: true, canManageEditors: false }],
-    ['plain', { canEdit: false, canManageEditors: false }],
-    ['admin', { canEdit: true, canManageEditors: true }],
+    ['gm', { role: 'member', canEdit: false, canManageEditors: false }],
+    ['officer', { role: 'officer', canEdit: true, canManageEditors: false }],
+    ['deleg', { role: 'officer', canEdit: true, canManageEditors: false }],
+    ['plain', { role: 'member', canEdit: false, canManageEditors: false }],
+    ['admin', { role: 'leader', canEdit: true, canManageEditors: true }],
   ] as const)('%s → 200 with viewer %o', async (who, viewer) => {
     const res = await get(`/${guildId}`, who);
     expect(res.status).toBe(200);
@@ -251,7 +251,11 @@ describe('editors endpoints — manage matrix', () => {
       .send({ kind: 'member', guildMemberId: memberIds.gm });
     expect(created.status).toBe(201);
     const res = await get(`/${guildId}`, 'gm');
-    expect(res.body.viewer).toEqual({ canEdit: true, canManageEditors: false });
+    expect(res.body.viewer).toEqual({
+      role: 'officer',
+      canEdit: true,
+      canManageEditors: false,
+    });
     await testApp.db
       .delete(schema.guildEditors)
       .where(eq(schema.guildEditors.id, created.body.id as number));

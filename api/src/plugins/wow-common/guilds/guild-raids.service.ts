@@ -13,8 +13,11 @@ import {
 } from '@raid-ledger/contract';
 import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
-import { GuildAccessService, type GuildActor } from './guild-access.service';
-import { findGuild } from './guild-queries.helpers';
+import {
+  GuildAccessService,
+  type GuildActor,
+} from '../../../guilds/guild-access.service';
+import { findGuild } from '../../../guilds/guild-core.queries';
 import {
   ATTENDANCE_WINDOW_WEEKS,
   neededFor,

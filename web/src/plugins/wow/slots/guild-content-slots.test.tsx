@@ -18,7 +18,7 @@ vi.mock('../../../hooks/use-auth', async (importOriginal) => ({
 
 const API = 'http://localhost:3000/plugins/wow/guilds';
 const CHAR_ID = '5b3c6f3e-1d2a-4c9b-9a51-2f8e7d6c5b4a';
-const SUMMARY = { id: 11, gameId: 7, name: 'Iron Vanguard', region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde', memberCount: 12, lastSnapshotAt: null };
+const SUMMARY = { id: 11, gameId: 7, kind: 'wow_guild' as const, name: 'Iron Vanguard', region: 'us', realmSlug: 'whitemane', realmName: null, faction: 'horde', memberCount: 12, lastSnapshotAt: null };
 
 function mine(gmPostHeadline: string | null): MyGuild {
     return { ...SUMMARY, rankIndex: 2, rankName: 'Raider', canEdit: false, gmPostHeadline };

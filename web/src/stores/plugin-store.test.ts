@@ -57,6 +57,7 @@ beforeEach(() => {
         usePluginStore.setState({
             activeSlugs: new Set<string>(),
             initialized: false,
+            settled: false,
         });
     });
 

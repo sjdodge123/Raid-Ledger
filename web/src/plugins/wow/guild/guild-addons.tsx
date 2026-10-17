@@ -1,8 +1,11 @@
 /**
- * ROK-1786 — "Recommended addons" (prototype `RecommendedAddons.tsx`):
+ * ROK-1786/ROK-1830 — "Recommended addons" (prototype `RecommendedAddons.tsx`):
  * pinned rows first (from the setting, never editable), then the guild's own
  * list, filtered by flavor. Editors add by pasting a link, edit, remove and
  * reorder (the full id list is PUT back).
+ *
+ * Addon flavors are a WoW concept, so the panel lives in this plugin and is
+ * contributed to core's Resources tab through `HubModule.resourceSections`.
  */
 import { useState, type JSX } from 'react';
 import type { GuildAddonList } from '@raid-ledger/contract';
@@ -12,8 +15,9 @@ import { AddonRow, type RowActions } from './addon-row';
 import {
     guildAddonMatches, guildAddonView, pinnedAddonView, pinnedMatches, reorderedIds, type FlavorFilter,
 } from './addon-view';
-import { SectionTitle } from './guild-bits';
-import { useGuildAddonMutations } from './use-guild-content';
+import { SectionTitle } from '../../../components/hub/hub-bits';
+import { useGuildAddonMutations, useGuildAddons } from '../../../components/hub/api/use-guild-content';
+import type { HubResourceCtx } from '../../hub-module';
 
 const FILTER_OPTIONS = [
     { value: 'any', label: 'All' },
@@ -42,7 +46,27 @@ function useAddonActions(guildId: number, list: GuildAddonList, visible: Readonl
     return { actions, add, adding: m.add.isPending, addFailure: m.add.error?.message ?? null, listError };
 }
 
-export function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
+/**
+ * The Resources-tab section. Core no longer runs this query, so pending and
+ * failed are answered here: a bare `null` conflated them and took the whole
+ * panel (an editor's Add form included) away with nothing said.
+ */
+export function GuildAddonsSection({ guildId, canEdit }: HubResourceCtx): JSX.Element {
+    const addons = useGuildAddons(guildId);
+    if (addons.error) {
+        return (
+            <p className="py-8 text-center text-sm text-muted" data-testid="guild-addons-load-error">
+                We couldn&apos;t load this guild&apos;s recommended addons. Try again in a moment.
+            </p>
+        );
+    }
+    if (!addons.data) {
+        return <div className="h-20 animate-pulse rounded-lg border border-edge bg-surface" aria-busy="true" data-testid="guild-addons-loading" />;
+    }
+    return <GuildAddons guildId={guildId} list={addons.data} canEdit={canEdit} />;
+}
+
+function GuildAddons({ guildId, list, canEdit }: { guildId: number; list: GuildAddonList; canEdit: boolean }): JSX.Element {
     const [filter, setFilter] = useState<FlavorFilter>('any');
     const visible = list.addons.filter((a) => guildAddonMatches(a, filter));
     const { actions, add, adding, addFailure, listError } = useAddonActions(guildId, list, new Set(visible.map((a) => a.id)));

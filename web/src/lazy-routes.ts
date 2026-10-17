@@ -76,7 +76,7 @@ export const CharacterDetailPage = lazyWithRetry(() =>
 );
 /** ROK-1785: WoW-plugin-owned guild page (no plugin route host exists, so it mounts here). */
 export const GuildPage = lazyWithRetry(() =>
-    import('./plugins/wow/guild/guild-page').then((m) => ({ default: m.GuildPage })),
+    import('./components/hub/hub-page').then((m) => ({ default: m.GuildPage })),
 );
 export const PlayersPage = lazyWithRetry(() =>
     import('./pages/players-page').then((m) => ({ default: m.PlayersPage })),

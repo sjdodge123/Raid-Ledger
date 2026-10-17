@@ -10,7 +10,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { AddonDetailFields } from './addon-form';
 import type { AddonDetails, AddonView } from './addon-view';
-import { Pill } from './guild-bits';
+import { Pill } from '../../../components/hub/hub-bits';
 
 /** Per-call outcome of a row save; the editor closes only on success. */
 export interface SaveCallbacks { onSuccess: () => void; onError: (error: Error) => void }

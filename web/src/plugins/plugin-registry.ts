@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { CharacterIdentityProvider } from './character-identity';
 import type { CalendarLayer, CalendarLayerRegistration } from './calendar-layer';
+import type { HubModule, HubModuleRegistration } from './hub-module';
 import { addGameServerProvider, clearGameServerProviders } from './game-server-status';
 
 /** All plugin slot names — each corresponds to a page location */
@@ -67,6 +68,8 @@ export interface PluginHandle {
     registerCalendarLayer(layer: CalendarLayer): void;
     /** Declare that this plugin feeds `GET /game-servers/status` — core asks for statuses only while it is active (ROK-1776). */
     registerGameServerProvider(): void;
+    /** Register this plugin's hub module — the tabs, widgets, member columns and hero pills for one `kind` (ROK-1830). */
+    registerHubModule(module: HubModule): void;
 }
 
 /** A character-identity provider and the plugin that owns it — filtered by active plugin like a slot. */
@@ -86,6 +89,9 @@ const identityRegistry = new Map<string, CharacterIdentityRegistration>();
 
 /** Calendar layers keyed by `layer.key` — re-registering a key replaces it (HMR) */
 const layerRegistry = new Map<string, CalendarLayerRegistration>();
+
+/** Hub modules keyed by `module.kind` — re-registering a kind replaces it (HMR) */
+const hubModuleRegistry = new Map<string, HubModuleRegistration>();
 
 /** Set by the first `useCalendarLayers` render: its hook order depends on this list staying fixed. */
 let layersFrozen = false;
@@ -139,6 +145,9 @@ export function registerPlugin(slug: string, badge: PluginBadgeMeta): PluginHand
         registerGameServerProvider() {
             addGameServerProvider(slug);
         },
+        registerHubModule(module) {
+            hubModuleRegistry.set(module.kind, { pluginSlug: slug, module });
+        },
     };
 }
 
@@ -155,6 +164,11 @@ export function getCharacterIdentityRegistrations(): readonly CharacterIdentityR
 /** Every calendar layer in registration order, regardless of plugin status — callers filter by active plugin. */
 export function getCalendarLayerRegistrations(): readonly CalendarLayerRegistration[] {
     return [...layerRegistry.values()];
+}
+
+/** Every hub module (one per kind), regardless of plugin status — callers filter by active plugin. */
+export function getHubModuleRegistrations(): readonly HubModuleRegistration[] {
+    return [...hubModuleRegistry.values()];
 }
 
 export function getPluginBadge(slug: string): PluginBadgeMeta | undefined {
@@ -188,6 +202,7 @@ export function clearRegistry(): void {
     badgeRegistry.clear();
     identityRegistry.clear();
     layerRegistry.clear();
+    hubModuleRegistry.clear();
     layersFrozen = false;
     clearGameServerProviders();
 }

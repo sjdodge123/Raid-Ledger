@@ -5,26 +5,14 @@ import * as schema from '../../../drizzle/schema';
 import {
   inLatestSnapshot,
   sameRegionOrUnknown,
-  toGuildSummary,
 } from './guild-membership.helpers';
+import { toGuildSummary } from '../../../guilds/guild-core.queries';
 
 /** ROK-1785 — read queries behind the guild endpoints (no access logic). */
 
 type Db = PostgresJsDatabase<typeof schema>;
 
 const { guilds, guildMembers, characters, users } = schema;
-
-export async function findGuild(
-  db: Db,
-  guildId: number,
-): Promise<schema.GuildSelect | null> {
-  const [row] = await db
-    .select()
-    .from(guilds)
-    .where(eq(guilds.id, guildId))
-    .limit(1);
-  return row ?? null;
-}
 
 /** Username of whoever captured the latest snapshot's rows, if known. */
 export async function findImportedBy(

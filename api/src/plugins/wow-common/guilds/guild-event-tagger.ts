@@ -10,7 +10,10 @@ import { DrizzleAsyncProvider } from '../../../drizzle/drizzle.module';
 import * as schema from '../../../drizzle/schema';
 import type { EventGuildTagger } from '../../plugin-host/extension-points';
 import { WOW_COMMON_MANIFEST } from '../manifest';
-import { GuildAccessService, type GuildActor } from './guild-access.service';
+import {
+  GuildAccessService,
+  type GuildActor,
+} from '../../../guilds/guild-access.service';
 
 /**
  * ROK-1787 P2: the WoW answer to "may this actor tag an event to this guild?".

@@ -1,6 +1,5 @@
 import { and, eq, gte, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
-import type { GuildSummary } from '@raid-ledger/contract';
 import * as schema from '../../../drizzle/schema';
 
 /**
@@ -88,17 +87,23 @@ export async function findLinkedMemberRows(
     );
 }
 
-/** Row shape → contract `GuildSummary` (ISO timestamps). */
-export function toGuildSummary(row: schema.GuildSelect): GuildSummary {
-  return {
-    id: row.id,
-    gameId: row.gameId,
-    name: row.name,
-    region: row.region,
-    realmSlug: row.realmSlug,
-    realmName: row.rawRealm,
-    faction: row.faction,
-    memberCount: row.memberCount,
-    lastSnapshotAt: row.lastSnapshotAt?.toISOString() ?? null,
-  };
+/** Is this member row in the guild's latest snapshot? */
+export async function isLiveMemberOf(
+  db: Db,
+  guildId: number,
+  memberId: number,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: guildMembers.id })
+    .from(guildMembers)
+    .innerJoin(guilds, eq(guilds.id, guildMembers.guildId))
+    .where(
+      and(
+        eq(guildMembers.id, memberId),
+        eq(guildMembers.guildId, guildId),
+        inLatestSnapshot(),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
 }

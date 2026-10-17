@@ -10,9 +10,27 @@ import { CharacterRoleSchema } from './characters.schema.js';
 const id = z.number().int().positive();
 const isoDate = z.iso.datetime({ offset: true });
 
+/**
+ * ROK-1830 — what kind of group a hub is. Every row today is a WoW guild
+ * (`guilds.kind` defaults to `wow_guild`); `game_server` arrives with ROK-1831.
+ */
+export const GUILD_KINDS = ['wow_guild', 'game_server'] as const;
+export const GuildKindSchema = z.enum(GUILD_KINDS);
+export type GuildKind = z.infer<typeof GuildKindSchema>;
+
+/**
+ * ROK-1830 D5-A — the hub permission ladder, highest first. `canEdit` is
+ * leader|officer and `canManageEditors` is leader; both stay on the viewer
+ * object so existing clients keep working.
+ */
+export const LADDER_ROLES = ['leader', 'officer', 'member', 'visitor'] as const;
+export const LadderRoleSchema = z.enum(LADDER_ROLES);
+export type LadderRole = z.infer<typeof LadderRoleSchema>;
+
 /** What the viewer may do on one guild (computed live per request). */
 export const GuildViewerAccessSchema = z
   .object({
+    role: LadderRoleSchema,
     canEdit: z.boolean(),
     canManageEditors: z.boolean(),
   })
@@ -24,6 +42,7 @@ export const GuildSummarySchema = z
   .object({
     id,
     gameId: id,
+    kind: GuildKindSchema,
     name: z.string(),
     region: z.string(),
     realmSlug: z.string().nullable(),

@@ -7,6 +7,7 @@ import {
   timestamp,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { games } from './games';
@@ -26,6 +27,13 @@ export const guilds = pgTable(
     id: serial('id').primaryKey(),
     gameId: integer('game_id')
       .references(() => games.id, { onDelete: 'cascade' })
+      .notNull(),
+    /**
+     * ROK-1830: which hub kind this group is (mirrors contract `GUILD_KINDS`).
+     * Every insert path today is WoW, so the default stays (spec Q5).
+     */
+    kind: varchar('kind', { length: 20, enum: ['wow_guild', 'game_server'] })
+      .default('wow_guild')
       .notNull(),
     region: varchar('region', { length: 10 }).notNull(),
     name: varchar('name', { length: 64 }).notNull(),
@@ -55,6 +63,10 @@ export const guilds = pgTable(
       .where(sql`${table.realmSlug} IS NULL`),
     // ROK-1157: FK backing index — the partial unique above does not count.
     index('idx_guilds_game_id').on(table.gameId),
+    check(
+      'guilds_kind_check',
+      sql`${table.kind} IN ('wow_guild', 'game_server')`,
+    ),
   ],
 );
 
