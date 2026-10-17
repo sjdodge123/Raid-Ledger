@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, type ReactNode } from 'react';
 import { http, HttpResponse } from 'msw';
@@ -7,6 +7,7 @@ import { server } from '../test/mocks/server';
 import { fetchCurrentUser, getAuthToken, setAuthToken, useAuth } from './use-auth';
 import { startMagicLinkRedeem } from '../lib/magic-link-redeem';
 import { getAccessToken } from '../lib/api/access-token-store';
+import { dropViewerPrivateCaches } from './viewer-private-caches';
 
 
 describe('setAuthToken / getAuthToken', () => {
@@ -134,8 +135,14 @@ describe('ROK-1366: fetchCurrentUser awaits a pending magic-link redeem', () => 
  * every identity change must drop it or the next viewer on this browser sees
  * the previous viewer's link.
  */
-describe('useAuth identity change — drops viewer-private calendar caches (ROK-1599)', () => {
-    const OVERVIEW = ['calendars', 'overview'];
+/** ROK-1599 + ROK-1811: an identity change empties every viewer-private cache, not an allow-list. */
+describe('useAuth identity change — clears the whole query cache (ROK-1599, ROK-1811)', () => {
+    const PRIVATE_KEYS = [
+        ['calendars', 'overview'],
+        ['notifications', 20, 0],
+        ['notifications', 'unread-count'],
+        ['me', 'characters', 1],
+    ];
     const userA = { id: 1, username: 'A', discordId: '1', displayName: null, avatar: null, customAvatarUrl: null, onboardingCompletedAt: null };
     const userB = { ...userA, id: 2, username: 'B', discordId: '2' };
     let queryClient: QueryClient;
@@ -144,7 +151,7 @@ describe('useAuth identity change — drops viewer-private calendar caches (ROK-
     beforeEach(() => {
         localStorage.clear();
         queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-        queryClient.setQueryData(OVERVIEW, { feed: { url: 'https://x/api/cal/u/user-a-token.ics' } });
+        for (const key of PRIVATE_KEYS) queryClient.setQueryData(key, { ownedBy: userA.id });
         server.use(
             http.post('http://localhost:3000/auth/refresh', () => new HttpResponse(null, { status: 401 })),
             http.post('http://localhost:3000/auth/logout', () => new HttpResponse(null, { status: 204 })),
@@ -154,16 +161,76 @@ describe('useAuth identity change — drops viewer-private calendar caches (ROK-
 
     afterEach(() => { localStorage.clear(); });
 
-    it('logout removes the cached overview (and its feed link)', () => {
+    it('logout removes the previous viewer\'s notifications, characters and overview, and signs out', () => {
         queryClient.setQueryData(['auth', 'me'], userA);
         const { result } = renderHook(() => useAuth(), { wrapper });
         act(() => { result.current.logout(); });
-        expect(queryClient.getQueryData(OVERVIEW)).toBeUndefined();
+        expect(PRIVATE_KEYS.map((key) => queryClient.getQueryData(key))).toEqual(PRIVATE_KEYS.map(() => undefined));
+        expect(queryClient.getQueryData(['auth', 'me'])).toBeNull();
     });
 
-    it('login as another user removes the previous viewer overview', async () => {
+    it('login as another user removes the previous viewer\'s caches and seeds the new identity', async () => {
+        queryClient.setQueryData(['auth', 'me'], userA);
         const { result } = renderHook(() => useAuth(), { wrapper });
         await act(async () => { await result.current.login('user-b-jwt'); });
-        expect(queryClient.getQueryData(OVERVIEW)).toBeUndefined();
+        expect(PRIVATE_KEYS.map((key) => queryClient.getQueryData(key))).toEqual(PRIVATE_KEYS.map(() => undefined));
+        expect(queryClient.getQueryData(['auth', 'me'])).toEqual(userB);
+    });
+});
+
+/**
+ * ROK-1811 (Codex P1): the drop must keep the LIVE `['auth','me']` Query, not
+ * just its payload — mounted `useAuth()` observers are attached to it, so a
+ * later sign-out (a cross-tab logout seeding null) has to reach the hook.
+ */
+describe('useAuth through an identity drop (ROK-1811)', () => {
+    const API = 'http://localhost:3000';
+    const PRIVATE_KEYS = [['notifications', 20, 0], ['me', 'characters', 1], ['calendars', 'overview']];
+    const userA = { id: 1, username: 'A', discordId: '1', displayName: null, avatar: null, customAvatarUrl: null, steamId: null, onboardingCompletedAt: null };
+    let queryClient: QueryClient;
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(QueryClientProvider, { client: queryClient }, children);
+    const privateData = () => PRIVATE_KEYS.map((key) => queryClient.getQueryData(key));
+
+    beforeEach(() => {
+        localStorage.clear();
+        queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+        for (const key of PRIVATE_KEYS) queryClient.setQueryData(key, { ownedBy: userA.id });
+    });
+    afterEach(() => { localStorage.clear(); setAuthToken(''); });
+
+    // React Query notifies observers on a macrotask, hence waitFor (the old
+    // clear+restore never notifies: waitFor then fails on this assertion).
+    it('a sign-out seeded after the drop reaches the mounted hook', async () => {
+        queryClient.setQueryData(['auth', 'me'], userA);
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        expect(result.current.user).toEqual(userA);
+        act(() => { dropViewerPrivateCaches(queryClient); });
+        act(() => { queryClient.setQueryData(['auth', 'me'], null); });
+        await waitFor(() => { expect(result.current.user).toBeNull(); });
+        expect(privateData()).toEqual(PRIVATE_KEYS.map(() => undefined));
+    });
+
+    it('a rejected re-mint after exiting impersonation drops the target user\'s caches and signs out', async () => {
+        queryClient.setQueryData(['auth', 'me'], userA);
+        server.use(
+            http.post(`${API}/auth/impersonate/exit`, () => new HttpResponse(null, { status: 204 })),
+            http.post(`${API}/auth/refresh`, () => new HttpResponse(null, { status: 401 })),
+        );
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        await act(async () => { await result.current.exitImpersonation(); });
+        expect(privateData()).toEqual(PRIVATE_KEYS.map(() => undefined));
+        await waitFor(() => { expect(result.current.user).toBeNull(); });
+    });
+
+    it('session expiry (refresh rejected) drops the previous viewer\'s caches', async () => {
+        setAuthToken('expired.jwt');
+        server.use(
+            http.get(`${API}/auth/me`, () => HttpResponse.json({}, { status: 401 })),
+            http.post(`${API}/auth/refresh`, () => new HttpResponse(null, { status: 401 })),
+        );
+        const { result } = renderHook(() => useAuth(), { wrapper });
+        await waitFor(() => { expect(result.current.isLoading).toBe(false); });
+        expect(result.current.user).toBeNull();
+        expect(privateData()).toEqual(PRIVATE_KEYS.map(() => undefined));
     });
 });

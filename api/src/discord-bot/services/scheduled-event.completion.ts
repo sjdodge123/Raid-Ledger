@@ -38,6 +38,8 @@ export type SECompletionSkipReason =
 export interface SECompletionRun {
   outcomes: SECompletionOutcome[];
   reason?: SECompletionSkipReason;
+  /** Events with no Discord SE whose embed got a `cron-complete` sync (ROK-1818). */
+  embedOnlyEventIds?: number[];
 }
 
 const STATUS_NAMES: Partial<Record<GuildScheduledEventStatus, string>> = {

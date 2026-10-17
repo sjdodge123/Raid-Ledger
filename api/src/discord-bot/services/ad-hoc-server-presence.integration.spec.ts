@@ -15,7 +15,13 @@ import {
   type ServerPresenceSource,
 } from '../../plugins/pelican/presence/server-presence.sink';
 import { AdHocGracePeriodQueueService } from '../queues/ad-hoc-grace-period.queue';
+import {
+  SERVER_PRESENCE_READER,
+  type ServerPresenceReader,
+  type ServerRosterPlayer,
+} from '../../plugins/pelican/presence/server-presence.reader';
 import { AdHocParticipantService } from './ad-hoc-participant.service';
+import { AdHocServerPresenceService } from './ad-hoc-server-presence.service';
 
 const e = schema.events;
 const t = schema.adHocParticipants;
@@ -372,5 +378,56 @@ describe('AdHocServerPresenceService — linked players are signed up (ROK-1802)
     await sink.playerJoined(src, player(STEAM_C));
     const signups = await signupsOf(eventId);
     expect(signups.map((s) => s.userId)).toEqual([adminId]);
+  });
+});
+
+describe('AdHocServerPresenceService — tracker reader resolved through DI (Codex r2 P1)', () => {
+  let reader: ServerPresenceReader;
+  let service: AdHocServerPresenceService;
+  const strict = { strict: false };
+  const tracked = (src: ServerPresenceSource, steamId: string) =>
+    jest
+      .spyOn(reader, 'playersForGame')
+      .mockReturnValue([
+        { ...src, steamId, name: 'Tracked' } satisfies ServerRosterPlayer,
+      ]);
+
+  beforeAll(() => {
+    reader = testApp.app.get<ServerPresenceReader>(
+      SERVER_PRESENCE_READER,
+      strict,
+    );
+    service = testApp.app.get(AdHocServerPresenceService, strict);
+  });
+
+  afterEach(() => jest.mocked(reader.playersForGame).mockRestore());
+
+  // With the old `@Optional() moduleRef: ModuleRef | null` (no @Inject) the
+  // paramtype was `Object`, Nest injected nothing and the reader read as null:
+  // onTrackerEnrol answered false and STEAM_C never got a row.
+  it('the app-resolved service reads the tracker and enrols a tracked player', async () => {
+    const src = source();
+    const eventId = await spawnWithTwo(src);
+    tracked(src, STEAM_C);
+
+    await expect(
+      service.onTrackerEnrol({ eventId, gameId: src.gameId }),
+    ).resolves.toBe(true);
+    const row = (await rowsOf(eventId)).find((r) => r.steamId === STEAM_C);
+    expect(row).toMatchObject({
+      onServer: true,
+      leftAt: null,
+      pelicanServerId: src.pelicanServerId,
+    });
+  });
+
+  it('a player open on another server of the game is not re-attached (Codex r2 P2)', async () => {
+    const src = source();
+    const eventId = await spawnWithTwo(src);
+    tracked(source(), STEAM_A); // the tracker already sees them on a new server
+
+    await service.onTrackerEnrol({ eventId, gameId: src.gameId });
+    const rows = (await rowsOf(eventId)).filter((r) => r.steamId === STEAM_A);
+    expect(rows.map((r) => r.pelicanServerId)).toEqual([src.pelicanServerId]);
   });
 });

@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { PELICAN_SYNC_CODES, type GameServerState, type PelicanSyncResult } from '@raid-ledger/contract';
 import { pelicanServerFixture } from '../../../test/mocks/pelican-handlers';
-import { applyServerPatch, stateChipView, syncToast, type ChipTone } from './pelican-servers.helpers';
+import { applyServerPatch, quickPlayHint, quickPlayPluginToActivate, stateChipView, syncToast, type ChipTone } from './pelican-servers.helpers';
 
 describe('stateChipView', () => {
     const cases: [GameServerState, ChipTone, string][] = [
@@ -55,5 +55,27 @@ describe('applyServerPatch', () => {
     it('a game change takes the picked name; clearing it clears the name', () => {
         expect(applyServerPatch(pelicanServerFixture, { gameId: 9 }, 'Rust')).toMatchObject({ gameId: 9, gameName: 'Rust' });
         expect(applyServerPatch(pelicanServerFixture, { gameId: null })).toMatchObject({ gameId: null, gameName: null });
+    });
+});
+
+describe('quickPlayHint (ROK-1800, ROK-1819)', () => {
+    const valheim = { pluginId: 'valheim', pluginName: 'Valheim' };
+    it('asks for a game first when none is mapped, even with an inactive plugin named', () => {
+        const row = { gameId: null, presenceSupported: false, presencePluginInactive: valheim };
+        expect(quickPlayHint(row)).toBe('Map a game first');
+        expect(quickPlayPluginToActivate(row)).toBeNull();
+    });
+    it('names the plugin to turn on when the game parser is suspended', () => {
+        const row = { gameId: 9, presenceSupported: false, presencePluginInactive: valheim };
+        expect(quickPlayHint(row)).toBe('Turn on the Valheim plugin to detect Quick Play');
+        expect(quickPlayPluginToActivate(row)).toBe('Valheim');
+    });
+    it('says not available when the game has no parser at all', () => {
+        const row = { gameId: 9, presenceSupported: false };
+        expect(quickPlayHint(row)).toBe('Not available for this game yet');
+        expect(quickPlayPluginToActivate(row)).toBeNull();
+    });
+    it('has no hint once the parser is live', () => {
+        expect(quickPlayHint({ gameId: 9, presenceSupported: true })).toBeNull();
     });
 });

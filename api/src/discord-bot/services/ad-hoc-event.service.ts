@@ -32,7 +32,7 @@ import {
   type SpawnClearance,
 } from './ad-hoc-spawn-clearance';
 import { traceGate } from '../listeners/voice-gate-trace';
-import { hasOpenServerPlayers } from './ad-hoc-server-presence.helpers';
+import { graceUnlessOnServer } from './ad-hoc-voice-leave-server.helpers';
 import {
   buildEventKey,
   findEventKeyForMember,
@@ -43,7 +43,6 @@ import {
   handleJoinExisting,
   spawnNewEvent,
   notifyCompleted,
-  startGracePeriod,
   type ActiveAdHocState,
   type AdHocHandlerDeps,
   type VoiceJoinBinding,
@@ -342,17 +341,13 @@ export class AdHocEventService implements OnModuleInit {
       roster.participants,
       roster.activeCount,
     );
-    // ROK-1800: players still on the game server keep the session alive.
-    if (
-      state.memberSet.size === 0 &&
-      !(await hasOpenServerPlayers(this.db, state.eventId))
-    ) {
-      await startGracePeriod(
-        this.getDeps(),
-        state.eventId,
-        event.channelBindingId,
-      );
-    }
+    // ROK-1800/1821: anyone on the game server (rows or tracker) keeps it alive.
+    if (state.memberSet.size > 0) return;
+    await graceUnlessOnServer(this.getDeps(), this.eventEmitter, {
+      eventId: state.eventId,
+      gameId: event.gameId,
+      bindingId: event.channelBindingId,
+    });
   }
 
   private async autoSignupParticipant(

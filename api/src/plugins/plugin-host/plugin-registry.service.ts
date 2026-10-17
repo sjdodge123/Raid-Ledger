@@ -26,6 +26,12 @@ import {
   type AdapterRegistrationOptions,
 } from './plugin-adapter-store';
 
+/** A suspended adapter's owning plugin, named for an admin hint (ROK-1819). */
+export interface SuspendedAdapterOwner {
+  pluginId: string;
+  pluginName: string;
+}
+
 @Injectable()
 export class PluginRegistryService implements OnModuleInit {
   private readonly logger = new Logger(PluginRegistryService.name);
@@ -227,6 +233,22 @@ export class PluginRegistryService implements OnModuleInit {
 
   getAdapter<T>(extensionPoint: string, gameSlug: string): T | undefined {
     return this.store.getAdapter<T>(extensionPoint, gameSlug);
+  }
+
+  /**
+   * The inactive plugin whose adapter would serve `extensionPoint`/`gameSlug`
+   * once activated, or undefined when one is live or none exists (ROK-1819).
+   */
+  getSuspendedAdapterOwner(
+    extensionPoint: string,
+    gameSlug: string,
+  ): SuspendedAdapterOwner | undefined {
+    if (this.store.getAdapter(extensionPoint, gameSlug) !== undefined)
+      return undefined;
+    const pluginId = this.store.findSuspendedOwner(extensionPoint, gameSlug);
+    if (pluginId === undefined) return undefined;
+    const pluginName = this.manifests.get(pluginId)?.name ?? pluginId;
+    return { pluginId, pluginName };
   }
 
   getAdaptersForExtensionPoint<T>(extensionPoint: string): Map<string, T> {

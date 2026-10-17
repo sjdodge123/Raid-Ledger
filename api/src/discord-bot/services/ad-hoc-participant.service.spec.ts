@@ -229,6 +229,33 @@ describe('AdHocParticipantService', () => {
       });
     });
 
+    it('carries source, inVoice and onServer so the web can split voice from server rows (ROK-1821)', async () => {
+      const { rows } = buildRosterRows();
+      const [voiceRow, serverRow] = rows;
+      mockDb.where.mockResolvedValueOnce([
+        { ...voiceRow, source: 'discord', inVoice: true, onServer: false },
+        {
+          ...serverRow,
+          discordUserId: null,
+          steamId: '76561198000000001',
+          source: 'steam',
+          inVoice: false,
+          onServer: true,
+        },
+      ]);
+      const result = await service.getRoster(42);
+      expect(result[0]).toMatchObject({
+        source: 'discord',
+        inVoice: true,
+        onServer: false,
+      });
+      expect(result[1]).toMatchObject({
+        source: 'steam',
+        inVoice: false,
+        onServer: true,
+      });
+    });
+
     it('returns empty array when no participants', async () => {
       mockDb.where.mockResolvedValueOnce([]);
       const result = await service.getRoster(42);

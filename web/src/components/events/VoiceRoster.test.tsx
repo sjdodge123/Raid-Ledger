@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { VoiceRoster } from './VoiceRoster';
+import { ServerGuestRoster, VoiceRoster } from './VoiceRoster';
 import type { AdHocParticipantDto } from '@raid-ledger/contract';
 
 function createParticipant(
@@ -32,19 +32,19 @@ describe('VoiceRoster — Empty state', () => {
   // ── Empty state ─────────────────────────────────────────────────────────────
 
   it('renders heading', () => {
-    render(<VoiceRoster participants={[]} activeCount={0} />);
+    render(<VoiceRoster participants={[]} />);
 
     expect(screen.getByText('Voice Channel Roster')).toBeInTheDocument();
   });
 
   it('shows empty state when no participants', () => {
-    render(<VoiceRoster participants={[]} activeCount={0} />);
+    render(<VoiceRoster participants={[]} />);
 
     expect(screen.getByText('No participants yet')).toBeInTheDocument();
   });
 
   it('does not show "In Channel" or "Left" sections when roster is empty', () => {
-    render(<VoiceRoster participants={[]} activeCount={0} />);
+    render(<VoiceRoster participants={[]} />);
 
     expect(screen.queryByText(/In Channel/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Left/)).not.toBeInTheDocument();
@@ -58,13 +58,13 @@ describe('VoiceRoster — Empty state', () => {
       createParticipant({ id: 'p2', discordUsername: 'Player2', leftAt: '2026-03-01T18:30:00Z', totalDurationSeconds: 1800 }),
     ];
 
-    render(<VoiceRoster participants={participants} activeCount={1} />);
+    render(<VoiceRoster participants={participants} />);
 
     expect(screen.getByText('1 active / 2 total')).toBeInTheDocument();
   });
 
   it('shows 0 active / 0 total for empty roster', () => {
-    render(<VoiceRoster participants={[]} activeCount={0} />);
+    render(<VoiceRoster participants={[]} />);
 
     expect(screen.getByText('0 active / 0 total')).toBeInTheDocument();
   });
@@ -80,7 +80,7 @@ describe('VoiceRoster — Empty state', () => {
       totalDurationSeconds: 1800,
     });
 
-    render(<VoiceRoster participants={[active, left]} activeCount={1} />);
+    render(<VoiceRoster participants={[active, left]} />);
 
     expect(screen.getByText('ActivePlayer')).toBeInTheDocument();
     expect(screen.getByText('LeftPlayer')).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('VoiceRoster — Empty state', () => {
       totalDurationSeconds: 1800,
     });
 
-    render(<VoiceRoster participants={[left]} activeCount={0} />);
+    render(<VoiceRoster participants={[left]} />);
 
     expect(screen.queryByText(/In Channel/)).not.toBeInTheDocument();
     expect(screen.getByText(/Left \(1\)/)).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe('VoiceRoster — Empty state', () => {
   it('does not show "Left" section when all participants are still active', () => {
     const active = createParticipant({ leftAt: null });
 
-    render(<VoiceRoster participants={[active]} activeCount={1} />);
+    render(<VoiceRoster participants={[active]} />);
 
     expect(screen.getByText(/In Channel \(1\)/)).toBeInTheDocument();
     expect(screen.queryByText(/^Left/)).not.toBeInTheDocument();
@@ -121,7 +121,7 @@ describe('VoiceRoster — Guest label', () => {
     });
 
     const { container } = render(
-      <VoiceRoster participants={[withAvatar]} activeCount={1} />,
+      <VoiceRoster participants={[withAvatar]} />,
     );
 
     const img = container.querySelector('img');
@@ -135,7 +135,7 @@ describe('VoiceRoster — Guest label', () => {
       discordUsername: 'NoAvatarUser',
     });
 
-    render(<VoiceRoster participants={[noAvatar]} activeCount={1} />);
+    render(<VoiceRoster participants={[noAvatar]} />);
 
     expect(screen.getByText('N')).toBeInTheDocument();
   });
@@ -146,7 +146,7 @@ describe('VoiceRoster — Guest label', () => {
       discordUsername: 'zen',
     });
 
-    render(<VoiceRoster participants={[noAvatar]} activeCount={1} />);
+    render(<VoiceRoster participants={[noAvatar]} />);
 
     expect(screen.getByText('Z')).toBeInTheDocument();
   });
@@ -156,7 +156,7 @@ describe('VoiceRoster — Guest label', () => {
   it('shows "(guest)" label for participants with no userId (unlinked)', () => {
     const guest = createParticipant({ userId: null, discordUsername: 'GuestUser' });
 
-    render(<VoiceRoster participants={[guest]} activeCount={1} />);
+    render(<VoiceRoster participants={[guest]} />);
 
     expect(screen.getByText('(guest)')).toBeInTheDocument();
   });
@@ -164,7 +164,7 @@ describe('VoiceRoster — Guest label', () => {
   it('does not show "(guest)" for participants with userId', () => {
     const linked = createParticipant({ userId: 99, discordUsername: 'LinkedUser' });
 
-    render(<VoiceRoster participants={[linked]} activeCount={1} />);
+    render(<VoiceRoster participants={[linked]} />);
 
     expect(screen.queryByText('(guest)')).not.toBeInTheDocument();
   });
@@ -174,7 +174,7 @@ describe('VoiceRoster — Guest label', () => {
   it('shows join time for participants', () => {
     const p = createParticipant({ joinedAt: '2026-03-01T18:00:00Z' });
 
-    render(<VoiceRoster participants={[p]} activeCount={1} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.getByText(/joined/)).toBeInTheDocument();
   });
@@ -187,7 +187,7 @@ describe('VoiceRoster — Guest label', () => {
       totalDurationSeconds: 5400, // 1h 30m
     });
 
-    render(<VoiceRoster participants={[withDuration]} activeCount={0} />);
+    render(<VoiceRoster participants={[withDuration]} />);
 
     expect(screen.getByText('1h 30m')).toBeInTheDocument();
   });
@@ -201,7 +201,7 @@ describe('VoiceRoster — Multiple participants', () => {
       totalDurationSeconds: 30,
     });
 
-    render(<VoiceRoster participants={[p]} activeCount={0} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
@@ -212,7 +212,7 @@ describe('VoiceRoster — Multiple participants', () => {
       totalDurationSeconds: 0,
     });
 
-    render(<VoiceRoster participants={[p]} activeCount={0} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.getByText('<1m')).toBeInTheDocument();
   });
@@ -223,7 +223,7 @@ describe('VoiceRoster — Multiple participants', () => {
       totalDurationSeconds: 2700, // 45m
     });
 
-    render(<VoiceRoster participants={[p]} activeCount={0} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.getByText('45m')).toBeInTheDocument();
   });
@@ -234,7 +234,7 @@ describe('VoiceRoster — Multiple participants', () => {
       totalDurationSeconds: 3600, // 1h
     });
 
-    render(<VoiceRoster participants={[p]} activeCount={0} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.getByText('1h')).toBeInTheDocument();
   });
@@ -242,7 +242,7 @@ describe('VoiceRoster — Multiple participants', () => {
   it('does not show duration when totalDurationSeconds is null', () => {
     const p = createParticipant({ totalDurationSeconds: null });
 
-    render(<VoiceRoster participants={[p]} activeCount={1} />);
+    render(<VoiceRoster participants={[p]} />);
 
     expect(screen.queryByText(/<1m/)).not.toBeInTheDocument();
     expect(screen.queryByText(/^\d+m$/)).not.toBeInTheDocument();
@@ -258,7 +258,7 @@ describe('VoiceRoster — Multiple participants', () => {
       createParticipant({ id: 'p3', discordUsername: 'Gamma' }),
     ];
 
-    render(<VoiceRoster participants={participants} activeCount={3} />);
+    render(<VoiceRoster participants={participants} />);
 
     expect(screen.getByText('Alpha')).toBeInTheDocument();
     expect(screen.getByText('Beta')).toBeInTheDocument();
@@ -279,7 +279,7 @@ describe('VoiceRoster — part 4', () => {
     );
 
     expect(() =>
-      render(<VoiceRoster participants={participants} activeCount={0} />),
+      render(<VoiceRoster participants={participants} />),
     ).not.toThrow();
 
     expect(screen.getByText(/Left \(10\)/)).toBeInTheDocument();
@@ -290,7 +290,7 @@ describe('VoiceRoster — part 4', () => {
 describe('VoiceRoster — dead avatar (ROK-1714)', () => {
   it('swaps a broken avatar image for the initial', () => {
     const stale = createParticipant({ discordAvatarHash: 'deadhash', discordUserId: 'd1', discordUsername: 'Halfdead' });
-    const { container } = render(<VoiceRoster participants={[stale]} activeCount={1} />);
+    const { container } = render(<VoiceRoster participants={[stale]} />);
 
     fireEvent.error(container.querySelector('img')!);
 
@@ -299,18 +299,33 @@ describe('VoiceRoster — dead avatar (ROK-1714)', () => {
   });
 });
 
-describe('VoiceRoster — Steam-only participant (ROK-1800)', () => {
+function steamOnlyRow(): AdHocParticipantDto {
+  return createParticipant({
+    userId: null,
+    discordUserId: null,
+    steamId: '76561198000000001',
+    source: 'steam',
+    inVoice: false,
+    discordUsername: 'Ragnhild',
+    discordAvatarHash: 'abc123',
+  });
+}
+
+describe('VoiceRoster — Steam-only participant (ROK-1800, ROK-1821)', () => {
+  it('keeps a steam-only server row out of the voice panel', () => {
+    render(<VoiceRoster participants={[steamOnlyRow()]} />);
+    expect(screen.queryByText('Ragnhild'), 'steam-only row must not be listed as voice').toBeNull();
+    expect(screen.getByText('No participants yet')).toBeInTheDocument();
+  });
+});
+
+describe('ServerGuestRoster — Steam-only participant (ROK-1800, ROK-1821)', () => {
   it('renders the character name with initials, never a Discord CDN url for a null id', () => {
-    const steam = createParticipant({
-      userId: null,
-      discordUserId: null,
-      steamId: '76561198000000001',
-      source: 'steam',
-      discordUsername: 'Ragnhild',
-      discordAvatarHash: 'abc123',
-    });
-    const { container } = render(<VoiceRoster participants={[steam]} activeCount={1} />);
+    const { container } = render(<ServerGuestRoster participants={[steamOnlyRow()]} />);
+    expect(screen.getByText(/On the game server \(1\)/)).toBeInTheDocument();
     expect(screen.getByText('Ragnhild')).toBeInTheDocument();
+    expect(screen.queryByText('R'), 'initial fallback without a Discord id').not.toBeNull();
     expect(container.querySelector('img'), 'no avatar img without a Discord id').toBeNull();
+    expect(container.innerHTML, 'no Discord CDN url for a null id').not.toContain('cdn.discordapp.com');
   });
 });

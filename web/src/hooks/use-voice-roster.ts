@@ -37,6 +37,16 @@ async function fetchInitialRoster(
   }
 }
 
+/**
+ * ROK-1821 (Codex r4): a linked server player is shown only through the
+ * signup roster, never the voice panel — so a roster change refetches the
+ * event's signups, or a viewer already on the page would not see the join.
+ */
+function invalidateSignupRoster(queryClient: ReturnType<typeof useQueryClient>, eventId: number): void {
+  void queryClient.invalidateQueries({ queryKey: ['events', eventId, 'detail'], exact: true });
+  void queryClient.invalidateQueries({ queryKey: ['events', eventId, 'roster'], exact: true });
+}
+
 function bindSocketEvents(
   socket: Socket,
   eventId: number,
@@ -47,6 +57,7 @@ function bindSocketEvents(
   socket.on('disconnect', () => setState((prev) => ({ ...prev, connected: false })));
   socket.on('roster:update', (data: { participants: AdHocParticipantDto[]; activeCount: number }) => {
     setState((prev) => ({ ...prev, participants: data.participants, activeCount: data.activeCount }));
+    invalidateSignupRoster(queryClient, eventId);
   });
   socket.on('event:status', (data: { status: 'live' | 'grace_period' | 'ended' }) => {
     setState((prev) => ({ ...prev, status: data.status }));

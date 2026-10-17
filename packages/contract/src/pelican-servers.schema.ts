@@ -55,6 +55,14 @@ export type PelicanSyncResult = z.infer<typeof PelicanSyncResultSchema>;
 
 const isoOrNull = z.iso.datetime({ offset: true }).nullable();
 
+/** A plugin named in an admin hint: its id and display name (ROK-1819). */
+export const PelicanPresencePluginRefSchema = z
+  .object({ pluginId: z.string().min(1), pluginName: z.string().min(1) })
+  .strict();
+export type PelicanPresencePluginRef = z.infer<
+  typeof PelicanPresencePluginRefSchema
+>;
+
 /**
  * One row of `GET /admin/plugins/pelican/servers`. `.strict()` so a leaked
  * `panelUuid` / `identifier` fails the server's own response parse — no
@@ -73,6 +81,12 @@ export const PelicanServerRowSchema = z
     presenceTracking: z.boolean(),
     /** The mapped game has an active `game-log-parser` adapter — the switch can be turned on. */
     presenceSupported: z.boolean(),
+    /**
+     * The game has a log parser, but the plugin that owns it is inactive
+     * (ROK-1819) — the admin activates that plugin to enable the switch.
+     * Absent when the parser is live or the game has none.
+     */
+    presencePluginInactive: PelicanPresencePluginRefSchema.optional(),
     lastSyncedAt: isoOrNull,
     statusCheckedAt: isoOrNull,
     /** The last complete listing did not include this server. */

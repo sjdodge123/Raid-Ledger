@@ -28,7 +28,7 @@ export interface ScheduledEventRecord {
  * Both are zone-less UTC wall clocks, so every compare below goes through
  * `utcWallClock` / `NOW_UTC` and every read through `utcIsoText`.
  */
-const effectiveEnd = (): SQL =>
+export const effectiveEnd = (): SQL =>
   sql`COALESCE(${schema.events.extendedUntil}, upper(${schema.events.duration}))`;
 
 export async function findStartCandidates(

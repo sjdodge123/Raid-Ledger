@@ -368,3 +368,27 @@ describe('nodeWingsSocketFactory (real local upgrade, no Wings)', () => {
     }
   });
 });
+
+describe('PelicanConsoleSocket frame normalisation + re-auth log (ROK-1821)', () => {
+  it('delivers each line of a multi-line, ANSI-coloured live frame separately', async () => {
+    const t = setup();
+    t.conn.start();
+    await connected(t);
+    t.frame(0, 'console output', ['\u001b[32mone\u001b[0m \rtwo\r\n']);
+    expect(t.onLine.mock.calls).toEqual([['one'], ['two']]);
+  });
+
+  it('logs a token refresh as a re-auth with the live frame count', async () => {
+    const log = jest.spyOn(Logger.prototype, 'log');
+    const t = setup();
+    t.conn.start();
+    await connected(t);
+    t.frame(0, 'console output', ['a\r\nb']);
+    t.frame(0, 'auth success');
+    const messages = log.mock.calls.map(([m]) => String(m));
+    expect(messages).toContain(
+      'Wings console re-auth: 1 live frames since last auth (2 lines this connection); requested log replay',
+    );
+    expect(t.onReachable).toHaveBeenCalledTimes(2);
+  });
+});
