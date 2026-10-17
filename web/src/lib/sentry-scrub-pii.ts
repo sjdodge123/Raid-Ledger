@@ -12,7 +12,13 @@
  * - Every string loses e-mail addresses, percent-encoded too (`[email]`),
  *   and IPv4/IPv6 literals (`[ip]`). Usernames inside free text cannot be
  *   matched generically.
+ * - ROK-1838: the same walk applies the secret rules
+ *   (`sentry-scrub-secrets.ts`) to every string it visits, so a `?token=` in a
+ *   message, an exception value, `extra`, `contexts` or a breadcrumb is
+ *   filtered at any depth — see `scrubSensitiveString`.
  */
+import { scrubSecretsFromText } from './sentry-scrub-secrets';
+
 export const PII_REDACTED = '[redacted]';
 
 const PII_KEY =
@@ -70,6 +76,11 @@ export function scrubPiiString(value: string): string {
         .replace(IPV4, '[ip]');
 }
 
+/** The one transform every visited string gets: PII rules, then secrets. */
+export function scrubSensitiveString(value: string): string {
+    return scrubSecretsFromText(scrubPiiString(value));
+}
+
 const CIRCULAR = '[circular]';
 const TRUNCATED = '[truncated]';
 type ScrubField = 'request' | 'spans' | 'extra' | 'contexts' | 'breadcrumbs' | 'tags';
@@ -80,8 +91,8 @@ function copyEntries(obj: object, ancestors: Set<object>, depth: number): Record
     const out: Record<string, unknown> = {};
     if (obj instanceof Error) {
         out['name'] = obj.name;
-        out['message'] = scrubPiiString(obj.message);
-        if (typeof obj.stack === 'string') out['stack'] = scrubPiiString(obj.stack);
+        out['message'] = scrubSensitiveString(obj.message);
+        if (typeof obj.stack === 'string') out['stack'] = scrubSensitiveString(obj.stack);
     }
     for (const key of Object.keys(obj)) {
         const raw: unknown = Reflect.get(obj, key);
@@ -97,7 +108,7 @@ function copyEntries(obj: object, ancestors: Set<object>, depth: number): Record
  * to — a frozen one would throw. Cycles and depth are bounded.
  */
 function scrubPiiValue(value: unknown, ancestors: Set<object>, depth: number): unknown {
-    if (typeof value === 'string') return scrubPiiString(value);
+    if (typeof value === 'string') return scrubSensitiveString(value);
     if (!value || typeof value !== 'object' || value instanceof Date) return value;
     if (ancestors.has(value)) return CIRCULAR;
     if (depth > MAX_DEPTH) return TRUNCATED;
@@ -141,18 +152,18 @@ export function scrubPiiEvent<T extends PiiScrubbableEvent>(event: T): T {
     if (target.user) target.user = reduceUser(target.user);
     for (const field of EVENT_FIELDS) replaceField(target, field);
     for (const ex of event.exception?.values ?? []) {
-        if (typeof ex.value === 'string') ex.value = scrubPiiString(ex.value);
+        if (typeof ex.value === 'string') ex.value = scrubSensitiveString(ex.value);
     }
-    if (typeof event.message === 'string') event.message = scrubPiiString(event.message);
+    if (typeof event.message === 'string') event.message = scrubSensitiveString(event.message);
     if (typeof event.transaction === 'string') {
-        event.transaction = scrubPiiString(event.transaction);
+        event.transaction = scrubSensitiveString(event.transaction);
     }
     return event;
 }
 
 /** Breadcrumb hook variant: the message and a scrubbed copy of `data`. */
 export function scrubPiiBreadcrumb<T extends PiiScrubbableBreadcrumb>(crumb: T): T {
-    if (typeof crumb.message === 'string') crumb.message = scrubPiiString(crumb.message);
+    if (typeof crumb.message === 'string') crumb.message = scrubSensitiveString(crumb.message);
     const data = crumb.data;
     if (data === undefined) return crumb;
     const copy = tryCopy(() => copyEntries(data, new Set<object>([data]), 0));
