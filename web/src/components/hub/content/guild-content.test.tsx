@@ -2,6 +2,7 @@
  * ROK-1786 (S2): the GM post on Overview, the Resources tab (rules, links,
  * recommended addons) and when that tab shows.
  */
+import { useEffect } from 'react';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -279,7 +280,7 @@ describe('Resources: the addons section while it loads and when it fails', () =>
         server.use(http.get(`${BASE}/addons`, () => HttpResponse.json({ message: 'nope' }, { status: 500 })));
         renderPage('#resources');
         const failure = await screen.findByTestId('guild-addons-load-error');
-        expect(failure).toHaveTextContent('We couldn’t load this guild’s recommended addons.');
+        expect(failure).toHaveTextContent("We couldn't load this guild's recommended addons. Try again in a moment.");
         expect(screen.queryByLabelText('Addon link'), 'the Add form belongs to a loaded list').toBeNull();
     });
 });
@@ -287,17 +288,41 @@ describe('Resources: the addons section while it loads and when it fails', () =>
 /**
  * ROK-1830 r3 — the probe reports in a LAYOUT effect and its answers are keyed
  * by guild, so a warm cache paints the Resources tab in the same frame.
+ *
+ * Phase-sensitive on purpose: `PaintSpy` is a later sibling whose PASSIVE
+ * effect snapshots the tab labels. A layout-effect probe has already forced
+ * the sync re-render by then, so the snapshot holds Resources; a passive-effect
+ * probe would still be queued and the snapshot would miss it (RTL's `act`
+ * flushes everything afterwards, so a post-render query cannot tell them apart).
  */
+function PaintSpy({ onPaint }: { onPaint: (labels: (string | null)[]) => void }): null {
+    useEffect(() => {
+        const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
+        onPaint(within(nav).getAllByRole('link').map((a) => a.textContent));
+    }, [onPaint]);
+    return null;
+}
+
 describe('Resources tab visibility on a warm cache', () => {
     it('offers Resources on the first render when the addons answer is already cached', async () => {
         serve(false, EMPTY_PROFILE, list);
         const queryClient = createTestQueryClient();
-        const page = <Routes><Route path="/guilds/:id" element={<GuildPage />} /></Routes>;
+        const painted: (string | null)[][] = [];
+        const onPaint = (labels: (string | null)[]): void => { painted.push(labels); };
+        const page = (
+            <Routes>
+                <Route path="/guilds/:id" element={<><GuildPage /><PaintSpy onPaint={onPaint} /></>} />
+            </Routes>
+        );
         const warm = renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
         await waitFor(async () => expect(await tabLabels()).toContain('Resources'));
         warm.unmount();
+        painted.length = 0;
 
         renderWithProviders(page, { initialEntries: ['/guilds/7'], queryClient });
+        const first = painted[0];
+        expect(first, 'the spy must have observed the first passive flush').toBeDefined();
+        expect(first, 'a cached answer must show Resources before the first passive flush').toContain('Resources');
         const nav = screen.getByRole('navigation', { name: 'Guild page sections' });
         const labels = within(nav).getAllByRole('link').map((a) => a.textContent);
         expect(labels, 'a cached answer must not need a second commit to show Resources').toContain('Resources');
