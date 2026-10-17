@@ -40,6 +40,12 @@ export const COMPOSER_OPEN_CUSTOM_ID = "lfgc:open";
  */
 export const COMPOSER_VIEW_CUSTOM_ID = "lfgc:view";
 
+/**
+ * `LFG_COMPOSER_IDS.MINE` — the intro's `My LFGs` (ROK-1660). A press that
+ * answers the clicker privately with their own list.
+ */
+export const COMPOSER_MINE_CUSTOM_ID = "lfgc:mine";
+
 /** Provisioning + the ENABLED handler are a few Discord round-trips. */
 const COMPOSER_READY_MS = 30_000;
 
@@ -151,6 +157,31 @@ export async function assertComposerPinned(run: Run): Promise<void> {
     await failComposerPinned(run);
   }
   await assertViewIsAPress(run);
+  await assertMyLfgsIsUp(run);
+}
+
+/**
+ * ROK-1660 — the intro carries `My LFGs`. Polled for the same reason as
+ * `View games ↗`: an intro posted by an older build is re-edited by the
+ * reconcile that set `Post an LFG`, which the caller has already seen.
+ *
+ * @param run - The board run, after `assertComposerPinned`'s poll passed.
+ */
+async function assertMyLfgsIsUp(run: Run): Promise<void> {
+  try {
+    await pollForCondition(async () => {
+      const seen = await readIntro(run);
+      return seen.ids.includes(COMPOSER_MINE_CUSTOM_ID) ? seen : null;
+    }, COMPOSER_READY_MS);
+  } catch {
+    const last = await readIntro(run).catch(() => null);
+    throw new Error(
+      "ROK-1660: this env's LFG board intro post must carry the " +
+        `"${COMPOSER_MINE_CUSTOM_ID}" press (My LFGs) within ` +
+        `${String(COMPOSER_READY_MS)}ms; last seen ${JSON.stringify(last)} ` +
+        `in forum ${forumId(run)}`,
+    );
+  }
 }
 
 /** The AC1 failure, quoting what the intro looked like last. */
