@@ -21,7 +21,7 @@ import { HubHero } from './hub-hero';
 import { HubOverview } from './hub-overview';
 import { resourcesVisible } from './content/guild-content.helpers';
 import { GuildResources } from './content/guild-resources';
-import { hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
+import { HUB_TAB_HASH_ALIASES, hubTabLabel, hubTabs, visibleHubTabIds, type HubTabEntry } from './hub-tabs';
 import { HubMembers } from './hub-members';
 import { useGuildPage, useGuildRaids } from './api/use-guild';
 import { useGuildProfile } from './api/use-guild-content';
@@ -71,7 +71,7 @@ interface PanelProps {
 
 function ActiveTab({ active, ctx, module: mod }: Omit<PanelProps, 'tabs'>): JSX.Element {
     const { page } = ctx;
-    if (active === 'roster') return <HubMembers ctx={ctx} module={mod} />;
+    if (active === 'members') return <HubMembers ctx={ctx} module={mod} />;
     if (active === 'resources') return <GuildResources guildId={page.guild.id} canEdit={page.viewer.canEdit} module={mod} />;
     const tab = mod?.tabs.find((t) => t.id === active);
     if (tab) return <tab.component {...ctx} />;
@@ -101,7 +101,7 @@ interface FrameProps {
 /** Hero + tab nav + panel. Rendered under `HubResourceVisibility`, so `showResources` is already settled. */
 function HubFrame({ ctx, module: mod, showResources }: FrameProps): JSX.Element {
     const tabs = hubTabs(mod, ctx, showResources);
-    const [active] = useHashTab(visibleHubTabIds(tabs), 'overview');
+    const [active] = useHashTab(visibleHubTabIds(tabs), 'overview', HUB_TAB_HASH_ALIASES);
     return (
         <div className={PAGE}>
             <HubHero ctx={ctx} module={mod} nextRaid={ctx.raids.data?.nextRaid ?? null} />

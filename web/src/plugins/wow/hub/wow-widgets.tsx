@@ -27,11 +27,11 @@ function RankCounts({ page }: HubCtx): JSX.Element {
 }
 
 /** Plain `<a href>`: `useHashTab` follows hashchange, which a router `<Link>` never fires (L3 note). */
-function SeeRosterLink(): JSX.Element {
+function SeeMembersLink(): JSX.Element {
     return (
-        <a href="#roster" data-testid="guild-see-roster"
+        <a href="#members" data-testid="guild-see-members"
             className={`rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}>
-            See roster
+            See members
         </a>
     );
 }
@@ -39,7 +39,7 @@ function SeeRosterLink(): JSX.Element {
 export function WowMembersSummary(ctx: HubCtx): JSX.Element {
     const { page } = ctx;
     return (
-        <WidgetCard id="members-summary" title={`Members · ${page.guild.memberCount}`} action={<SeeRosterLink />}>
+        <WidgetCard id="members-summary" title={`Members · ${page.guild.memberCount}`} action={<SeeMembersLink />}>
             <div className="flex flex-col gap-3" data-testid="guild-members-summary">
                 <RoleSummary counts={page.roleCounts} />
                 <RankCounts {...ctx} />

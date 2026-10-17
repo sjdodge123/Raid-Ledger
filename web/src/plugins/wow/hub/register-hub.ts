@@ -13,8 +13,9 @@ import { WowRoleSummaryBand } from './wow-members';
 import {
     WOW_MEMBERS_EMPTY,
     WOW_MEMBER_COLUMNS,
-    wowMemberGroups,
     wowMemberRowClass,
+    wowMemberRows,
+    wowMemberSearch,
     wowMembersBlurb,
 } from './wow-members.helpers';
 import { WowEditorsWidget, WowMembersSummary, WowRoleCompositionWidget } from './wow-widgets';
@@ -42,7 +43,8 @@ export const wowHubModule: HubModule = {
     ],
     memberColumns: WOW_MEMBER_COLUMNS,
     heroPills: [WowWhereFact, WowFactionPill],
-    memberGroups: wowMemberGroups,
+    memberRows: wowMemberRows,
+    memberSearch: wowMemberSearch,
     membersSummary: WowRoleSummaryBand,
     membersBlurb: wowMembersBlurb,
     membersEmpty: WOW_MEMBERS_EMPTY,

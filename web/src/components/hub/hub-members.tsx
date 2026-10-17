@@ -1,51 +1,72 @@
 /**
- * ROK-1785/ROK-1830 — the Members (Roster) tab frame: a titled card holding
- * the module's summary band and its member groups, each a collapsible list of
- * rows. Core owns the frame and the collapse behaviour; the hub module says
- * how rows group (WoW: by guild rank) and what each row's cells are.
+ * ROK-1785/ROK-1830 — the Members tab frame (D7-A: the tab the page used to
+ * call "Roster"). Core owns the card, the search box, the grouping toggle and
+ * the count line; the hub module says which rows there are, what each column
+ * holds, how rows group and what text the search matches.
+ *
+ * Two shells, one column set: the §4.21 box table from 1024px up, §4.18
+ * stacked cards below it — exactly one is mounted, so a selector never
+ * matches a hidden copy.
  */
-import type { JSX } from 'react';
+import { useState, type JSX } from 'react';
 import type { GuildPage } from '@raid-ledger/contract';
-import type { HubCtx, HubMemberColumn, HubMemberGroup, HubModule } from '../../plugins/hub-module';
-import { ScrollCollapsible } from '../ui/scroll-collapsible';
+import type { HubCtx, HubModule } from '../../plugins/hub-module';
+import { useMediaQuery } from '../../hooks/use-media-query';
+import { DESKTOP_MQ } from '../../lib/breakpoints';
+import { Checkbox } from '../ui/checkbox';
+import { SearchInput } from '../ui/search-input';
 import { Card, SectionTitle } from './hub-bits';
+import { HubMemberCards, HubMemberTable } from './hub-member-table';
+import { bandMembers, filterMembers, groupingColumn, membersCountLine } from './hub-members.helpers';
 
-interface GroupProps {
-    group: HubMemberGroup;
-    columns: readonly HubMemberColumn[];
-    rowClass: ((row: HubMemberGroup['rows'][number]) => string) | undefined;
+interface ToolsProps {
+    query: string;
+    onQuery: (q: string) => void;
+    groupLabel: string | null;
+    grouped: boolean;
+    onGrouped: (on: boolean) => void;
 }
 
-function MemberGroup({ group, columns, rowClass }: GroupProps): JSX.Element {
+/** Search + the module's grouping toggle, wrapping onto two rows on a phone. */
+function MemberTools({ query, onQuery, groupLabel, grouped, onGrouped }: ToolsProps): JSX.Element {
     return (
-        <div data-testid={group.testId}>
-            <ScrollCollapsible title={`${group.label} · ${group.rows.length}`} defaultOpen={group.defaultOpen}
-                className="border-b border-edge py-2 last:border-b-0">
-                <ul aria-label={`${group.label} members`} className="flex flex-col gap-1 text-sm">
-                    {group.rows.map((row) => (
-                        <li key={row.memberId} data-testid="guild-roster-member"
-                            className={`flex flex-wrap items-center gap-x-2 gap-y-1 border-l-2 py-1 pl-2 ${rowClass ? rowClass(row) : 'border-edge-subtle'}`}>
-                            {columns.map((c) => <c.cell key={c.id} row={row} />)}
-                        </li>
-                    ))}
-                </ul>
-            </ScrollCollapsible>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="w-full max-w-xs">
+                <SearchInput value={query} onChange={onQuery} label="Search members" placeholder="Search members" />
+            </div>
+            {groupLabel !== null && (
+                <Checkbox checked={grouped} onChange={(e) => onGrouped(e.target.checked)}
+                    label={`Group by ${groupLabel.toLowerCase()}`} data-testid="guild-members-group-toggle" />
+            )}
         </div>
     );
 }
 
 export function HubMembers({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | undefined }): JSX.Element {
     const page: GuildPage = ctx.page;
-    const groups = (mod?.memberGroups(page) ?? []).filter((g) => g.rows.length > 0);
+    const [query, setQuery] = useState('');
+    const [grouped, setGrouped] = useState(true);
+    const isDesktop = useMediaQuery(DESKTOP_MQ);
+    const columns = mod?.memberColumns ?? [];
+    const allRows = mod?.memberRows(page) ?? [];
+    const rows = filterMembers(allRows, query, mod?.memberSearch);
+    const groupCol = groupingColumn(columns);
+    const bands = bandMembers(rows, grouped ? groupCol?.groupBy : undefined);
     const Summary = mod?.membersSummary;
+    const List = isDesktop ? HubMemberTable : HubMemberCards;
     return (
-        <section id="members" className="scroll-mt-4" data-testid="guild-roster">
+        <section id="members" className="scroll-mt-4" data-testid="guild-members">
             <SectionTitle title="Members" blurb={mod?.membersBlurb?.(page) ?? `${page.guild.memberCount} members`} />
             <Card className="flex flex-col gap-3">
                 {Summary && <Summary {...ctx} />}
-                {groups.length === 0
-                    ? <p className="py-6 text-center text-sm text-muted">{mod?.membersEmpty ?? 'No members yet.'}</p>
-                    : <div>{groups.map((g) => <MemberGroup key={g.key} group={g} columns={mod?.memberColumns ?? []} rowClass={mod?.memberRowClass} />)}</div>}
+                <MemberTools query={query} onQuery={setQuery} grouped={grouped} onGrouped={setGrouped}
+                    groupLabel={groupCol?.header ?? null} />
+                <p className="text-xs text-muted" data-testid="guild-members-count">{membersCountLine(rows.length, allRows.length)}</p>
+                {allRows.length === 0 && <p className="py-6 text-center text-sm text-muted">{mod?.membersEmpty ?? 'No members yet.'}</p>}
+                {allRows.length > 0 && rows.length === 0 && (
+                    <p className="py-6 text-center text-sm text-muted" data-testid="guild-members-no-match">No members match “{query.trim()}”.</p>
+                )}
+                {rows.length > 0 && <List bands={bands} columns={columns} rowClass={mod?.memberRowClass} />}
             </Card>
         </section>
     );
