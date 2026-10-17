@@ -53,7 +53,14 @@ export function isMemberViewer(
   return !!user && !user.deactivatedAt;
 }
 
-export function toPublicSignupUser(user: SignupUserDto): PublicSignupUserDto {
+/**
+ * `discordId` is deliberately not part of the input type: the public shape has
+ * no id key and `publicAvatarUrl` takes no id, so there is nothing to plumb
+ * (ROK-1827).
+ */
+export function toPublicSignupUser(
+  user: Omit<SignupUserDto, 'discordId'>,
+): PublicSignupUserDto {
   return PublicSignupUserSchema.parse({
     id: user.id,
     username: user.username,
@@ -69,7 +76,6 @@ export function toPublicSignup(
 ): PublicSignupResponseDto {
   const user = toPublicSignupUser({
     ...signup.user,
-    discordId: signup.user.discordId || (signup.discordUserId ?? ''),
     avatar: signup.user.avatar ?? signup.discordAvatarHash ?? null,
   });
   return PublicSignupResponseSchema.parse({
