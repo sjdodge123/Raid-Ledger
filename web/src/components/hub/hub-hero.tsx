@@ -37,9 +37,9 @@ function HeroFacts({ ctx, module: mod }: { ctx: HubCtx; module: HubModule | unde
 }
 
 /** Plain `<a href>`, not `NavChip`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
-function NextRaidChip({ raid }: { raid: GuildEventCardDto }): JSX.Element {
+function NextRaidChip({ raid, tab }: { raid: GuildEventCardDto; tab: string }): JSX.Element {
     return (
-        <a href="#raids" className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
+        <a href={`#${tab}`} className={`${NAV_CHIP_CLASS} max-w-full`} data-testid="guild-next-raid">
             <CalendarDaysIcon className="h-4 w-4 shrink-0 text-success" aria-hidden="true" />
             {/* One inline text run, so a narrow screen wraps it as a sentence instead of splitting the count into its own flex column. */}
             <span className="min-w-0">
@@ -58,6 +58,8 @@ interface HubHeroProps {
 
 export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Element {
     const line = mod?.heroNote ? mod.heroNote(ctx) : null;
+    const jumpTab = mod?.eventsJumpTab ?? null;
+    const chip = nextRaid !== null && jumpTab !== null ? <NextRaidChip raid={nextRaid} tab={jumpTab} /> : null;
     return (
         <header data-testid="guild-hero"
             className="mb-4 flex flex-col gap-4 rounded-xl border border-edge bg-panel p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
@@ -68,9 +70,9 @@ export function HubHero({ ctx, module: mod, nextRaid }: HubHeroProps): JSX.Eleme
                     <HeroFacts ctx={ctx} module={mod} />
                 </div>
             </div>
-            {(nextRaid || line) && (
+            {(chip || line) && (
                 <div className="flex flex-col items-start gap-1 lg:items-end">
-                    {nextRaid && <NextRaidChip raid={nextRaid} />}
+                    {chip}
                     {line && <p className="text-xs text-dim">{line}</p>}
                 </div>
             )}

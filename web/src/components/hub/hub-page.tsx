@@ -3,9 +3,8 @@
  * `TabRow` + the active tab. Game-specific tabs, widgets, member columns and
  * hero pills come from the hub module registered for `guild.kind`
  * (`web/src/plugins/hub-module.ts`); core never imports a plugin.
- * S1 shows Overview and Roster; S2 (ROK-1786) adds Resources when it has
- * content or the viewer can edit it; S3 (ROK-1787) adds Raids. Other tabs stay
- * hidden until their story ships (spec Q3). A 403 (not a member) is a friendly empty state.
+ * Resources is core's own tab, shown once it has content or the viewer can
+ * edit it. A 403 (not a member) is a friendly empty state.
  */
 import { useEffect, useRef, type JSX, type ReactNode } from 'react';
 import { useParams } from 'react-router-dom';

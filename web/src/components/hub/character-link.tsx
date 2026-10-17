@@ -5,7 +5,7 @@
  */
 import type { JSX } from 'react';
 import { Link } from 'react-router-dom';
-import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { FOCUS_RING } from '../ui/form-classes';
 
 interface CharacterLinkProps {
     name: string;

@@ -1,14 +1,15 @@
 /**
- * ROK-1787 — small shared bits for the Raids widgets: the in-page jump to the
- * Raids tab and the quiet in-card empty state (design-system §4.5).
+ * ROK-1787/ROK-1830 — small shared bits for the hub's event cards: the in-page
+ * jump to another tab and the quiet in-card empty state (design-system §4.5).
+ * The jump target is the caller's: core never knows a module's tab ids.
  */
 import type { JSX, ReactNode } from 'react';
-import { FOCUS_RING } from '../../../components/ui/form-classes';
+import { FOCUS_RING } from '../ui/form-classes';
 
 /** Plain `<a href>`: `useHashTab` follows hashchange, which a router `<Link>` never fires. */
-export function JumpLink({ testId, children }: { testId: string; children: ReactNode }): JSX.Element {
+export function JumpLink({ testId, href, children }: { testId: string; href: string; children: ReactNode }): JSX.Element {
     return (
-        <a href="#raids" data-testid={testId}
+        <a href={href} data-testid={testId}
             className={`rounded-sm text-sm font-medium text-success underline-offset-2 hover:underline ${FOCUS_RING}`}>
             {children}
         </a>

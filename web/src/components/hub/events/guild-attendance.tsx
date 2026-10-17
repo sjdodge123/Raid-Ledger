@@ -1,11 +1,11 @@
 /** ROK-1787 — attendance leaderboard over the last 8 weeks (prototype `proposed/AttendanceLeaderboard.tsx`). */
 import type { JSX } from 'react';
 import type { GuildRaidsDto, GuildAttendanceRowDto } from '@raid-ledger/contract';
-import { CharacterLink } from '../../../plugins/wow/hub/character-link';
+import { CharacterLink } from '../character-link';
 import { WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
 import { percent } from './guild-raids.helpers';
-import { CardFootnote, QuietEmpty } from '../../../plugins/wow/hub/raids-bits';
+import { CardFootnote, QuietEmpty } from '../card-bits';
 
 function LeaderRow({ row, rank }: { row: GuildAttendanceRowDto; rank: number }): JSX.Element {
     const pct = percent(row.attended, row.of);

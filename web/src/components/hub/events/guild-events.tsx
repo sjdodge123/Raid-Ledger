@@ -11,7 +11,7 @@ import { FOCUS_RING } from '../../ui/form-classes';
 import { Card, Pill, SectionTitle, WidgetCard } from '../hub-bits';
 import { GuildMeter } from './guild-meter';
 import { dateTile, dayLabel, percent, signupLabel, timeRange, whenLabel } from './guild-raids.helpers';
-import { JumpLink, QuietEmpty } from '../../../plugins/wow/hub/raids-bits';
+import { JumpLink, QuietEmpty } from '../card-bits';
 
 const SUBHEAD = 'mb-2 text-xs font-semibold uppercase tracking-wider text-muted';
 const COMPACT_COUNT = 2;
@@ -90,10 +90,18 @@ function EventLists({ raids, compact }: { raids: GuildRaidsDto; compact: boolean
     );
 }
 
-export function GuildEvents({ raids, compact = false }: { raids: GuildRaidsDto; compact?: boolean }): JSX.Element {
+interface GuildEventsProps {
+    raids: GuildRaidsDto;
+    compact?: boolean;
+    /** Tab id the compact card's "All events" jumps to; no value = no jump link. */
+    jumpTab?: string | null;
+}
+
+export function GuildEvents({ raids, compact = false, jumpTab = null }: GuildEventsProps): JSX.Element {
     if (compact) {
+        const action = jumpTab === null ? undefined : <JumpLink testId="guild-all-events" href={`#${jumpTab}`}>All events</JumpLink>;
         return (
-            <WidgetCard id="guild-events" title="Upcoming & recent events" action={<JumpLink testId="guild-all-events">All events</JumpLink>}>
+            <WidgetCard id="guild-events" title="Upcoming & recent events" action={action}>
                 <EventLists raids={raids} compact />
             </WidgetCard>
         );

@@ -39,4 +39,5 @@ export const wowHubModule: HubModule = {
     membersEmpty: WOW_MEMBERS_EMPTY,
     memberRowClass: wowMemberRowClass,
     heroNote: wowHeroNote,
+    eventsJumpTab: 'raids',
 };

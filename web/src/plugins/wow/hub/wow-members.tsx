@@ -6,7 +6,7 @@
 import type { JSX } from 'react';
 import type { HubCtx, HubMemberRow } from '../../hub-module';
 import { Pill } from '../../../components/hub/hub-bits';
-import { CharacterLink } from './character-link';
+import { CharacterLink } from '../../../components/hub/character-link';
 import { CharRoleBadge, RoleSummary } from './role-bits';
 
 function memberFacts(m: HubMemberRow): string {

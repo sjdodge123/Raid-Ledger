@@ -275,7 +275,8 @@ export class WowCommonModule implements OnModuleInit, OnModuleDestroy {
       EVENT_GUILD_TAGGER_KEY,
       this.guildEventTagger,
       { ownerPluginId: WOW_COMMON_MANIFEST.id },
-    ); // ROK-1830: WoW owns the `wow_guild` hub kind (core resolves it by kind).
+    );
+    // ROK-1830: WoW owns the `wow_guild` hub kind (core resolves it by kind).
     this.pluginRegistry.registerAdapter(
       EXTENSION_POINTS.HUB_KIND,
       this.hubKindAdapter.kind,

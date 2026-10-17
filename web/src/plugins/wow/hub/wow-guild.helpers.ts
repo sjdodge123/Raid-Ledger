@@ -19,13 +19,6 @@ export function rankLabel(group: Pick<GuildRankGroup, 'rankIndex' | 'rankName'>)
     return group.rankIndex === null ? 'Unranked' : `Rank ${group.rankIndex}`;
 }
 
-/** Up to two initials for the crest placeholder ("Iron Vanguard" → "IV"). */
-export function crestInitials(name: string): string {
-    const letters = name.split(/\s+/).filter(Boolean).map((w) => w.charAt(0).toUpperCase());
-    return letters.slice(0, 2).join('') || '?';
-}
-
-/** `area-52` → `Area 52`. */
 /** The realm to show: the addon-reported name, else the prettified slug. */
 export function guildRealm(guild: { realmName: string | null; realmSlug: string | null }): string | null {
     return guild.realmName ?? realmLabel(guild.realmSlug);

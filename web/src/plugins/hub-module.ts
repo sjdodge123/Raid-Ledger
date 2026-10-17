@@ -78,6 +78,12 @@ export interface HubModule {
     memberRowClass?: (row: HubMemberRow) => string;
     /** Line under the hero's next-event chip (WoW: the LedgerLink import line). */
     heroNote?: (ctx: HubCtx) => string | null;
+    /**
+     * Tab id the hero's next-event chip and the Overview events widget jump to
+     * (WoW: `raids`). Unset = no jump, so a module without an events tab never
+     * renders a dead chip.
+     */
+    eventsJumpTab?: string;
 }
 
 export interface HubModuleRegistration {
