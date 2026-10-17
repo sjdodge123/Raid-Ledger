@@ -101,8 +101,8 @@ function whoElseSection(): PrivacySection {
         bullets: [
             { key: 'discord', content: <><Lead>Discord</Lead> shows event posts and messages that mention members.</> },
             { key: 'google', requires: 'calendar', content: <><Lead>Google</Lead>: calendar sync, as above.</> },
-            // ROK-1779: PROPOSED wording, pending the operator's sign-off in the PR.
-            { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Passwords, tokens and calendar ids are removed first, and usernames, email addresses and IP addresses are stripped wherever they can be detected. Feedback you send, including any screenshot you attach, also goes to Sentry. Error reports are off unless this site&apos;s admins turn them on, and they can turn them off again.</> },
+            // ROK-1838: reports are on by default; admins opt out with ENABLE_TELEMETRY=false.
+            { key: 'errors', requires: 'telemetry', content: <><Lead>Error reports.</Lead> When something breaks, an error report (and on the web app, a recording of the page with all text and typing hidden) is sent to the Raid Ledger developers&apos; error tracker, Sentry, so they can fix it. Passwords, tokens and calendar ids are removed first, and usernames, email addresses and IP addresses are stripped wherever they can be detected. Feedback you send, including any screenshot you attach, also goes to Sentry. Error reports are on by default, and this site&apos;s admins can turn them off.</> },
             { key: 'ai', requires: 'ai', content: <><Lead>AI suggestions.</Lead> If the admins turn on AI features, members&apos; usernames and gaming stats (not calendar data) are sent to the AI provider they chose to suggest games.</> },
             { key: 'games', content: 'Game databases (IGDB, Steam, IsThereAnyDeal, Blizzard) are asked about games and characters. If you link Steam, your Steam id is used to read your game library.' },
         ],

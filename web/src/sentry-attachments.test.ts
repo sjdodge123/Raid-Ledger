@@ -51,7 +51,7 @@ describe('captureMessageVerified attachments (ROK-1313)', () => {
         expect(Sentry.captureMessage).toHaveBeenCalledWith('[IDEA] nice', { level: 'info' });
     });
 
-    it('sends no attachment when telemetry is off (ROK-1779 opt-in)', async () => {
+    it('sends no attachment when telemetry is off (ROK-1838 opt-out)', async () => {
         const Sentry = await import('@sentry/react');
         const { captureMessageVerified, initSentry } = await import('./sentry');
         initSentry(false);
