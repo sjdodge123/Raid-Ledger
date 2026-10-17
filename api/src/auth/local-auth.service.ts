@@ -21,10 +21,7 @@ import { defined } from '../common/defined.helpers';
 import { ImpersonationSessionService } from './impersonation/impersonation-session.service';
 import { TokenBlocklistService } from './token-blocklist.service';
 import { signAccessToken } from './access-token-mint.helpers';
-import {
-  IMPERSONATION_TTL_MS,
-  secondsUntil,
-} from './impersonation/impersonation-session.helpers';
+import { markerExpiry } from './impersonation/impersonation-session.helpers';
 
 /** The caller of `impersonate` (req.user). */
 export interface ImpersonatingCaller {
@@ -233,23 +230,22 @@ export class LocalAuthService {
     this.logger.log(
       `IMPERSONATION: Admin "${adminUser.username}" (id:${adminUser.id}) -> "${target.username}" (id:${target.id})`,
     );
-    const expiresIn = await this.recordStart(adminUser.id, target.id, familyId);
-    return this.buildImpersonationToken(adminUser, target, expiresIn);
+    const notAfter = await this.recordStart(adminUser.id, target.id, familyId);
+    return this.buildImpersonationToken(adminUser, target, notAfter);
   }
 
-  /** Marker (+audit) or cookie-less audit; returns the token's expiresIn (s). */
+  /** Marker (+audit) or cookie-less audit; returns the token's deadline. */
   private async recordStart(
     adminId: number,
     targetId: number,
     familyId: string | null,
-  ): Promise<number> {
-    const now = new Date();
+  ): Promise<Date> {
     if (!familyId) {
       await this.sessions.auditStart(adminId, targetId, null);
-      return IMPERSONATION_TTL_MS / 1000;
+      return markerExpiry(new Date());
     }
     const marker = await this.sessions.start(familyId, adminId, targetId);
-    return secondsUntil(marker.expiresAt, now);
+    return marker.expiresAt;
   }
 
   private async findImpersonationTarget(targetUserId: number) {
@@ -271,7 +267,7 @@ export class LocalAuthService {
   private async buildImpersonationToken(
     adminUser: { id: number },
     target: typeof users.$inferSelect,
-    expiresInSeconds: number,
+    notAfter: Date,
   ): Promise<ImpersonationStartResult> {
     return {
       access_token: await signAccessToken(
@@ -282,7 +278,7 @@ export class LocalAuthService {
           role: target.role,
           impersonatedBy: adminUser.id,
         },
-        { expiresIn: expiresInSeconds },
+        { notAfter },
       ),
       user: {
         id: target.id,

@@ -1,13 +1,15 @@
 import { API_BASE_URL } from '../config';
 import { RefreshResponseSchema } from '@raid-ledger/contract';
-import { setAccessToken } from './access-token-store';
+import { getAccessToken, setAccessToken } from './access-token-store';
 import { getAuthMethod } from './silent-reauth';
+import { isTokenStale } from './token-expiry';
 import {
   endDeactivatedSession,
   isDeactivatedResponse,
   readErrorCode,
 } from './deactivated-session';
 import { nativeFetch } from './native-fetch';
+import { httpStatusOf } from './api-error';
 
 /**
  * ROK-1353: single-flight access-token refresh.
@@ -53,6 +55,9 @@ const LOCK_NAME = 'rl-refresh';
 
 
 let inFlight: Promise<RefreshOutcome> | null = null;
+
+/** >0 while this tab holds `rl-refresh` for `installSessionExclusively` (ROK-1820). */
+let installDepth = 0;
 
 /**
  * Identity generation (review m1). Impersonation start/exit and a cross-tab
@@ -136,6 +141,10 @@ async function doRefresh(): Promise<RefreshOutcome> {
 }
 
 function sharedRefresh(): Promise<RefreshOutcome> {
+  // A refresh asked for while this tab holds the lock for a session install
+  // would queue behind it forever (the install may be awaiting this very
+  // refresh) — answer indeterminate, which never clears the session.
+  if (installDepth > 0) return Promise.resolve(INDETERMINATE);
   if (!inFlight) {
     inFlight = doRefresh().finally(() => {
       inFlight = null;
@@ -169,4 +178,101 @@ export async function freshRefresh(): Promise<RefreshOutcome> {
   bumpRefreshGeneration();
   if (inFlight) await inFlight;
   return sharedRefresh();
+}
+
+/** Runs `issue`, then bumps the generation — still inside the lock when locked. */
+async function issueThenBump<T>(issue: () => Promise<T>): Promise<T> {
+  try {
+    return await issue();
+  } finally {
+    bumpRefreshGeneration();
+  }
+}
+
+async function underInstallLock<T>(
+  locks: LockManager,
+  issue: () => Promise<T>,
+  entered: { value: boolean },
+): Promise<T> {
+  return locks.request(LOCK_NAME, async () => {
+    entered.value = true;
+    installDepth += 1;
+    try {
+      return await issueThenBump(issue);
+    } finally {
+      installDepth -= 1;
+    }
+  });
+}
+
+/**
+ * Locked when Web Locks exist. If the lock request itself fails (e.g. an
+ * opaque origin) the install runs unlocked, as `doRefresh` does; an error
+ * thrown by `issue` under the lock is rethrown, never retried.
+ */
+async function issueFenced<T>(issue: () => Promise<T>): Promise<T> {
+  const locks = lockManager();
+  if (!locks) return issueThenBump(issue);
+  const entered = { value: false };
+  try {
+    return await underInstallLock(locks, issue, entered);
+  } catch (err) {
+    if (entered.value) throw err;
+    return issueThenBump(issue);
+  }
+}
+
+/**
+ * ROK-1820: run a request that ISSUES a new session (a password change that
+ * revokes every session and re-mints one) so no refresh can land on top of it.
+ *
+ * - A stale access token is refreshed FIRST, unlocked: under the lock every
+ *   in-tab refresh answers indeterminate, so the request would 401 unretried.
+ * - The request runs under the `rl-refresh` Web Lock, so no refresh POST from
+ *   any tab of this browser is in flight while it runs: a sibling's rotated
+ *   `rl_rt` Set-Cookie lands BEFORE the re-issued cookie, never after it.
+ * - The generation is bumped before the request and again before the lock is
+ *   released, so a refresh that began under the pre-change session — or
+ *   queued behind the install — is dropped instead of overwriting the
+ *   re-issued access token.
+ * - A 401 under the lock (an unexpired but revoked token — another tab changed
+ *   the password) can't refresh there, so the lock is released, ONE normal
+ *   refresh runs, and the request is retried once under a fresh fence. A 401
+ *   is rejected by the auth guard before the handler, so the retry is safe.
+ *
+ * Known gap: without `navigator.locks`, a refresh that passed the server's
+ * revoke re-check just before the change can still deliver its (now revoked)
+ * `rl_rt` Set-Cookie AFTER the re-issued one; the generation only guards the
+ * access token, so the next refresh 401s and signs the user out.
+ */
+export async function installSessionExclusively<T>(issue: () => Promise<T>): Promise<T> {
+  if (getAuthMethod() && isTokenStale(getAccessToken())) await ensureFreshToken();
+  const first = await attemptInstall(issue);
+  if (!first.unauthorized || !getAuthMethod()) return first.settle();
+  // Outside the lock now, a normal refresh can run. `freshRefresh` never joins
+  // a pre-change POST, whose token the generation bump would drop anyway.
+  if ((await freshRefresh()).kind !== 'ok') return first.settle();
+  return (await attemptInstall(issue)).settle();
+}
+
+/** One fenced attempt: its outcome, replayable, plus whether it was a 401. */
+interface InstallAttempt<T> {
+  settle: () => T;
+  unauthorized: boolean;
+}
+
+/** True for a 401 thrown by `fetchApi` or returned by `fetchWithAuth`. */
+function isUnauthorized(outcome: unknown): boolean {
+  if (outcome instanceof Response) return outcome.status === 401;
+  return httpStatusOf(outcome) === 401;
+}
+
+async function attemptInstall<T>(issue: () => Promise<T>): Promise<InstallAttempt<T>> {
+  bumpRefreshGeneration();
+  try {
+    const value = await issueFenced(issue);
+    return { settle: () => value, unauthorized: isUnauthorized(value) };
+  } catch (err) {
+    return { settle: () => { throw err; }, unauthorized: isUnauthorized(err) };
+  }
 }
